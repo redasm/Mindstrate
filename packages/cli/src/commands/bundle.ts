@@ -10,7 +10,7 @@ import type { PortableContextBundle } from '@mindstrate/protocol/models';
 import { createMemory } from '../helpers.js';
 
 export const bundleCommand = new Command('bundle')
-  .description('Create, install, and validate portable ECS context bundles');
+  .description('Create, install, validate, and publish portable ECS context bundles');
 
 bundleCommand
   .command('create <name>')
@@ -93,6 +93,36 @@ bundleCommand
       console.log(`  Skipped edges:   ${result.skippedEdges}`);
     } catch (error) {
       console.error('Bundle install failed:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    } finally {
+      memory.close();
+    }
+  });
+
+bundleCommand
+  .command('publish <file>')
+  .description('Prepare a portable ECS context bundle for distribution')
+  .option('-r, --registry <url>', 'Bundle registry URL', 'local')
+  .option('-v, --visibility <mode>', 'Distribution visibility: public, private, or unlisted', 'unlisted')
+  .action(async (file, options) => {
+    if (!fs.existsSync(file)) {
+      console.error(`File not found: ${file}`);
+      process.exit(1);
+    }
+
+    const memory = createMemory();
+
+    try {
+      await memory.init();
+      const bundle = JSON.parse(fs.readFileSync(file, 'utf-8')) as PortableContextBundle;
+      const result = memory.publishBundle(bundle, {
+        registry: options.registry,
+        visibility: options.visibility,
+      });
+      console.log('Bundle publication manifest:');
+      console.log(JSON.stringify(result.manifest, null, 2));
+    } catch (error) {
+      console.error('Bundle publish failed:', error instanceof Error ? error.message : error);
       process.exit(1);
     } finally {
       memory.close();

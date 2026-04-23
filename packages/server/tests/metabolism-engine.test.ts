@@ -69,8 +69,11 @@ describe('MetabolismEngine', () => {
     const run = await engine.run({ project: 'mindstrate', trigger: 'manual' });
 
     expect(run.status).toBe(MetabolismRunStatus.COMPLETED);
+    expect(run.stageStats[MetabolismStage.DIGEST]).toBeDefined();
+    expect(run.stageStats[MetabolismStage.ASSIMILATE]).toBeDefined();
     expect(run.stageStats[MetabolismStage.COMPRESS]).toBeDefined();
     expect(run.stageStats[MetabolismStage.PRUNE]).toBeDefined();
+    expect(run.stageStats[MetabolismStage.REFLECT]).toBeDefined();
     expect(run.notes?.some((note) => note.includes('projectionRecords='))).toBe(true);
 
     const runs = graphStore.listMetabolismRuns({ project: 'mindstrate' });

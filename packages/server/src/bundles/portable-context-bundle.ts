@@ -5,6 +5,7 @@ import {
   type PortableContextBundleEdge,
   type PortableContextBundleNode,
 } from '@mindstrate/protocol/models';
+import { createHash } from 'node:crypto';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 
 export interface CreateBundleOptions {
@@ -27,6 +28,28 @@ export interface InstallBundleResult {
 export interface ValidateBundleResult {
   valid: boolean;
   errors: string[];
+}
+
+export interface PublishBundleOptions {
+  registry?: string;
+  visibility?: 'public' | 'private' | 'unlisted';
+}
+
+export interface BundlePublicationManifest {
+  id: string;
+  name: string;
+  version: string;
+  registry: string;
+  visibility: 'public' | 'private' | 'unlisted';
+  nodeCount: number;
+  edgeCount: number;
+  digest: string;
+  publishedAt: string;
+}
+
+export interface PublishBundleResult {
+  bundle: PortableContextBundle;
+  manifest: BundlePublicationManifest;
 }
 
 export class PortableContextBundleManager {
@@ -162,6 +185,32 @@ export class PortableContextBundleManager {
       updatedNodes,
       installedEdges,
       skippedEdges,
+    };
+  }
+
+  publishBundle(bundle: PortableContextBundle, options: PublishBundleOptions = {}): PublishBundleResult {
+    const validation = this.validateBundle(bundle);
+    if (!validation.valid) {
+      throw new Error(`Invalid bundle: ${validation.errors.join('; ')}`);
+    }
+
+    const digest = createHash('sha256')
+      .update(JSON.stringify(bundle))
+      .digest('hex');
+
+    return {
+      bundle,
+      manifest: {
+        id: bundle.id,
+        name: bundle.name,
+        version: bundle.version,
+        registry: options.registry ?? 'local',
+        visibility: options.visibility ?? 'unlisted',
+        nodeCount: bundle.nodeIds.length,
+        edgeCount: bundle.edgeIds.length,
+        digest: `sha256:${digest}`,
+        publishedAt: new Date().toISOString(),
+      },
     };
   }
 }

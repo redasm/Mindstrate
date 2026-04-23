@@ -85,7 +85,7 @@ import {
   ingestUserFeedback,
   type IngestContextEventInput,
 } from './events/index.js';
-import { PortableContextBundleManager, type CreateBundleOptions, type InstallBundleResult, type ValidateBundleResult } from './bundles/index.js';
+import { PortableContextBundleManager, type CreateBundleOptions, type InstallBundleResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
 
 /**
  * Optional sink invoked whenever a knowledge mutation is committed by the facade.
@@ -510,6 +510,17 @@ export class Mindstrate {
     return result.assembled;
   }
 
+  async assembleWorkingContext(
+    taskDescription: string,
+    options?: {
+      project?: string;
+      context?: RetrievalContext;
+      sessionId?: string;
+    },
+  ): Promise<AssembledContext> {
+    return this.assembleContext(taskDescription, options);
+  }
+
   // ============================================================
   // 知识 CRUD
   // ============================================================
@@ -861,8 +872,29 @@ export class Mindstrate {
     return this.metabolismEngine.run(options);
   }
 
+  runDigest(options?: { project?: string }) {
+    return this.metabolismEngine.runDigest(options);
+  }
+
+  runAssimilation(options?: { project?: string }) {
+    return this.metabolismEngine.runAssimilation(options);
+  }
+
+  async runCompression(options?: { project?: string }) {
+    await this.ensureInit();
+    return this.metabolismEngine.runCompression(options);
+  }
+
   runPruning(options?: PruneOptions): PruneResult {
     return this.pruner.prune(options);
+  }
+
+  runReflection(options?: ConflictReflectionOptions): ConflictReflectionResult {
+    return this.runConflictReflection(options);
+  }
+
+  projectKnowledgeUnit(options?: GraphKnowledgeProjectionOptions): ProjectionRecord[] {
+    return this.projectionMaterializer.materialize(options);
   }
 
   listContextNodes(options?: {
@@ -939,6 +971,10 @@ export class Mindstrate {
 
   installBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): InstallBundleResult {
     return this.bundleManager.installBundle(bundle);
+  }
+
+  publishBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult {
+    return this.bundleManager.publishBundle(bundle, options);
   }
 
   readGraphKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {

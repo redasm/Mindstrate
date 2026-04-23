@@ -4,7 +4,7 @@ import type {
   KnowledgeUnit,
   RetrievalContext,
 } from '@mindstrate/protocol';
-import type { ContextNode, ConflictRecord } from '@mindstrate/protocol/models';
+import { SubstrateType, type ContextNode, type ConflictRecord } from '@mindstrate/protocol/models';
 
 interface DagNode<T> {
   deps?: string[];
@@ -233,18 +233,49 @@ export async function runContextAssemblyDag(
         'curated',
         'summary',
       ],
-      run: async (ctx) => ({
-        taskDescription: input.taskDescription,
-        project: await ctx.get<string | undefined>('project'),
-        sessionContext: await ctx.get<string | undefined>('sessionContext'),
-        projectSnapshot: await ctx.get<KnowledgeUnit | undefined>('projectSnapshot'),
-        graphSummaries: (await ctx.get<ContextNode[]>('graphSummaries')).map((node) => node.title),
-        graphPatterns: (await ctx.get<ContextNode[]>('graphPatterns')).map((node) => node.title),
-        graphRules: (await ctx.get<ContextNode[]>('graphRules')).map((node) => node.title),
-        graphConflicts: (await ctx.get<ConflictRecord[]>('graphConflicts')).map((record) => record.reason),
-        curated: await ctx.get<CuratedContext>('curated'),
-        summary: await ctx.get<string>('summary'),
-      } satisfies AssembledContext),
+      run: async (ctx) => {
+        const project = await ctx.get<string | undefined>('project');
+        const sessionContext = await ctx.get<string | undefined>('sessionContext');
+        const projectSnapshot = await ctx.get<KnowledgeUnit | undefined>('projectSnapshot');
+        const graphSummaries = await ctx.get<ContextNode[]>('graphSummaries');
+        const graphPatterns = await ctx.get<ContextNode[]>('graphPatterns');
+        const graphRules = await ctx.get<ContextNode[]>('graphRules');
+        const graphConflicts = await ctx.get<ConflictRecord[]>('graphConflicts');
+        const curated = await ctx.get<CuratedContext>('curated');
+
+        return {
+          taskDescription: input.taskDescription,
+          project,
+          sessionContext,
+          projectSnapshot,
+          graphSummaries: graphSummaries.map((node) => node.title),
+          graphPatterns: graphPatterns.map((node) => node.title),
+          graphRules: graphRules.map((node) => node.title),
+          graphConflicts: graphConflicts.map((record) => record.reason),
+          sessionContinuity: sessionContext ? {
+            project,
+            content: sessionContext,
+          } : undefined,
+          projectSubstrate: project || projectSnapshot ? {
+            project,
+            snapshotTitle: projectSnapshot?.title,
+            snapshot: projectSnapshot,
+          } : undefined,
+          taskRelevantPatterns: [
+            ...graphPatterns.map((node) => node.title),
+            ...graphSummaries.map((node) => node.title),
+          ],
+          applicableSkills: graphPatterns
+            .filter((node) => node.substrateType === SubstrateType.SKILL)
+            .map((node) => node.title),
+          activeRules: graphRules.map((node) => node.title),
+          knownConflicts: graphConflicts.map((record) => record.reason),
+          warnings: curated.warnings.map((warning) => warning.knowledge.title),
+          evidenceTrail: buildEvidenceTrail(project, sessionContext, projectSnapshot, graphRules, graphPatterns, graphSummaries, graphConflicts),
+          curated,
+          summary: await ctx.get<string>('summary'),
+        } satisfies AssembledContext;
+      },
     },
   };
 
@@ -254,4 +285,27 @@ export async function runContextAssemblyDag(
     assembled: value,
     executionOrder,
   };
+}
+
+function buildEvidenceTrail(
+  project: string | undefined,
+  sessionContext: string | undefined,
+  projectSnapshot: KnowledgeUnit | undefined,
+  graphRules: ContextNode[],
+  graphPatterns: ContextNode[],
+  graphSummaries: ContextNode[],
+  graphConflicts: ConflictRecord[],
+): string[] {
+  const trail: string[] = [];
+  if (sessionContext) {
+    trail.push(`session:${project ?? 'default'}`);
+  }
+  if (projectSnapshot) {
+    trail.push(`project-snapshot:${projectSnapshot.id}`);
+  }
+  trail.push(...graphRules.map((node) => `rule:${node.id}`));
+  trail.push(...graphPatterns.map((node) => `pattern:${node.id}`));
+  trail.push(...graphSummaries.map((node) => `summary:${node.id}`));
+  trail.push(...graphConflicts.map((record) => `conflict:${record.id}`));
+  return trail;
 }

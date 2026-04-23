@@ -132,6 +132,28 @@ describe('runContextAssemblyDag', () => {
     expect(result.assembled.graphPatterns).toEqual(['Pattern Node']);
     expect(result.assembled.graphRules).toEqual(['Rule Node']);
     expect(result.assembled.graphConflicts).toEqual(['Hydration rules disagree']);
+    expect(result.assembled.sessionContinuity).toEqual({
+      project: 'mindstrate',
+      content: 'Prior session context',
+    });
+    expect(result.assembled.projectSubstrate).toEqual({
+      project: 'mindstrate',
+      snapshotTitle: 'Project Snapshot',
+      snapshot: makeProjectSnapshot('mindstrate'),
+    });
+    expect(result.assembled.taskRelevantPatterns).toEqual(['Pattern Node', 'Summary Node']);
+    expect(result.assembled.applicableSkills).toEqual([]);
+    expect(result.assembled.activeRules).toEqual(['Rule Node']);
+    expect(result.assembled.knownConflicts).toEqual(['Hydration rules disagree']);
+    expect(result.assembled.warnings).toEqual([]);
+    expect(result.assembled.evidenceTrail).toEqual([
+      'session:mindstrate',
+      'project-snapshot:snapshot-1',
+      'rule:rule-1',
+      'pattern:pattern-1',
+      'summary:summary-1',
+      'conflict:conflict-1',
+    ]);
     expect(result.assembled.curated).toBe(curated);
     expect(result.assembled.summary).toContain('Curated task context');
     expect(result.assembled.summary).toContain('Operational Rules');
@@ -207,6 +229,6 @@ describe('runContextAssemblyDag', () => {
     expect(result.assembled.project).toBeUndefined();
     expect(result.assembled.sessionContext).toBeUndefined();
     expect(result.assembled.projectSnapshot).toBeUndefined();
-    expect(result.assembled.summary).toBe('Working Context for: brand new task');
+    expect(result.assembled.summary).toContain('Working Context for: brand new task');
   });
 });

@@ -311,6 +311,49 @@ describe('Mindstrate', () => {
     });
   });
 
+  describe('ECS facade compatibility', () => {
+    it('should expose the design-document ECS runtime methods', async () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.SESSION_SUMMARY,
+        title: 'Session snapshot A',
+        content: 'Summary: Fixed hydration mismatch in SSR rendering flow.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+      });
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.SESSION_SUMMARY,
+        title: 'Session snapshot B',
+        content: 'Summary: Resolved hydration mismatch in SSR rendering path.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+      });
+
+      const digest = memory.runDigest({ project: 'proj' });
+      const assimilation = memory.runAssimilation({ project: 'proj' });
+      const compression = await memory.runCompression({ project: 'proj' });
+      const pruning = memory.runPruning({ project: 'proj' });
+      const reflection = memory.runReflection({ project: 'proj' });
+      const context = await memory.assembleWorkingContext('fix hydration mismatch', { project: 'proj' });
+      const projections = memory.projectKnowledgeUnit({ project: 'proj', limit: 10 });
+
+      expect(digest.stage).toBe('digest');
+      expect(assimilation.stage).toBe('assimilate');
+      expect(compression.summary.summaryNodesCreated).toBeGreaterThanOrEqual(0);
+      expect(pruning.scannedNodes).toBeGreaterThanOrEqual(0);
+      expect(reflection.candidateNodesCreated).toBeGreaterThanOrEqual(0);
+      expect(context.project).toBe('proj');
+      expect(projections.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('curateContext', () => {
     it('should produce graph-first curated context', async () => {
       const internal = memory as unknown as {

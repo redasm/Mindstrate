@@ -66,4 +66,33 @@ describe('PortableContextBundleManager', () => {
 
     freshStore.close();
   });
+
+  it('publishes a bundle as a portable manifest payload', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Publishable Rule',
+      content: 'Published ECS bundles preserve rules for community reuse.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+
+    const bundle = bundles.createBundle({
+      name: 'community-ecs-rules',
+      project: 'mindstrate',
+      description: 'Rules suitable for distribution.',
+    });
+    const publication = bundles.publishBundle(bundle, {
+      registry: 'https://registry.example.test/mindstrate',
+      visibility: 'public',
+    });
+
+    expect(publication.bundle).toBe(bundle);
+    expect(publication.manifest.name).toBe('community-ecs-rules');
+    expect(publication.manifest.registry).toBe('https://registry.example.test/mindstrate');
+    expect(publication.manifest.visibility).toBe('public');
+    expect(publication.manifest.nodeCount).toBe(1);
+    expect(publication.manifest.edgeCount).toBe(0);
+    expect(publication.manifest.digest).toMatch(/^sha256:/);
+  });
 });

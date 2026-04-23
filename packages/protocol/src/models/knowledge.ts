@@ -279,6 +279,21 @@ export interface AssembledContext {
   graphPatterns?: string[];
   graphRules?: string[];
   graphConflicts?: string[];
+  sessionContinuity?: {
+    project?: string;
+    content: string;
+  };
+  projectSubstrate?: {
+    project?: string;
+    snapshotTitle?: string;
+    snapshot?: KnowledgeUnit;
+  };
+  taskRelevantPatterns?: string[];
+  applicableSkills?: string[];
+  activeRules?: string[];
+  knownConflicts?: string[];
+  warnings?: string[];
+  evidenceTrail?: string[];
   curated: CuratedContext;
   summary: string;
 }
