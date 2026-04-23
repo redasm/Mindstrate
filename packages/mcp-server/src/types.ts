@@ -4,6 +4,8 @@
 
 import type {
   CreateKnowledgeInput,
+  GraphKnowledgeSearchResult,
+  GraphKnowledgeView,
   RetrievalFilter,
   RetrievalResult,
   RetrievalContext,
@@ -39,6 +41,8 @@ export interface LocalMemory {
   curateContext(task: string, context?: RetrievalContext): Promise<CuratedContext>;
   assembleContext(task: string, options?: { project?: string; context?: RetrievalContext; sessionId?: string }): Promise<AssembledContext>;
   runEvolution(options?: { autoApply?: boolean; maxItems?: number; mode?: 'standard' | 'background' }): Promise<EvolutionRunResult>;
+  readGraphKnowledge(opts?: { project?: string; limit?: number }): GraphKnowledgeView[];
+  queryGraphKnowledge(query: string, opts?: { project?: string; topK?: number; limit?: number }): GraphKnowledgeSearchResult[];
   addMutationSink(sink: unknown): void;
   close(): void;
 }
@@ -62,6 +66,8 @@ export interface McpApi {
   curateContext(task: string, context?: RetrievalContext): Promise<CuratedContext>;
   assembleContext(task: string, options?: { project?: string; context?: RetrievalContext; sessionId?: string }): Promise<AssembledContext>;
   runEvolution(options?: { autoApply?: boolean; maxItems?: number; mode?: 'standard' | 'background' }): Promise<EvolutionRunResult>;
+  readGraphKnowledge(opts?: { project?: string; limit?: number }): Promise<GraphKnowledgeView[]>;
+  queryGraphKnowledge(query: string, opts?: { project?: string; topK?: number; limit?: number }): Promise<GraphKnowledgeSearchResult[]>;
   close(): void;
 }
 

@@ -93,6 +93,30 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'graph_knowledge_search',
+    description:
+      'Search ECS-native graph knowledge views derived from high-level context nodes such as rules, patterns, and summaries. ' +
+      'Use this when you want evolved substrate context instead of legacy knowledge-unit search.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query describing the topic, decision, or issue',
+        },
+        project: {
+          type: 'string',
+          description: 'Optional project scope for graph knowledge search',
+        },
+        topK: {
+          type: 'number',
+          description: 'Maximum number of graph knowledge views to return (default: 5)',
+        },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'memory_feedback',
     description: 'Provide feedback on a knowledge entry (upvote or downvote).',
     inputSchema: {

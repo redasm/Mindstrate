@@ -8,6 +8,7 @@ import { CaptureSource } from '@mindstrate/protocol';
 import type { z } from 'zod';
 import type { McpApi, McpToolResponse, SessionState } from '../types.js';
 import type {
+  GraphKnowledgeSearchSchema,
   MemorySearchSchema,
   MemoryAddSchema,
   MemoryFeedbackSchema,
@@ -58,6 +59,44 @@ export async function handleMemorySearch(
     content: [{
       type: 'text',
       text: `Found ${results.length} relevant knowledge entries:\n\n${formatted}`,
+    }],
+  };
+}
+
+export async function handleGraphKnowledgeSearch(
+  api: McpApi,
+  input: z.infer<typeof GraphKnowledgeSearchSchema>,
+): Promise<McpToolResponse> {
+  const { query, project, topK } = input;
+  const results = await api.queryGraphKnowledge(query, {
+    project,
+    topK: topK ?? 5,
+    limit: Math.max(topK ?? 5, 10),
+  });
+
+  if (results.length === 0) {
+    return {
+      content: [{ type: 'text', text: 'No relevant ECS graph knowledge views found.' }],
+    };
+  }
+
+  const formatted = results.map((result, index) => {
+    const view = result.view;
+    const lines = [
+      `### ${index + 1}. [${view.substrateType}] ${view.title}`,
+      `Relevance: ${(result.relevanceScore * 100).toFixed(1)}% | Priority: ${view.priorityScore.toFixed(2)}`,
+      `Domain: ${view.domainType}`,
+      `Summary: ${view.summary}`,
+      view.tags.length > 0 ? `Tags: ${view.tags.join(', ')}` : null,
+      `ID: ${view.id}`,
+    ].filter(Boolean);
+    return lines.join('\n');
+  }).join('\n---\n\n');
+
+  return {
+    content: [{
+      type: 'text',
+      text: `Found ${results.length} ECS graph knowledge views:\n\n${formatted}`,
     }],
   };
 }
@@ -238,6 +277,31 @@ export async function handleMemoryCurate(
   });
 
   let text = curated.summary;
+  if ((curated.graphRules?.length ?? 0) > 0) {
+    text += '\n\n### ECS Graph Rules\n';
+    for (const rule of curated.graphRules ?? []) {
+      text += `- ${rule}\n`;
+    }
+  }
+  if ((curated.graphPatterns?.length ?? 0) > 0) {
+    text += '\n### ECS Graph Patterns\n';
+    for (const pattern of curated.graphPatterns ?? []) {
+      text += `- ${pattern}\n`;
+    }
+  }
+  if ((curated.graphSummaries?.length ?? 0) > 0) {
+    text += '\n### ECS Graph Summaries\n';
+    for (const summary of curated.graphSummaries ?? []) {
+      text += `- ${summary}\n`;
+    }
+  }
+  if ((curated.graphConflicts?.length ?? 0) > 0) {
+    text += '\n### ECS Graph Conflicts\n';
+    for (const conflict of curated.graphConflicts ?? []) {
+      text += `- ${conflict}\n`;
+    }
+  }
+
   const allResults = [
     ...curated.knowledge,
     ...curated.workflows,
@@ -273,6 +337,30 @@ export async function handleContextAssemble(
   let text = assembled.summary;
   if (assembled.projectSnapshot) {
     text += `\n\n### Project Snapshot ID\n- ${assembled.projectSnapshot.id}\n`;
+  }
+  if ((assembled.graphRules?.length ?? 0) > 0) {
+    text += '\n### ECS Graph Rules\n';
+    for (const rule of assembled.graphRules ?? []) {
+      text += `- ${rule}\n`;
+    }
+  }
+  if ((assembled.graphPatterns?.length ?? 0) > 0) {
+    text += '\n### ECS Graph Patterns\n';
+    for (const pattern of assembled.graphPatterns ?? []) {
+      text += `- ${pattern}\n`;
+    }
+  }
+  if ((assembled.graphSummaries?.length ?? 0) > 0) {
+    text += '\n### ECS Graph Summaries\n';
+    for (const summary of assembled.graphSummaries ?? []) {
+      text += `- ${summary}\n`;
+    }
+  }
+  if ((assembled.graphConflicts?.length ?? 0) > 0) {
+    text += '\n### ECS Graph Conflicts\n';
+    for (const conflict of assembled.graphConflicts ?? []) {
+      text += `- ${conflict}\n`;
+    }
   }
 
   const allResults = [

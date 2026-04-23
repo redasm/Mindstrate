@@ -26,6 +26,9 @@ import {
 } from '@mindstrate/server';
 import type {
   CreateKnowledgeInput,
+  GraphKnowledgeSearchResult,
+  GraphKnowledgeView,
+  MetabolismRun,
   RetrievalFilter,
 } from '@mindstrate/server';
 
@@ -244,6 +247,40 @@ app.post('/api/search', async (req, res) => {
   }
 });
 
+/** GET /api/graph/knowledge - ECS-native projected graph knowledge */
+app.get('/api/graph/knowledge', async (req, res) => {
+  try {
+    await memory.init();
+    const project = req.query.project as string | undefined;
+    const limit = parseInt(req.query.limit as string || '20', 10);
+    const entries: GraphKnowledgeView[] = memory.readGraphKnowledge({ project, limit });
+    res.json({ entries, total: entries.length });
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** POST /api/graph/search - ECS-native projected graph search */
+app.post('/api/graph/search', async (req, res) => {
+  try {
+    await memory.init();
+    const { query, project, topK, limit } = req.body;
+    if (!query) {
+      res.status(400).json({ error: 'query is required' });
+      return;
+    }
+
+    const results: GraphKnowledgeSearchResult[] = memory.queryGraphKnowledge(query, {
+      project,
+      topK: topK || 10,
+      limit: limit || 50,
+    });
+    res.json(results);
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
 // ============================================================
 // Session Memory
 // ============================================================
@@ -452,6 +489,18 @@ app.post('/api/evolve', async (req, res) => {
     const { autoApply, maxItems, mode } = req.body;
     const result = await memory.runEvolution({ autoApply, maxItems, mode });
     res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** POST /api/metabolism/run - 运行 ECS 代谢引擎 */
+app.post('/api/metabolism/run', async (req, res) => {
+  try {
+    await memory.init();
+    const { project, trigger } = req.body;
+    const run: MetabolismRun = await memory.runMetabolism({ project, trigger });
+    res.json(run);
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }

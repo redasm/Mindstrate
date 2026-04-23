@@ -13,6 +13,12 @@ export const MemorySearchSchema = z.object({
   topK: z.number().int().min(1).max(50).optional(),
 });
 
+export const GraphKnowledgeSearchSchema = z.object({
+  query: z.string().min(1, 'query is required'),
+  project: z.string().optional(),
+  topK: z.number().int().min(1).max(50).optional(),
+});
+
 export const MemoryAddSchema = z.object({
   title: z.string().min(1, 'title is required'),
   type: z.nativeEnum(KnowledgeType),

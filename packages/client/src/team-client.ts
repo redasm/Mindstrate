@@ -8,6 +8,9 @@
 import type {
   KnowledgeUnit,
   CreateKnowledgeInput,
+  GraphKnowledgeSearchResult,
+  GraphKnowledgeView,
+  MetabolismRun,
   RetrievalResult,
   RetrievalFilter,
   CuratedContext,
@@ -231,6 +234,27 @@ export class TeamClient {
     });
   }
 
+  async readGraphKnowledge(options?: { project?: string; limit?: number }): Promise<GraphKnowledgeView[]> {
+    const params = new URLSearchParams();
+    if (options?.project) params.set('project', options.project);
+    if (options?.limit) params.set('limit', String(options.limit));
+
+    const data = await this.fetch<{ entries?: GraphKnowledgeView[] }>(`/api/graph/knowledge?${params}`);
+    return data.entries ?? [];
+  }
+
+  async queryGraphKnowledge(
+    query: string,
+    options?: { project?: string; topK?: number; limit?: number },
+  ): Promise<GraphKnowledgeSearchResult[]> {
+    return this.post('/api/graph/search', {
+      query,
+      project: options?.project,
+      topK: options?.topK,
+      limit: options?.limit,
+    });
+  }
+
   // ============================================================
   // Knowledge Evolution (知识进化)
   // ============================================================
@@ -241,6 +265,13 @@ export class TeamClient {
     mode?: 'standard' | 'background';
   }): Promise<EvolutionRunResult> {
     return this.post('/api/evolve', options ?? {});
+  }
+
+  async runMetabolism(options?: {
+    project?: string;
+    trigger?: 'manual' | 'scheduled' | 'event_driven';
+  }): Promise<MetabolismRun> {
+    return this.post('/api/metabolism/run', options ?? {});
   }
 
   // ============================================================

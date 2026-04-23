@@ -47,6 +47,7 @@ import pino from 'pino';
 // Tool & Resource modules
 import { TOOL_DEFINITIONS } from './tools/definitions.js';
 import {
+  GraphKnowledgeSearchSchema,
   MemorySearchSchema,
   MemoryAddSchema,
   MemoryFeedbackSchema,
@@ -57,6 +58,7 @@ import {
   MemoryEvolveSchema,
 } from './tools/schemas.js';
 import {
+  handleGraphKnowledgeSearch,
   handleMemorySearch,
   handleMemoryAdd,
   handleMemoryFeedback,
@@ -255,6 +257,16 @@ const api: McpApi = {
     return memory!.runEvolution(options);
   },
 
+  async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
+    if (teamClient) return teamClient.readGraphKnowledge(opts);
+    return memory!.readGraphKnowledge(opts);
+  },
+
+  async queryGraphKnowledge(query: string, opts?: { project?: string; topK?: number; limit?: number }) {
+    if (teamClient) return teamClient.queryGraphKnowledge(query, opts);
+    return memory!.queryGraphKnowledge(query, opts);
+  },
+
   close() {
     if (vaultSync) {
       void vaultSync.stop();
@@ -313,6 +325,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(MemorySearchSchema, args);
       if ('error' in v) return v.error;
       return handleMemorySearch(api, v.data);
+    }
+    case 'graph_knowledge_search': {
+      const v = validateArgs(GraphKnowledgeSearchSchema, args);
+      if ('error' in v) return v.error;
+      return handleGraphKnowledgeSearch(api, v.data);
     }
     case 'memory_add': {
       const v = validateArgs(MemoryAddSchema, args);

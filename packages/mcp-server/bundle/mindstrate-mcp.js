@@ -6940,11 +6940,31 @@ var require_team_client = __commonJS({
           sessionId: options?.sessionId
         });
       }
+      async readGraphKnowledge(options) {
+        const params = new URLSearchParams();
+        if (options?.project)
+          params.set("project", options.project);
+        if (options?.limit)
+          params.set("limit", String(options.limit));
+        const data = await this.fetch(`/api/graph/knowledge?${params}`);
+        return data.entries ?? [];
+      }
+      async queryGraphKnowledge(query, options) {
+        return this.post("/api/graph/search", {
+          query,
+          project: options?.project,
+          topK: options?.topK,
+          limit: options?.limit
+        });
+      }
       // ============================================================
       // Knowledge Evolution (知识进化)
       // ============================================================
       async runEvolution(options) {
         return this.post("/api/evolve", options ?? {});
+      }
+      async runMetabolism(options) {
+        return this.post("/api/metabolism/run", options ?? {});
       }
       // ============================================================
       // HTTP helpers
@@ -11445,6 +11465,156 @@ var require_session = __commonJS({
   }
 });
 
+// ../protocol/dist/models/context-graph.js
+var require_context_graph = __commonJS({
+  "../protocol/dist/models/context-graph.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.ContextEventType = exports2.ContextRelationType = exports2.ContextNodeStatus = exports2.ContextDomainType = exports2.SubstrateType = void 0;
+    exports2.isValidSubstrateType = isValidSubstrateType;
+    exports2.isValidContextDomainType = isValidContextDomainType;
+    exports2.isValidContextNodeStatus = isValidContextNodeStatus;
+    exports2.isValidContextRelationType = isValidContextRelationType;
+    exports2.isValidContextEventType = isValidContextEventType;
+    var SubstrateType;
+    (function(SubstrateType2) {
+      SubstrateType2["EPISODE"] = "episode";
+      SubstrateType2["SNAPSHOT"] = "snapshot";
+      SubstrateType2["SUMMARY"] = "summary";
+      SubstrateType2["PATTERN"] = "pattern";
+      SubstrateType2["SKILL"] = "skill";
+      SubstrateType2["RULE"] = "rule";
+      SubstrateType2["HEURISTIC"] = "heuristic";
+      SubstrateType2["AXIOM"] = "axiom";
+    })(SubstrateType || (exports2.SubstrateType = SubstrateType = {}));
+    var ContextDomainType;
+    (function(ContextDomainType2) {
+      ContextDomainType2["BUG_FIX"] = "bug_fix";
+      ContextDomainType2["BEST_PRACTICE"] = "best_practice";
+      ContextDomainType2["ARCHITECTURE"] = "architecture";
+      ContextDomainType2["CONVENTION"] = "convention";
+      ContextDomainType2["PATTERN"] = "pattern";
+      ContextDomainType2["TROUBLESHOOTING"] = "troubleshooting";
+      ContextDomainType2["GOTCHA"] = "gotcha";
+      ContextDomainType2["HOW_TO"] = "how_to";
+      ContextDomainType2["WORKFLOW"] = "workflow";
+      ContextDomainType2["PROJECT_SNAPSHOT"] = "project_snapshot";
+      ContextDomainType2["SESSION_SUMMARY"] = "session_summary";
+      ContextDomainType2["CONTEXT_EVENT"] = "context_event";
+    })(ContextDomainType || (exports2.ContextDomainType = ContextDomainType = {}));
+    var ContextNodeStatus;
+    (function(ContextNodeStatus2) {
+      ContextNodeStatus2["CANDIDATE"] = "candidate";
+      ContextNodeStatus2["ACTIVE"] = "active";
+      ContextNodeStatus2["VERIFIED"] = "verified";
+      ContextNodeStatus2["DEPRECATED"] = "deprecated";
+      ContextNodeStatus2["ARCHIVED"] = "archived";
+      ContextNodeStatus2["CONFLICTED"] = "conflicted";
+    })(ContextNodeStatus || (exports2.ContextNodeStatus = ContextNodeStatus = {}));
+    var ContextRelationType;
+    (function(ContextRelationType2) {
+      ContextRelationType2["FOLLOWS"] = "follows";
+      ContextRelationType2["CAUSES"] = "causes";
+      ContextRelationType2["SUPPORTS"] = "supports";
+      ContextRelationType2["CONTRADICTS"] = "contradicts";
+      ContextRelationType2["GENERALIZES"] = "generalizes";
+      ContextRelationType2["INSTANTIATES"] = "instantiates";
+      ContextRelationType2["DERIVED_FROM"] = "derived_from";
+      ContextRelationType2["APPLIES_TO"] = "applies_to";
+      ContextRelationType2["DEPENDS_ON"] = "depends_on";
+      ContextRelationType2["OBSERVED_IN"] = "observed_in";
+    })(ContextRelationType || (exports2.ContextRelationType = ContextRelationType = {}));
+    var ContextEventType;
+    (function(ContextEventType2) {
+      ContextEventType2["SESSION_OBSERVATION"] = "session_observation";
+      ContextEventType2["KNOWLEDGE_WRITE"] = "knowledge_write";
+      ContextEventType2["PROJECT_SNAPSHOT"] = "project_snapshot";
+      ContextEventType2["FEEDBACK_SIGNAL"] = "feedback_signal";
+      ContextEventType2["TOOL_RESULT"] = "tool_result";
+      ContextEventType2["TEST_RESULT"] = "test_result";
+      ContextEventType2["GIT_ACTIVITY"] = "git_activity";
+      ContextEventType2["LSP_DIAGNOSTIC"] = "lsp_diagnostic";
+      ContextEventType2["USER_EDIT"] = "user_edit";
+      ContextEventType2["METABOLIC_OUTPUT"] = "metabolic_output";
+    })(ContextEventType || (exports2.ContextEventType = ContextEventType = {}));
+    var VALID_SUBSTRATE_TYPES = new Set(Object.values(SubstrateType));
+    var VALID_CONTEXT_DOMAIN_TYPES = new Set(Object.values(ContextDomainType));
+    var VALID_CONTEXT_NODE_STATUSES = new Set(Object.values(ContextNodeStatus));
+    var VALID_CONTEXT_RELATION_TYPES = new Set(Object.values(ContextRelationType));
+    var VALID_CONTEXT_EVENT_TYPES = new Set(Object.values(ContextEventType));
+    function isValidSubstrateType(value) {
+      return VALID_SUBSTRATE_TYPES.has(value);
+    }
+    function isValidContextDomainType(value) {
+      return VALID_CONTEXT_DOMAIN_TYPES.has(value);
+    }
+    function isValidContextNodeStatus(value) {
+      return VALID_CONTEXT_NODE_STATUSES.has(value);
+    }
+    function isValidContextRelationType(value) {
+      return VALID_CONTEXT_RELATION_TYPES.has(value);
+    }
+    function isValidContextEventType(value) {
+      return VALID_CONTEXT_EVENT_TYPES.has(value);
+    }
+  }
+});
+
+// ../protocol/dist/models/context-event.js
+var require_context_event = __commonJS({
+  "../protocol/dist/models/context-event.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.isValidContextEventType = exports2.ContextEventType = void 0;
+    var context_graph_js_1 = require_context_graph();
+    Object.defineProperty(exports2, "ContextEventType", { enumerable: true, get: function() {
+      return context_graph_js_1.ContextEventType;
+    } });
+    Object.defineProperty(exports2, "isValidContextEventType", { enumerable: true, get: function() {
+      return context_graph_js_1.isValidContextEventType;
+    } });
+  }
+});
+
+// ../protocol/dist/models/metabolism.js
+var require_metabolism = __commonJS({
+  "../protocol/dist/models/metabolism.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+    exports2.ProjectionTarget = exports2.MetabolismRunStatus = exports2.MetabolismStage = void 0;
+    var MetabolismStage;
+    (function(MetabolismStage2) {
+      MetabolismStage2["DIGEST"] = "digest";
+      MetabolismStage2["ASSIMILATE"] = "assimilate";
+      MetabolismStage2["COMPRESS"] = "compress";
+      MetabolismStage2["PRUNE"] = "prune";
+      MetabolismStage2["REFLECT"] = "reflect";
+    })(MetabolismStage || (exports2.MetabolismStage = MetabolismStage = {}));
+    var MetabolismRunStatus;
+    (function(MetabolismRunStatus2) {
+      MetabolismRunStatus2["RUNNING"] = "running";
+      MetabolismRunStatus2["COMPLETED"] = "completed";
+      MetabolismRunStatus2["FAILED"] = "failed";
+      MetabolismRunStatus2["CANCELLED"] = "cancelled";
+    })(MetabolismRunStatus || (exports2.MetabolismRunStatus = MetabolismRunStatus = {}));
+    var ProjectionTarget;
+    (function(ProjectionTarget2) {
+      ProjectionTarget2["KNOWLEDGE_UNIT"] = "knowledge_unit";
+      ProjectionTarget2["SESSION_SUMMARY"] = "session_summary";
+      ProjectionTarget2["PROJECT_SNAPSHOT"] = "project_snapshot";
+      ProjectionTarget2["OBSIDIAN_DOCUMENT"] = "obsidian_document";
+    })(ProjectionTarget || (exports2.ProjectionTarget = ProjectionTarget = {}));
+  }
+});
+
+// ../protocol/dist/models/projection.js
+var require_projection = __commonJS({
+  "../protocol/dist/models/projection.js"(exports2) {
+    "use strict";
+    Object.defineProperty(exports2, "__esModule", { value: true });
+  }
+});
+
 // ../protocol/dist/models/index.js
 var require_models = __commonJS({
   "../protocol/dist/models/index.js"(exports2) {
@@ -11468,6 +11638,10 @@ var require_models = __commonJS({
     Object.defineProperty(exports2, "__esModule", { value: true });
     __exportStar(require_knowledge(), exports2);
     __exportStar(require_session(), exports2);
+    __exportStar(require_context_graph(), exports2);
+    __exportStar(require_context_event(), exports2);
+    __exportStar(require_metabolism(), exports2);
+    __exportStar(require_projection(), exports2);
   }
 });
 
@@ -18760,6 +18934,28 @@ var TOOL_DEFINITIONS = [
         }
       },
       required: ["title", "type", "solution"]
+    }
+  },
+  {
+    name: "graph_knowledge_search",
+    description: "Search ECS-native graph knowledge views derived from high-level context nodes such as rules, patterns, and summaries. Use this when you want evolved substrate context instead of legacy knowledge-unit search.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query describing the topic, decision, or issue"
+        },
+        project: {
+          type: "string",
+          description: "Optional project scope for graph knowledge search"
+        },
+        topK: {
+          type: "number",
+          description: "Maximum number of graph knowledge views to return (default: 5)"
+        }
+      },
+      required: ["query"]
     }
   },
   {
@@ -32734,6 +32930,11 @@ var MemorySearchSchema = external_exports.object({
   type: external_exports.nativeEnum(import_protocol3.KnowledgeType).optional(),
   topK: external_exports.number().int().min(1).max(50).optional()
 });
+var GraphKnowledgeSearchSchema = external_exports.object({
+  query: external_exports.string().min(1, "query is required"),
+  project: external_exports.string().optional(),
+  topK: external_exports.number().int().min(1).max(50).optional()
+});
 var MemoryAddSchema = external_exports.object({
   title: external_exports.string().min(1, "title is required"),
   type: external_exports.nativeEnum(import_protocol3.KnowledgeType),
@@ -32835,6 +33036,39 @@ ${k.actionable.steps.map((s, j) => `  ${j + 1}. ${s}`).join("\n")}
     content: [{
       type: "text",
       text: `Found ${results.length} relevant knowledge entries:
+
+${formatted}`
+    }]
+  };
+}
+async function handleGraphKnowledgeSearch(api2, input) {
+  const { query, project, topK } = input;
+  const results = await api2.queryGraphKnowledge(query, {
+    project,
+    topK: topK ?? 5,
+    limit: Math.max(topK ?? 5, 10)
+  });
+  if (results.length === 0) {
+    return {
+      content: [{ type: "text", text: "No relevant ECS graph knowledge views found." }]
+    };
+  }
+  const formatted = results.map((result, index) => {
+    const view = result.view;
+    const lines = [
+      `### ${index + 1}. [${view.substrateType}] ${view.title}`,
+      `Relevance: ${(result.relevanceScore * 100).toFixed(1)}% | Priority: ${view.priorityScore.toFixed(2)}`,
+      `Domain: ${view.domainType}`,
+      `Summary: ${view.summary}`,
+      view.tags.length > 0 ? `Tags: ${view.tags.join(", ")}` : null,
+      `ID: ${view.id}`
+    ].filter(Boolean);
+    return lines.join("\n");
+  }).join("\n---\n\n");
+  return {
+    content: [{
+      type: "text",
+      text: `Found ${results.length} ECS graph knowledge views:
 
 ${formatted}`
     }]
@@ -32967,6 +33201,34 @@ async function handleMemoryCurate(api2, input) {
     currentFramework: framework
   });
   let text = curated.summary;
+  if ((curated.graphRules?.length ?? 0) > 0) {
+    text += "\n\n### ECS Graph Rules\n";
+    for (const rule of curated.graphRules ?? []) {
+      text += `- ${rule}
+`;
+    }
+  }
+  if ((curated.graphPatterns?.length ?? 0) > 0) {
+    text += "\n### ECS Graph Patterns\n";
+    for (const pattern of curated.graphPatterns ?? []) {
+      text += `- ${pattern}
+`;
+    }
+  }
+  if ((curated.graphSummaries?.length ?? 0) > 0) {
+    text += "\n### ECS Graph Summaries\n";
+    for (const summary of curated.graphSummaries ?? []) {
+      text += `- ${summary}
+`;
+    }
+  }
+  if ((curated.graphConflicts?.length ?? 0) > 0) {
+    text += "\n### ECS Graph Conflicts\n";
+    for (const conflict of curated.graphConflicts ?? []) {
+      text += `- ${conflict}
+`;
+    }
+  }
   const allResults = [
     ...curated.knowledge,
     ...curated.workflows,
@@ -32999,6 +33261,34 @@ async function handleContextAssemble(api2, input) {
 ### Project Snapshot ID
 - ${assembled.projectSnapshot.id}
 `;
+  }
+  if ((assembled.graphRules?.length ?? 0) > 0) {
+    text += "\n### ECS Graph Rules\n";
+    for (const rule of assembled.graphRules ?? []) {
+      text += `- ${rule}
+`;
+    }
+  }
+  if ((assembled.graphPatterns?.length ?? 0) > 0) {
+    text += "\n### ECS Graph Patterns\n";
+    for (const pattern of assembled.graphPatterns ?? []) {
+      text += `- ${pattern}
+`;
+    }
+  }
+  if ((assembled.graphSummaries?.length ?? 0) > 0) {
+    text += "\n### ECS Graph Summaries\n";
+    for (const summary of assembled.graphSummaries ?? []) {
+      text += `- ${summary}
+`;
+    }
+  }
+  if ((assembled.graphConflicts?.length ?? 0) > 0) {
+    text += "\n### ECS Graph Conflicts\n";
+    for (const conflict of assembled.graphConflicts ?? []) {
+      text += `- ${conflict}
+`;
+    }
   }
   const allResults = [
     ...assembled.curated.knowledge,
@@ -33211,6 +33501,14 @@ var api = {
     if (teamClient) return teamClient.runEvolution(options);
     return memory.runEvolution(options);
   },
+  async readGraphKnowledge(opts) {
+    if (teamClient) return teamClient.readGraphKnowledge(opts);
+    return memory.readGraphKnowledge(opts);
+  },
+  async queryGraphKnowledge(query, opts) {
+    if (teamClient) return teamClient.queryGraphKnowledge(query, opts);
+    return memory.queryGraphKnowledge(query, opts);
+  },
   close() {
     if (vaultSync) {
       void vaultSync.stop();
@@ -33254,6 +33552,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(MemorySearchSchema, args);
       if ("error" in v) return v.error;
       return handleMemorySearch(api, v.data);
+    }
+    case "graph_knowledge_search": {
+      const v = validateArgs(GraphKnowledgeSearchSchema, args);
+      if ("error" in v) return v.error;
+      return handleGraphKnowledgeSearch(api, v.data);
     }
     case "memory_add": {
       const v = validateArgs(MemoryAddSchema, args);
