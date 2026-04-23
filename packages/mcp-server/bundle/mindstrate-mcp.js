@@ -6986,6 +6986,19 @@ var require_team_client = __commonJS({
         const data = await this.fetch(`/api/context/conflicts?${params}`);
         return data.conflicts ?? [];
       }
+      async listContextEdges(options) {
+        const params = new URLSearchParams();
+        if (options?.sourceId)
+          params.set("sourceId", options.sourceId);
+        if (options?.targetId)
+          params.set("targetId", options.targetId);
+        if (options?.relationType)
+          params.set("relationType", options.relationType);
+        if (options?.limit)
+          params.set("limit", String(options.limit));
+        const data = await this.fetch(`/api/context/edges?${params}`);
+        return data.edges ?? [];
+      }
       async createBundle(options) {
         return this.post("/api/bundles/create", options);
       }
@@ -19027,6 +19040,19 @@ var TOOL_DEFINITIONS = [
         domainType: { type: "string", description: "Optional domain filter" },
         status: { type: "string", description: "Optional status filter" },
         limit: { type: "number", description: "Maximum number of nodes to return (default: 10)" }
+      }
+    }
+  },
+  {
+    name: "context_edges",
+    description: "List ECS graph edges and relationships.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sourceId: { type: "string", description: "Optional source node id filter" },
+        targetId: { type: "string", description: "Optional target node id filter" },
+        relationType: { type: "string", description: "Optional relation type filter" },
+        limit: { type: "number", description: "Maximum number of edges to return (default: 20)" }
       }
     }
   },
@@ -33091,6 +33117,12 @@ var ContextQueryGraphSchema = external_exports.object({
   status: external_exports.string().optional(),
   limit: external_exports.number().int().min(1).max(100).optional()
 });
+var ContextEdgesSchema = external_exports.object({
+  sourceId: external_exports.string().optional(),
+  targetId: external_exports.string().optional(),
+  relationType: external_exports.string().optional(),
+  limit: external_exports.number().int().min(1).max(200).optional()
+});
 var ContextConflictsSchema = external_exports.object({
   project: external_exports.string().optional(),
   limit: external_exports.number().int().min(1).max(100).optional()
@@ -33325,6 +33357,34 @@ async function handleContextQueryGraph(api2, input) {
     content: [{
       type: "text",
       text: `Found ${nodes.length} ECS context nodes:
+
+${formatted}`
+    }]
+  };
+}
+async function handleContextEdges(api2, input) {
+  const edges = await api2.listContextEdges({
+    sourceId: input.sourceId,
+    targetId: input.targetId,
+    relationType: input.relationType,
+    limit: input.limit ?? 20
+  });
+  if (edges.length === 0) {
+    return {
+      content: [{ type: "text", text: "No ECS context edges matched the query." }]
+    };
+  }
+  const formatted = edges.map((edge, index) => [
+    `### ${index + 1}. ${edge.relationType}`,
+    `Source: ${edge.sourceId}`,
+    `Target: ${edge.targetId}`,
+    `Strength: ${edge.strength.toFixed(2)}`,
+    `ID: ${edge.id}`
+  ].join("\n")).join("\n---\n\n");
+  return {
+    content: [{
+      type: "text",
+      text: `Found ${edges.length} ECS edges:
 
 ${formatted}`
     }]
@@ -33855,6 +33915,10 @@ var api = {
     if (teamClient) return teamClient.queryContextGraph(options);
     return memory.queryContextGraph(options);
   },
+  async listContextEdges(options) {
+    if (teamClient) return teamClient.listContextEdges(options);
+    return memory.listContextEdges(options);
+  },
   async listContextConflicts(options) {
     if (teamClient) return teamClient.listContextConflicts(options);
     return memory.listConflictRecords(options?.project, options?.limit);
@@ -33941,6 +34005,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(ContextQueryGraphSchema, args);
       if ("error" in v) return v.error;
       return handleContextQueryGraph(api, v.data);
+    }
+    case "context_edges": {
+      const v = validateArgs(ContextEdgesSchema, args);
+      if ("error" in v) return v.error;
+      return handleContextEdges(api, v.data);
     }
     case "context_conflicts": {
       const v = validateArgs(ContextConflictsSchema, args);
