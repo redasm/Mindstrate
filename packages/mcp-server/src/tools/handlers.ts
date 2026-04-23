@@ -17,6 +17,7 @@ import type {
   BundleCreateSchema,
   BundleValidateSchema,
   BundleInstallSchema,
+  BundlePublishSchema,
   MemorySearchSchema,
   MemoryAddSchema,
   MemoryFeedbackSchema,
@@ -292,6 +293,33 @@ export async function handleBundleInstall(
     content: [{
       type: 'text',
       text: `Bundle installed.\nInstalled nodes: ${result.installedNodes}\nUpdated nodes: ${result.updatedNodes}\nInstalled edges: ${result.installedEdges}\nSkipped edges: ${result.skippedEdges}`,
+    }],
+  };
+}
+
+export async function handleBundlePublish(
+  api: McpApi,
+  input: z.infer<typeof BundlePublishSchema>,
+): Promise<McpToolResponse> {
+  const result = await api.publishBundle(input.bundle, {
+    registry: input.registry,
+    visibility: input.visibility,
+  });
+
+  return {
+    content: [{
+      type: 'text',
+      text: [
+        'Bundle publication manifest:',
+        `ID: ${result.manifest.id}`,
+        `Name: ${result.manifest.name}`,
+        `Version: ${result.manifest.version}`,
+        `Registry: ${result.manifest.registry}`,
+        `Visibility: ${result.manifest.visibility}`,
+        `Nodes: ${result.manifest.nodeCount}`,
+        `Edges: ${result.manifest.edgeCount}`,
+        `Digest: ${result.manifest.digest}`,
+      ].join('\n'),
     }],
   };
 }

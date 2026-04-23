@@ -102,6 +102,8 @@ export {
   PortableContextBundleManager,
   type CreateBundleOptions,
   type InstallBundleResult,
+  type PublishBundleOptions,
+  type PublishBundleResult,
   type ValidateBundleResult,
 } from './bundles/index.js';
 

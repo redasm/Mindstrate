@@ -56,6 +56,7 @@ import {
   BundleCreateSchema,
   BundleValidateSchema,
   BundleInstallSchema,
+  BundlePublishSchema,
   MemorySearchSchema,
   MemoryAddSchema,
   MemoryFeedbackSchema,
@@ -75,6 +76,7 @@ import {
   handleBundleCreate,
   handleBundleValidate,
   handleBundleInstall,
+  handleBundlePublish,
   handleMemorySearch,
   handleMemoryAdd,
   handleMemoryFeedback,
@@ -315,6 +317,11 @@ const api: McpApi = {
     return memory!.installBundle(bundle);
   },
 
+  async publishBundle(bundle, options) {
+    if (teamClient) return teamClient.publishBundle(bundle, options);
+    return memory!.publishBundle(bundle, options);
+  },
+
   async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory!.readGraphKnowledge(opts);
@@ -428,6 +435,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(BundleInstallSchema, args);
       if ('error' in v) return v.error;
       return handleBundleInstall(api, v.data);
+    }
+    case 'bundle_publish': {
+      const v = validateArgs(BundlePublishSchema, args);
+      if ('error' in v) return v.error;
+      return handleBundlePublish(api, v.data);
     }
     case 'memory_add': {
       const v = validateArgs(MemoryAddSchema, args);

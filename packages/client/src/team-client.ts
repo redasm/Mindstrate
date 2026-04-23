@@ -59,6 +59,28 @@ export interface SyncResult {
   failed: number;
 }
 
+export interface PublishBundleOptions {
+  registry?: string;
+  visibility?: 'public' | 'private' | 'unlisted';
+}
+
+export interface BundlePublicationManifest {
+  id: string;
+  name: string;
+  version: string;
+  registry: string;
+  visibility: 'public' | 'private' | 'unlisted';
+  nodeCount: number;
+  edgeCount: number;
+  digest: string;
+  publishedAt: string;
+}
+
+export interface PublishBundleResult {
+  bundle: PortableContextBundle;
+  manifest: BundlePublicationManifest;
+}
+
 export interface TeamClientConfig {
   /** Team Server URL (如 http://192.168.1.100:3388) */
   serverUrl: string;
@@ -368,6 +390,17 @@ export class TeamClient {
     skippedEdges: number;
   }> {
     return this.post('/api/bundles/install', { bundle });
+  }
+
+  async publishBundle(
+    bundle: PortableContextBundle,
+    options: PublishBundleOptions = {},
+  ): Promise<PublishBundleResult> {
+    return this.post('/api/bundles/publish', {
+      bundle,
+      registry: options.registry,
+      visibility: options.visibility,
+    });
   }
 
   // ============================================================

@@ -109,6 +109,12 @@ export const BundleInstallSchema = z.object({
   bundle: BundlePayloadSchema,
 });
 
+export const BundlePublishSchema = z.object({
+  bundle: BundlePayloadSchema,
+  registry: z.string().optional(),
+  visibility: z.enum(['public', 'private', 'unlisted']).optional(),
+});
+
 export const MemoryAddSchema = z.object({
   title: z.string().min(1, 'title is required'),
   type: z.nativeEnum(KnowledgeType),

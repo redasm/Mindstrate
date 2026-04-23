@@ -4,6 +4,7 @@ import {
   type ContextEventType,
   type ContextNodeStatus,
   type PortableContextBundle,
+  type PublishBundleOptions,
   type SubstrateType,
 } from '@mindstrate/server';
 import { parseLimit, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
@@ -169,5 +170,18 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     }
 
     res.json(memory.installBundle(bundle));
+  }));
+
+  app.post('/api/bundles/publish', withInitializedMemory(memory, async (req, res) => {
+    const bundle = req.body.bundle as PortableContextBundle | undefined;
+    if (!bundle) {
+      res.status(400).json({ error: 'bundle is required' });
+      return;
+    }
+
+    res.json(memory.publishBundle(bundle, {
+      registry: req.body.registry,
+      visibility: req.body.visibility,
+    } as PublishBundleOptions));
   }));
 };

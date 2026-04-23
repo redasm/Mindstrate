@@ -26,6 +26,26 @@ import type {
   PortableContextBundle,
 } from '@mindstrate/protocol';
 
+export interface PublishBundleOptions {
+  registry?: string;
+  visibility?: 'public' | 'private' | 'unlisted';
+}
+
+export interface PublishBundleResult {
+  bundle: PortableContextBundle;
+  manifest: {
+    id: string;
+    name: string;
+    version: string;
+    registry: string;
+    visibility: 'public' | 'private' | 'unlisted';
+    nodeCount: number;
+    edgeCount: number;
+    digest: string;
+    publishedAt: string;
+  };
+}
+
 /**
  * Minimal interface the MCP server needs from a local Mindstrate instance.
  * The concrete class lives in @mindstrate/server (loaded lazily so the
@@ -95,6 +115,7 @@ export interface LocalMemory {
     installedEdges: number;
     skippedEdges: number;
   };
+  publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult;
   addMutationSink(sink: unknown): void;
   close(): void;
 }
@@ -163,6 +184,7 @@ export interface McpApi {
     installedEdges: number;
     skippedEdges: number;
   }>;
+  publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): Promise<PublishBundleResult>;
   close(): void;
 }
 

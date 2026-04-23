@@ -119,4 +119,31 @@ describe('team-server HTTP integration', () => {
     expect(filtered).toHaveLength(1);
     expect(filtered[0].title).toBe('Workflow entry');
   });
+
+  it('publishes portable bundles through the team HTTP API', async () => {
+    const { client } = await startTeamServer();
+
+    await client.add(makeKnowledgeInput({
+      title: 'Publishable team rule',
+      type: KnowledgeType.CONVENTION,
+      solution: 'Team bundle publication should produce a portable manifest.',
+      context: { project: 'proj-bundle' },
+    }));
+
+    const bundle = await client.createBundle({
+      name: 'team-ecs-rules',
+      project: 'proj-bundle',
+    });
+    const publication = await client.publishBundle(bundle, {
+      registry: 'https://registry.example.test/mindstrate',
+      visibility: 'public',
+    });
+
+    expect(publication.bundle.id).toBe(bundle.id);
+    expect(publication.manifest.name).toBe('team-ecs-rules');
+    expect(publication.manifest.registry).toBe('https://registry.example.test/mindstrate');
+    expect(publication.manifest.visibility).toBe('public');
+    expect(publication.manifest.nodeCount).toBeGreaterThan(0);
+    expect(publication.manifest.digest).toMatch(/^sha256:/);
+  });
 });

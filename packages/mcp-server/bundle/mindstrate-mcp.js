@@ -7033,6 +7033,13 @@ var require_team_client = __commonJS({
       async installBundle(bundle) {
         return this.post("/api/bundles/install", { bundle });
       }
+      async publishBundle(bundle, options = {}) {
+        return this.post("/api/bundles/publish", {
+          bundle,
+          registry: options.registry,
+          visibility: options.visibility
+        });
+      }
       // ============================================================
       // Knowledge Evolution (知识进化)
       // ============================================================
@@ -19141,6 +19148,23 @@ var TOOL_DEFINITIONS = [
       type: "object",
       properties: {
         bundle: { type: "object", description: "Portable bundle payload" }
+      },
+      required: ["bundle"]
+    }
+  },
+  {
+    name: "bundle_publish",
+    description: "Publish or prepare a portable ECS context bundle for distribution.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bundle: { type: "object", description: "Portable bundle payload" },
+        registry: { type: "string", description: "Optional target registry URL or local registry name" },
+        visibility: {
+          type: "string",
+          enum: ["public", "private", "unlisted"],
+          description: "Distribution visibility"
+        }
       },
       required: ["bundle"]
     }
@@ -33203,6 +33227,11 @@ var BundleValidateSchema = external_exports.object({
 var BundleInstallSchema = external_exports.object({
   bundle: BundlePayloadSchema
 });
+var BundlePublishSchema = external_exports.object({
+  bundle: BundlePayloadSchema,
+  registry: external_exports.string().optional(),
+  visibility: external_exports.enum(["public", "private", "unlisted"]).optional()
+});
 var MemoryAddSchema = external_exports.object({
   title: external_exports.string().min(1, "title is required"),
   type: external_exports.nativeEnum(import_protocol3.KnowledgeType),
@@ -33501,6 +33530,28 @@ Installed nodes: ${result.installedNodes}
 Updated nodes: ${result.updatedNodes}
 Installed edges: ${result.installedEdges}
 Skipped edges: ${result.skippedEdges}`
+    }]
+  };
+}
+async function handleBundlePublish(api2, input) {
+  const result = await api2.publishBundle(input.bundle, {
+    registry: input.registry,
+    visibility: input.visibility
+  });
+  return {
+    content: [{
+      type: "text",
+      text: [
+        "Bundle publication manifest:",
+        `ID: ${result.manifest.id}`,
+        `Name: ${result.manifest.name}`,
+        `Version: ${result.manifest.version}`,
+        `Registry: ${result.manifest.registry}`,
+        `Visibility: ${result.manifest.visibility}`,
+        `Nodes: ${result.manifest.nodeCount}`,
+        `Edges: ${result.manifest.edgeCount}`,
+        `Digest: ${result.manifest.digest}`
+      ].join("\n")
     }]
   };
 }
@@ -33965,6 +34016,10 @@ var api = {
     if (teamClient) return teamClient.installBundle(bundle);
     return memory.installBundle(bundle);
   },
+  async publishBundle(bundle, options) {
+    if (teamClient) return teamClient.publishBundle(bundle, options);
+    return memory.publishBundle(bundle, options);
+  },
   async readGraphKnowledge(opts) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory.readGraphKnowledge(opts);
@@ -34061,6 +34116,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(BundleInstallSchema, args);
       if ("error" in v) return v.error;
       return handleBundleInstall(api, v.data);
+    }
+    case "bundle_publish": {
+      const v = validateArgs(BundlePublishSchema, args);
+      if ("error" in v) return v.error;
+      return handleBundlePublish(api, v.data);
     }
     case "memory_add": {
       const v = validateArgs(MemoryAddSchema, args);

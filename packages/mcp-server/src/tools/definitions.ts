@@ -232,6 +232,23 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'bundle_publish',
+    description: 'Publish or prepare a portable ECS context bundle for distribution.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        bundle: { type: 'object', description: 'Portable bundle payload' },
+        registry: { type: 'string', description: 'Optional target registry URL or local registry name' },
+        visibility: {
+          type: 'string',
+          enum: ['public', 'private', 'unlisted'],
+          description: 'Distribution visibility',
+        },
+      },
+      required: ['bundle'],
+    },
+  },
+  {
     name: 'memory_feedback',
     description: 'Provide feedback on a knowledge entry (upvote or downvote).',
     inputSchema: {
