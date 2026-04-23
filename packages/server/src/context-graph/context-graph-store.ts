@@ -81,6 +81,24 @@ export interface CreateContextEventInput {
   observedAt?: string;
 }
 
+export interface NodeEmbeddingRecord {
+  nodeId: string;
+  model: string;
+  dimensions: number;
+  embedding: number[];
+  text?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertNodeEmbeddingInput {
+  nodeId: string;
+  model: string;
+  dimensions: number;
+  embedding: number[];
+  text?: string;
+}
+
 export class ContextGraphStore {
   private readonly db: Database.Database;
   private readonly ownsDb: boolean;
@@ -152,6 +170,18 @@ export class ContextGraphStore {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS node_embeddings (
+        node_id TEXT NOT NULL,
+        model TEXT NOT NULL,
+        dimensions INTEGER NOT NULL,
+        embedding TEXT NOT NULL,
+        text TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (node_id, model),
+        FOREIGN KEY(node_id) REFERENCES context_nodes(id) ON DELETE CASCADE
+      );
+
       CREATE TABLE IF NOT EXISTS conflict_records (
         id TEXT PRIMARY KEY,
         project TEXT,
@@ -193,6 +223,7 @@ export class ContextGraphStore {
       CREATE INDEX IF NOT EXISTS idx_context_events_project ON context_events(project);
       CREATE INDEX IF NOT EXISTS idx_context_events_type ON context_events(type);
       CREATE INDEX IF NOT EXISTS idx_context_events_observed_at ON context_events(observed_at);
+      CREATE INDEX IF NOT EXISTS idx_node_embeddings_model ON node_embeddings(model);
       CREATE INDEX IF NOT EXISTS idx_conflict_records_project ON conflict_records(project);
       CREATE INDEX IF NOT EXISTS idx_conflict_records_detected_at ON conflict_records(detected_at);
       CREATE INDEX IF NOT EXISTS idx_projection_records_node_id ON projection_records(node_id);
@@ -353,6 +384,11 @@ export class ContextGraphStore {
     return this.getNodeById(id);
   }
 
+  deleteNode(id: string): boolean {
+    const result = this.db.prepare('DELETE FROM context_nodes WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
   recordNodeAccess(id: string, accessedAt = new Date().toISOString()): void {
     this.db.prepare(`
       UPDATE context_nodes
@@ -492,6 +528,40 @@ export class ContextGraphStore {
 
     const rows = this.db.prepare(sql).all(...params) as EventRow[];
     return rows.map((row) => this.rowToEvent(row));
+  }
+
+  upsertNodeEmbedding(input: UpsertNodeEmbeddingInput): NodeEmbeddingRecord {
+    const existing = this.getNodeEmbedding(input.nodeId, input.model);
+    const now = new Date().toISOString();
+    const createdAt = existing?.createdAt ?? now;
+
+    this.db.prepare(`
+      INSERT INTO node_embeddings (
+        node_id, model, dimensions, embedding, text, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(node_id, model) DO UPDATE SET
+        dimensions = excluded.dimensions,
+        embedding = excluded.embedding,
+        text = excluded.text,
+        updated_at = excluded.updated_at
+    `).run(
+      input.nodeId,
+      input.model,
+      input.dimensions,
+      JSON.stringify(input.embedding),
+      input.text ?? null,
+      createdAt,
+      now,
+    );
+
+    return this.getNodeEmbedding(input.nodeId, input.model)!;
+  }
+
+  getNodeEmbedding(nodeId: string, model: string): NodeEmbeddingRecord | null {
+    const row = this.db.prepare(`
+      SELECT * FROM node_embeddings WHERE node_id = ? AND model = ?
+    `).get(nodeId, model) as NodeEmbeddingRow | undefined;
+    return row ? this.rowToNodeEmbedding(row) : null;
   }
 
   createConflictRecord(input: {
@@ -736,6 +806,18 @@ export class ContextGraphStore {
     };
   }
 
+  private rowToNodeEmbedding(row: NodeEmbeddingRow): NodeEmbeddingRecord {
+    return {
+      nodeId: row.node_id,
+      model: row.model,
+      dimensions: row.dimensions,
+      embedding: JSON.parse(row.embedding),
+      text: row.text ?? undefined,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
   private rowToConflict(row: ConflictRow): ConflictRecord {
     return {
       id: row.id,
@@ -816,6 +898,16 @@ interface EventRow {
   metadata: string | null;
   observed_at: string;
   created_at: string;
+}
+
+interface NodeEmbeddingRow {
+  node_id: string;
+  model: string;
+  dimensions: number;
+  embedding: string;
+  text: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface ConflictRow {

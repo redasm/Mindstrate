@@ -124,4 +124,29 @@ describe('ContextGraphStore', () => {
     expect(store.listEvents({ type: ContextEventType.SESSION_OBSERVATION })[0].content)
       .toContain('graph-first ECS');
   });
+
+  it('stores node embeddings as a graph-native shadow index', () => {
+    const node = store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Graph embeddings belong with nodes',
+      content: 'Node embeddings should be addressable by node id.',
+    });
+
+    const embedding = store.upsertNodeEmbedding({
+      nodeId: node.id,
+      model: 'test-embedding',
+      dimensions: 3,
+      embedding: [0.1, 0.2, 0.3],
+      text: 'Graph embeddings belong with nodes',
+    });
+
+    expect(embedding.nodeId).toBe(node.id);
+    expect(embedding.embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(store.getNodeEmbedding(node.id, 'test-embedding')?.dimensions).toBe(3);
+
+    store.deleteNode(node.id);
+
+    expect(store.getNodeEmbedding(node.id, 'test-embedding')).toBeNull();
+  });
 });
