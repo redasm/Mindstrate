@@ -83,7 +83,21 @@ export {
 } from './context-graph/index.js';
 export { KnowledgeProjectionMaterializer, KnowledgeUnitMaterializer } from './projections/index.js';
 export { MetabolismEngine, Pruner, type RunMetabolismOptions, type PruneOptions, type PruneResult } from './metabolism/index.js';
-export { ingestContextEvent, type IngestContextEventInput, type IngestContextEventResult } from './events/index.js';
+export {
+  ingestContextEvent,
+  ingestGitActivity,
+  ingestTestRun,
+  ingestLspDiagnostic,
+  ingestUserFeedback,
+  ingestKnowledgeWrite,
+  ingestProjectSnapshotEvent,
+  type IngestContextEventInput,
+  type IngestContextEventResult,
+  type IngestGitActivityInput,
+  type IngestTestRunInput,
+  type IngestLspDiagnosticInput,
+  type IngestUserFeedbackInput,
+} from './events/index.js';
 
 // Processing
 export { Embedder } from './processing/embedder.js';

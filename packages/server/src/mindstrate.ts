@@ -74,7 +74,13 @@ import type {
   ProjectionRecord,
 } from '@mindstrate/protocol/models';
 import { digestKnowledgeInput } from './context-graph/knowledge-digest.js';
-import { ingestContextEvent, type IngestContextEventInput } from './events/index.js';
+import {
+  ingestContextEvent,
+  ingestKnowledgeWrite,
+  ingestProjectSnapshotEvent,
+  ingestUserFeedback,
+  type IngestContextEventInput,
+} from './events/index.js';
 
 /**
  * Optional sink invoked whenever a knowledge mutation is committed by the facade.
@@ -253,6 +259,7 @@ export class Mindstrate {
 
     const node = this.contextGraphStore.createNode(digested.nodeInput);
     const { knowledge } = await this.knowledgeUnitMaterializer.materializeNode(node);
+    this.tryIngestDerivedEvent(() => ingestKnowledgeWrite(this.contextGraphStore, knowledge));
     await this.notifySinks('added', knowledge);
 
     return {
@@ -329,8 +336,10 @@ export class Mindstrate {
     }
 
     if (created) {
+      this.tryIngestDerivedEvent(() => ingestProjectSnapshotEvent(this.contextGraphStore, knowledge));
       await this.notifySinks('added', knowledge);
     } else if (built.changed) {
+      this.tryIngestDerivedEvent(() => ingestProjectSnapshotEvent(this.contextGraphStore, knowledge));
       await this.notifySinks('updated', knowledge);
     }
 
@@ -568,6 +577,11 @@ export class Mindstrate {
     context?: string,
   ): void {
     this.feedbackLoop.recordFeedback(retrievalId, signal, context);
+    this.tryIngestDerivedEvent(() => ingestUserFeedback(this.contextGraphStore, {
+      retrievalId,
+      signal,
+      context,
+    }));
   }
 
   /**
@@ -1010,6 +1024,16 @@ export class Mindstrate {
           `[Mindstrate] mutation sink ${kind} failed: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    }
+  }
+
+  private tryIngestDerivedEvent(work: () => void): void {
+    try {
+      work();
+    } catch (err) {
+      console.warn(
+        `[Mindstrate] derived event ingestion failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 }

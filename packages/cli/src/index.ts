@@ -22,6 +22,9 @@
  *   mindstrate evolve               运行知识进化引擎
  *   mindstrate evaluate             运行检索质量评估
  *   mindstrate curate <task>        上下文策划
+ *   mindstrate context-graph        查询 ECS 上下文图
+ *   mindstrate conflicts            查看 ECS 冲突记录
+ *   mindstrate metabolism           运行 ECS 代谢引擎
  */
 
 import { Command } from 'commander';
@@ -41,6 +44,9 @@ import { webCommand } from './commands/web.js';
 import { registerEvolveCommand } from './commands/evolve.js';
 import { registerEvaluateCommand } from './commands/evaluate.js';
 import { registerCurateCommand } from './commands/curate.js';
+import { contextGraphCommand } from './commands/context-graph.js';
+import { conflictsCommand } from './commands/conflicts.js';
+import { metabolismCommand } from './commands/metabolism.js';
 import { vaultCommand } from './commands/vault.js';
 
 const program = new Command();
@@ -65,6 +71,9 @@ program.addCommand(setupMcpCommand);
 program.addCommand(webCommand);
 program.addCommand(maintainCommand);
 program.addCommand(vaultCommand);
+program.addCommand(contextGraphCommand);
+program.addCommand(conflictsCommand);
+program.addCommand(metabolismCommand);
 registerEvolveCommand(program);
 registerEvaluateCommand(program);
 registerCurateCommand(program);
