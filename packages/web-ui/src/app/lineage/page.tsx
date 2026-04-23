@@ -1,5 +1,7 @@
 'use client';
 
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type ContextNode = {
@@ -25,6 +27,15 @@ type ContextEdge = {
 const SUBSTRATE_ORDER = ['axiom', 'heuristic', 'rule', 'skill', 'pattern', 'summary', 'snapshot', 'episode'];
 
 export default function LineagePage() {
+  return (
+    <Suspense fallback={<div className="py-12 text-center text-gray-400">Loading lineage view...</div>}>
+      <LineagePageContent />
+    </Suspense>
+  );
+}
+
+function LineagePageContent() {
+  const searchParams = useSearchParams();
   const [nodes, setNodes] = useState<ContextNode[]>([]);
   const [edges, setEdges] = useState<ContextEdge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +64,13 @@ export default function LineagePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const nodeId = searchParams.get('node');
+    if (nodeId) {
+      setSelectedNodeId(nodeId);
+    }
+  }, [searchParams]);
 
   const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const filteredNodes = useMemo(() => {

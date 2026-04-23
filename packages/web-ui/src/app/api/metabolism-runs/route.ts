@@ -18,3 +18,21 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+/** POST /api/metabolism-runs - trigger an ECS metabolism run */
+export async function POST(request: NextRequest) {
+  try {
+    const memory = getMemory();
+    const body = await request.json().catch(() => ({}));
+    const run = await memory.runMetabolism({
+      project: body.project || undefined,
+      trigger: body.trigger || 'manual',
+    });
+    return NextResponse.json(run, { status: 201 });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 },
+    );
+  }
+}

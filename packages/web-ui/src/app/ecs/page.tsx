@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 type ConflictRecord = {
@@ -27,6 +28,7 @@ export default function EcsPage() {
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [runs, setRuns] = useState<MetabolismRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [triggering, setTriggering] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -50,6 +52,22 @@ export default function EcsPage() {
     load();
   }, [load]);
 
+  const triggerMetabolism = async () => {
+    setTriggering(true);
+    try {
+      const res = await fetch('/api/metabolism-runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger: 'manual' }),
+      });
+      if (res.ok) {
+        await load();
+      }
+    } finally {
+      setTriggering(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div>
@@ -57,6 +75,20 @@ export default function EcsPage() {
         <p className="mt-1 text-sm text-gray-500">
           Inspect active conflicts and recent metabolism runs in the context substrate.
         </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={triggerMetabolism}
+          disabled={triggering}
+          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+        >
+          {triggering ? 'Running...' : 'Run Metabolism'}
+        </button>
+        <Link href="/lineage" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+          Open Lineage View
+        </Link>
       </div>
 
       {loading ? <div className="py-12 text-center text-gray-400">Loading ECS panels...</div> : null}
@@ -80,7 +112,17 @@ export default function EcsPage() {
                   <div className="mt-2 text-xs text-gray-500">
                     {conflict.project ? <div>Project: {conflict.project}</div> : null}
                     <div>Detected: {new Date(conflict.detectedAt).toLocaleString()}</div>
-                    <div>Nodes: {conflict.nodeIds.join(', ')}</div>
+                    <div className="flex flex-wrap gap-2">
+                      {conflict.nodeIds.map((nodeId) => (
+                        <Link
+                          key={nodeId}
+                          href={`/lineage?node=${encodeURIComponent(nodeId)}`}
+                          className="rounded-md bg-white px-2 py-1 text-xs text-brand-700 hover:bg-brand-50"
+                        >
+                          {nodeId.slice(0, 8)}...
+                        </Link>
+                      ))}
+                    </div>
                     {conflict.resolution ? <div>Resolution: {conflict.resolution}</div> : null}
                   </div>
                 </article>
