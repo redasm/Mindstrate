@@ -1,4 +1,5 @@
 import {
+  ContextRelationType,
   ContextNodeStatus,
   SubstrateType,
   type ContextNode,
@@ -56,6 +57,12 @@ export class Pruner {
         continue;
       }
 
+      if (isCoveredByActiveHighLevelRule(this.graphStore, node)) {
+        this.graphStore.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
+        archivedNodes++;
+        continue;
+      }
+
       if (shouldArchive(node, archiveOlderThanDays, archiveAccessCountAtMost)) {
         this.graphStore.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
         archivedNodes++;
@@ -78,6 +85,22 @@ function shouldDeprecate(
 ): boolean {
   return node.qualityScore <= deprecateQualityScoreAtMost
     || (node.negativeFeedback - node.positiveFeedback) >= deprecateNegativeFeedbackDeltaAtLeast;
+}
+
+function isCoveredByActiveHighLevelRule(
+  graphStore: ContextGraphStore,
+  node: ContextNode,
+): boolean {
+  if ([SubstrateType.RULE, SubstrateType.HEURISTIC, SubstrateType.AXIOM].includes(node.substrateType)) {
+    return false;
+  }
+
+  return graphStore.listOutgoingEdges(node.id, ContextRelationType.GENERALIZES).some((edge) => {
+    const target = graphStore.getNodeById(edge.targetId);
+    return target !== null
+      && [SubstrateType.RULE, SubstrateType.HEURISTIC, SubstrateType.AXIOM].includes(target.substrateType)
+      && [ContextNodeStatus.ACTIVE, ContextNodeStatus.VERIFIED].includes(target.status);
+  });
 }
 
 function shouldArchive(

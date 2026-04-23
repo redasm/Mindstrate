@@ -6,6 +6,7 @@ import { createTempDir, removeTempDir } from './helpers.js';
 import {
   ContextDomainType,
   ContextNodeStatus,
+  ContextRelationType,
   SubstrateType,
 } from '@mindstrate/protocol/models';
 
@@ -55,5 +56,37 @@ describe('Pruner', () => {
     expect(result.deprecatedNodes).toBe(1);
     expect(graphStore.getNodeById(stale.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
     expect(graphStore.getNodeById(weak.id)?.status).toBe(ContextNodeStatus.DEPRECATED);
+  });
+
+  it('archives lower-level nodes covered by active high-level rules', () => {
+    const snapshot = graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Repeated TDD reminder',
+      content: 'Always write the failing test first for ECS runtime changes.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 75,
+    });
+    const rule = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'ECS changes are test-first',
+      content: 'Write a failing test before changing ECS runtime behavior.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 90,
+    });
+    graphStore.createEdge({
+      sourceId: snapshot.id,
+      targetId: rule.id,
+      relationType: ContextRelationType.GENERALIZES,
+    });
+
+    const result = pruner.prune({ project: 'mindstrate' });
+
+    expect(result.archivedNodes).toBe(1);
+    expect(graphStore.getNodeById(snapshot.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
+    expect(graphStore.getNodeById(rule.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
 });

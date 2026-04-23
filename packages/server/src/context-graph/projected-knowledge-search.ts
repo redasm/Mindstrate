@@ -23,7 +23,7 @@ export class ProjectedKnowledgeSearch {
       .map((view) => ({
         view,
         relevanceScore: computeProjectionMatchScore(query, view),
-        matchReason: `Graph projection | ${view.substrateType} match`,
+        matchReason: `Graph projection | Projected ${view.substrateType} match`,
       }))
       .filter((result) => result.relevanceScore > 0)
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
