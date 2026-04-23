@@ -10,6 +10,7 @@ import type {
   CreateKnowledgeInput,
   ConflictRecord,
   ContextDomainType,
+  ContextEdge,
   ContextEventType,
   ContextNode,
   ContextNodeStatus,
@@ -303,6 +304,22 @@ export class TeamClient {
 
     const data = await this.fetch<{ conflicts?: ConflictRecord[] }>(`/api/context/conflicts?${params}`);
     return data.conflicts ?? [];
+  }
+
+  async listContextEdges(options?: {
+    sourceId?: string;
+    targetId?: string;
+    relationType?: string;
+    limit?: number;
+  }): Promise<ContextEdge[]> {
+    const params = new URLSearchParams();
+    if (options?.sourceId) params.set('sourceId', options.sourceId);
+    if (options?.targetId) params.set('targetId', options.targetId);
+    if (options?.relationType) params.set('relationType', options.relationType);
+    if (options?.limit) params.set('limit', String(options.limit));
+
+    const data = await this.fetch<{ edges?: ContextEdge[] }>(`/api/context/edges?${params}`);
+    return data.edges ?? [];
   }
 
   async createBundle(options: {

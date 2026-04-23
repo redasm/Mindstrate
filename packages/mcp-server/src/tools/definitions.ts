@@ -155,6 +155,19 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'context_edges',
+    description: 'List ECS graph edges and relationships.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        sourceId: { type: 'string', description: 'Optional source node id filter' },
+        targetId: { type: 'string', description: 'Optional target node id filter' },
+        relationType: { type: 'string', description: 'Optional relation type filter' },
+        limit: { type: 'number', description: 'Maximum number of edges to return (default: 20)' },
+      },
+    },
+  },
+  {
     name: 'context_conflicts',
     description: 'List active ECS conflict records for a project or the entire graph.',
     inputSchema: {

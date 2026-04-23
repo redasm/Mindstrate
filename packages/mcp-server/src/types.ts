@@ -6,6 +6,7 @@ import type {
   ConflictRecord,
   CreateKnowledgeInput,
   ContextDomainType,
+  ContextEdge,
   ContextEvent,
   ContextEventType,
   ContextNode,
@@ -71,6 +72,12 @@ export interface LocalMemory {
     status?: ContextNodeStatus;
     limit?: number;
   }): ContextNode[];
+  listContextEdges(options?: {
+    sourceId?: string;
+    targetId?: string;
+    relationType?: string;
+    limit?: number;
+  }): ContextEdge[];
   listConflictRecords(project?: string, limit?: number): ConflictRecord[];
   runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
   createBundle(options: {
@@ -133,6 +140,12 @@ export interface McpApi {
     status?: ContextNodeStatus;
     limit?: number;
   }): Promise<ContextNode[]>;
+  listContextEdges(options?: {
+    sourceId?: string;
+    targetId?: string;
+    relationType?: string;
+    limit?: number;
+  }): Promise<ContextEdge[]>;
   listContextConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]>;
   runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
   createBundle(options: {

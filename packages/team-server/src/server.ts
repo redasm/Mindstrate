@@ -30,6 +30,7 @@ import {
 } from '@mindstrate/server';
 import type {
   ConflictRecord,
+  ContextEdge,
   ContextNode,
   CreateKnowledgeInput,
   GraphKnowledgeSearchResult,
@@ -361,6 +362,26 @@ app.get('/api/context/conflicts', async (req, res) => {
     const limit = parseInt(req.query.limit as string || '20', 10);
     const conflicts: ConflictRecord[] = memory.listConflictRecords(project, limit);
     res.json({ conflicts, total: conflicts.length });
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** GET /api/context/edges - list ECS graph edges */
+app.get('/api/context/edges', async (req, res) => {
+  try {
+    await memory.init();
+    const sourceId = req.query.sourceId as string | undefined;
+    const targetId = req.query.targetId as string | undefined;
+    const relationType = req.query.relationType as string | undefined;
+    const limit = parseInt(req.query.limit as string || '50', 10);
+    const edges: ContextEdge[] = memory.listContextEdges({
+      sourceId,
+      targetId,
+      relationType: relationType as never,
+      limit,
+    });
+    res.json({ edges, total: edges.length });
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }

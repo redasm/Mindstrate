@@ -50,6 +50,7 @@ import {
   GraphKnowledgeSearchSchema,
   ContextIngestEventSchema,
   ContextQueryGraphSchema,
+  ContextEdgesSchema,
   ContextConflictsSchema,
   MetabolismRunSchema,
   BundleCreateSchema,
@@ -68,6 +69,7 @@ import {
   handleGraphKnowledgeSearch,
   handleContextIngestEvent,
   handleContextQueryGraph,
+  handleContextEdges,
   handleContextConflicts,
   handleMetabolismRun,
   handleBundleCreate,
@@ -283,6 +285,11 @@ const api: McpApi = {
     return memory!.queryContextGraph(options);
   },
 
+  async listContextEdges(options) {
+    if (teamClient) return teamClient.listContextEdges(options);
+    return memory!.listContextEdges(options);
+  },
+
   async listContextConflicts(options) {
     if (teamClient) return teamClient.listContextConflicts(options);
     return memory!.listConflictRecords(options?.project, options?.limit);
@@ -391,6 +398,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(ContextQueryGraphSchema, args);
       if ('error' in v) return v.error;
       return handleContextQueryGraph(api, v.data);
+    }
+    case 'context_edges': {
+      const v = validateArgs(ContextEdgesSchema, args);
+      if ('error' in v) return v.error;
+      return handleContextEdges(api, v.data);
     }
     case 'context_conflicts': {
       const v = validateArgs(ContextConflictsSchema, args);

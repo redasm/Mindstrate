@@ -41,6 +41,13 @@ export const ContextQueryGraphSchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
 });
 
+export const ContextEdgesSchema = z.object({
+  sourceId: z.string().optional(),
+  targetId: z.string().optional(),
+  relationType: z.string().optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
 export const ContextConflictsSchema = z.object({
   project: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),

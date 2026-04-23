@@ -11,6 +11,7 @@ import type {
   GraphKnowledgeSearchSchema,
   ContextIngestEventSchema,
   ContextQueryGraphSchema,
+  ContextEdgesSchema,
   ContextConflictsSchema,
   MetabolismRunSchema,
   BundleCreateSchema,
@@ -156,6 +157,39 @@ export async function handleContextQueryGraph(
     content: [{
       type: 'text',
       text: `Found ${nodes.length} ECS context nodes:\n\n${formatted}`,
+    }],
+  };
+}
+
+export async function handleContextEdges(
+  api: McpApi,
+  input: z.infer<typeof ContextEdgesSchema>,
+): Promise<McpToolResponse> {
+  const edges = await api.listContextEdges({
+    sourceId: input.sourceId,
+    targetId: input.targetId,
+    relationType: input.relationType,
+    limit: input.limit ?? 20,
+  });
+
+  if (edges.length === 0) {
+    return {
+      content: [{ type: 'text', text: 'No ECS context edges matched the query.' }],
+    };
+  }
+
+  const formatted = edges.map((edge, index) => [
+    `### ${index + 1}. ${edge.relationType}`,
+    `Source: ${edge.sourceId}`,
+    `Target: ${edge.targetId}`,
+    `Strength: ${edge.strength.toFixed(2)}`,
+    `ID: ${edge.id}`,
+  ].join('\n')).join('\n---\n\n');
+
+  return {
+    content: [{
+      type: 'text',
+      text: `Found ${edges.length} ECS edges:\n\n${formatted}`,
     }],
   };
 }
