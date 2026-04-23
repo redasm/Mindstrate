@@ -1,5 +1,5 @@
 import type { ContextGraphStore } from './context-graph-store.js';
-import { SubstrateType, type ContextNode } from '@mindstrate/protocol/models';
+import { ContextNodeStatus, SubstrateType, type ContextNode } from '@mindstrate/protocol/models';
 
 export interface ContextPrioritySelection {
   rules: ContextNode[];
@@ -23,21 +23,25 @@ export class ContextPrioritySelector {
     const perLayerLimit = options.perLayerLimit ?? 5;
 
     return {
-      rules: this.graphStore.listNodes({
-        project: options.project,
-        substrateType: SubstrateType.RULE,
-        limit: perLayerLimit,
-      }),
-      patterns: this.graphStore.listNodes({
-        project: options.project,
-        substrateType: SubstrateType.PATTERN,
-        limit: perLayerLimit,
-      }),
-      summaries: this.graphStore.listNodes({
-        project: options.project,
-        substrateType: SubstrateType.SUMMARY,
-        limit: perLayerLimit,
-      }),
+      rules: this.selectLayer(SubstrateType.RULE, options.project, perLayerLimit),
+      patterns: this.selectLayer(SubstrateType.PATTERN, options.project, perLayerLimit),
+      summaries: this.selectLayer(SubstrateType.SUMMARY, options.project, perLayerLimit),
     };
   }
+
+  private selectLayer(substrateType: SubstrateType, project: string | undefined, limit: number): ContextNode[] {
+    return this.graphStore.listNodes({
+      project,
+      substrateType,
+      limit: limit * 3,
+    })
+      .filter((node) => SELECTABLE_STATUSES.has(node.status))
+      .slice(0, limit);
+  }
 }
+
+const SELECTABLE_STATUSES = new Set([
+  ContextNodeStatus.ACTIVE,
+  ContextNodeStatus.VERIFIED,
+  ContextNodeStatus.CANDIDATE,
+]);

@@ -60,4 +60,48 @@ describe('ContextPrioritySelector', () => {
     expect(selection.patterns.map((node) => node.title)).toEqual(['Pattern 1']);
     expect(selection.summaries.map((node) => node.title)).toEqual(['Summary 1']);
   });
+
+  it('excludes conflicted and inactive nodes from default working context selection', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Active Rule',
+      content: 'safe rule',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Conflicted Rule',
+      content: 'conflicted rule',
+      project: 'mindstrate',
+      status: ContextNodeStatus.CONFLICTED,
+    });
+    graphStore.createNode({
+      substrateType: SubstrateType.PATTERN,
+      domainType: ContextDomainType.PATTERN,
+      title: 'Deprecated Pattern',
+      content: 'deprecated pattern',
+      project: 'mindstrate',
+      status: ContextNodeStatus.DEPRECATED,
+    });
+    graphStore.createNode({
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Archived Summary',
+      content: 'archived summary',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ARCHIVED,
+    });
+
+    const selection = selector.select({
+      project: 'mindstrate',
+      perLayerLimit: 5,
+    });
+
+    expect(selection.rules.map((node) => node.title)).toEqual(['Active Rule']);
+    expect(selection.patterns).toEqual([]);
+    expect(selection.summaries).toEqual([]);
+  });
 });
