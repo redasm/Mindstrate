@@ -76,6 +76,7 @@ export interface SaveObservationInput {
   sessionId: string;
   type: SessionObservation['type'];
   content: string;
+  project?: string;
   metadata?: Record<string, string>;
 }
 

@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Mindstrate } from '../src/mindstrate.js';
 import { KnowledgeType } from '@mindstrate/protocol';
+import { ContextDomainType, ContextNodeStatus, MetabolismRunStatus, ProjectionTarget, SubstrateType } from '@mindstrate/protocol/models';
 import { createTempDir, removeTempDir, makeKnowledgeInput } from './helpers.js';
 import type { DetectedProject } from '../src/project/detector.js';
 
@@ -49,6 +50,18 @@ describe('Mindstrate', () => {
       const k = memory.get(result.knowledge!.id);
       expect(k).toBeDefined();
       expect(k!.title).toBe('Test knowledge entry');
+
+      const contextNodes = memory.listContextNodes({
+        sourceRef: result.knowledge!.id,
+        limit: 10,
+      });
+      expect(contextNodes).toHaveLength(1);
+
+      const projections = memory.listProjectionRecords({
+        target: ProjectionTarget.KNOWLEDGE_UNIT,
+        limit: 10,
+      });
+      expect(projections.some((projection) => projection.targetRef === result.knowledge!.id)).toBe(true);
     });
 
     it('should detect duplicate entries', async () => {
@@ -86,6 +99,40 @@ describe('Mindstrate', () => {
       // but may still return results - we just check it doesn't crash
       const results = await memory.search('quantum physics formulas');
       expect(results).toBeDefined();
+    });
+
+    it('should prioritize graph-projected high-level nodes when they match the query', async () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Hydration Safety Rule',
+        content: 'Use hydration-safe SSR and avoid browser-only checks during render.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+        qualityScore: 90,
+        confidence: 0.9,
+      });
+
+      await memory.add(makeKnowledgeInput({
+        title: 'Legacy hydration note',
+        solution: 'Client-only logic may cause mismatch.',
+        context: { project: 'proj', language: 'typescript', framework: 'react' },
+      }));
+
+      const results = await memory.search('hydration safe SSR', {
+        context: { project: 'proj' },
+        topK: 5,
+      });
+
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0].knowledge.title).toBe('Hydration Safety Rule');
+      expect(results[0].matchReason).toContain('Graph projection');
     });
   });
 
@@ -168,6 +215,34 @@ describe('Mindstrate', () => {
       expect(old!.status).toBe('abandoned');
       expect(s2.status).toBe('active');
     });
+
+    it('should auto-compress similar session snapshots into a summary node', async () => {
+      const first = await memory.startSession({ project: 'proj' });
+      memory.saveObservation({
+        sessionId: first.id,
+        type: 'problem_solved',
+        content: 'Fixed hydration mismatch in SSR rendering by moving browser checks into useEffect.',
+      });
+      await memory.endSession(first.id);
+
+      const second = await memory.startSession({ project: 'proj' });
+      memory.saveObservation({
+        sessionId: second.id,
+        type: 'problem_solved',
+        content: 'Resolved hydration mismatch in SSR rendering by moving browser-only checks into useEffect.',
+      });
+      await memory.endSession(second.id);
+
+      const summaries = memory.listContextNodes({
+        project: 'proj',
+        substrateType: SubstrateType.SUMMARY,
+        domainType: ContextDomainType.SESSION_SUMMARY,
+        limit: 10,
+      });
+
+      expect(summaries.length).toBeGreaterThan(0);
+      expect(summaries[0].content).toContain('Compressed from');
+    });
   });
 
   describe('assembleContext', () => {
@@ -216,8 +291,10 @@ describe('Mindstrate', () => {
       expect(assembled.sessionContext).toContain('Keep SSR output deterministic');
       expect(assembled.projectSnapshot?.tags).toContain('project-snapshot');
       expect(assembled.curated.knowledge.length).toBeGreaterThan(0);
+      expect(assembled.curated.graphRules).toBeDefined();
       expect(assembled.summary).toContain('Session Continuity');
       expect(assembled.summary).toContain('Project Snapshot');
+      expect(assembled.summary).toContain('Operational Rules');
       expect(assembled.summary).toContain('Task Curation');
     });
 
@@ -231,6 +308,129 @@ describe('Mindstrate', () => {
       expect(assembled.projectSnapshot).toBeUndefined();
       expect(assembled.curated).toBeDefined();
       expect(assembled.summary).toContain('Working Context for: brand new task');
+    });
+  });
+
+  describe('curateContext', () => {
+    it('should produce graph-first curated context', async () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Hydration Safety Rule',
+        content: 'Use hydration-safe SSR and avoid browser-only checks during render.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+      });
+
+      const curated = await memory.curateContext('fix hydration mismatch', {
+        project: 'proj',
+        currentLanguage: 'typescript',
+        currentFramework: 'react',
+      });
+
+      expect(curated.graphRules).toEqual(['Hydration Safety Rule']);
+      expect(curated.summary).toContain('Operational Rules');
+      expect(curated.summary).toContain('Task Curation');
+    });
+  });
+
+  describe('graph knowledge interfaces', () => {
+    it('should expose graph-projected knowledge views through the facade', () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Hydration Safety Rule',
+        content: 'Use hydration-safe SSR and avoid browser-only checks during render.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+        qualityScore: 90,
+        confidence: 0.9,
+      });
+
+      const projected = memory.readGraphKnowledge({
+        project: 'proj',
+        limit: 10,
+      });
+
+      expect(projected).toHaveLength(1);
+      expect(projected[0].substrateType).toBe(SubstrateType.RULE);
+      expect(projected[0].title).toBe('Hydration Safety Rule');
+    });
+
+    it('should expose ECS-native projected search through the facade', () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Hydration Safety Rule',
+        content: 'Use hydration-safe SSR and avoid browser-only checks during render.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+        qualityScore: 90,
+        confidence: 0.9,
+      });
+
+      const results = memory.queryGraphKnowledge('hydration safe SSR', {
+        project: 'proj',
+        topK: 5,
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].view.title).toBe('Hydration Safety Rule');
+      expect(results[0].matchReason).toContain('Projected rule');
+    });
+  });
+
+  describe('metabolism framework', () => {
+    it('should expose metabolism runs and projection records through the facade', async () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.SESSION_SUMMARY,
+        title: 'Session snapshot A',
+        content: 'Summary: Fixed hydration mismatch in SSR rendering flow.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+      });
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.SESSION_SUMMARY,
+        title: 'Session snapshot B',
+        content: 'Summary: Resolved hydration mismatch in SSR rendering path.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+      });
+
+      const run = await memory.runMetabolism({ project: 'proj', trigger: 'manual' });
+      expect(run.status).toBe(MetabolismRunStatus.COMPLETED);
+
+      const runs = memory.listMetabolismRuns('proj');
+      expect(runs).toHaveLength(1);
+
+      const projections = memory.listProjectionRecords({ target: ProjectionTarget.KNOWLEDGE_UNIT });
+      expect(projections.length).toBeGreaterThan(0);
     });
   });
 
@@ -263,6 +463,118 @@ describe('Mindstrate', () => {
     it('should expose read-only config', () => {
       const cfg = memory.getConfig();
       expect(cfg.dataDir).toBe(tempDir);
+    });
+  });
+
+  describe('conflicts', () => {
+    it('should expose conflict detection and conflict records through the facade', async () => {
+      await memory.runConflictDetection({
+        project: 'proj',
+        substrateType: SubstrateType.RULE,
+        similarityThreshold: 0.55,
+      });
+
+      memory.listContextNodes({
+        project: 'proj',
+        substrateType: SubstrateType.RULE,
+      });
+
+      const existingA = memory.listContextNodes({
+        project: 'proj',
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        limit: 1,
+      });
+      expect(existingA).toEqual([]);
+
+      const graph = (memory as unknown as {
+        listContextNodes: typeof memory.listContextNodes;
+      });
+
+      const nodeA = graph.listContextNodes({
+        project: 'proj',
+        substrateType: SubstrateType.RULE,
+        limit: 10,
+      });
+      expect(nodeA).toEqual([]);
+
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      const ruleA = internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Rule A',
+        content: 'Use hydration-safe SSR and browser checks during render are supported.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+      });
+      const ruleB = internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Rule B',
+        content: 'Use hydration-safe SSR but do not run browser checks during render.',
+        project: 'proj',
+        status: ContextNodeStatus.ACTIVE,
+      });
+
+      const result = await memory.runConflictDetection({
+        project: 'proj',
+        substrateType: SubstrateType.RULE,
+        similarityThreshold: 0.55,
+      });
+
+      expect(result.conflictsDetected).toBe(1);
+
+      const records = memory.listConflictRecords('proj');
+      expect(records).toHaveLength(1);
+      expect(records[0].nodeIds).toEqual(expect.arrayContaining([ruleA.id, ruleB.id]));
+    });
+
+    it('should expose conflict reflection candidates through the facade', async () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+          createConflictRecord(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      const ruleA = internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Rule A',
+        content: 'Use hydration-safe SSR and browser checks during render are supported.',
+        project: 'proj',
+        status: ContextNodeStatus.CONFLICTED,
+      });
+      const ruleB = internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Rule B',
+        content: 'Use hydration-safe SSR but do not run browser checks during render.',
+        project: 'proj',
+        status: ContextNodeStatus.CONFLICTED,
+      });
+      const conflict = internal.contextGraphStore.createConflictRecord({
+        project: 'proj',
+        nodeIds: [ruleA.id, ruleB.id],
+        reason: 'High-similarity contradictory nodes detected (0.91)',
+      });
+
+      const result = memory.runConflictReflection({ project: 'proj' });
+      expect(result.candidateNodesCreated).toBe(1);
+
+      const candidates = memory.listContextNodes({
+        project: 'proj',
+        sourceRef: conflict.id,
+        limit: 10,
+      });
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0].status).toBe(ContextNodeStatus.CANDIDATE);
+      expect(candidates[0].content).toContain('Reflection task:');
     });
   });
 });

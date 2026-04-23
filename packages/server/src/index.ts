@@ -40,6 +40,49 @@ export type { IVectorStore, VectorDocument, VectorSearchResult } from './storage
 export { MetadataStore } from './storage/metadata-store.js';
 export { VectorStore } from './storage/vector-store.js';
 export { SessionStore } from './storage/session-store.js';
+export {
+  ContextGraphStore,
+  ContextPrioritySelector,
+  GraphKnowledgeProjector,
+  ProjectedKnowledgeSearch,
+  runContextAssemblyDag,
+  buildSessionSnapshotContent,
+  ConflictDetector,
+  ConflictReflector,
+  digestCompletedSession,
+  buildEpisodeTitle,
+  digestSessionObservation,
+  PatternCompressor,
+  RuleCompressor,
+  SummaryCompressor,
+  sessionObservationToDomainType,
+  sessionObservationToEventType,
+  type ContextAssemblyDagDeps,
+  type ContextAssemblyDagInput,
+  type ContextAssemblyDagResult,
+  type CreateContextEdgeInput,
+  type CreateContextEventInput,
+  type CreateContextNodeInput,
+  type DigestCompletedSessionInput,
+  type DigestSessionObservationInput,
+  type ConflictDetectionOptions,
+  type ConflictDetectionResult,
+  type ConflictReflectionOptions,
+  type ConflictReflectionResult,
+  type ContextPrioritySelection,
+  type ContextPrioritySelectorOptions,
+  type GraphKnowledgeProjectionOptions,
+  type ProjectedKnowledgeSearchOptions,
+  type PatternCompressionOptions,
+  type PatternCompressionResult,
+  type RuleCompressionOptions,
+  type RuleCompressionResult,
+  type SummaryCompressionOptions,
+  type SummaryCompressionResult,
+  type UpdateContextNodeInput,
+} from './context-graph/index.js';
+export { KnowledgeProjectionMaterializer, KnowledgeUnitMaterializer } from './projections/index.js';
+export { MetabolismEngine, type RunMetabolismOptions } from './metabolism/index.js';
 
 // Processing
 export { Embedder } from './processing/embedder.js';

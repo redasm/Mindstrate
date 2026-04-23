@@ -252,6 +252,14 @@ export interface FeedbackEvent {
 export interface CuratedContext {
   /** 任务描述 */
   taskDescription: string;
+  /** 高层图规则 */
+  graphRules?: string[];
+  /** 高层图模式 */
+  graphPatterns?: string[];
+  /** 图中的近期总结 */
+  graphSummaries?: string[];
+  /** 当前活跃冲突 */
+  graphConflicts?: string[];
   /** 最相关的知识列表 */
   knowledge: RetrievalResult[];
   /** 相关的工作流/步骤 */
@@ -267,6 +275,10 @@ export interface AssembledContext {
   project?: string;
   sessionContext?: string;
   projectSnapshot?: KnowledgeUnit;
+  graphSummaries?: string[];
+  graphPatterns?: string[];
+  graphRules?: string[];
+  graphConflicts?: string[];
   curated: CuratedContext;
   summary: string;
 }
