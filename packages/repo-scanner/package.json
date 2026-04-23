@@ -14,6 +14,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@mindstrate/client": "*",
     "@mindstrate/server": "*",
     "better-sqlite3": "^11.7.0"
   },

@@ -1,6 +1,15 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { CaptureSource, Mindstrate, KnowledgeExtractor, loadConfig, type CommitInfo } from '@mindstrate/server';
+import { TeamClient } from '@mindstrate/client';
+import {
+  CaptureSource,
+  ContextDomainType,
+  ContextEventType,
+  Mindstrate,
+  KnowledgeExtractor,
+  loadConfig,
+  type CommitInfo,
+} from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
 import { SourceStore } from './source-store.js';
 import type { CommitIngestionOptions, CommitIngestionResult, GitLocalSourceInput, ScanExecutionResult, ScanSource } from './types.js';
@@ -10,19 +19,30 @@ export interface RepoScannerOptions {
   memory?: Mindstrate;
 }
 
+interface KnowledgeSink {
+  init(): Promise<void>;
+  addKnowledge(input: any): Promise<{ success: boolean; message?: string }>;
+  ingestGitActivity(input: {
+    content: string;
+    project?: string;
+    actor?: string;
+    sourceRef?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<void>;
+  close(): Promise<void>;
+}
+
 export class RepoScannerService {
   readonly store: SourceStore;
-  private memory: Mindstrate;
-  private ownsMemory: boolean;
+  private sink: KnowledgeSink;
   private extractor: KnowledgeExtractor;
 
   constructor(options: RepoScannerOptions = {}) {
     const scannerDbPath = options.scannerDbPath
       ?? path.join(os.homedir(), '.mindstrate-scanner', 'scanner.db');
     this.store = new SourceStore(scannerDbPath);
-    this.memory = options.memory ?? new Mindstrate();
-    this.ownsMemory = !options.memory;
-    const config = loadConfig(this.memory.getConfig());
+    const config = loadConfig(options.memory?.getConfig());
+    this.sink = createKnowledgeSink(options.memory);
     this.extractor = new KnowledgeExtractor(
       config.openaiApiKey,
       config.llmModel,
@@ -31,7 +51,7 @@ export class RepoScannerService {
   }
 
   async init(): Promise<void> {
-    await this.memory.init();
+    await this.sink.init();
   }
 
   addGitLocalSource(input: GitLocalSourceInput): ScanSource {
@@ -163,16 +183,14 @@ export class RepoScannerService {
 
   async close(): Promise<void> {
     this.store.close();
-    if (this.ownsMemory) {
-      this.memory.close();
-    }
+    await this.sink.close();
   }
 
   async ingestCommit(options: CommitIngestionOptions): Promise<CommitIngestionResult> {
     const { project, commit, recordGitActivity = false, dryRun = false } = options;
 
     if (recordGitActivity) {
-      this.memory.ingestGitActivity({
+      await this.sink.ingestGitActivity({
         content: `${commit.message.split('\n')[0]}\nFiles: ${commit.files.join(', ')}`,
         project,
         actor: commit.author,
@@ -210,7 +228,7 @@ export class RepoScannerService {
       };
     }
 
-    const result = await this.memory.add(knowledge);
+    const result = await this.sink.addKnowledge(knowledge);
     return {
       status: result.success ? 'imported' : 'skipped',
       reason: result.message ?? 'Commit processed',
@@ -307,4 +325,78 @@ export class RepoScannerService {
     });
     return result.status;
   }
+}
+
+function createKnowledgeSink(memory?: Mindstrate): KnowledgeSink {
+  if (memory) {
+    return {
+      async init() {
+        await memory.init();
+      },
+      async addKnowledge(input) {
+        return memory.add(input);
+      },
+      async ingestGitActivity(input) {
+        memory.ingestGitActivity(input);
+      },
+      async close() {
+        return;
+      },
+    };
+  }
+
+  const teamServerUrl = process.env['TEAM_SERVER_URL'] ?? '';
+  if (teamServerUrl) {
+    const client = new TeamClient({
+      serverUrl: teamServerUrl,
+      apiKey: process.env['TEAM_API_KEY'] ?? '',
+    });
+
+    return {
+      async init() {
+        const healthy = await client.health();
+        if (!healthy) {
+          throw new Error(`Team Server is not reachable: ${teamServerUrl}`);
+        }
+      },
+      async addKnowledge(input) {
+        return client.add(input);
+      },
+      async ingestGitActivity(input) {
+        await client.ingestContextEvent({
+          type: ContextEventType.GIT_ACTIVITY,
+          content: input.content,
+          project: input.project,
+          actor: input.actor ?? 'git',
+          domainType: ContextDomainType.ARCHITECTURE,
+          substrateType: 'episode',
+          title: `git activity: ${input.content.slice(0, 80)}`,
+          tags: ['git-activity'],
+          metadata: {
+            sourceRef: input.sourceRef,
+            ...input.metadata,
+          },
+        });
+      },
+      async close() {
+        return;
+      },
+    };
+  }
+
+  const localMemory = new Mindstrate();
+  return {
+    async init() {
+      await localMemory.init();
+    },
+    async addKnowledge(input) {
+      return localMemory.add(input);
+    },
+    async ingestGitActivity(input) {
+      localMemory.ingestGitActivity(input);
+    },
+    async close() {
+      localMemory.close();
+    },
+  };
 }
