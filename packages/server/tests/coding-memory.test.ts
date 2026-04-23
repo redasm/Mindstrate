@@ -294,7 +294,7 @@ describe('Mindstrate', () => {
       expect(assembled.curated.graphRules).toBeDefined();
       expect(assembled.summary).toContain('Session Continuity');
       expect(assembled.summary).toContain('Project Snapshot');
-      expect(assembled.summary).toContain('Operational Rules');
+      expect(assembled.summary).toContain('Recent Summary Clusters');
       expect(assembled.summary).toContain('Task Curation');
     });
 
@@ -394,7 +394,7 @@ describe('Mindstrate', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0].view.title).toBe('Hydration Safety Rule');
-      expect(results[0].matchReason).toContain('Projected rule');
+      expect(results[0].matchReason).toContain('Graph projection');
     });
   });
 
@@ -431,6 +431,29 @@ describe('Mindstrate', () => {
 
       const projections = memory.listProjectionRecords({ target: ProjectionTarget.KNOWLEDGE_UNIT });
       expect(projections.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('external signal ingestion', () => {
+    it('should ingest git activity into the context graph facade', () => {
+      const ingested = memory.ingestGitActivity({
+        content: 'feat: wire capture into ecs event stream',
+        project: 'proj',
+        actor: 'tester',
+        sourceRef: 'abc123',
+        metadata: { commitHash: 'abc123' },
+      });
+
+      expect(ingested.event.type).toBe('git_activity');
+      expect(ingested.node.sourceRef).toBe('abc123');
+
+      const nodes = memory.listContextNodes({
+        project: 'proj',
+        sourceRef: 'abc123',
+        limit: 10,
+      });
+      expect(nodes).toHaveLength(1);
+      expect(nodes[0].title).toContain('git activity');
     });
   });
 

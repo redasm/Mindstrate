@@ -175,6 +175,29 @@ export class MetadataStore {
     return rows.map(r => this.rowToKnowledge(r));
   }
 
+  /** 查找内容完全相同的知识（用于精确去重预检查） */
+  findExactDuplicate(input: CreateKnowledgeInput): KnowledgeUnit | null {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM knowledge_units
+      WHERE type = ?
+        AND title = ?
+        AND COALESCE(problem, '') = ?
+        AND solution = ?
+        AND COALESCE(ctx_project, '') = ?
+      LIMIT 1
+    `).get(
+      input.type,
+      input.title,
+      input.problem ?? '',
+      input.solution,
+      input.context?.project ?? '',
+    ) as any;
+
+    if (!row) return null;
+    return this.rowToKnowledge(row);
+  }
+
   /** 按条件过滤查询 */
   query(filter: RetrievalFilter, limit: number = 50): KnowledgeUnit[] {
     const conditions: string[] = [];

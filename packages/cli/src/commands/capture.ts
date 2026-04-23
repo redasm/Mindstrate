@@ -53,6 +53,19 @@ export const captureCommand = new Command('capture')
       let skipped = 0;
 
       for (const commit of commits) {
+        if (!options.dryRun && !options.p4) {
+          memory.ingestGitActivity({
+            content: `${commit.message.split('\n')[0]}\nFiles: ${commit.files.join(', ')}`,
+            project: process.cwd().split(/[/\\]/).pop(),
+            actor: commit.author,
+            sourceRef: commit.hash,
+            metadata: {
+              commitHash: commit.hash,
+              files: commit.files,
+            },
+          });
+        }
+
         const result = await extractor.extractFromCommit(commit);
 
         if (!result.extracted || !result.knowledge) {

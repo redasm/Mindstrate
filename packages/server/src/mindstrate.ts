@@ -76,8 +76,11 @@ import type {
 import { digestKnowledgeInput } from './context-graph/knowledge-digest.js';
 import {
   ingestContextEvent,
+  ingestGitActivity,
+  ingestLspDiagnostic,
   ingestKnowledgeWrite,
   ingestProjectSnapshotEvent,
+  ingestTestRun,
   ingestUserFeedback,
   type IngestContextEventInput,
 } from './events/index.js';
@@ -237,6 +240,16 @@ export class Mindstrate {
         success: false,
         message: `Quality gate failed: ${gateResult.errors.join('; ')}`,
         qualityWarnings: gateResult.warnings,
+      };
+    }
+
+    const exactDuplicate = this.metadataStore.findExactDuplicate(input);
+    if (exactDuplicate) {
+      this.metadataStore.recordUsage(exactDuplicate.id);
+      return {
+        success: false,
+        message: `Exact duplicate detected. Existing knowledge ID: ${exactDuplicate.id}`,
+        duplicateOf: exactDuplicate.id,
       };
     }
 
@@ -691,6 +704,37 @@ export class Mindstrate {
 
   ingestEvent(input: IngestContextEventInput): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
     return ingestContextEvent(this.contextGraphStore, input);
+  }
+
+  ingestGitActivity(input: {
+    content: string;
+    project?: string;
+    actor?: string;
+    sourceRef?: string;
+    metadata?: Record<string, unknown>;
+  }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
+    return ingestGitActivity(this.contextGraphStore, input);
+  }
+
+  ingestTestRun(input: {
+    content: string;
+    project?: string;
+    sessionId?: string;
+    actor?: string;
+    sourceRef?: string;
+    metadata?: Record<string, unknown>;
+  }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
+    return ingestTestRun(this.contextGraphStore, input);
+  }
+
+  ingestLspDiagnostic(input: {
+    content: string;
+    project?: string;
+    sessionId?: string;
+    sourceRef?: string;
+    metadata?: Record<string, unknown>;
+  }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
+    return ingestLspDiagnostic(this.contextGraphStore, input);
   }
 
   /** 压缩当前会话（由 AI 调用，传入摘要） */
