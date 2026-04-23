@@ -475,6 +475,26 @@ describe('Mindstrate', () => {
       expect(nodes).toHaveLength(1);
       expect(nodes[0].title).toContain('test result');
     });
+
+    it('should ingest lsp diagnostics into the context graph facade', () => {
+      const ingested = memory.ingestLspDiagnostic({
+        content: 'Type error TS2322 in src/mindstrate.ts',
+        project: 'proj',
+        sourceRef: 'lsp:mindstrate.ts',
+        metadata: { code: 'TS2322' },
+      });
+
+      expect(ingested.event.type).toBe('lsp_diagnostic');
+      expect(ingested.node.sourceRef).toBe('lsp:mindstrate.ts');
+
+      const nodes = memory.listContextNodes({
+        project: 'proj',
+        sourceRef: 'lsp:mindstrate.ts',
+        limit: 10,
+      });
+      expect(nodes).toHaveLength(1);
+      expect(nodes[0].title).toContain('lsp diagnostic');
+    });
   });
 
   describe('stats', () => {
