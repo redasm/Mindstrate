@@ -50,6 +50,7 @@ import {
   type DetectedProject,
 } from './project/index.js';
 import { runContextAssemblyDag } from './context-graph/context-assembly-dag.js';
+import { ContextInternalizer, type InternalizationSuggestionOptions, type InternalizationSuggestions } from './context-graph/context-internalizer.js';
 import { ContextPrioritySelector } from './context-graph/context-priority-selector.js';
 import { ContextGraphStore } from './context-graph/context-graph-store.js';
 import { GraphKnowledgeProjector, type GraphKnowledgeProjectionOptions } from './context-graph/knowledge-projector.js';
@@ -101,6 +102,7 @@ export class Mindstrate {
   private config: MindstrateConfig;
   private metadataStore: MetadataStore;
   private contextGraphStore: ContextGraphStore;
+  private contextInternalizer: ContextInternalizer;
   private contextPrioritySelector: ContextPrioritySelector;
   private graphKnowledgeProjector: GraphKnowledgeProjector;
   private projectedKnowledgeSearch: ProjectedKnowledgeSearch;
@@ -147,6 +149,7 @@ export class Mindstrate {
     // 初始化各模块
     this.metadataStore = new MetadataStore(this.config.dbPath);
     this.contextGraphStore = new ContextGraphStore(this.metadataStore.getDb());
+    this.contextInternalizer = new ContextInternalizer(this.contextGraphStore);
     this.contextPrioritySelector = new ContextPrioritySelector(this.contextGraphStore);
     this.graphKnowledgeProjector = new GraphKnowledgeProjector(this.contextGraphStore);
     this.projectedKnowledgeSearch = new ProjectedKnowledgeSearch(this.graphKnowledgeProjector);
@@ -913,6 +916,10 @@ export class Mindstrate {
 
   projectKnowledgeUnit(options?: GraphKnowledgeProjectionOptions): ProjectionRecord[] {
     return this.projectionMaterializer.materialize(options);
+  }
+
+  generateInternalizationSuggestions(options?: InternalizationSuggestionOptions): InternalizationSuggestions {
+    return this.contextInternalizer.generateSuggestions(options);
   }
 
   listContextNodes(options?: {

@@ -373,6 +373,37 @@ describe('Mindstrate', () => {
     });
   });
 
+  describe('memory internalization', () => {
+    it('should generate AGENTS and system prompt suggestions from stable rules', () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Test-first ECS changes',
+        content: 'Write a failing test before changing ECS runtime behavior.',
+        project: 'proj',
+        status: ContextNodeStatus.VERIFIED,
+        qualityScore: 92,
+        confidence: 0.95,
+      });
+
+      const suggestions = memory.generateInternalizationSuggestions({
+        project: 'proj',
+      });
+
+      expect(suggestions.agentsMd).toContain('Test-first ECS changes');
+      expect(suggestions.agentsMd).toContain('Write a failing test before changing ECS runtime behavior.');
+      expect(suggestions.systemPromptFragment).toContain('Test-first ECS changes');
+      expect(suggestions.projectSnapshotFragment).toContain('Test-first ECS changes');
+      expect(suggestions.sourceNodeIds).toHaveLength(1);
+    });
+  });
+
   describe('curateContext', () => {
     it('should produce graph-first curated context', async () => {
       const internal = memory as unknown as {

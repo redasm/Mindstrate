@@ -59,3 +59,8 @@ export {
   ProjectedKnowledgeSearch,
   type ProjectedKnowledgeSearchOptions,
 } from './projected-knowledge-search.js';
+export {
+  ContextInternalizer,
+  type InternalizationSuggestionOptions,
+  type InternalizationSuggestions,
+} from './context-internalizer.js';
