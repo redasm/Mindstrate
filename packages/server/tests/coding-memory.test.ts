@@ -207,6 +207,25 @@ describe('Mindstrate', () => {
       expect(ended!.status).toBe('completed');
     });
 
+    it('should restore ECS session snapshot projections with legacy session context', async () => {
+      const session = await memory.startSession({ project: 'proj' });
+      memory.saveObservation({
+        sessionId: session.id,
+        type: 'decision',
+        content: 'Keep restored context graph-aware.',
+      });
+      await memory.endSession(session.id);
+
+      const restored = memory.restoreSessionContext('proj');
+      const formatted = memory.formatSessionContext('proj');
+
+      expect(restored.lastSession?.decisions).toContain('Keep restored context graph-aware.');
+      expect(restored.graphSnapshots?.[0].title).toContain('Session snapshot');
+      expect(restored.graphSnapshots?.[0].nodeId).toBeTruthy();
+      expect(formatted).toContain('ECS Session Snapshots');
+      expect(formatted).toContain('Keep restored context graph-aware');
+    });
+
     it('should auto-end old active session when starting new one', async () => {
       const s1 = await memory.startSession({ project: 'proj' });
       const s2 = await memory.startSession({ project: 'proj' });

@@ -200,7 +200,7 @@ export class SessionStore {
 
   /** 格式化上下文为可注入的文本 */
   formatContextForInjection(ctx: SessionContext): string {
-    if (!ctx.lastSession && !ctx.recentTimeline?.length) {
+    if (!ctx.lastSession && !ctx.recentTimeline?.length && !ctx.graphSnapshots?.length) {
       return '';
     }
 
@@ -237,6 +237,14 @@ export class SessionStore {
     if (ctx.projectContext) {
       parts.push(`\n## Project Context`);
       parts.push(ctx.projectContext);
+    }
+
+    if (ctx.graphSnapshots?.length) {
+      parts.push(`\n## ECS Session Snapshots`);
+      ctx.graphSnapshots.forEach((snapshot) => {
+        const endedAt = snapshot.endedAt ? ` [${snapshot.endedAt}]` : '';
+        parts.push(`- ${snapshot.title}${endedAt}: ${snapshot.summary}`);
+      });
     }
 
     return parts.join('\n');

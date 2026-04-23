@@ -62,10 +62,9 @@ import { RuleCompressor, type RuleCompressionOptions, type RuleCompressionResult
 import { SummaryCompressor, type SummaryCompressionOptions, type SummaryCompressionResult } from './context-graph/summary-compressor.js';
 import { MetabolismEngine, Pruner, type RunMetabolismOptions, type PruneOptions, type PruneResult } from './metabolism/index.js';
 import { KnowledgeProjectionMaterializer, KnowledgeUnitMaterializer } from './projections/index.js';
-import { SubstrateType } from '@mindstrate/protocol/models';
+import { ContextDomainType, SubstrateType } from '@mindstrate/protocol/models';
 import type {
   ConflictRecord,
-  ContextDomainType,
   ContextEdge,
   ContextEvent,
   ContextNode,
@@ -815,7 +814,26 @@ export class Mindstrate {
 
   /** 恢复会话上下文（新会话开始时调用） */
   restoreSessionContext(project: string = ''): SessionContext {
-    return this.sessionStore.restoreContext(project);
+    const context = this.sessionStore.restoreContext(project);
+    const graphSnapshots = this.contextGraphStore.listNodes({
+      project,
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      limit: 5,
+    });
+
+    if (graphSnapshots.length > 0) {
+      context.graphSnapshots = graphSnapshots.map((node) => ({
+        nodeId: node.id,
+        title: node.title,
+        summary: node.content,
+        endedAt: typeof node.metadata?.['endedAt'] === 'string'
+          ? node.metadata['endedAt']
+          : undefined,
+      }));
+    }
+
+    return context;
   }
 
   /** 格式化会话上下文为可注入的文本 */

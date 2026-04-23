@@ -109,4 +109,11 @@ export interface SessionContext {
   }>;
   /** 项目级别的累积上下文 */
   projectContext?: string;
+  /** ECS 图中恢复出的会话快照投影 */
+  graphSnapshots?: Array<{
+    nodeId: string;
+    title: string;
+    summary: string;
+    endedAt?: string;
+  }>;
 }
