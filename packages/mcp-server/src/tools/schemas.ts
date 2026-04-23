@@ -51,6 +51,57 @@ export const MetabolismRunSchema = z.object({
   trigger: z.enum(['manual', 'scheduled', 'event_driven']).optional(),
 });
 
+export const BundleCreateSchema = z.object({
+  name: z.string().min(1, 'name is required'),
+  version: z.string().optional(),
+  description: z.string().optional(),
+  project: z.string().optional(),
+  nodeIds: z.array(z.string()).optional(),
+  includeRelatedEdges: z.boolean().optional(),
+});
+
+export const BundlePayloadSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  version: z.string().min(1),
+  description: z.string().optional(),
+  projectScoped: z.boolean(),
+  nodeIds: z.array(z.string()),
+  edgeIds: z.array(z.string()),
+  exportedAt: z.string().min(1),
+  nodes: z.array(z.object({
+    id: z.string(),
+    substrateType: z.string(),
+    domainType: z.string(),
+    title: z.string(),
+    content: z.string(),
+    tags: z.array(z.string()),
+    project: z.string().optional(),
+    compressionLevel: z.number(),
+    confidence: z.number(),
+    qualityScore: z.number(),
+    status: z.string(),
+    sourceRef: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })).optional(),
+  edges: z.array(z.object({
+    id: z.string(),
+    sourceId: z.string(),
+    targetId: z.string(),
+    relationType: z.string(),
+    strength: z.number(),
+    evidence: z.record(z.string(), z.unknown()).optional(),
+  })).optional(),
+});
+
+export const BundleValidateSchema = z.object({
+  bundle: BundlePayloadSchema,
+});
+
+export const BundleInstallSchema = z.object({
+  bundle: BundlePayloadSchema,
+});
+
 export const MemoryAddSchema = z.object({
   title: z.string().min(1, 'title is required'),
   type: z.nativeEnum(KnowledgeType),

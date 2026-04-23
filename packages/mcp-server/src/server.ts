@@ -52,6 +52,9 @@ import {
   ContextQueryGraphSchema,
   ContextConflictsSchema,
   MetabolismRunSchema,
+  BundleCreateSchema,
+  BundleValidateSchema,
+  BundleInstallSchema,
   MemorySearchSchema,
   MemoryAddSchema,
   MemoryFeedbackSchema,
@@ -67,6 +70,9 @@ import {
   handleContextQueryGraph,
   handleContextConflicts,
   handleMetabolismRun,
+  handleBundleCreate,
+  handleBundleValidate,
+  handleBundleInstall,
   handleMemorySearch,
   handleMemoryAdd,
   handleMemoryFeedback,
@@ -287,6 +293,21 @@ const api: McpApi = {
     return memory!.runMetabolism(options);
   },
 
+  async createBundle(options) {
+    if (teamClient) return teamClient.createBundle(options);
+    return memory!.createBundle(options);
+  },
+
+  async validateBundle(bundle) {
+    if (teamClient) return teamClient.validateBundle(bundle);
+    return memory!.validateBundle(bundle);
+  },
+
+  async installBundle(bundle) {
+    if (teamClient) return teamClient.installBundle(bundle);
+    return memory!.installBundle(bundle);
+  },
+
   async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory!.readGraphKnowledge(opts);
@@ -380,6 +401,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(MetabolismRunSchema, args);
       if ('error' in v) return v.error;
       return handleMetabolismRun(api, v.data);
+    }
+    case 'bundle_create': {
+      const v = validateArgs(BundleCreateSchema, args);
+      if ('error' in v) return v.error;
+      return handleBundleCreate(api, v.data);
+    }
+    case 'bundle_validate': {
+      const v = validateArgs(BundleValidateSchema, args);
+      if ('error' in v) return v.error;
+      return handleBundleValidate(api, v.data);
+    }
+    case 'bundle_install': {
+      const v = validateArgs(BundleInstallSchema, args);
+      if ('error' in v) return v.error;
+      return handleBundleInstall(api, v.data);
     }
     case 'memory_add': {
       const v = validateArgs(MemoryAddSchema, args);

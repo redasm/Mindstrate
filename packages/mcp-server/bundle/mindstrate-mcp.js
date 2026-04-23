@@ -6986,6 +6986,15 @@ var require_team_client = __commonJS({
         const data = await this.fetch(`/api/context/conflicts?${params}`);
         return data.conflicts ?? [];
       }
+      async createBundle(options) {
+        return this.post("/api/bundles/create", options);
+      }
+      async validateBundle(bundle) {
+        return this.post("/api/bundles/validate", { bundle });
+      }
+      async installBundle(bundle) {
+        return this.post("/api/bundles/install", { bundle });
+      }
       // ============================================================
       // Knowledge Evolution (知识进化)
       // ============================================================
@@ -19045,6 +19054,44 @@ var TOOL_DEFINITIONS = [
           description: "Why the metabolism run was triggered"
         }
       }
+    }
+  },
+  {
+    name: "bundle_create",
+    description: "Create a portable ECS context bundle from the current graph.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Bundle name" },
+        version: { type: "string", description: "Bundle version (default: 0.1.0)" },
+        description: { type: "string", description: "Optional description" },
+        project: { type: "string", description: "Optional project scope" },
+        nodeIds: { type: "array", items: { type: "string" }, description: "Optional explicit node ids" },
+        includeRelatedEdges: { type: "boolean", description: "Include edges between bundled nodes (default: true)" }
+      },
+      required: ["name"]
+    }
+  },
+  {
+    name: "bundle_validate",
+    description: "Validate a portable ECS context bundle payload.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bundle: { type: "object", description: "Portable bundle payload" }
+      },
+      required: ["bundle"]
+    }
+  },
+  {
+    name: "bundle_install",
+    description: "Install a portable ECS context bundle payload into the current graph.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        bundle: { type: "object", description: "Portable bundle payload" }
+      },
+      required: ["bundle"]
     }
   },
   {
@@ -33052,6 +33099,53 @@ var MetabolismRunSchema = external_exports.object({
   project: external_exports.string().optional(),
   trigger: external_exports.enum(["manual", "scheduled", "event_driven"]).optional()
 });
+var BundleCreateSchema = external_exports.object({
+  name: external_exports.string().min(1, "name is required"),
+  version: external_exports.string().optional(),
+  description: external_exports.string().optional(),
+  project: external_exports.string().optional(),
+  nodeIds: external_exports.array(external_exports.string()).optional(),
+  includeRelatedEdges: external_exports.boolean().optional()
+});
+var BundlePayloadSchema = external_exports.object({
+  id: external_exports.string().min(1),
+  name: external_exports.string().min(1),
+  version: external_exports.string().min(1),
+  description: external_exports.string().optional(),
+  projectScoped: external_exports.boolean(),
+  nodeIds: external_exports.array(external_exports.string()),
+  edgeIds: external_exports.array(external_exports.string()),
+  exportedAt: external_exports.string().min(1),
+  nodes: external_exports.array(external_exports.object({
+    id: external_exports.string(),
+    substrateType: external_exports.string(),
+    domainType: external_exports.string(),
+    title: external_exports.string(),
+    content: external_exports.string(),
+    tags: external_exports.array(external_exports.string()),
+    project: external_exports.string().optional(),
+    compressionLevel: external_exports.number(),
+    confidence: external_exports.number(),
+    qualityScore: external_exports.number(),
+    status: external_exports.string(),
+    sourceRef: external_exports.string().optional(),
+    metadata: external_exports.record(external_exports.string(), external_exports.unknown()).optional()
+  })).optional(),
+  edges: external_exports.array(external_exports.object({
+    id: external_exports.string(),
+    sourceId: external_exports.string(),
+    targetId: external_exports.string(),
+    relationType: external_exports.string(),
+    strength: external_exports.number(),
+    evidence: external_exports.record(external_exports.string(), external_exports.unknown()).optional()
+  })).optional()
+});
+var BundleValidateSchema = external_exports.object({
+  bundle: BundlePayloadSchema
+});
+var BundleInstallSchema = external_exports.object({
+  bundle: BundlePayloadSchema
+});
 var MemoryAddSchema = external_exports.object({
   title: external_exports.string().min(1, "title is required"),
   type: external_exports.nativeEnum(import_protocol3.KnowledgeType),
@@ -33284,6 +33378,43 @@ ${stats}` : null,
 Notes:
 ${run.notes.map((note) => `- ${note}`).join("\n")}` : null
       ].filter(Boolean).join("\n")
+    }]
+  };
+}
+async function handleBundleCreate(api2, input) {
+  const bundle = await api2.createBundle(input);
+  return {
+    content: [{
+      type: "text",
+      text: `Bundle created.
+ID: ${bundle.id}
+Name: ${bundle.name}
+Nodes: ${bundle.nodeIds.length}
+Edges: ${bundle.edgeIds.length}`
+    }]
+  };
+}
+async function handleBundleValidate(api2, input) {
+  const result = await api2.validateBundle(input.bundle);
+  return {
+    content: [{
+      type: "text",
+      text: result.valid ? "Bundle is valid." : `Bundle validation failed:
+${result.errors.map((error49) => `- ${error49}`).join("\n")}`
+    }],
+    isError: result.valid ? void 0 : true
+  };
+}
+async function handleBundleInstall(api2, input) {
+  const result = await api2.installBundle(input.bundle);
+  return {
+    content: [{
+      type: "text",
+      text: `Bundle installed.
+Installed nodes: ${result.installedNodes}
+Updated nodes: ${result.updatedNodes}
+Installed edges: ${result.installedEdges}
+Skipped edges: ${result.skippedEdges}`
     }]
   };
 }
@@ -33732,6 +33863,18 @@ var api = {
     if (teamClient) return teamClient.runMetabolism(options);
     return memory.runMetabolism(options);
   },
+  async createBundle(options) {
+    if (teamClient) return teamClient.createBundle(options);
+    return memory.createBundle(options);
+  },
+  async validateBundle(bundle) {
+    if (teamClient) return teamClient.validateBundle(bundle);
+    return memory.validateBundle(bundle);
+  },
+  async installBundle(bundle) {
+    if (teamClient) return teamClient.installBundle(bundle);
+    return memory.installBundle(bundle);
+  },
   async readGraphKnowledge(opts) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory.readGraphKnowledge(opts);
@@ -33808,6 +33951,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(MetabolismRunSchema, args);
       if ("error" in v) return v.error;
       return handleMetabolismRun(api, v.data);
+    }
+    case "bundle_create": {
+      const v = validateArgs(BundleCreateSchema, args);
+      if ("error" in v) return v.error;
+      return handleBundleCreate(api, v.data);
+    }
+    case "bundle_validate": {
+      const v = validateArgs(BundleValidateSchema, args);
+      if ("error" in v) return v.error;
+      return handleBundleValidate(api, v.data);
+    }
+    case "bundle_install": {
+      const v = validateArgs(BundleInstallSchema, args);
+      if ("error" in v) return v.error;
+      return handleBundleInstall(api, v.data);
     }
     case "memory_add": {
       const v = validateArgs(MemoryAddSchema, args);

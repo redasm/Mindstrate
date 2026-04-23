@@ -22,6 +22,7 @@ import type {
   Session,
   EvolutionRunResult,
   PipelineResult,
+  PortableContextBundle,
 } from '@mindstrate/protocol';
 
 /**
@@ -72,6 +73,21 @@ export interface LocalMemory {
   }): ContextNode[];
   listConflictRecords(project?: string, limit?: number): ConflictRecord[];
   runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
+  createBundle(options: {
+    name: string;
+    version?: string;
+    description?: string;
+    project?: string;
+    nodeIds?: string[];
+    includeRelatedEdges?: boolean;
+  }): PortableContextBundle;
+  validateBundle(bundle: PortableContextBundle): { valid: boolean; errors: string[] };
+  installBundle(bundle: PortableContextBundle): {
+    installedNodes: number;
+    updatedNodes: number;
+    installedEdges: number;
+    skippedEdges: number;
+  };
   addMutationSink(sink: unknown): void;
   close(): void;
 }
@@ -119,6 +135,21 @@ export interface McpApi {
   }): Promise<ContextNode[]>;
   listContextConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]>;
   runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
+  createBundle(options: {
+    name: string;
+    version?: string;
+    description?: string;
+    project?: string;
+    nodeIds?: string[];
+    includeRelatedEdges?: boolean;
+  }): Promise<PortableContextBundle>;
+  validateBundle(bundle: PortableContextBundle): Promise<{ valid: boolean; errors: string[] }>;
+  installBundle(bundle: PortableContextBundle): Promise<{
+    installedNodes: number;
+    updatedNodes: number;
+    installedEdges: number;
+    skippedEdges: number;
+  }>;
   close(): void;
 }
 

@@ -13,6 +13,9 @@ import type {
   ContextQueryGraphSchema,
   ContextConflictsSchema,
   MetabolismRunSchema,
+  BundleCreateSchema,
+  BundleValidateSchema,
+  BundleInstallSchema,
   MemorySearchSchema,
   MemoryAddSchema,
   MemoryFeedbackSchema,
@@ -213,6 +216,48 @@ export async function handleMetabolismRun(
         stats ? `\nStage Stats:\n${stats}` : null,
         run.notes?.length ? `\nNotes:\n${run.notes.map((note) => `- ${note}`).join('\n')}` : null,
       ].filter(Boolean).join('\n'),
+    }],
+  };
+}
+
+export async function handleBundleCreate(
+  api: McpApi,
+  input: z.infer<typeof BundleCreateSchema>,
+): Promise<McpToolResponse> {
+  const bundle = await api.createBundle(input);
+  return {
+    content: [{
+      type: 'text',
+      text: `Bundle created.\nID: ${bundle.id}\nName: ${bundle.name}\nNodes: ${bundle.nodeIds.length}\nEdges: ${bundle.edgeIds.length}`,
+    }],
+  };
+}
+
+export async function handleBundleValidate(
+  api: McpApi,
+  input: z.infer<typeof BundleValidateSchema>,
+): Promise<McpToolResponse> {
+  const result = await api.validateBundle(input.bundle);
+  return {
+    content: [{
+      type: 'text',
+      text: result.valid
+        ? 'Bundle is valid.'
+        : `Bundle validation failed:\n${result.errors.map((error) => `- ${error}`).join('\n')}`,
+    }],
+    isError: result.valid ? undefined : true,
+  };
+}
+
+export async function handleBundleInstall(
+  api: McpApi,
+  input: z.infer<typeof BundleInstallSchema>,
+): Promise<McpToolResponse> {
+  const result = await api.installBundle(input.bundle);
+  return {
+    content: [{
+      type: 'text',
+      text: `Bundle installed.\nInstalled nodes: ${result.installedNodes}\nUpdated nodes: ${result.updatedNodes}\nInstalled edges: ${result.installedEdges}\nSkipped edges: ${result.skippedEdges}`,
     }],
   };
 }

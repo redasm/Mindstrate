@@ -181,6 +181,44 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'bundle_create',
+    description: 'Create a portable ECS context bundle from the current graph.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Bundle name' },
+        version: { type: 'string', description: 'Bundle version (default: 0.1.0)' },
+        description: { type: 'string', description: 'Optional description' },
+        project: { type: 'string', description: 'Optional project scope' },
+        nodeIds: { type: 'array', items: { type: 'string' }, description: 'Optional explicit node ids' },
+        includeRelatedEdges: { type: 'boolean', description: 'Include edges between bundled nodes (default: true)' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'bundle_validate',
+    description: 'Validate a portable ECS context bundle payload.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        bundle: { type: 'object', description: 'Portable bundle payload' },
+      },
+      required: ['bundle'],
+    },
+  },
+  {
+    name: 'bundle_install',
+    description: 'Install a portable ECS context bundle payload into the current graph.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        bundle: { type: 'object', description: 'Portable bundle payload' },
+      },
+      required: ['bundle'],
+    },
+  },
+  {
     name: 'memory_feedback',
     description: 'Provide feedback on a knowledge entry (upvote or downvote).',
     inputSchema: {
