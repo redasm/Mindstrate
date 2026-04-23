@@ -455,6 +455,26 @@ describe('Mindstrate', () => {
       expect(nodes).toHaveLength(1);
       expect(nodes[0].title).toContain('git activity');
     });
+
+    it('should ingest test results into the context graph facade', () => {
+      const ingested = memory.ingestTestRun({
+        content: 'Vitest failed in context graph tests',
+        project: 'proj',
+        actor: 'vitest',
+        sourceRef: 'test:ctx-graph',
+      });
+
+      expect(ingested.event.type).toBe('test_result');
+      expect(ingested.node.sourceRef).toBe('test:ctx-graph');
+
+      const nodes = memory.listContextNodes({
+        project: 'proj',
+        sourceRef: 'test:ctx-graph',
+        limit: 10,
+      });
+      expect(nodes).toHaveLength(1);
+      expect(nodes[0].title).toContain('test result');
+    });
   });
 
   describe('stats', () => {

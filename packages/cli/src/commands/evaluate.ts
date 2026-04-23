@@ -33,14 +33,15 @@ export function registerEvaluateCommand(program: Command): void {
               );
             }
           }
-        } else {
-          console.log('Running retrieval evaluation...\n');
-          const result = await memory.runEvaluation(parseInt(opts.topK, 10));
+      } else {
+        console.log('Running retrieval evaluation...\n');
+        const result = await memory.runEvaluation(parseInt(opts.topK, 10));
+        const project = process.cwd().split(/[/\\]/).pop();
 
-          if (result.totalCases === 0) {
-            console.log('No evaluation cases found.');
-            console.log('Use the addEvalCase API to add test cases for evaluation.');
-          } else {
+        if (result.totalCases === 0) {
+          console.log('No evaluation cases found.');
+          console.log('Use the addEvalCase API to add test cases for evaluation.');
+        } else {
             console.log(`Cases: ${result.totalCases}`);
             console.log(`Precision: ${(result.precision * 100).toFixed(1)}%`);
             console.log(`Recall: ${(result.recall * 100).toFixed(1)}%`);
@@ -52,12 +53,26 @@ export function registerEvaluateCommand(program: Command): void {
               for (const d of result.details.filter(d => d.misses.length > 0)) {
                 console.log(`Query: "${d.query}"`);
                 console.log(`  Missing: ${d.misses.join(', ')}`);
-              }
             }
           }
+
+          memory.ingestTestRun({
+            content: `Retrieval evaluation completed. Cases=${result.totalCases}, precision=${(result.precision * 100).toFixed(1)}%, recall=${(result.recall * 100).toFixed(1)}%, f1=${(result.f1 * 100).toFixed(1)}%, mrr=${(result.meanReciprocalRank * 100).toFixed(1)}%`,
+            project,
+            actor: 'mindstrate-evaluate',
+            sourceRef: `eval:${Date.now()}`,
+            metadata: {
+              totalCases: result.totalCases,
+              precision: result.precision,
+              recall: result.recall,
+              f1: result.f1,
+              mrr: result.meanReciprocalRank,
+            },
+          });
         }
-      } finally {
-        memory.close();
       }
+    } finally {
+      memory.close();
+    }
     });
 }
