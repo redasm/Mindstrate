@@ -109,7 +109,9 @@ export class TeamClient {
       language: options?.filter?.language,
       framework: options?.filter?.framework,
       project: options?.filter?.project,
-      type: options?.filter?.types?.[0],
+      types: options?.filter?.types,
+      tags: options?.filter?.tags,
+      status: options?.filter?.status,
       minScore: options?.filter?.minScore,
     });
     return data.results ?? [];
@@ -127,10 +129,13 @@ export class TeamClient {
   /** List knowledge on the team server. Note: only the first type in filter.types is sent. */
   async list(filter?: RetrievalFilter, limit?: number): Promise<KnowledgeUnit[]> {
     const params = new URLSearchParams();
-    if (filter?.types?.[0]) params.set('type', filter.types[0]);
+    for (const type of filter?.types ?? []) params.append('type', type);
     if (filter?.language) params.set('language', filter.language);
     if (filter?.framework) params.set('framework', filter.framework);
     if (filter?.project) params.set('project', filter.project);
+    for (const tag of filter?.tags ?? []) params.append('tag', tag);
+    for (const status of filter?.status ?? []) params.append('status', status);
+    if (filter?.minScore !== undefined) params.set('minScore', String(filter.minScore));
     if (limit) params.set('limit', String(limit));
 
     const data = await this.fetch<{ entries?: KnowledgeUnit[] }>(`/api/knowledge?${params}`);
@@ -173,6 +178,25 @@ export class TeamClient {
 
   async restoreSession(project: string = ''): Promise<{ context: SessionContext; formatted: string | null }> {
     return this.fetch(`/api/session/restore?project=${encodeURIComponent(project)}`);
+  }
+
+  async getSession(id: string): Promise<Session | null> {
+    try {
+      return await this.fetch<Session>(`/api/session/${id}`);
+    } catch (err) {
+      console.warn(`[TeamClient] Failed to get session ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
+  }
+
+  async getActiveSession(project: string = ''): Promise<Session | null> {
+    try {
+      const data = await this.fetch<{ session?: Session | null }>(`/api/session/active?project=${encodeURIComponent(project)}`);
+      return data.session ?? null;
+    } catch (err) {
+      console.warn(`[TeamClient] Failed to get active session for ${project || '(default)'}: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
   // ============================================================

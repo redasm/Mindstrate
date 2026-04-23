@@ -215,9 +215,9 @@ const api: McpApi = {
     return { session, context: context || null };
   },
 
-  async saveObservation(sessionId: string, type: string, content: string) {
-    if (teamClient) return teamClient.saveObservation(sessionId, type, content);
-    memory!.saveObservation({ sessionId, type, content } as SaveObservationInput);
+  async saveObservation(sessionId: string, type: string, content: string, metadata?: Record<string, string>) {
+    if (teamClient) return teamClient.saveObservation(sessionId, type, content, metadata);
+    memory!.saveObservation({ sessionId, type, content, metadata } as SaveObservationInput);
   },
 
   async endSession(sessionId: string, summary?: string, openTasks?: string[]) {
@@ -229,12 +229,12 @@ const api: McpApi = {
   },
 
   async getSession(id: string): Promise<Session | null> {
-    if (teamClient) return null;
+    if (teamClient) return teamClient.getSession(id);
     return memory!.getSession(id);
   },
 
   async getActiveSession(project: string): Promise<Session | null> {
-    if (teamClient) return null;
+    if (teamClient) return teamClient.getActiveSession(project);
     return memory!.getActiveSession(project);
   },
 

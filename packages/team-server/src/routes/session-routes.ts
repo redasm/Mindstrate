@@ -46,6 +46,27 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json({ context, formatted: formatted || null });
   }));
 
+  app.get('/api/session/active', asyncRoute((req, res) => {
+    const project = typeof req.query.project === 'string' ? req.query.project : '';
+    res.json({ session: memory.getActiveSession(project) });
+  }));
+
+  app.get('/api/session/:id', asyncRoute((req, res) => {
+    const id = readParam(req.params.id);
+    if (!id) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    const session = memory.getSession(id);
+    if (!session) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    res.json(session);
+  }));
+
   app.post('/api/feedback', asyncRoute((req, res) => {
     const { retrievalId, signal, context } = req.body;
     if (!retrievalId || !signal) {

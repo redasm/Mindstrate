@@ -391,7 +391,7 @@ export async function handleSessionSave(
     };
   }
 
-  await api.saveObservation(sessionId, input.type, input.content);
+  await api.saveObservation(sessionId, input.type, input.content, input.metadata);
 
   return {
     content: [{ type: 'text', text: `Observation saved: [${input.type}] ${input.content.substring(0, 80)}` }],

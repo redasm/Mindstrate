@@ -32,5 +32,19 @@ export const readParam = (value: unknown): string | undefined => {
   return undefined;
 };
 
+export const readStringArray = (value: unknown): string[] | undefined => {
+  if (typeof value === 'string') {
+    const entries = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+    return entries.length > 0 ? entries : undefined;
+  }
+
+  if (Array.isArray(value)) {
+    const entries = value.filter((entry): entry is string => typeof entry === 'string');
+    return entries.length > 0 ? entries : undefined;
+  }
+
+  return undefined;
+};
+
 export const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Unknown error';

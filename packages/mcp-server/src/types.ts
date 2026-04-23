@@ -39,7 +39,7 @@ export interface LocalMemory {
   upvote(id: string): void;
   downvote(id: string): void;
   startSession(input: { project?: string; techContext?: string }): Promise<Session>;
-  saveObservation(input: { sessionId: string; type: string; content: string }): void;
+  saveObservation(input: { sessionId: string; type: string; content: string; metadata?: Record<string, string> }): void;
   compressSession(input: { sessionId: string; summary: string; openTasks?: string[] }): void;
   endSession(sessionId: string): Promise<void>;
   getSession(id: string): Session | null;
@@ -108,7 +108,7 @@ export interface McpApi {
   upvote(id: string): Promise<void>;
   downvote(id: string): Promise<void>;
   startSession(project: string, techContext?: string): Promise<{ session: Session; context: string | null }>;
-  saveObservation(sessionId: string, type: string, content: string): Promise<void>;
+  saveObservation(sessionId: string, type: string, content: string, metadata?: Record<string, string>): Promise<void>;
   endSession(sessionId: string, summary?: string, openTasks?: string[]): Promise<void>;
   getSession(id: string): Promise<Session | null>;
   getActiveSession(project: string): Promise<Session | null>;

@@ -22,15 +22,18 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const memory = getMemory();
+    const memory = await getMemoryReady();
     const body = await request.json();
 
-    const updated = memory.update(id, {
+    const updated = await memory.updateAndReindex(id, {
       title: body.title,
       problem: body.problem,
       solution: body.solution,
+      codeSnippets: body.codeSnippets,
       tags: body.tags,
       context: body.context,
+      actionable: body.actionable,
+      confidence: body.confidence,
     });
 
     if (!updated) {

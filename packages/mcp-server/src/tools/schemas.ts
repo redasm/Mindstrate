@@ -137,6 +137,7 @@ export const SessionSaveSchema = z.object({
     'decision_path', 'failed_path', 'knowledge_applied', 'knowledge_rejected',
   ]),
   content: z.string().min(1, 'content is required'),
+  metadata: z.record(z.string(), z.string()).optional(),
 });
 
 export const MemoryFeedbackAutoSchema = z.object({

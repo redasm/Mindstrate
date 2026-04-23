@@ -3,10 +3,11 @@ import {
   CaptureSource,
   isValidKnowledgeType,
   KnowledgeType,
+  type KnowledgeStatus,
   type CreateKnowledgeInput,
   type RetrievalFilter,
 } from '@mindstrate/server';
-import { asyncRoute, parseLimit, readParam, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
+import { asyncRoute, parseLimit, readParam, readStringArray, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
 
 const createKnowledgeInput = (body: any): CreateKnowledgeInput => ({
   type: body.type || KnowledgeType.HOW_TO,
@@ -26,15 +27,22 @@ const createKnowledgeInput = (body: any): CreateKnowledgeInput => ({
   source: body.source || CaptureSource.CLI,
   commitHash: body.commitHash,
   confidence: body.confidence,
+  actionable: body.actionable,
 });
 
 const createListFilter = (query: Record<string, unknown>): RetrievalFilter => {
   const filter: RetrievalFilter = {};
+  const types = readStringArray(query.type);
+  const tags = readStringArray(query.tag ?? query.tags);
+  const status = readStringArray(query.status);
 
-  if (typeof query.type === 'string') filter.types = [query.type as KnowledgeType];
+  if (types) filter.types = types as KnowledgeType[];
   if (typeof query.language === 'string') filter.language = query.language;
   if (typeof query.framework === 'string') filter.framework = query.framework;
   if (typeof query.project === 'string') filter.project = query.project;
+  if (tags) filter.tags = tags;
+  if (status) filter.status = status as KnowledgeStatus[];
+  if (typeof query.minScore === 'string') filter.minScore = Number(query.minScore);
 
   return filter;
 };
@@ -120,7 +128,10 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
   }));
 
   app.post('/api/search', withInitializedMemory(memory, async (req, res) => {
-    const { query, topK, language, framework, project, type, minScore } = req.body;
+    const { query, topK, language, framework, project, minScore } = req.body;
+    const types = readStringArray(req.body.types ?? req.body.type);
+    const tags = readStringArray(req.body.tags);
+    const status = readStringArray(req.body.status);
     if (!query) {
       res.status(400).json({ error: 'query is required' });
       return;
@@ -132,7 +143,9 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
         language,
         framework,
         project,
-        types: type ? [type] : undefined,
+        types: types as KnowledgeType[] | undefined,
+        tags,
+        status: status as KnowledgeStatus[] | undefined,
         minScore,
       },
     });
@@ -165,6 +178,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
           source: entry.metadata?.source ?? entry.source,
           commitHash: entry.metadata?.commitHash ?? entry.commitHash,
           confidence: entry.metadata?.confidence ?? entry.confidence,
+          actionable: entry.actionable,
         });
 
         if (result.success) imported++;

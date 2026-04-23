@@ -47,14 +47,18 @@ export async function POST(request: NextRequest) {
       title: body.title,
       problem: body.problem || undefined,
       solution: body.solution,
+      codeSnippets: body.codeSnippets,
       tags: body.tags || [],
       context: {
-        language: body.language || undefined,
-        framework: body.framework || undefined,
-        project: body.project || undefined,
+        language: body.language || body.context?.language || undefined,
+        framework: body.framework || body.context?.framework || undefined,
+        project: body.project || body.context?.project || undefined,
+        filePaths: body.context?.filePaths,
+        dependencies: body.context?.dependencies,
       },
       author: body.author || 'web-ui',
       source: CaptureSource.WEB_UI,
+      actionable: body.actionable,
     });
 
     if (result.success) {
