@@ -46,6 +46,13 @@ export interface PublishBundleResult {
   };
 }
 
+export interface InternalizationSuggestions {
+  agentsMd: string;
+  projectSnapshotFragment: string;
+  systemPromptFragment: string;
+  sourceNodeIds: string[];
+}
+
 /**
  * Minimal interface the MCP server needs from a local Mindstrate instance.
  * The concrete class lives in @mindstrate/server (loaded lazily so the
@@ -116,6 +123,7 @@ export interface LocalMemory {
     skippedEdges: number;
   };
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult;
+  generateInternalizationSuggestions(options?: { project?: string; limit?: number }): InternalizationSuggestions;
   addMutationSink(sink: unknown): void;
   close(): void;
 }
@@ -185,6 +193,7 @@ export interface McpApi {
     skippedEdges: number;
   }>;
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): Promise<PublishBundleResult>;
+  generateInternalizationSuggestions(options?: { project?: string; limit?: number }): Promise<InternalizationSuggestions>;
   close(): void;
 }
 

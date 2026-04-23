@@ -165,6 +165,11 @@ export const ContextAssembleSchema = z.object({
   framework: z.string().optional(),
 });
 
+export const ContextInternalizeSchema = z.object({
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(50).optional(),
+});
+
 export const MemoryEvolveSchema = z.object({
   autoApply: z.boolean().optional(),
   maxItems: z.number().int().min(1).optional(),

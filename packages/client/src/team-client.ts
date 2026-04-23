@@ -81,6 +81,13 @@ export interface PublishBundleResult {
   manifest: BundlePublicationManifest;
 }
 
+export interface InternalizationSuggestions {
+  agentsMd: string;
+  projectSnapshotFragment: string;
+  systemPromptFragment: string;
+  sourceNodeIds: string[];
+}
+
 export interface TeamClientConfig {
   /** Team Server URL (如 http://192.168.1.100:3388) */
   serverUrl: string;
@@ -401,6 +408,13 @@ export class TeamClient {
       registry: options.registry,
       visibility: options.visibility,
     });
+  }
+
+  async generateInternalizationSuggestions(options?: {
+    project?: string;
+    limit?: number;
+  }): Promise<InternalizationSuggestions> {
+    return this.post('/api/context/internalize', options ?? {});
   }
 
   // ============================================================

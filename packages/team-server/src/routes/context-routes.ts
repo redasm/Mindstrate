@@ -125,6 +125,14 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json(assembled);
   }));
 
+  app.post('/api/context/internalize', withInitializedMemory(memory, async (req, res) => {
+    const { project, limit } = req.body;
+    res.json(memory.generateInternalizationSuggestions({
+      project,
+      limit,
+    }));
+  }));
+
   app.post('/api/evolve', withInitializedMemory(memory, async (req, res) => {
     const { autoApply, maxItems, mode } = req.body;
     res.json(await memory.runEvolution({ autoApply, maxItems, mode }));

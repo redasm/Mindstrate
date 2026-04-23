@@ -426,6 +426,24 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'context_internalize',
+    description:
+      'Generate AGENTS.md, project snapshot, and system prompt suggestions from stable ECS rules, heuristics, and axioms.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        project: {
+          type: 'string',
+          description: 'Optional project scope',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of stable nodes to include (default: 10)',
+        },
+      },
+    },
+  },
+  {
     name: 'memory_evolve',
     description:
       'Run the knowledge evolution engine to identify improvements, merges, and deprecations. ' +

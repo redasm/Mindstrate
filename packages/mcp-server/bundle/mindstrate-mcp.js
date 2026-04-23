@@ -7040,6 +7040,9 @@ var require_team_client = __commonJS({
           visibility: options.visibility
         });
       }
+      async generateInternalizationSuggestions(options) {
+        return this.post("/api/context/internalize", options ?? {});
+      }
       // ============================================================
       // Knowledge Evolution (知识进化)
       // ============================================================
@@ -19336,6 +19339,23 @@ var TOOL_DEFINITIONS = [
         }
       },
       required: ["task"]
+    }
+  },
+  {
+    name: "context_internalize",
+    description: "Generate AGENTS.md, project snapshot, and system prompt suggestions from stable ECS rules, heuristics, and axioms.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description: "Optional project scope"
+        },
+        limit: {
+          type: "number",
+          description: "Maximum number of stable nodes to include (default: 10)"
+        }
+      }
     }
   },
   {
@@ -33284,6 +33304,10 @@ var ContextAssembleSchema = external_exports.object({
   language: external_exports.string().optional(),
   framework: external_exports.string().optional()
 });
+var ContextInternalizeSchema = external_exports.object({
+  project: external_exports.string().optional(),
+  limit: external_exports.number().int().min(1).max(50).optional()
+});
 var MemoryEvolveSchema = external_exports.object({
   autoApply: external_exports.boolean().optional(),
   maxItems: external_exports.number().int().min(1).optional(),
@@ -33786,6 +33810,22 @@ async function handleContextAssemble(api2, input) {
   }
   return { content: [{ type: "text", text }] };
 }
+async function handleContextInternalize(api2, input) {
+  const suggestions = await api2.generateInternalizationSuggestions(input);
+  const text = [
+    "### AGENTS.md Suggestion",
+    suggestions.agentsMd,
+    "",
+    "### Project Snapshot Fragment",
+    suggestions.projectSnapshotFragment,
+    "",
+    "### System Prompt Fragment",
+    suggestions.systemPromptFragment,
+    "",
+    `Source Node IDs: ${suggestions.sourceNodeIds.join(", ") || "(none)"}`
+  ].join("\n");
+  return { content: [{ type: "text", text }] };
+}
 async function handleMemoryEvolve(api2, input) {
   const { autoApply, maxItems, mode } = input;
   const evolveResult = await api2.runEvolution({
@@ -34020,6 +34060,10 @@ var api = {
     if (teamClient) return teamClient.publishBundle(bundle, options);
     return memory.publishBundle(bundle, options);
   },
+  async generateInternalizationSuggestions(options) {
+    if (teamClient) return teamClient.generateInternalizationSuggestions(options);
+    return memory.generateInternalizationSuggestions(options);
+  },
   async readGraphKnowledge(opts) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory.readGraphKnowledge(opts);
@@ -34157,6 +34201,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(ContextAssembleSchema, args);
       if ("error" in v) return v.error;
       return handleContextAssemble(api, v.data);
+    }
+    case "context_internalize": {
+      const v = validateArgs(ContextInternalizeSchema, args);
+      if ("error" in v) return v.error;
+      return handleContextInternalize(api, v.data);
     }
     case "memory_evolve": {
       const v = validateArgs(MemoryEvolveSchema, args);

@@ -25,6 +25,7 @@ import type {
   MemoryFeedbackAutoSchema,
   MemoryCurateSchema,
   ContextAssembleSchema,
+  ContextInternalizeSchema,
   MemoryEvolveSchema,
 } from './schemas.js';
 
@@ -599,6 +600,27 @@ export async function handleContextAssemble(
       text += '\n';
     }
   }
+
+  return { content: [{ type: 'text', text }] };
+}
+
+export async function handleContextInternalize(
+  api: McpApi,
+  input: z.infer<typeof ContextInternalizeSchema>,
+): Promise<McpToolResponse> {
+  const suggestions = await api.generateInternalizationSuggestions(input);
+  const text = [
+    '### AGENTS.md Suggestion',
+    suggestions.agentsMd,
+    '',
+    '### Project Snapshot Fragment',
+    suggestions.projectSnapshotFragment,
+    '',
+    '### System Prompt Fragment',
+    suggestions.systemPromptFragment,
+    '',
+    `Source Node IDs: ${suggestions.sourceNodeIds.join(', ') || '(none)'}`,
+  ].join('\n');
 
   return { content: [{ type: 'text', text }] };
 }

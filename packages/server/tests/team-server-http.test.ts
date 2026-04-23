@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { Mindstrate, KnowledgeType } from '../src/index.js';
+import {
+  ContextDomainType,
+  ContextNodeStatus,
+  Mindstrate,
+  KnowledgeType,
+  SubstrateType,
+} from '../src/index.js';
 import { createApp } from '../../team-server/src/app.js';
 import { TeamClient } from '../../client/src/team-client.js';
 import { createTempDir, makeKnowledgeInput, removeTempDir } from './helpers.js';
@@ -145,5 +151,33 @@ describe('team-server HTTP integration', () => {
     expect(publication.manifest.visibility).toBe('public');
     expect(publication.manifest.nodeCount).toBeGreaterThan(0);
     expect(publication.manifest.digest).toMatch(/^sha256:/);
+  });
+
+  it('generates internalization suggestions through the team HTTP API', async () => {
+    const { client, memory } = await startTeamServer();
+    const internal = memory as unknown as {
+      contextGraphStore: {
+        createNode(input: Record<string, unknown>): { id: string };
+      };
+    };
+
+    internal.contextGraphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Review ECS changes with tests',
+      content: 'Run focused tests before publishing ECS runtime changes.',
+      project: 'proj-internalize',
+      status: ContextNodeStatus.VERIFIED,
+      qualityScore: 95,
+      confidence: 0.95,
+    });
+
+    const suggestions = await client.generateInternalizationSuggestions({
+      project: 'proj-internalize',
+    });
+
+    expect(suggestions.agentsMd).toContain('Review ECS changes with tests');
+    expect(suggestions.systemPromptFragment).toContain('Run focused tests before publishing ECS runtime changes.');
+    expect(suggestions.sourceNodeIds).toHaveLength(1);
   });
 });

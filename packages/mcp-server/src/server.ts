@@ -64,6 +64,7 @@ import {
   MemoryFeedbackAutoSchema,
   MemoryCurateSchema,
   ContextAssembleSchema,
+  ContextInternalizeSchema,
   MemoryEvolveSchema,
 } from './tools/schemas.js';
 import {
@@ -87,6 +88,7 @@ import {
   handleMemoryFeedbackAuto,
   handleMemoryCurate,
   handleContextAssemble,
+  handleContextInternalize,
   handleMemoryEvolve,
 } from './tools/handlers.js';
 import { RESOURCE_DEFINITIONS, handleReadResource } from './resources/handlers.js';
@@ -322,6 +324,11 @@ const api: McpApi = {
     return memory!.publishBundle(bundle, options);
   },
 
+  async generateInternalizationSuggestions(options) {
+    if (teamClient) return teamClient.generateInternalizationSuggestions(options);
+    return memory!.generateInternalizationSuggestions(options);
+  },
+
   async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory!.readGraphKnowledge(opts);
@@ -476,6 +483,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(ContextAssembleSchema, args);
       if ('error' in v) return v.error;
       return handleContextAssemble(api, v.data);
+    }
+    case 'context_internalize': {
+      const v = validateArgs(ContextInternalizeSchema, args);
+      if ('error' in v) return v.error;
+      return handleContextInternalize(api, v.data);
     }
     case 'memory_evolve': {
       const v = validateArgs(MemoryEvolveSchema, args);
