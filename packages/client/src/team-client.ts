@@ -8,6 +8,11 @@
 import type {
   KnowledgeUnit,
   CreateKnowledgeInput,
+  ConflictRecord,
+  ContextDomainType,
+  ContextEventType,
+  ContextNode,
+  ContextNodeStatus,
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
   MetabolismRun,
@@ -253,6 +258,50 @@ export class TeamClient {
       topK: options?.topK,
       limit: options?.limit,
     });
+  }
+
+  async ingestContextEvent(input: {
+    type: ContextEventType;
+    content: string;
+    project?: string;
+    sessionId?: string;
+    actor?: string;
+    domainType?: ContextDomainType;
+    substrateType?: string;
+    title?: string;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+  }): Promise<{ eventId: string; nodeId: string }> {
+    return this.post('/api/context/events', input);
+  }
+
+  async queryContextGraph(options?: {
+    query?: string;
+    project?: string;
+    substrateType?: string;
+    domainType?: ContextDomainType;
+    status?: ContextNodeStatus;
+    limit?: number;
+  }): Promise<ContextNode[]> {
+    const params = new URLSearchParams();
+    if (options?.query) params.set('query', options.query);
+    if (options?.project) params.set('project', options.project);
+    if (options?.substrateType) params.set('substrateType', options.substrateType);
+    if (options?.domainType) params.set('domainType', options.domainType);
+    if (options?.status) params.set('status', options.status);
+    if (options?.limit) params.set('limit', String(options.limit));
+
+    const data = await this.fetch<{ nodes?: ContextNode[] }>(`/api/context/graph?${params}`);
+    return data.nodes ?? [];
+  }
+
+  async listContextConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]> {
+    const params = new URLSearchParams();
+    if (options?.project) params.set('project', options.project);
+    if (options?.limit) params.set('limit', String(options.limit));
+
+    const data = await this.fetch<{ conflicts?: ConflictRecord[] }>(`/api/context/conflicts?${params}`);
+    return data.conflicts ?? [];
   }
 
   // ============================================================

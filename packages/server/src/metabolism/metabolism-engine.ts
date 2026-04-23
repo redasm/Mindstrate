@@ -10,6 +10,7 @@ import { RuleCompressor } from '../context-graph/rule-compressor.js';
 import { ConflictDetector } from '../context-graph/conflict-detector.js';
 import { ConflictReflector } from '../context-graph/conflict-reflector.js';
 import { KnowledgeProjectionMaterializer } from '../projections/knowledge-projection.js';
+import { Pruner } from './pruner.js';
 
 export interface RunMetabolismOptions {
   project?: string;
@@ -24,6 +25,7 @@ export class MetabolismEngine {
   private readonly conflictDetector: ConflictDetector;
   private readonly conflictReflector: ConflictReflector;
   private readonly projectionMaterializer: KnowledgeProjectionMaterializer;
+  private readonly pruner: Pruner;
 
   constructor(deps: {
     graphStore: ContextGraphStore;
@@ -33,6 +35,7 @@ export class MetabolismEngine {
     conflictDetector: ConflictDetector;
     conflictReflector: ConflictReflector;
     projectionMaterializer: KnowledgeProjectionMaterializer;
+    pruner: Pruner;
   }) {
     this.graphStore = deps.graphStore;
     this.summaryCompressor = deps.summaryCompressor;
@@ -41,6 +44,7 @@ export class MetabolismEngine {
     this.conflictDetector = deps.conflictDetector;
     this.conflictReflector = deps.conflictReflector;
     this.projectionMaterializer = deps.projectionMaterializer;
+    this.pruner = deps.pruner;
   }
 
   async run(options: RunMetabolismOptions = {}): Promise<MetabolismRun> {
@@ -70,6 +74,9 @@ export class MetabolismEngine {
     const reflection = this.conflictReflector.reflectConflicts({
       project: options.project,
     });
+    const prune = this.pruner.prune({
+      project: options.project,
+    });
     const projections = this.projectionMaterializer.materialize({
       project: options.project,
       limit: 50,
@@ -92,10 +99,10 @@ export class MetabolismEngine {
           skipped: 0,
         },
         [MetabolismStage.PRUNE]: {
-          scanned: projections.length,
-          created: projections.length,
+          scanned: prune.scannedNodes,
+          created: prune.archivedNodes + prune.deprecatedNodes,
           updated: 0,
-          skipped: 0,
+          skipped: prune.skippedConflictedNodes,
         },
       },
       notes: [
@@ -104,6 +111,8 @@ export class MetabolismEngine {
         `ruleNodesCreated=${rule.ruleNodesCreated}`,
         `conflictsDetected=${conflicts.conflictsDetected}`,
         `reflectionCandidates=${reflection.candidateNodesCreated}`,
+        `archivedNodes=${prune.archivedNodes}`,
+        `deprecatedNodes=${prune.deprecatedNodes}`,
         `projectionRecords=${projections.length}`,
       ],
     })!;

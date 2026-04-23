@@ -3,9 +3,16 @@
  */
 
 import type {
+  ConflictRecord,
   CreateKnowledgeInput,
+  ContextDomainType,
+  ContextEvent,
+  ContextEventType,
+  ContextNode,
+  ContextNodeStatus,
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
+  MetabolismRun,
   RetrievalFilter,
   RetrievalResult,
   RetrievalContext,
@@ -43,6 +50,28 @@ export interface LocalMemory {
   runEvolution(options?: { autoApply?: boolean; maxItems?: number; mode?: 'standard' | 'background' }): Promise<EvolutionRunResult>;
   readGraphKnowledge(opts?: { project?: string; limit?: number }): GraphKnowledgeView[];
   queryGraphKnowledge(query: string, opts?: { project?: string; topK?: number; limit?: number }): GraphKnowledgeSearchResult[];
+  ingestEvent(input: {
+    type: ContextEventType;
+    content: string;
+    project?: string;
+    sessionId?: string;
+    actor?: string;
+    domainType?: ContextDomainType;
+    substrateType?: string;
+    title?: string;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+  }): { event: ContextEvent; node: ContextNode; previousNodeId?: string };
+  queryContextGraph(options?: {
+    query?: string;
+    project?: string;
+    substrateType?: string;
+    domainType?: ContextDomainType;
+    status?: ContextNodeStatus;
+    limit?: number;
+  }): ContextNode[];
+  listConflictRecords(project?: string, limit?: number): ConflictRecord[];
+  runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
   addMutationSink(sink: unknown): void;
   close(): void;
 }
@@ -68,6 +97,28 @@ export interface McpApi {
   runEvolution(options?: { autoApply?: boolean; maxItems?: number; mode?: 'standard' | 'background' }): Promise<EvolutionRunResult>;
   readGraphKnowledge(opts?: { project?: string; limit?: number }): Promise<GraphKnowledgeView[]>;
   queryGraphKnowledge(query: string, opts?: { project?: string; topK?: number; limit?: number }): Promise<GraphKnowledgeSearchResult[]>;
+  ingestContextEvent(input: {
+    type: ContextEventType;
+    content: string;
+    project?: string;
+    sessionId?: string;
+    actor?: string;
+    domainType?: ContextDomainType;
+    substrateType?: string;
+    title?: string;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
+  }): Promise<{ eventId: string; nodeId: string }>;
+  queryContextGraph(options?: {
+    query?: string;
+    project?: string;
+    substrateType?: string;
+    domainType?: ContextDomainType;
+    status?: ContextNodeStatus;
+    limit?: number;
+  }): Promise<ContextNode[]>;
+  listContextConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]>;
+  runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
   close(): void;
 }
 

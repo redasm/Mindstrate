@@ -9,6 +9,7 @@ import { ConflictReflector } from '../src/context-graph/conflict-reflector.js';
 import { GraphKnowledgeProjector } from '../src/context-graph/knowledge-projector.js';
 import { KnowledgeProjectionMaterializer } from '../src/projections/knowledge-projection.js';
 import { MetabolismEngine } from '../src/metabolism/metabolism-engine.js';
+import { Pruner } from '../src/metabolism/pruner.js';
 import { Embedder } from '../src/processing/embedder.js';
 import { createTempDir, removeTempDir } from './helpers.js';
 import {
@@ -38,6 +39,7 @@ describe('MetabolismEngine', () => {
       conflictDetector: new ConflictDetector(graphStore, embedder),
       conflictReflector: new ConflictReflector(graphStore),
       projectionMaterializer: new KnowledgeProjectionMaterializer(graphStore, projector),
+      pruner: new Pruner(graphStore),
     });
 
     graphStore.createNode({

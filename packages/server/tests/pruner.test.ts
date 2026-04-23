@@ -1,0 +1,59 @@
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
+import { Pruner } from '../src/metabolism/pruner.js';
+import { createTempDir, removeTempDir } from './helpers.js';
+import {
+  ContextDomainType,
+  ContextNodeStatus,
+  SubstrateType,
+} from '@mindstrate/protocol/models';
+
+describe('Pruner', () => {
+  let tempDir: string;
+  let graphStore: ContextGraphStore;
+  let pruner: Pruner;
+
+  beforeEach(() => {
+    tempDir = createTempDir();
+    graphStore = new ContextGraphStore(path.join(tempDir, 'pruner.db'));
+    pruner = new Pruner(graphStore);
+  });
+
+  afterEach(() => {
+    graphStore.close();
+    removeTempDir(tempDir);
+  });
+
+  it('archives stale low-access episodic nodes and deprecates very low quality nodes', () => {
+    const stale = graphStore.createNode({
+      substrateType: SubstrateType.EPISODE,
+      domainType: ContextDomainType.CONTEXT_EVENT,
+      title: 'Stale episode',
+      content: 'Old event',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    graphStore.updateNode(stale.id, {
+      lastAccessedAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
+      accessCount: 0,
+    });
+
+    const weak = graphStore.createNode({
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Weak summary',
+      content: 'Bad guidance',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 10,
+    });
+
+    const result = pruner.prune({ project: 'mindstrate' });
+
+    expect(result.archivedNodes).toBe(1);
+    expect(result.deprecatedNodes).toBe(1);
+    expect(graphStore.getNodeById(stale.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
+    expect(graphStore.getNodeById(weak.id)?.status).toBe(ContextNodeStatus.DEPRECATED);
+  });
+});

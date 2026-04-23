@@ -19,6 +19,38 @@ export const GraphKnowledgeSearchSchema = z.object({
   topK: z.number().int().min(1).max(50).optional(),
 });
 
+export const ContextIngestEventSchema = z.object({
+  type: z.string().min(1, 'type is required'),
+  content: z.string().min(1, 'content is required'),
+  project: z.string().optional(),
+  sessionId: z.string().optional(),
+  actor: z.string().optional(),
+  domainType: z.string().optional(),
+  substrateType: z.string().optional(),
+  title: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const ContextQueryGraphSchema = z.object({
+  query: z.string().optional(),
+  project: z.string().optional(),
+  substrateType: z.string().optional(),
+  domainType: z.string().optional(),
+  status: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+export const ContextConflictsSchema = z.object({
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+export const MetabolismRunSchema = z.object({
+  project: z.string().optional(),
+  trigger: z.enum(['manual', 'scheduled', 'event_driven']).optional(),
+});
+
 export const MemoryAddSchema = z.object({
   title: z.string().min(1, 'title is required'),
   type: z.nativeEnum(KnowledgeType),

@@ -4,11 +4,15 @@
  * Implements the logic for each MCP tool call.
  */
 
-import { CaptureSource } from '@mindstrate/protocol';
+import { CaptureSource, type ContextDomainType, type ContextEventType, type ContextNodeStatus } from '@mindstrate/protocol';
 import type { z } from 'zod';
 import type { McpApi, McpToolResponse, SessionState } from '../types.js';
 import type {
   GraphKnowledgeSearchSchema,
+  ContextIngestEventSchema,
+  ContextQueryGraphSchema,
+  ContextConflictsSchema,
+  MetabolismRunSchema,
   MemorySearchSchema,
   MemoryAddSchema,
   MemoryFeedbackSchema,
@@ -97,6 +101,118 @@ export async function handleGraphKnowledgeSearch(
     content: [{
       type: 'text',
       text: `Found ${results.length} ECS graph knowledge views:\n\n${formatted}`,
+    }],
+  };
+}
+
+export async function handleContextIngestEvent(
+  api: McpApi,
+  input: z.infer<typeof ContextIngestEventSchema>,
+): Promise<McpToolResponse> {
+  const result = await api.ingestContextEvent({
+    ...input,
+    type: input.type as ContextEventType,
+    domainType: input.domainType as ContextDomainType | undefined,
+  });
+  return {
+    content: [{
+      type: 'text',
+      text: `Context event ingested.\nEvent ID: ${result.eventId}\nNode ID: ${result.nodeId}`,
+    }],
+  };
+}
+
+export async function handleContextQueryGraph(
+  api: McpApi,
+  input: z.infer<typeof ContextQueryGraphSchema>,
+): Promise<McpToolResponse> {
+  const nodes = await api.queryContextGraph({
+    query: input.query,
+    project: input.project,
+    substrateType: input.substrateType,
+    domainType: input.domainType as ContextDomainType | undefined,
+    status: input.status as ContextNodeStatus | undefined,
+    limit: input.limit ?? 10,
+  });
+
+  if (nodes.length === 0) {
+    return {
+      content: [{ type: 'text', text: 'No ECS context graph nodes matched the query.' }],
+    };
+  }
+
+  const formatted = nodes.map((node, index) => [
+    `### ${index + 1}. [${node.substrateType}] ${node.title}`,
+    `Domain: ${node.domainType} | Status: ${node.status} | Quality: ${node.qualityScore.toFixed(0)}`,
+    node.project ? `Project: ${node.project}` : null,
+    `Tags: ${node.tags.join(', ') || '(none)'}`,
+    `ID: ${node.id}`,
+  ].filter(Boolean).join('\n')).join('\n---\n\n');
+
+  return {
+    content: [{
+      type: 'text',
+      text: `Found ${nodes.length} ECS context nodes:\n\n${formatted}`,
+    }],
+  };
+}
+
+export async function handleContextConflicts(
+  api: McpApi,
+  input: z.infer<typeof ContextConflictsSchema>,
+): Promise<McpToolResponse> {
+  const conflicts = await api.listContextConflicts({
+    project: input.project,
+    limit: input.limit ?? 20,
+  });
+
+  if (conflicts.length === 0) {
+    return {
+      content: [{ type: 'text', text: 'No active ECS conflicts found.' }],
+    };
+  }
+
+  const formatted = conflicts.map((conflict, index) => [
+    `### ${index + 1}. ${conflict.reason}`,
+    conflict.project ? `Project: ${conflict.project}` : null,
+    `Nodes: ${conflict.nodeIds.join(', ')}`,
+    `Detected: ${conflict.detectedAt}`,
+    conflict.resolution ? `Resolution: ${conflict.resolution}` : null,
+  ].filter(Boolean).join('\n')).join('\n---\n\n');
+
+  return {
+    content: [{
+      type: 'text',
+      text: `Found ${conflicts.length} ECS conflicts:\n\n${formatted}`,
+    }],
+  };
+}
+
+export async function handleMetabolismRun(
+  api: McpApi,
+  input: z.infer<typeof MetabolismRunSchema>,
+): Promise<McpToolResponse> {
+  const run = await api.runMetabolism({
+    project: input.project,
+    trigger: input.trigger ?? 'manual',
+  });
+
+  const stats = Object.entries(run.stageStats)
+    .map(([stage, stat]) => `${stage}: scanned=${stat?.scanned ?? 0}, created=${stat?.created ?? 0}, skipped=${stat?.skipped ?? 0}`)
+    .join('\n');
+
+  return {
+    content: [{
+      type: 'text',
+      text: [
+        'Metabolism run completed.',
+        `Run ID: ${run.id}`,
+        `Status: ${run.status}`,
+        run.project ? `Project: ${run.project}` : null,
+        `Trigger: ${run.trigger}`,
+        stats ? `\nStage Stats:\n${stats}` : null,
+        run.notes?.length ? `\nNotes:\n${run.notes.map((note) => `- ${note}`).join('\n')}` : null,
+      ].filter(Boolean).join('\n'),
     }],
   };
 }

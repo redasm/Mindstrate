@@ -117,6 +117,70 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'context_ingest_event',
+    description:
+      'Ingest a low-level ECS context event and materialize it as an episode node. ' +
+      'Use this for tool results, test failures, git activity, diagnostics, or explicit external signals.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        type: { type: 'string', description: 'Context event type, such as test_result or git_activity' },
+        content: { type: 'string', description: 'Raw event content to record' },
+        project: { type: 'string', description: 'Optional project scope' },
+        sessionId: { type: 'string', description: 'Optional session identifier' },
+        actor: { type: 'string', description: 'Optional actor label' },
+        domainType: { type: 'string', description: 'Optional domain type override' },
+        substrateType: { type: 'string', description: 'Optional substrate type override' },
+        title: { type: 'string', description: 'Optional node title override' },
+        tags: { type: 'array', items: { type: 'string' }, description: 'Optional tags' },
+      },
+      required: ['type', 'content'],
+    },
+  },
+  {
+    name: 'context_query_graph',
+    description:
+      'Query ECS context graph nodes directly. ' +
+      'Use this when you need raw graph nodes rather than projected knowledge views.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Optional lexical query over title/content/tags' },
+        project: { type: 'string', description: 'Optional project scope' },
+        substrateType: { type: 'string', description: 'Optional substrate filter' },
+        domainType: { type: 'string', description: 'Optional domain filter' },
+        status: { type: 'string', description: 'Optional status filter' },
+        limit: { type: 'number', description: 'Maximum number of nodes to return (default: 10)' },
+      },
+    },
+  },
+  {
+    name: 'context_conflicts',
+    description: 'List active ECS conflict records for a project or the entire graph.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        project: { type: 'string', description: 'Optional project scope' },
+        limit: { type: 'number', description: 'Maximum number of conflicts to return (default: 20)' },
+      },
+    },
+  },
+  {
+    name: 'metabolism_run',
+    description: 'Run the ECS metabolism engine and return the run summary.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        project: { type: 'string', description: 'Optional project scope' },
+        trigger: {
+          type: 'string',
+          enum: ['manual', 'scheduled', 'event_driven'],
+          description: 'Why the metabolism run was triggered',
+        },
+      },
+    },
+  },
+  {
     name: 'memory_feedback',
     description: 'Provide feedback on a knowledge entry (upvote or downvote).',
     inputSchema: {

@@ -48,6 +48,10 @@ import pino from 'pino';
 import { TOOL_DEFINITIONS } from './tools/definitions.js';
 import {
   GraphKnowledgeSearchSchema,
+  ContextIngestEventSchema,
+  ContextQueryGraphSchema,
+  ContextConflictsSchema,
+  MetabolismRunSchema,
   MemorySearchSchema,
   MemoryAddSchema,
   MemoryFeedbackSchema,
@@ -59,6 +63,10 @@ import {
 } from './tools/schemas.js';
 import {
   handleGraphKnowledgeSearch,
+  handleContextIngestEvent,
+  handleContextQueryGraph,
+  handleContextConflicts,
+  handleMetabolismRun,
   handleMemorySearch,
   handleMemoryAdd,
   handleMemoryFeedback,
@@ -135,14 +143,15 @@ const api: McpApi = {
         );
         throw err;
       }
-      memory = new MindstrateClass();
-      await memory.init();
+      const localMemory = new MindstrateClass();
+      memory = localMemory;
+      await localMemory.init();
 
       if (OBSIDIAN_VAULT_PATH && OBSIDIAN_AUTO_SYNC) {
         try {
           const { SyncManager } = await import('@mindstrate/obsidian-sync');
-          vaultSync = new SyncManager(memory as any, { vaultRoot: OBSIDIAN_VAULT_PATH, silent: true });
-          memory.addMutationSink(vaultSync as any);
+          vaultSync = new SyncManager(localMemory as any, { vaultRoot: OBSIDIAN_VAULT_PATH, silent: true });
+          localMemory.addMutationSink(vaultSync as any);
           const r = await vaultSync!.exportAll();
           logger.info(
             { written: r.written, removed: r.removed, vaultPath: OBSIDIAN_VAULT_PATH },
@@ -257,6 +266,27 @@ const api: McpApi = {
     return memory!.runEvolution(options);
   },
 
+  async ingestContextEvent(input) {
+    if (teamClient) return teamClient.ingestContextEvent(input);
+    const result = memory!.ingestEvent(input);
+    return { eventId: result.event.id, nodeId: result.node.id };
+  },
+
+  async queryContextGraph(options) {
+    if (teamClient) return teamClient.queryContextGraph(options);
+    return memory!.queryContextGraph(options);
+  },
+
+  async listContextConflicts(options) {
+    if (teamClient) return teamClient.listContextConflicts(options);
+    return memory!.listConflictRecords(options?.project, options?.limit);
+  },
+
+  async runMetabolism(options) {
+    if (teamClient) return teamClient.runMetabolism(options);
+    return memory!.runMetabolism(options);
+  },
+
   async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory!.readGraphKnowledge(opts);
@@ -330,6 +360,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(GraphKnowledgeSearchSchema, args);
       if ('error' in v) return v.error;
       return handleGraphKnowledgeSearch(api, v.data);
+    }
+    case 'context_ingest_event': {
+      const v = validateArgs(ContextIngestEventSchema, args);
+      if ('error' in v) return v.error;
+      return handleContextIngestEvent(api, v.data);
+    }
+    case 'context_query_graph': {
+      const v = validateArgs(ContextQueryGraphSchema, args);
+      if ('error' in v) return v.error;
+      return handleContextQueryGraph(api, v.data);
+    }
+    case 'context_conflicts': {
+      const v = validateArgs(ContextConflictsSchema, args);
+      if ('error' in v) return v.error;
+      return handleContextConflicts(api, v.data);
+    }
+    case 'metabolism_run': {
+      const v = validateArgs(MetabolismRunSchema, args);
+      if ('error' in v) return v.error;
+      return handleMetabolismRun(api, v.data);
     }
     case 'memory_add': {
       const v = validateArgs(MemoryAddSchema, args);

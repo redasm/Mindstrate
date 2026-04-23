@@ -60,11 +60,21 @@ import { digestCompletedSession, digestSessionObservation } from './context-grap
 import { PatternCompressor, type PatternCompressionOptions, type PatternCompressionResult } from './context-graph/pattern-compressor.js';
 import { RuleCompressor, type RuleCompressionOptions, type RuleCompressionResult } from './context-graph/rule-compressor.js';
 import { SummaryCompressor, type SummaryCompressionOptions, type SummaryCompressionResult } from './context-graph/summary-compressor.js';
-import { MetabolismEngine, type RunMetabolismOptions } from './metabolism/index.js';
+import { MetabolismEngine, Pruner, type RunMetabolismOptions, type PruneOptions, type PruneResult } from './metabolism/index.js';
 import { KnowledgeProjectionMaterializer, KnowledgeUnitMaterializer } from './projections/index.js';
 import { SubstrateType } from '@mindstrate/protocol/models';
-import type { ConflictRecord, ContextDomainType, ContextNode, ContextNodeStatus, CuratedContext, MetabolismRun, ProjectionRecord } from '@mindstrate/protocol/models';
+import type {
+  ConflictRecord,
+  ContextDomainType,
+  ContextEvent,
+  ContextNode,
+  ContextNodeStatus,
+  CuratedContext,
+  MetabolismRun,
+  ProjectionRecord,
+} from '@mindstrate/protocol/models';
 import { digestKnowledgeInput } from './context-graph/knowledge-digest.js';
+import { ingestContextEvent, type IngestContextEventInput } from './events/index.js';
 
 /**
  * Optional sink invoked whenever a knowledge mutation is committed by the facade.
@@ -87,6 +97,7 @@ export class Mindstrate {
   private projectionMaterializer: KnowledgeProjectionMaterializer;
   private knowledgeUnitMaterializer: KnowledgeUnitMaterializer;
   private metabolismEngine: MetabolismEngine;
+  private pruner: Pruner;
   private conflictDetector: ConflictDetector;
   private conflictReflector: ConflictReflector;
   private patternCompressor: PatternCompressor;
@@ -135,6 +146,7 @@ export class Mindstrate {
     this.patternCompressor = new PatternCompressor(this.contextGraphStore, this.embedder);
     this.ruleCompressor = new RuleCompressor(this.contextGraphStore, this.embedder);
     this.summaryCompressor = new SummaryCompressor(this.contextGraphStore, this.embedder);
+    this.pruner = new Pruner(this.contextGraphStore);
     this.metabolismEngine = new MetabolismEngine({
       graphStore: this.contextGraphStore,
       summaryCompressor: this.summaryCompressor,
@@ -143,6 +155,7 @@ export class Mindstrate {
       conflictDetector: this.conflictDetector,
       conflictReflector: this.conflictReflector,
       projectionMaterializer: this.projectionMaterializer,
+      pruner: this.pruner,
     });
     this.vectorStore = configOverrides?.vectorStore
       ?? new VectorStore(this.config.vectorStorePath, this.config.collectionName);
@@ -659,6 +672,10 @@ export class Mindstrate {
     });
   }
 
+  ingestEvent(input: IngestContextEventInput): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
+    return ingestContextEvent(this.contextGraphStore, input);
+  }
+
   /** 压缩当前会话（由 AI 调用，传入摘要） */
   compressSession(input: CompressSessionInput): void {
     this.sessionStore.compress(input);
@@ -782,6 +799,10 @@ export class Mindstrate {
     return this.metabolismEngine.run(options);
   }
 
+  runPruning(options?: PruneOptions): PruneResult {
+    return this.pruner.prune(options);
+  }
+
   listContextNodes(options?: {
     project?: string;
     substrateType?: SubstrateType;
@@ -795,6 +816,38 @@ export class Mindstrate {
 
   listConflictRecords(project?: string, limit?: number): ConflictRecord[] {
     return this.contextGraphStore.listConflictRecords({ project, limit });
+  }
+
+  queryContextGraph(options?: {
+    query?: string;
+    project?: string;
+    substrateType?: SubstrateType;
+    domainType?: ContextDomainType;
+    status?: ContextNodeStatus;
+    limit?: number;
+  }): ContextNode[] {
+    const nodes = this.contextGraphStore.listNodes({
+      project: options?.project,
+      substrateType: options?.substrateType,
+      domainType: options?.domainType,
+      status: options?.status,
+      limit: Math.max(options?.limit ?? 20, 1) * 10,
+    });
+    const query = options?.query?.trim().toLowerCase();
+    if (!query) {
+      return nodes.slice(0, options?.limit ?? 20);
+    }
+
+    const tokens = query.split(/[^a-z0-9\u4e00-\u9fff]+/).filter(Boolean);
+    return nodes
+      .map((node) => ({
+        node,
+        score: computeGraphNodeMatchScore(tokens, node),
+      }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, options?.limit ?? 20)
+      .map((entry) => entry.node);
   }
 
   listProjectionRecords(options?: { nodeId?: string; target?: string; limit?: number }): ProjectionRecord[] {
@@ -1027,4 +1080,15 @@ function mapGraphViewType(view: GraphKnowledgeView): KnowledgeType {
     default:
       return KnowledgeType.BEST_PRACTICE;
   }
+}
+
+function computeGraphNodeMatchScore(tokens: string[], node: ContextNode): number {
+  const haystack = `${node.title}\n${node.content}\n${node.tags.join(' ')}`.toLowerCase();
+  const matched = tokens.filter((token) => haystack.includes(token)).length;
+  if (matched === 0) return 0;
+
+  const lexicalScore = matched / tokens.length;
+  const qualityScore = Math.min(node.qualityScore / 100, 1);
+  const confidenceScore = Math.min(node.confidence, 1);
+  return lexicalScore * 0.6 + qualityScore * 0.25 + confidenceScore * 0.15;
 }

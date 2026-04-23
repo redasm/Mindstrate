@@ -22,9 +22,15 @@ import {
   Mindstrate,
   KnowledgeType,
   CaptureSource,
+  ContextDomainType,
+  ContextEventType,
+  ContextNodeStatus,
+  SubstrateType,
   isValidKnowledgeType,
 } from '@mindstrate/server';
 import type {
+  ConflictRecord,
+  ContextNode,
   CreateKnowledgeInput,
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
@@ -276,6 +282,84 @@ app.post('/api/graph/search', async (req, res) => {
       limit: limit || 50,
     });
     res.json(results);
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** POST /api/context/events - ingest a low-level ECS event */
+app.post('/api/context/events', async (req, res) => {
+  try {
+    await memory.init();
+    const {
+      type,
+      content,
+      project,
+      sessionId,
+      actor,
+      domainType,
+      substrateType,
+      title,
+      tags,
+      metadata,
+    } = req.body;
+
+    if (!type || !content) {
+      res.status(400).json({ error: 'type and content are required' });
+      return;
+    }
+
+    const result = memory.ingestEvent({
+      type: type as ContextEventType,
+      content,
+      project,
+      sessionId,
+      actor,
+      domainType: domainType as ContextDomainType | undefined,
+      substrateType: substrateType as SubstrateType | undefined,
+      title,
+      tags,
+      metadata,
+    });
+
+    res.status(201).json({ eventId: result.event.id, nodeId: result.node.id });
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** GET /api/context/graph - query ECS graph nodes */
+app.get('/api/context/graph', async (req, res) => {
+  try {
+    await memory.init();
+    const query = req.query.query as string | undefined;
+    const project = req.query.project as string | undefined;
+    const substrateType = req.query.substrateType as SubstrateType | undefined;
+    const domainType = req.query.domainType as ContextDomainType | undefined;
+    const status = req.query.status as ContextNodeStatus | undefined;
+    const limit = parseInt(req.query.limit as string || '20', 10);
+    const nodes: ContextNode[] = memory.queryContextGraph({
+      query,
+      project,
+      substrateType,
+      domainType,
+      status,
+      limit,
+    });
+    res.json({ nodes, total: nodes.length });
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** GET /api/context/conflicts - list ECS conflict records */
+app.get('/api/context/conflicts', async (req, res) => {
+  try {
+    await memory.init();
+    const project = req.query.project as string | undefined;
+    const limit = parseInt(req.query.limit as string || '20', 10);
+    const conflicts: ConflictRecord[] = memory.listConflictRecords(project, limit);
+    res.json({ conflicts, total: conflicts.length });
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }

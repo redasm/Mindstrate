@@ -6957,6 +6957,35 @@ var require_team_client = __commonJS({
           limit: options?.limit
         });
       }
+      async ingestContextEvent(input) {
+        return this.post("/api/context/events", input);
+      }
+      async queryContextGraph(options) {
+        const params = new URLSearchParams();
+        if (options?.query)
+          params.set("query", options.query);
+        if (options?.project)
+          params.set("project", options.project);
+        if (options?.substrateType)
+          params.set("substrateType", options.substrateType);
+        if (options?.domainType)
+          params.set("domainType", options.domainType);
+        if (options?.status)
+          params.set("status", options.status);
+        if (options?.limit)
+          params.set("limit", String(options.limit));
+        const data = await this.fetch(`/api/context/graph?${params}`);
+        return data.nodes ?? [];
+      }
+      async listContextConflicts(options) {
+        const params = new URLSearchParams();
+        if (options?.project)
+          params.set("project", options.project);
+        if (options?.limit)
+          params.set("limit", String(options.limit));
+        const data = await this.fetch(`/api/context/conflicts?${params}`);
+        return data.conflicts ?? [];
+      }
       // ============================================================
       // Knowledge Evolution (知识进化)
       // ============================================================
@@ -18956,6 +18985,66 @@ var TOOL_DEFINITIONS = [
         }
       },
       required: ["query"]
+    }
+  },
+  {
+    name: "context_ingest_event",
+    description: "Ingest a low-level ECS context event and materialize it as an episode node. Use this for tool results, test failures, git activity, diagnostics, or explicit external signals.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        type: { type: "string", description: "Context event type, such as test_result or git_activity" },
+        content: { type: "string", description: "Raw event content to record" },
+        project: { type: "string", description: "Optional project scope" },
+        sessionId: { type: "string", description: "Optional session identifier" },
+        actor: { type: "string", description: "Optional actor label" },
+        domainType: { type: "string", description: "Optional domain type override" },
+        substrateType: { type: "string", description: "Optional substrate type override" },
+        title: { type: "string", description: "Optional node title override" },
+        tags: { type: "array", items: { type: "string" }, description: "Optional tags" }
+      },
+      required: ["type", "content"]
+    }
+  },
+  {
+    name: "context_query_graph",
+    description: "Query ECS context graph nodes directly. Use this when you need raw graph nodes rather than projected knowledge views.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Optional lexical query over title/content/tags" },
+        project: { type: "string", description: "Optional project scope" },
+        substrateType: { type: "string", description: "Optional substrate filter" },
+        domainType: { type: "string", description: "Optional domain filter" },
+        status: { type: "string", description: "Optional status filter" },
+        limit: { type: "number", description: "Maximum number of nodes to return (default: 10)" }
+      }
+    }
+  },
+  {
+    name: "context_conflicts",
+    description: "List active ECS conflict records for a project or the entire graph.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Optional project scope" },
+        limit: { type: "number", description: "Maximum number of conflicts to return (default: 20)" }
+      }
+    }
+  },
+  {
+    name: "metabolism_run",
+    description: "Run the ECS metabolism engine and return the run summary.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: { type: "string", description: "Optional project scope" },
+        trigger: {
+          type: "string",
+          enum: ["manual", "scheduled", "event_driven"],
+          description: "Why the metabolism run was triggered"
+        }
+      }
     }
   },
   {
@@ -32935,6 +33024,34 @@ var GraphKnowledgeSearchSchema = external_exports.object({
   project: external_exports.string().optional(),
   topK: external_exports.number().int().min(1).max(50).optional()
 });
+var ContextIngestEventSchema = external_exports.object({
+  type: external_exports.string().min(1, "type is required"),
+  content: external_exports.string().min(1, "content is required"),
+  project: external_exports.string().optional(),
+  sessionId: external_exports.string().optional(),
+  actor: external_exports.string().optional(),
+  domainType: external_exports.string().optional(),
+  substrateType: external_exports.string().optional(),
+  title: external_exports.string().optional(),
+  tags: external_exports.array(external_exports.string()).optional(),
+  metadata: external_exports.record(external_exports.string(), external_exports.unknown()).optional()
+});
+var ContextQueryGraphSchema = external_exports.object({
+  query: external_exports.string().optional(),
+  project: external_exports.string().optional(),
+  substrateType: external_exports.string().optional(),
+  domainType: external_exports.string().optional(),
+  status: external_exports.string().optional(),
+  limit: external_exports.number().int().min(1).max(100).optional()
+});
+var ContextConflictsSchema = external_exports.object({
+  project: external_exports.string().optional(),
+  limit: external_exports.number().int().min(1).max(100).optional()
+});
+var MetabolismRunSchema = external_exports.object({
+  project: external_exports.string().optional(),
+  trigger: external_exports.enum(["manual", "scheduled", "event_driven"]).optional()
+});
 var MemoryAddSchema = external_exports.object({
   title: external_exports.string().min(1, "title is required"),
   type: external_exports.nativeEnum(import_protocol3.KnowledgeType),
@@ -33071,6 +33188,102 @@ async function handleGraphKnowledgeSearch(api2, input) {
       text: `Found ${results.length} ECS graph knowledge views:
 
 ${formatted}`
+    }]
+  };
+}
+async function handleContextIngestEvent(api2, input) {
+  const result = await api2.ingestContextEvent({
+    ...input,
+    type: input.type,
+    domainType: input.domainType
+  });
+  return {
+    content: [{
+      type: "text",
+      text: `Context event ingested.
+Event ID: ${result.eventId}
+Node ID: ${result.nodeId}`
+    }]
+  };
+}
+async function handleContextQueryGraph(api2, input) {
+  const nodes = await api2.queryContextGraph({
+    query: input.query,
+    project: input.project,
+    substrateType: input.substrateType,
+    domainType: input.domainType,
+    status: input.status,
+    limit: input.limit ?? 10
+  });
+  if (nodes.length === 0) {
+    return {
+      content: [{ type: "text", text: "No ECS context graph nodes matched the query." }]
+    };
+  }
+  const formatted = nodes.map((node, index) => [
+    `### ${index + 1}. [${node.substrateType}] ${node.title}`,
+    `Domain: ${node.domainType} | Status: ${node.status} | Quality: ${node.qualityScore.toFixed(0)}`,
+    node.project ? `Project: ${node.project}` : null,
+    `Tags: ${node.tags.join(", ") || "(none)"}`,
+    `ID: ${node.id}`
+  ].filter(Boolean).join("\n")).join("\n---\n\n");
+  return {
+    content: [{
+      type: "text",
+      text: `Found ${nodes.length} ECS context nodes:
+
+${formatted}`
+    }]
+  };
+}
+async function handleContextConflicts(api2, input) {
+  const conflicts = await api2.listContextConflicts({
+    project: input.project,
+    limit: input.limit ?? 20
+  });
+  if (conflicts.length === 0) {
+    return {
+      content: [{ type: "text", text: "No active ECS conflicts found." }]
+    };
+  }
+  const formatted = conflicts.map((conflict, index) => [
+    `### ${index + 1}. ${conflict.reason}`,
+    conflict.project ? `Project: ${conflict.project}` : null,
+    `Nodes: ${conflict.nodeIds.join(", ")}`,
+    `Detected: ${conflict.detectedAt}`,
+    conflict.resolution ? `Resolution: ${conflict.resolution}` : null
+  ].filter(Boolean).join("\n")).join("\n---\n\n");
+  return {
+    content: [{
+      type: "text",
+      text: `Found ${conflicts.length} ECS conflicts:
+
+${formatted}`
+    }]
+  };
+}
+async function handleMetabolismRun(api2, input) {
+  const run = await api2.runMetabolism({
+    project: input.project,
+    trigger: input.trigger ?? "manual"
+  });
+  const stats = Object.entries(run.stageStats).map(([stage, stat]) => `${stage}: scanned=${stat?.scanned ?? 0}, created=${stat?.created ?? 0}, skipped=${stat?.skipped ?? 0}`).join("\n");
+  return {
+    content: [{
+      type: "text",
+      text: [
+        "Metabolism run completed.",
+        `Run ID: ${run.id}`,
+        `Status: ${run.status}`,
+        run.project ? `Project: ${run.project}` : null,
+        `Trigger: ${run.trigger}`,
+        stats ? `
+Stage Stats:
+${stats}` : null,
+        run.notes?.length ? `
+Notes:
+${run.notes.map((note) => `- ${note}`).join("\n")}` : null
+      ].filter(Boolean).join("\n")
     }]
   };
 }
@@ -33400,13 +33613,14 @@ var api = {
         );
         throw err;
       }
-      memory = new MindstrateClass();
-      await memory.init();
+      const localMemory = new MindstrateClass();
+      memory = localMemory;
+      await localMemory.init();
       if (OBSIDIAN_VAULT_PATH && OBSIDIAN_AUTO_SYNC) {
         try {
           const { SyncManager } = await import("@mindstrate/obsidian-sync");
-          vaultSync = new SyncManager(memory, { vaultRoot: OBSIDIAN_VAULT_PATH, silent: true });
-          memory.addMutationSink(vaultSync);
+          vaultSync = new SyncManager(localMemory, { vaultRoot: OBSIDIAN_VAULT_PATH, silent: true });
+          localMemory.addMutationSink(vaultSync);
           const r = await vaultSync.exportAll();
           logger.info(
             { written: r.written, removed: r.removed, vaultPath: OBSIDIAN_VAULT_PATH },
@@ -33501,6 +33715,23 @@ var api = {
     if (teamClient) return teamClient.runEvolution(options);
     return memory.runEvolution(options);
   },
+  async ingestContextEvent(input) {
+    if (teamClient) return teamClient.ingestContextEvent(input);
+    const result = memory.ingestEvent(input);
+    return { eventId: result.event.id, nodeId: result.node.id };
+  },
+  async queryContextGraph(options) {
+    if (teamClient) return teamClient.queryContextGraph(options);
+    return memory.queryContextGraph(options);
+  },
+  async listContextConflicts(options) {
+    if (teamClient) return teamClient.listContextConflicts(options);
+    return memory.listConflictRecords(options?.project, options?.limit);
+  },
+  async runMetabolism(options) {
+    if (teamClient) return teamClient.runMetabolism(options);
+    return memory.runMetabolism(options);
+  },
   async readGraphKnowledge(opts) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory.readGraphKnowledge(opts);
@@ -33557,6 +33788,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(GraphKnowledgeSearchSchema, args);
       if ("error" in v) return v.error;
       return handleGraphKnowledgeSearch(api, v.data);
+    }
+    case "context_ingest_event": {
+      const v = validateArgs(ContextIngestEventSchema, args);
+      if ("error" in v) return v.error;
+      return handleContextIngestEvent(api, v.data);
+    }
+    case "context_query_graph": {
+      const v = validateArgs(ContextQueryGraphSchema, args);
+      if ("error" in v) return v.error;
+      return handleContextQueryGraph(api, v.data);
+    }
+    case "context_conflicts": {
+      const v = validateArgs(ContextConflictsSchema, args);
+      if ("error" in v) return v.error;
+      return handleContextConflicts(api, v.data);
+    }
+    case "metabolism_run": {
+      const v = validateArgs(MetabolismRunSchema, args);
+      if ("error" in v) return v.error;
+      return handleMetabolismRun(api, v.data);
     }
     case "memory_add": {
       const v = validateArgs(MemoryAddSchema, args);
