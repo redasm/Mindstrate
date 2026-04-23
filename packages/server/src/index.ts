@@ -104,6 +104,7 @@ export {
 export {
   PortableContextBundleManager,
   type CreateBundleOptions,
+  type EditableBundleFiles,
   type InstallBundleResult,
   type PublishBundleOptions,
   type PublishBundleResult,

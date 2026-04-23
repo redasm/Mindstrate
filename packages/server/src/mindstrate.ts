@@ -85,7 +85,7 @@ import {
   ingestUserFeedback,
   type IngestContextEventInput,
 } from './events/index.js';
-import { PortableContextBundleManager, type CreateBundleOptions, type InstallBundleResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
+import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
 
 /**
  * Optional sink invoked whenever a knowledge mutation is committed by the facade.
@@ -1000,6 +1000,10 @@ export class Mindstrate {
 
   publishBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult {
     return this.bundleManager.publishBundle(bundle, options);
+  }
+
+  createEditableBundleFiles(bundle: import('@mindstrate/protocol/models').PortableContextBundle): EditableBundleFiles {
+    return this.bundleManager.createEditableBundleFiles(bundle);
   }
 
   readGraphKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {

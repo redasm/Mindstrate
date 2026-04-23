@@ -52,6 +52,8 @@ export interface PublishBundleResult {
   manifest: BundlePublicationManifest;
 }
 
+export type EditableBundleFiles = Record<string, string>;
+
 export class PortableContextBundleManager {
   private readonly graphStore: ContextGraphStore;
 
@@ -213,6 +215,23 @@ export class PortableContextBundleManager {
       },
     };
   }
+
+  createEditableBundleFiles(bundle: PortableContextBundle): EditableBundleFiles {
+    const validation = this.validateBundle(bundle);
+    if (!validation.valid) {
+      throw new Error(`Invalid bundle: ${validation.errors.join('; ')}`);
+    }
+
+    return {
+      'bundle.json': JSON.stringify(bundle, null, 2),
+      'rules.md': formatBundleMarkdown('Rules', bundle.nodes?.filter((node) => node.substrateType === 'rule') ?? []),
+      'skills.md': formatBundleMarkdown('Skills', bundle.nodes?.filter((node) => node.substrateType === 'skill') ?? []),
+      'invariants.md': formatBundleMarkdown(
+        'Invariants',
+        bundle.nodes?.filter((node) => ['heuristic', 'axiom'].includes(node.substrateType)) ?? [],
+      ),
+    };
+  }
 }
 
 function serializeNode(node: ContextNode): PortableContextBundleNode {
@@ -250,4 +269,31 @@ function slugify(value: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+}
+
+function formatBundleMarkdown(
+  title: string,
+  nodes: PortableContextBundleNode[],
+): string {
+  const lines = [`# ${title}`, ''];
+  if (nodes.length === 0) {
+    lines.push('_No entries in this bundle._');
+    return lines.join('\n');
+  }
+
+  for (const node of nodes) {
+    lines.push(`## ${node.title}`);
+    lines.push('');
+    lines.push(node.content);
+    lines.push('');
+    lines.push(`- ID: ${node.id}`);
+    lines.push(`- Domain: ${node.domainType}`);
+    lines.push(`- Status: ${node.status}`);
+    if (node.tags.length > 0) {
+      lines.push(`- Tags: ${node.tags.join(', ')}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n').trimEnd() + '\n';
 }

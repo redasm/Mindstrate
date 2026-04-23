@@ -95,4 +95,27 @@ describe('PortableContextBundleManager', () => {
     expect(publication.manifest.edgeCount).toBe(0);
     expect(publication.manifest.digest).toMatch(/^sha256:/);
   });
+
+  it('creates editable bundle files for filesystem workflows', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Filesystem Rule',
+      content: 'Editable bundle folders should include rule markdown.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+
+    const bundle = bundles.createBundle({
+      name: 'filesystem-bundle',
+      project: 'mindstrate',
+    });
+    const files = bundles.createEditableBundleFiles(bundle);
+
+    expect(files['bundle.json']).toContain('"name": "filesystem-bundle"');
+    expect(files['rules.md']).toContain('## Filesystem Rule');
+    expect(files['rules.md']).toContain('Editable bundle folders should include rule markdown.');
+    expect(files['skills.md']).toContain('# Skills');
+    expect(files['invariants.md']).toContain('# Invariants');
+  });
 });

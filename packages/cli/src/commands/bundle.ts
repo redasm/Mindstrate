@@ -6,6 +6,7 @@
 
 import { Command } from 'commander';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { PortableContextBundle } from '@mindstrate/protocol/models';
 import { createMemory } from '../helpers.js';
 
@@ -17,6 +18,7 @@ bundleCommand
   .description('Create a portable ECS context bundle JSON file')
   .option('-p, --project <project>', 'Project scope')
   .option('-o, --output <file>', 'Output file path', 'mindstrate-bundle.json')
+  .option('--output-dir <dir>', 'Output editable bundle directory instead of a single JSON file')
   .option('-d, --description <text>', 'Bundle description')
   .action(async (name, options) => {
     const memory = createMemory();
@@ -28,8 +30,19 @@ bundleCommand
         project: options.project,
         description: options.description,
       });
-      fs.writeFileSync(options.output, JSON.stringify(bundle, null, 2), 'utf-8');
-      console.log(`Bundle created: ${options.output}`);
+      if (options.outputDir) {
+        const files = memory.createEditableBundleFiles(bundle);
+        fs.mkdirSync(options.outputDir, { recursive: true });
+        for (const [relativePath, content] of Object.entries(files)) {
+          const outputPath = path.join(options.outputDir, relativePath);
+          fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+          fs.writeFileSync(outputPath, content, 'utf-8');
+        }
+        console.log(`Editable bundle created: ${options.outputDir}`);
+      } else {
+        fs.writeFileSync(options.output, JSON.stringify(bundle, null, 2), 'utf-8');
+        console.log(`Bundle created: ${options.output}`);
+      }
       console.log(`  Nodes: ${bundle.nodeIds.length}`);
       console.log(`  Edges: ${bundle.edgeIds.length}`);
     } catch (error) {
