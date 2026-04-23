@@ -1,5 +1,5 @@
 /**
- * mindstrate setup-mcp - 生成 MCP Server 配置
+ * mindstrate mcp setup - 生成 MCP Server 配置
  *
  * 为不同的 AI 编程工具生成接入配置：
  * - Cursor: .cursor/mcp.json
@@ -18,7 +18,7 @@ export interface SetupMcpResult {
 
 /**
  * Programmatic entry: write MCP config(s) for the requested tool(s).
- * Used both by `mindstrate setup-mcp` and by `mindstrate init --tool ...`.
+ * Used both by `mindstrate mcp setup` and by `mindstrate init --tool ...`.
  */
 export function writeMcpConfig(options: {
   tool: 'cursor' | 'opencode' | 'claude-desktop' | 'all';
@@ -118,7 +118,11 @@ export function writeMcpConfig(options: {
   return { generated, serverPath };
 }
 
-export const setupMcpCommand = new Command('setup-mcp')
+export const setupMcpCommand = new Command('mcp')
+  .description('Manage MCP server configuration');
+
+setupMcpCommand
+  .command('setup')
   .description('Generate MCP server config for AI coding assistants')
   .option('--tool <tool>', 'Target tool: cursor, opencode, claude-desktop, all', 'all')
   .option('--global', 'Install globally (Claude Desktop)', false)

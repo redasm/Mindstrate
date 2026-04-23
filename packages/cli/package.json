@@ -5,7 +5,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "mindstrate": "./dist/index.js"
+    "mindstrate": "./dist/index.js",
+    "ms": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

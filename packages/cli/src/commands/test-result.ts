@@ -1,5 +1,5 @@
 /**
- * CLI Command: test-result
+ * CLI Command: test
  *
  * Ingest a test result summary into the ECS event stream.
  */
@@ -8,7 +8,7 @@ import { Command } from 'commander';
 import * as fs from 'node:fs';
 import { createMemory } from '../helpers.js';
 
-export const testResultCommand = new Command('test-result')
+export const testResultCommand = new Command('test')
   .description('Ingest a test result summary into the ECS event stream')
   .argument('[summary]', 'Short test result summary')
   .option('-f, --file <path>', 'Read test output summary from a file')

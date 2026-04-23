@@ -1,5 +1,5 @@
 /**
- * CLI Command: curate
+ * CLI Command: ctx
  *
  * 上下文策划 -- 为任务自动组装知识包。
  */
@@ -9,8 +9,8 @@ import { createMemory } from '../helpers.js';
 
 export function registerCurateCommand(program: Command): void {
   program
-    .command('curate <task>')
-    .description('为任务自动组装知识包（上下文策划）')
+    .command('ctx <task>')
+    .description('为任务组装工作上下文')
     .option('-l, --language <lang>', '编程语言')
     .option('-f, --framework <fw>', '框架')
     .action(async (task, opts) => {

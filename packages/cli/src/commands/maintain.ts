@@ -1,12 +1,12 @@
 /**
- * mindstrate maintain - 运行维护任务
+ * mindstrate doctor - 运行维护任务
  */
 
 import { Command } from 'commander';
 import { createMemory } from '../helpers.js';
 
-export const maintainCommand = new Command('maintain')
-  .description('Run quality maintenance tasks')
+export const maintainCommand = new Command('doctor')
+  .description('Run maintenance and health checks')
   .action(async () => {
     const memory = createMemory();
 

@@ -1,15 +1,15 @@
 /**
- * mindstrate capture - 从 git commit 或 P4 changelist 中采集知识
+ * mindstrate scan - 从 git commit 或 P4 changelist 中采集知识
  *
  * Git 模式：
- *   mindstrate capture --last-commit
- *   mindstrate capture --commit <hash>
- *   mindstrate capture --recent 10
+ *   mindstrate scan --last-commit
+ *   mindstrate scan --commit <hash>
+ *   mindstrate scan --recent 10
  *
  * P4 模式：
- *   mindstrate capture --p4 --changelist <CL>
- *   mindstrate capture --p4 --recent 10
- *   mindstrate capture --p4 --recent 10 --depot //depot/project/...
+ *   mindstrate scan --p4 --changelist <CL>
+ *   mindstrate scan --p4 --recent 10
+ *   mindstrate scan --p4 --recent 10 --depot //depot/project/...
  */
 
 import { Command } from 'commander';
@@ -27,8 +27,8 @@ import {
 import type { CommitInfo } from '@mindstrate/server';
 import { createMemory, TYPE_LABELS } from '../helpers.js';
 
-export const captureCommand = new Command('capture')
-  .description('Capture knowledge from git commits or P4 changelists')
+export const captureCommand = new Command('scan')
+  .description('Scan git commits or P4 changelists for knowledge')
   .option('--last-commit', 'Capture from the last git commit')
   .option('--commit <hash>', 'Capture from a specific git commit')
   .option('--p4', 'Use Perforce (P4) instead of Git')

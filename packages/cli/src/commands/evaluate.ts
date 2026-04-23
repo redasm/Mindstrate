@@ -1,5 +1,5 @@
 /**
- * CLI Command: evaluate
+ * CLI Command: eval
  *
  * 运行检索质量评估。
  */
@@ -9,7 +9,7 @@ import { createMemory } from '../helpers.js';
 
 export function registerEvaluateCommand(program: Command): void {
   program
-    .command('evaluate')
+    .command('eval')
     .description('运行检索质量评估')
     .option('--top-k <n>', '检索结果数量', '5')
     .option('--trend', '显示评估趋势', false)
@@ -22,7 +22,7 @@ export function registerEvaluateCommand(program: Command): void {
           const trend = memory.getEvalTrend(10);
           console.log(`Evaluation Trend: ${trend.trend}\n`);
           if (trend.runs.length === 0) {
-            console.log('No evaluation runs yet. Run `mindstrate evaluate` first.');
+            console.log('No evaluation runs yet. Run `mindstrate eval` first.');
           } else {
             console.log('Run ID      | Date       | Precision | Recall | F1    | MRR');
             console.log('------------|------------|-----------|--------|-------|------');

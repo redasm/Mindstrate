@@ -1,5 +1,5 @@
 /**
- * CLI Command: lsp-diagnostic
+ * CLI Command: diag
  *
  * Ingest an LSP diagnostic summary into the ECS event stream.
  */
@@ -8,8 +8,8 @@ import { Command } from 'commander';
 import * as fs from 'node:fs';
 import { createMemory } from '../helpers.js';
 
-export const lspDiagnosticCommand = new Command('lsp-diagnostic')
-  .description('Ingest an LSP diagnostic summary into the ECS event stream')
+export const lspDiagnosticCommand = new Command('diag')
+  .description('Ingest a diagnostic summary into the ECS event stream')
   .argument('[summary]', 'Short diagnostic summary')
   .option('-f, --file <path>', 'Read diagnostic summary from a file')
   .option('-p, --project <project>', 'Project scope (defaults to current directory name)')

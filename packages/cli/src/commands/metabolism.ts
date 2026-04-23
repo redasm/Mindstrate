@@ -1,5 +1,5 @@
 /**
- * CLI Command: metabolism
+ * CLI Command: gc
  *
  * Run ECS metabolism and print the result.
  */
@@ -7,8 +7,8 @@
 import { Command } from 'commander';
 import { createMemory } from '../helpers.js';
 
-export const metabolismCommand = new Command('metabolism')
-  .description('Run the ECS metabolism engine')
+export const metabolismCommand = new Command('gc')
+  .description('Run ECS garbage collection and compaction')
   .option('-p, --project <project>', 'Project scope')
   .option('-t, --trigger <trigger>', 'Trigger type: manual | scheduled | event_driven', 'manual')
   .action(async (options) => {

@@ -1,5 +1,5 @@
 /**
- * CLI Command: context-graph
+ * CLI Command: graph
  *
  * Query raw ECS context graph nodes.
  */
@@ -7,7 +7,7 @@
 import { Command } from 'commander';
 import { createMemory, truncate } from '../helpers.js';
 
-export const contextGraphCommand = new Command('context-graph')
+export const contextGraphCommand = new Command('graph')
   .description('Query ECS context graph nodes')
   .option('-q, --query <query>', 'Lexical query over node title/content/tags')
   .option('-p, --project <project>', 'Project scope')

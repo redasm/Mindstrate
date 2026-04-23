@@ -1,5 +1,5 @@
 /**
- * CLI Command: conflicts
+ * CLI Command: conflict
  *
  * List ECS conflict records.
  */
@@ -7,7 +7,7 @@
 import { Command } from 'commander';
 import { createMemory, formatDate } from '../helpers.js';
 
-export const conflictsCommand = new Command('conflicts')
+export const conflictsCommand = new Command('conflict')
   .description('List ECS conflict records')
   .option('-p, --project <project>', 'Project scope')
   .option('-l, --limit <number>', 'Maximum number of conflicts', '20')

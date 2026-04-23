@@ -11,23 +11,23 @@
  *   mindstrate stats                查看统计信息
  *   mindstrate vote <id> <up|down>  投票
  *   mindstrate delete <id>          删除知识
- *   mindstrate capture              从 git commit 采集知识
+ *   mindstrate scan                 从 git commit 采集知识
  *   mindstrate hook install         安装 git hook
  *   mindstrate hook uninstall       卸载 git hook
  *   mindstrate export [file]        导出知识库
  *   mindstrate import <file>        导入知识
- *   mindstrate setup-mcp            生成 MCP Server 配置
+ *   mindstrate mcp setup            生成 MCP Server 配置
  *   mindstrate web                  启动 Web UI 管理界面
- *   mindstrate maintain             运行维护任务
+ *   mindstrate doctor               运行维护任务
  *   mindstrate evolve               运行知识进化引擎
- *   mindstrate evaluate             运行检索质量评估
- *   mindstrate curate <task>        上下文策划
- *   mindstrate context-graph        查询 ECS 上下文图
- *   mindstrate conflicts            查看 ECS 冲突记录
- *   mindstrate metabolism           运行 ECS 代谢引擎
+ *   mindstrate eval                 运行检索质量评估
+ *   mindstrate ctx <task>           组装工作上下文
+ *   mindstrate graph                查询 ECS 上下文图
+ *   mindstrate conflict             查看 ECS 冲突记录
+ *   mindstrate gc                   运行 ECS 代谢引擎
  *   mindstrate bundle               管理可移植 ECS 上下文包
- *   mindstrate test-result          写入测试结果到 ECS 事件流
- *   mindstrate lsp-diagnostic       写入 LSP 诊断到 ECS 事件流
+ *   mindstrate test                 写入测试结果到 ECS 事件流
+ *   mindstrate diag                 写入诊断到 ECS 事件流
  */
 
 import { Command } from 'commander';
