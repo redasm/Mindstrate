@@ -1,6 +1,6 @@
-# Mindstrate - Agent Rules
+# Mindstrate - Project Agent Rules
 
-## 知识管理 (mindstrate MCP)
+## 知识管理 (Mindstrate MCP)
 
 ### 会话生命周期（自动执行）
 - **对话开始时**：立即调用 `session_start`，project 设为当前目录名
