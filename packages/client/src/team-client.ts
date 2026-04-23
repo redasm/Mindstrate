@@ -24,6 +24,7 @@ import type {
   Session,
   PipelineResult,
   EvolutionRunResult,
+  PortableContextBundle,
 } from '@mindstrate/protocol';
 
 /** Stats returned by the team server */
@@ -302,6 +303,30 @@ export class TeamClient {
 
     const data = await this.fetch<{ conflicts?: ConflictRecord[] }>(`/api/context/conflicts?${params}`);
     return data.conflicts ?? [];
+  }
+
+  async createBundle(options: {
+    name: string;
+    version?: string;
+    description?: string;
+    project?: string;
+    nodeIds?: string[];
+    includeRelatedEdges?: boolean;
+  }): Promise<PortableContextBundle> {
+    return this.post('/api/bundles/create', options);
+  }
+
+  async validateBundle(bundle: PortableContextBundle): Promise<{ valid: boolean; errors: string[] }> {
+    return this.post('/api/bundles/validate', { bundle });
+  }
+
+  async installBundle(bundle: PortableContextBundle): Promise<{
+    installedNodes: number;
+    updatedNodes: number;
+    installedEdges: number;
+    skippedEdges: number;
+  }> {
+    return this.post('/api/bundles/install', { bundle });
   }
 
   // ============================================================

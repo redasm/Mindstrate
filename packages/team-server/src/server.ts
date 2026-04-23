@@ -35,6 +35,7 @@ import type {
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
   MetabolismRun,
+  PortableContextBundle,
   RetrievalFilter,
 } from '@mindstrate/server';
 
@@ -585,6 +586,62 @@ app.post('/api/metabolism/run', async (req, res) => {
     const { project, trigger } = req.body;
     const run: MetabolismRun = await memory.runMetabolism({ project, trigger });
     res.json(run);
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** POST /api/bundles/create - create a portable ECS context bundle */
+app.post('/api/bundles/create', async (req, res) => {
+  try {
+    await memory.init();
+    const { name, version, description, project, nodeIds, includeRelatedEdges } = req.body;
+    if (!name) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+
+    const bundle: PortableContextBundle = memory.createBundle({
+      name,
+      version,
+      description,
+      project,
+      nodeIds,
+      includeRelatedEdges,
+    });
+    res.status(201).json(bundle);
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** POST /api/bundles/validate - validate a portable ECS context bundle */
+app.post('/api/bundles/validate', async (req, res) => {
+  try {
+    await memory.init();
+    const bundle = req.body.bundle as PortableContextBundle | undefined;
+    if (!bundle) {
+      res.status(400).json({ error: 'bundle is required' });
+      return;
+    }
+
+    res.json(memory.validateBundle(bundle));
+  } catch (error) {
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
+/** POST /api/bundles/install - install a portable ECS context bundle */
+app.post('/api/bundles/install', async (req, res) => {
+  try {
+    await memory.init();
+    const bundle = req.body.bundle as PortableContextBundle | undefined;
+    if (!bundle) {
+      res.status(400).json({ error: 'bundle is required' });
+      return;
+    }
+
+    res.json(memory.installBundle(bundle));
   } catch (error) {
     res.status(500).json({ error: getErrorMessage(error) });
   }
