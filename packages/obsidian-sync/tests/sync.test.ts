@@ -1,0 +1,248 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
+import { Mindstrate, KnowledgeType, CaptureSource } from '@mindstrate/server';
+import { SyncManager, parseMarkdown, VaultLayout } from '../src/index.js';
+
+function tmp(prefix: string): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+async function makeMemory(dataDir: string): Promise<Mindstrate> {
+  const memory = new Mindstrate({ dataDir });
+  await memory.init();
+  return memory;
+}
+
+describe('SyncManager (integration)', () => {
+  let dataDir: string;
+  let vaultDir: string;
+  let memory: Mindstrate;
+
+  beforeEach(async () => {
+    dataDir = tmp('mindstrate-data-');
+    vaultDir = tmp('mindstrate-vault-');
+    memory = await makeMemory(dataDir);
+  });
+
+  afterEach(() => {
+    try { memory.close(); } catch { /* ignore */ }
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    fs.rmSync(vaultDir, { recursive: true, force: true });
+  });
+
+  it('exportAll writes all knowledge into project/type folders', async () => {
+    const r1 = await memory.add({
+      type: KnowledgeType.BUG_FIX,
+      title: 'Hydration error in Next 15',
+      problem: 'Date.now in render causes mismatch',
+      solution: 'Move volatile values to useEffect',
+      tags: ['next', 'ssr'],
+      context: { project: 'website', language: 'typescript', framework: 'next' },
+      source: CaptureSource.CLI,
+    });
+    expect(r1.success).toBe(true);
+
+    const r2 = await memory.add({
+      type: KnowledgeType.BEST_PRACTICE,
+      title: 'Always use absolute imports',
+      solution: 'Configure tsconfig paths and prefer @/ imports',
+      tags: ['style'],
+      context: { project: 'website', language: 'typescript' },
+      source: CaptureSource.CLI,
+    });
+    expect(r2.success).toBe(true);
+
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    const out = await sync.exportAll();
+    expect(out.errors).toHaveLength(0);
+    expect(out.written).toBe(2);
+
+    // Check folder layout
+    const bugFiles = fs.readdirSync(path.join(vaultDir, 'website', 'bug-fixes'));
+    expect(bugFiles).toHaveLength(1);
+    expect(bugFiles[0]).toMatch(/--[a-f0-9]+\.md$/);
+
+    const bpFiles = fs.readdirSync(path.join(vaultDir, 'website', 'best-practices'));
+    expect(bpFiles).toHaveLength(1);
+
+    // Check meta index
+    const indexPath = path.join(vaultDir, '_meta', 'index.json');
+    expect(fs.existsSync(indexPath)).toBe(true);
+    const idx = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+    expect(Object.keys(idx.files)).toHaveLength(2);
+  });
+
+  it('exportOne is invoked via mutation sink on add/update/delete', async () => {
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    memory.addMutationSink(sync);
+
+    const r = await memory.add({
+      type: KnowledgeType.GOTCHA,
+      title: 'Beware default export with HMR',
+      solution: 'Always name your default-exported component to keep refresh state',
+      tags: ['react'],
+      context: { project: 'frontend', language: 'typescript', framework: 'react' },
+      source: CaptureSource.CLI,
+    });
+    expect(r.success).toBe(true);
+
+    const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
+    const rel = idx.files[r.knowledge!.id];
+    expect(rel).toBeDefined();
+
+    const abs = path.join(vaultDir, rel.split('/').join(path.sep));
+    expect(fs.existsSync(abs)).toBe(true);
+
+    // Update title and ensure file moves to new slug
+    memory.update(r.knowledge!.id, { title: 'Renamed: HMR gotcha with default export' });
+    const idx2 = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
+    const newRel = idx2.files[r.knowledge!.id];
+    expect(newRel).not.toBe(rel);
+    expect(fs.existsSync(path.join(vaultDir, newRel.split('/').join(path.sep)))).toBe(true);
+    expect(fs.existsSync(abs)).toBe(false);
+
+    // Delete propagates
+    await memory.delete(r.knowledge!.id);
+    expect(fs.existsSync(path.join(vaultDir, newRel.split('/').join(path.sep)))).toBe(false);
+    const idx3 = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
+    expect(idx3.files[r.knowledge!.id]).toBeUndefined();
+  });
+
+  it('orphan files (KU removed without sink) are cleaned up on full re-export', async () => {
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+
+    const r = await memory.add({
+      type: KnowledgeType.HOW_TO,
+      title: 'Set up vitest in monorepo',
+      solution: 'Create a vitest.config.ts at the workspace root and reference packages',
+      context: { project: 'tools', language: 'typescript' },
+      source: CaptureSource.CLI,
+    });
+    await sync.exportAll();
+
+    // Now delete via metadata directly (simulating a sink-less deletion)
+    await memory.delete(r.knowledge!.id);
+
+    const r2 = await sync.exportAll();
+    expect(r2.removed).toBe(1);
+
+    const layout = new VaultLayout({ vaultRoot: vaultDir });
+    expect(layout.walkMarkdownFiles()).toHaveLength(0);
+  });
+
+  it('reads back edits made directly to a vault file via parseMarkdown', async () => {
+    // We don't start the watcher in this test (chokidar tests are flaky/timeouty);
+    // we exercise the same code path used by the watcher.
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    memory.addMutationSink(sync);
+
+    const r = await memory.add({
+      type: KnowledgeType.PATTERN,
+      title: 'Repository pattern',
+      solution: 'Encapsulate persistence behind an interface',
+      tags: ['ddd'],
+      context: { project: 'api', language: 'typescript' },
+      source: CaptureSource.CLI,
+    });
+
+    const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
+    const rel = idx.files[r.knowledge!.id];
+    const abs = path.join(vaultDir, rel.split('/').join(path.sep));
+
+    // User edits the markdown manually
+    let text = fs.readFileSync(abs, 'utf8');
+    text = text.replace('Repository pattern', 'Repository pattern (revised)');
+    text = text.replace('Encapsulate persistence behind an interface',
+      'Encapsulate persistence behind an interface; testable via fakes');
+    fs.writeFileSync(abs, text, 'utf8');
+
+    // Simulate the watcher-side processing
+    const reread = fs.readFileSync(abs, 'utf8');
+    const parsed = parseMarkdown(reread);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.title).toContain('revised');
+    expect(parsed!.solution).toContain('testable via fakes');
+  });
+
+  it('ignores vault edits for mirror-only knowledge types', async () => {
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    memory.addMutationSink(sync);
+
+    const r = await memory.add({
+      type: KnowledgeType.GOTCHA,
+      title: 'Volatile gotcha',
+      solution: 'Original volatile guidance',
+      context: { project: 'api', language: 'typescript' },
+      source: CaptureSource.CLI,
+    });
+
+    const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
+    const rel = idx.files[r.knowledge!.id];
+    const abs = path.join(vaultDir, rel.split('/').join(path.sep));
+
+    let text = fs.readFileSync(abs, 'utf8');
+    text = text.replace('Original volatile guidance', 'Edited in vault but should be ignored');
+    fs.writeFileSync(abs, text, 'utf8');
+
+    await (sync.watcher as any).handleAddOrChange(rel);
+
+    const unchanged = memory.get(r.knowledge!.id);
+    expect(unchanged!.solution).toBe('Original volatile guidance');
+  });
+
+  it('ignores stale vault edits when Mindstrate has newer content', async () => {
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    memory.addMutationSink(sync);
+
+    const r = await memory.add({
+      type: KnowledgeType.ARCHITECTURE,
+      title: 'Service lifecycle',
+      solution: 'Version one of the lifecycle note.',
+      context: { project: 'api', language: 'typescript' },
+      source: CaptureSource.CLI,
+    });
+
+    const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
+    const rel = idx.files[r.knowledge!.id];
+    const abs = path.join(vaultDir, rel.split('/').join(path.sep));
+    const staleText = fs.readFileSync(abs, 'utf8');
+
+    memory.update(r.knowledge!.id, { solution: 'Version two from Mindstrate.' });
+
+    const staleEdited = staleText.replace(
+      'Version one of the lifecycle note.',
+      'Edited from a stale vault snapshot.',
+    );
+    fs.writeFileSync(abs, staleEdited, 'utf8');
+
+    await (sync.watcher as any).handleAddOrChange(rel);
+
+    const current = memory.get(r.knowledge!.id);
+    expect(current!.solution).toBe('Version two from Mindstrate.');
+  });
+
+  it('does not delete mirror-only knowledge when the vault file is removed', async () => {
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    memory.addMutationSink(sync);
+
+    const r = await memory.add({
+      type: KnowledgeType.BUG_FIX,
+      title: 'Mirror-only bug fix',
+      solution: 'Important fix that should stay canonical in Mindstrate.',
+      context: { project: 'api', language: 'typescript' },
+      source: CaptureSource.CLI,
+    });
+
+    const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
+    const rel = idx.files[r.knowledge!.id];
+    const abs = path.join(vaultDir, rel.split('/').join(path.sep));
+    fs.unlinkSync(abs);
+
+    await (sync.watcher as any).handleUnlink(abs);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(memory.get(r.knowledge!.id)).not.toBeNull();
+  });
+});

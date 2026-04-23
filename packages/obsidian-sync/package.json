@@ -1,0 +1,24 @@
+{
+  "name": "@mindstrate/obsidian-sync",
+  "version": "0.1.0",
+  "description": "Bidirectional sync between Mindstrate and an Obsidian vault",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@mindstrate/server": "*",
+    "chokidar": "^4.0.1",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.4"
+  }
+}

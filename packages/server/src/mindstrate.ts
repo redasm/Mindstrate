@@ -1,0 +1,687 @@
+/**
+ * Mindstrate - Main Entry (Facade)
+ *
+ * Mindstrate 主类，统一封装所有子模块，
+ * 提供简洁的 API 供 CLI 和 MCP Server 使用。
+ *
+ * 新增能力：
+ * - 自动反馈闭环（FeedbackLoop）
+ * - 知识自动进化（KnowledgeEvolution）
+ * - 上下文策划（Retriever.curateContext）
+ * - 检索质量评估（RetrievalEvaluator）
+ * - 质量门禁（Pipeline.qualityGate）
+ */
+
+import * as fs from 'node:fs';
+import { loadConfig, type MindstrateConfig } from './config.js';
+import type {
+  CreateKnowledgeInput,
+  UpdateKnowledgeInput,
+  RetrievalContext,
+  RetrievalFilter,
+  RetrievalResult,
+  KnowledgeUnit,
+  CuratedContext,
+  AssembledContext,
+  FeedbackEvent,
+} from '@mindstrate/protocol';
+import { KnowledgeType } from '@mindstrate/protocol';
+import type {
+  Session,
+  CreateSessionInput,
+  SaveObservationInput,
+  CompressSessionInput,
+  SessionContext,
+} from '@mindstrate/protocol';
+import { MetadataStore } from './storage/metadata-store.js';
+import { VectorStore } from './storage/vector-store.js';
+import type { IVectorStore } from './storage/vector-store-interface.js';
+import { SessionStore } from './storage/session-store.js';
+import { Embedder } from './processing/embedder.js';
+import { Pipeline, type PipelineResult, type QualityGateResult } from './processing/pipeline.js';
+import { SessionCompressor } from './processing/session-compressor.js';
+import { Retriever } from './retrieval/retriever.js';
+import { QualityScorer } from './quality/scorer.js';
+import { FeedbackLoop } from './quality/feedback-loop.js';
+import { KnowledgeEvolution, type EvolutionSuggestion, type EvolutionRunResult } from './quality/evolution.js';
+import { RetrievalEvaluator, type EvalRunResult } from './quality/eval.js';
+import {
+  buildProjectSnapshot,
+  type DetectedProject,
+} from './project/index.js';
+
+/**
+ * Optional sink invoked whenever a knowledge mutation is committed by the facade.
+ * Used by external integrations (e.g. obsidian-sync) to mirror state without
+ * coupling core to those packages.
+ */
+export interface KnowledgeMutationSink {
+  onAdded?(knowledge: KnowledgeUnit): void | Promise<void>;
+  onUpdated?(knowledge: KnowledgeUnit): void | Promise<void>;
+  onDeleted?(id: string): void | Promise<void>;
+}
+
+export class Mindstrate {
+  private config: MindstrateConfig;
+  private metadataStore: MetadataStore;
+  private vectorStore: IVectorStore;
+  private sessionStore: SessionStore;
+  private embedder: Embedder;
+  private pipeline: Pipeline;
+  private sessionCompressor: SessionCompressor;
+  private retriever: Retriever;
+  private scorer: QualityScorer;
+  private feedbackLoop: FeedbackLoop;
+  private evolution: KnowledgeEvolution;
+  private evaluator: RetrievalEvaluator;
+  private mutationSinks: KnowledgeMutationSink[] = [];
+  private initialized = false;
+  private initPromise: Promise<void> | null = null;
+
+  constructor(configOverrides?: Partial<MindstrateConfig> & {
+    /** Custom vector store implementation (default: local JSON-based VectorStore) */
+    vectorStore?: IVectorStore;
+  }) {
+    this.config = loadConfig(configOverrides);
+
+    // 确保数据目录存在
+    if (!fs.existsSync(this.config.dataDir)) {
+      fs.mkdirSync(this.config.dataDir, { recursive: true });
+    }
+
+    // OpenAI-compatible client config (defaults to official OpenAI; set
+    // openaiBaseUrl in env/config to use Aliyun, DeepSeek, Moonshot, etc.)
+    const llmBaseUrl = this.config.openaiBaseUrl;
+    const embeddingBaseUrl = this.config.openaiEmbeddingBaseUrl ?? llmBaseUrl;
+
+    // 初始化各模块
+    this.metadataStore = new MetadataStore(this.config.dbPath);
+    this.vectorStore = configOverrides?.vectorStore
+      ?? new VectorStore(this.config.vectorStorePath, this.config.collectionName);
+    this.sessionStore = new SessionStore(this.metadataStore.getDb());
+    this.embedder = new Embedder(this.config.openaiApiKey, this.config.embeddingModel, embeddingBaseUrl);
+    this.sessionCompressor = new SessionCompressor(this.config.openaiApiKey, this.config.llmModel, llmBaseUrl);
+
+    // 自动反馈闭环
+    this.feedbackLoop = new FeedbackLoop(this.metadataStore.getDb(), this.metadataStore);
+
+    // Pipeline 和 Retriever 使用 FeedbackLoop
+    this.pipeline = new Pipeline(
+      this.metadataStore,
+      this.vectorStore,
+      this.embedder,
+      this.config.deduplicationThreshold,
+    );
+    this.retriever = new Retriever(
+      this.metadataStore,
+      this.vectorStore,
+      this.embedder,
+      this.feedbackLoop,
+    );
+    this.scorer = new QualityScorer(this.metadataStore, this.feedbackLoop);
+
+    // 知识进化引擎
+    this.evolution = new KnowledgeEvolution(
+      this.metadataStore,
+      this.vectorStore,
+      this.embedder,
+      this.feedbackLoop,
+      this.config.openaiApiKey,
+      { baseURL: llmBaseUrl, llmModel: this.config.llmModel },
+    );
+
+    // 检索评估
+    this.evaluator = new RetrievalEvaluator(this.metadataStore.getDb(), this.retriever);
+  }
+
+  /** 异步初始化（必须在使用前调用，并发安全） */
+  async init(): Promise<void> {
+    if (this.initialized) return;
+    if (!this.initPromise) {
+      this.initPromise = this.vectorStore.initialize().then(() => {
+        this.initialized = true;
+      }).catch((err) => {
+        // 重置以允许重试
+        this.initPromise = null;
+        throw err;
+      });
+    }
+    return this.initPromise;
+  }
+
+  // ============================================================
+  // 知识写入
+  // ============================================================
+
+  /** 添加一条新知识 */
+  async add(input: CreateKnowledgeInput): Promise<PipelineResult> {
+    await this.ensureInit();
+    const result = await this.pipeline.process(input);
+    if (result.success && result.knowledge) {
+      await this.notifySinks('added', result.knowledge);
+    }
+    return result;
+  }
+
+  /**
+   * Idempotent upsert of a project snapshot KU.
+   *
+   * Behavior:
+   *  - Computes a deterministic id from `project.root + project.name`.
+   *  - Extracts preserve blocks from the existing KU's solution (if any).
+   *  - Re-renders the snapshot body, merging preserved sections.
+   *  - Inserts the KU directly (bypassing dedup / quality gate) so
+   *    multiple `mindstrate init` runs always converge on the same record.
+   *  - Returns whether the body actually changed since last time.
+   */
+  async upsertProjectSnapshot(
+    project: DetectedProject,
+    options: { author?: string; trusted?: boolean } = {},
+  ): Promise<{ knowledge: KnowledgeUnit; changed: boolean; created: boolean }> {
+    await this.ensureInit();
+
+    // Build with knowledge of the existing solution (so preserve blocks survive).
+    const { id } = buildProjectSnapshot(project, options);
+    const existing = this.metadataStore.getById(id);
+    const previousSolution = existing?.solution;
+    const built = buildProjectSnapshot(project, { ...options, previousSolution });
+
+    let knowledge: KnowledgeUnit;
+    let created = false;
+
+    if (existing) {
+      knowledge = this.metadataStore.update(id, {
+        title: built.input.title,
+        problem: built.input.problem,
+        solution: built.input.solution,
+        tags: built.input.tags,
+        confidence: built.input.confidence,
+        actionable: built.input.actionable,
+        context: built.input.context,
+      })!;
+    } else {
+      knowledge = this.metadataStore.create(built.input, { id });
+      created = true;
+    }
+
+    // Re-embed and write to vector store so semantic search picks up new content.
+    try {
+      const text = this.embedder.knowledgeToText(knowledge);
+      const embedding = await this.embedder.embed(text);
+      // delete then add to handle both create and update paths uniformly
+      await this.vectorStore.delete(id);
+      await this.vectorStore.add({
+        id,
+        embedding,
+        text,
+        metadata: {
+          type: knowledge.type,
+          language: knowledge.context.language ?? '',
+          framework: knowledge.context.framework ?? '',
+          project: knowledge.context.project ?? '',
+        },
+      });
+    } catch (err) {
+      // Embedding failures shouldn't break init; the metadata is still queryable.
+      console.warn(
+        `[Mindstrate] project snapshot embedding failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    if (created) {
+      await this.notifySinks('added', knowledge);
+    } else if (built.changed) {
+      await this.notifySinks('updated', knowledge);
+    }
+
+    return { knowledge, changed: built.changed || created, created };
+  }
+
+  /**
+   * Returns the project snapshot KU previously created by `upsertProjectSnapshot`,
+   * or null if none exists.
+   */
+  getProjectSnapshot(project: DetectedProject): KnowledgeUnit | null {
+    const { id } = buildProjectSnapshot(project);
+    return this.metadataStore.getById(id);
+  }
+
+  /** 质量门禁预检查（不写入，仅检查质量） */
+  checkQuality(input: CreateKnowledgeInput): QualityGateResult {
+    return this.pipeline.qualityGate(input);
+  }
+
+  // ============================================================
+  // 知识检索
+  // ============================================================
+
+  /** 搜索相关知识 */
+  async search(
+    query: string,
+    options?: {
+      context?: RetrievalContext;
+      filter?: RetrievalFilter;
+      topK?: number;
+      sessionId?: string;
+    },
+  ): Promise<RetrievalResult[]> {
+    await this.ensureInit();
+    return this.retriever.search(
+      query,
+      options?.context,
+      options?.filter,
+      options?.topK ?? this.config.defaultTopK,
+      options?.sessionId,
+    );
+  }
+
+  /**
+   * 上下文策划：自动组装任务知识包
+   */
+  async curateContext(
+    taskDescription: string,
+    context?: RetrievalContext,
+    sessionId?: string,
+  ): Promise<CuratedContext> {
+    await this.ensureInit();
+    return this.retriever.curateContext(taskDescription, context, sessionId);
+  }
+
+  async assembleContext(
+    taskDescription: string,
+    options?: {
+      project?: string;
+      context?: RetrievalContext;
+      sessionId?: string;
+    },
+  ): Promise<AssembledContext> {
+    await this.ensureInit();
+
+    const project = options?.project ?? options?.context?.project ?? '';
+    const context: RetrievalContext | undefined = options?.context
+      ? { ...options.context, project: project || options.context.project }
+      : (project ? { project } : undefined);
+    const sessionContext = project ? this.formatSessionContext(project) || undefined : undefined;
+    const projectSnapshot = project ? this.findProjectSnapshot(project) : null;
+    const curated = await this.retriever.curateContext(taskDescription, context, options?.sessionId);
+
+    return {
+      taskDescription,
+      project: project || undefined,
+      sessionContext,
+      projectSnapshot: projectSnapshot ?? undefined,
+      curated,
+      summary: this.formatAssembledContext(
+        taskDescription,
+        project || undefined,
+        sessionContext,
+        projectSnapshot ?? undefined,
+        curated,
+      ),
+    };
+  }
+
+  // ============================================================
+  // 知识 CRUD
+  // ============================================================
+
+  get(id: string): KnowledgeUnit | null {
+    return this.metadataStore.getById(id);
+  }
+
+  /** Find knowledge by full ID or ID prefix */
+  findByIdOrPrefix(idOrPrefix: string): KnowledgeUnit | null {
+    // Try exact match first
+    const exact = this.metadataStore.getById(idOrPrefix);
+    if (exact) return exact;
+    // Fallback to prefix search via SQL LIKE
+    return this.metadataStore.findByIdPrefix(idOrPrefix);
+  }
+
+  update(id: string, input: UpdateKnowledgeInput): KnowledgeUnit | null {
+    const updated = this.metadataStore.update(id, input);
+    if (updated) {
+      void this.notifySinks('updated', updated);
+    }
+    return updated;
+  }
+
+  async updateAndReindex(id: string, input: UpdateKnowledgeInput): Promise<KnowledgeUnit | null> {
+    await this.ensureInit();
+
+    const updated = this.metadataStore.update(id, input);
+    if (!updated) return null;
+
+    const text = this.embedder.knowledgeToText(updated);
+    const embedding = await this.embedder.embed(text);
+    await this.vectorStore.update({
+      id: updated.id,
+      embedding,
+      text,
+      metadata: {
+        type: updated.type,
+        language: updated.context.language ?? '',
+        framework: updated.context.framework ?? '',
+        project: updated.context.project ?? '',
+      },
+    });
+
+    await this.notifySinks('updated', updated);
+    return updated;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    await this.ensureInit();
+    const deleted = this.metadataStore.delete(id);
+    if (deleted) {
+      await this.vectorStore.delete(id);
+      await this.notifySinks('deleted', id);
+    }
+    return deleted;
+  }
+
+  list(filter?: RetrievalFilter, limit?: number): KnowledgeUnit[] {
+    return this.metadataStore.query(filter ?? {}, limit);
+  }
+
+  // ============================================================
+  // 知识反馈
+  // ============================================================
+
+  upvote(id: string): void {
+    this.metadataStore.vote(id, 'up');
+  }
+
+  downvote(id: string): void {
+    this.metadataStore.vote(id, 'down');
+  }
+
+  /**
+   * 记录自动反馈（检索结果的使用情况）
+   */
+  recordFeedback(
+    retrievalId: string,
+    signal: FeedbackEvent['signal'],
+    context?: string,
+  ): void {
+    this.feedbackLoop.recordFeedback(retrievalId, signal, context);
+  }
+
+  /**
+   * 获取知识的反馈统计
+   */
+  getFeedbackStats(knowledgeId: string) {
+    return this.feedbackLoop.getFeedbackStats(knowledgeId);
+  }
+
+  // ============================================================
+  // 知识进化
+  // ============================================================
+
+  /**
+   * 运行知识进化循环
+   */
+  async runEvolution(options?: {
+    autoApply?: boolean;
+    maxItems?: number;
+    mode?: 'standard' | 'background';
+  }): Promise<EvolutionRunResult> {
+    await this.ensureInit();
+    return this.evolution.runEvolution(options);
+  }
+
+  /**
+   * 应用进化建议
+   */
+  applyEvolutionSuggestion(suggestion: EvolutionSuggestion): boolean {
+    return this.evolution.applySuggestion(suggestion);
+  }
+
+  // ============================================================
+  // 检索评估
+  // ============================================================
+
+  /**
+   * 运行检索质量评估
+   */
+  async runEvaluation(topK?: number): Promise<EvalRunResult> {
+    await this.ensureInit();
+    return this.evaluator.runEvaluation(topK);
+  }
+
+  /** 添加评估用例 */
+  addEvalCase(query: string, expectedIds: string[], options?: {
+    language?: string;
+    framework?: string;
+  }) {
+    return this.evaluator.addCase(query, expectedIds, options);
+  }
+
+  /** 获取评估趋势 */
+  getEvalTrend(limit?: number) {
+    return this.evaluator.getTrend(limit);
+  }
+
+  // ============================================================
+  // 会话记忆
+  // ============================================================
+
+  /** 开始新会话（自动压缩并结束同项目的旧活跃会话） */
+  async startSession(input: CreateSessionInput = {}): Promise<Session> {
+    // 自动结束同项目的旧活跃会话
+    const active = this.sessionStore.getActiveSession(input.project);
+    if (active) {
+      // 自动解决该会话中未响应的反馈
+      this.feedbackLoop.resolveTimeouts(active.id);
+      // 自动压缩后再结束，避免丢失观察数据
+      if (!active.summary && (active.observations?.length ?? 0) > 0) {
+        try {
+          await this.autoCompressSession(active.id);
+        } catch (err) {
+          // Compression is best-effort; don't block new session creation
+          console.warn(
+            `[Mindstrate] Failed to auto-compress session ${active.id}: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+      this.sessionStore.endSession(active.id, 'abandoned');
+    }
+    return this.sessionStore.create(input);
+  }
+
+  /** 保存会话观察（AI 工作过程中的关键事件） */
+  saveObservation(input: SaveObservationInput): void {
+    this.sessionStore.addObservation(input);
+  }
+
+  /** 压缩当前会话（由 AI 调用，传入摘要） */
+  compressSession(input: CompressSessionInput): void {
+    this.sessionStore.compress(input);
+  }
+
+  /** 自动压缩会话（用 LLM 或规则从观察中生成摘要） */
+  async autoCompressSession(sessionId: string): Promise<CompressSessionInput | null> {
+    const session = this.sessionStore.getById(sessionId);
+    if (!session) return null;
+
+    const result = await this.sessionCompressor.compress(session);
+    this.sessionStore.compress(result);
+    return result;
+  }
+
+  /** 结束会话 */
+  async endSession(sessionId: string): Promise<void> {
+    const session = this.sessionStore.getById(sessionId);
+    if (!session) return;
+
+    // 自动解决未响应的反馈追踪
+    this.feedbackLoop.resolveTimeouts(sessionId);
+
+    // 如果没有摘要，自动压缩
+    if (!session.summary && (session.observations?.length ?? 0) > 0) {
+      await this.autoCompressSession(sessionId);
+    }
+
+    this.sessionStore.endSession(sessionId, 'completed');
+  }
+
+  /** 恢复会话上下文（新会话开始时调用） */
+  restoreSessionContext(project: string = ''): SessionContext {
+    return this.sessionStore.restoreContext(project);
+  }
+
+  /** 格式化会话上下文为可注入的文本 */
+  formatSessionContext(project: string = ''): string {
+    const ctx = this.restoreSessionContext(project);
+    return this.sessionStore.formatContextForInjection(ctx);
+  }
+
+  /** 获取当前活跃会话 */
+  getActiveSession(project: string = ''): Session | null {
+    return this.sessionStore.getActiveSession(project);
+  }
+
+  /** 获取会话 */
+  getSession(id: string): Session | null {
+    return this.sessionStore.getById(id);
+  }
+
+  /** 获取最近会话列表 */
+  getRecentSessions(project: string = '', limit: number = 10): Session[] {
+    return this.sessionStore.getRecentSessions(project, limit);
+  }
+
+  // ============================================================
+  // 维护
+  // ============================================================
+
+  runMaintenance(): {
+    total: number;
+    updated: number;
+    deprecated: number;
+    outdated: number;
+  } {
+    return this.scorer.runMaintenance();
+  }
+
+  async getStats(): Promise<{
+    total: number;
+    byType: Record<string, number>;
+    byStatus: Record<string, number>;
+    byLanguage: Record<string, number>;
+    vectorCount: number;
+    feedbackStats: {
+      totalEvents: number;
+      last30Days: number;
+      avgAdoptionRate: number;
+    };
+  }> {
+    const dbStats = this.metadataStore.getStats();
+    const vectorCount = await this.vectorStore.count();
+    const feedbackStats = this.feedbackLoop.getGlobalStats();
+
+    return {
+      ...dbStats,
+      vectorCount,
+      feedbackStats: {
+        totalEvents: feedbackStats.totalEvents,
+        last30Days: feedbackStats.last30Days,
+        avgAdoptionRate: feedbackStats.avgAdoptionRate,
+      },
+    };
+  }
+
+  // ============================================================
+  // 生命周期
+  // ============================================================
+
+  /** 关闭所有连接，确保数据持久化 */
+  close(): void {
+    this.vectorStore.flush();
+    this.metadataStore.close();
+  }
+
+  getConfig(): Readonly<MindstrateConfig> {
+    return this.config;
+  }
+
+  private async ensureInit(): Promise<void> {
+    if (!this.initialized) {
+      await this.init();
+    }
+  }
+
+  private findProjectSnapshot(project: string): KnowledgeUnit | null {
+    const candidates = this.metadataStore.query({
+      project,
+      types: [KnowledgeType.ARCHITECTURE],
+    }, 20);
+
+    return candidates.find((knowledge) => knowledge.tags.includes('project-snapshot')) ?? null;
+  }
+
+  private formatAssembledContext(
+    taskDescription: string,
+    project: string | undefined,
+    sessionContext: string | undefined,
+    projectSnapshot: KnowledgeUnit | undefined,
+    curated: CuratedContext,
+  ): string {
+    const sections: string[] = [`## Working Context for: ${taskDescription}`];
+
+    if (project) {
+      sections.push(`Project: ${project}`);
+    }
+
+    if (sessionContext) {
+      sections.push('\n### Session Continuity');
+      sections.push(sessionContext);
+    }
+
+    if (projectSnapshot) {
+      sections.push('\n### Project Snapshot');
+      sections.push(`Title: ${projectSnapshot.title}`);
+      sections.push(projectSnapshot.solution);
+    }
+
+    sections.push('\n### Task Curation');
+    sections.push(curated.summary);
+
+    return sections.join('\n').trim();
+  }
+
+  // ============================================================
+  // Mutation sinks (for external mirrors like obsidian-sync)
+  // ============================================================
+
+  /** Register a sink that will be notified after every successful add/update/delete. */
+  addMutationSink(sink: KnowledgeMutationSink): void {
+    this.mutationSinks.push(sink);
+  }
+
+  removeMutationSink(sink: KnowledgeMutationSink): void {
+    this.mutationSinks = this.mutationSinks.filter((s) => s !== sink);
+  }
+
+  private async notifySinks(
+    kind: 'added' | 'updated' | 'deleted',
+    payload: KnowledgeUnit | string,
+  ): Promise<void> {
+    for (const sink of this.mutationSinks) {
+      try {
+        if (kind === 'added' && sink.onAdded) {
+          await sink.onAdded(payload as KnowledgeUnit);
+        } else if (kind === 'updated' && sink.onUpdated) {
+          await sink.onUpdated(payload as KnowledgeUnit);
+        } else if (kind === 'deleted' && sink.onDeleted) {
+          await sink.onDeleted(payload as string);
+        }
+      } catch (err) {
+        // Sinks must never break the main mutation flow.
+        console.warn(
+          `[Mindstrate] mutation sink ${kind} failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+}

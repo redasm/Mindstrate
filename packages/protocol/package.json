@@ -1,0 +1,37 @@
+{
+  "name": "@mindstrate/protocol",
+  "version": "0.1.0",
+  "description": "Type-only protocol definitions shared between Mindstrate clients and servers. Zero runtime dependencies.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./models": {
+      "types": "./dist/models/index.d.ts",
+      "default": "./dist/models/index.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.4"
+  }
+}

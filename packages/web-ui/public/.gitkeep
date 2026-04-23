@@ -1,0 +1,3 @@
+# Empty placeholder so Next.js standalone build + Dockerfile copy steps
+# always succeed even when the project has no static assets yet.
+# Add favicon.ico, robots.txt etc. here when needed.

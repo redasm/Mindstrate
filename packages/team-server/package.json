@@ -1,0 +1,24 @@
+{
+  "name": "@mindstrate/team-server",
+  "version": "0.1.0",
+  "description": "Mindstrate centralized team knowledge server",
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/server.js",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@mindstrate/server": "*",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "pino": "^10.3.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "mindstrate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI memory and context substrate for agents and teams",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "dev": "turbo run dev",
+    "clean": "turbo run clean",
+    "lint": "eslint \"packages/*/src/**/*.ts\""
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.59.0",
+    "@typescript-eslint/parser": "^8.59.0",
+    "eslint": "^9.39.4",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "npm@10.0.0"
+}
