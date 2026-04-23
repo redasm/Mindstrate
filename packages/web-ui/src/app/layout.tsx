@@ -20,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { href: '/knowledge',      label: t.nav.knowledge },
     { href: '/bundles',        label: 'Bundles' },
     { href: '/ecs',            label: 'ECS' },
+    { href: '/lineage',        label: 'Lineage' },
     { href: '/graph-knowledge', label: 'Graph' },
     { href: '/search',         label: t.nav.search },
     { href: '/knowledge/new',  label: t.nav.add },

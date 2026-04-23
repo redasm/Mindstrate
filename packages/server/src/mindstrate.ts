@@ -66,6 +66,7 @@ import { SubstrateType } from '@mindstrate/protocol/models';
 import type {
   ConflictRecord,
   ContextDomainType,
+  ContextEdge,
   ContextEvent,
   ContextNode,
   ContextNodeStatus,
@@ -877,6 +878,15 @@ export class Mindstrate {
 
   listConflictRecords(project?: string, limit?: number): ConflictRecord[] {
     return this.contextGraphStore.listConflictRecords({ project, limit });
+  }
+
+  listContextEdges(options?: {
+    sourceId?: string;
+    targetId?: string;
+    relationType?: import('@mindstrate/protocol/models').ContextRelationType;
+    limit?: number;
+  }): ContextEdge[] {
+    return this.contextGraphStore.listEdges(options);
   }
 
   queryContextGraph(options?: {
