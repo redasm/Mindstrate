@@ -1,6 +1,7 @@
 import type { ContextGraphStore } from './context-graph-store.js';
 import {
   ContextDomainType,
+  ContextEventType,
   ContextNodeStatus,
   ContextRelationType,
   SubstrateType,
@@ -16,6 +17,7 @@ export interface ConflictReflectionResult {
   scannedConflicts: number;
   candidateNodesCreated: number;
   candidateNodeIds: string[];
+  auditEventIds: string[];
 }
 
 export class ConflictReflector {
@@ -32,6 +34,7 @@ export class ConflictReflector {
     }).filter((record) => !this.hasReflectionNode(record.id));
 
     const candidateNodeIds: string[] = [];
+    const auditEventIds: string[] = [];
 
     for (const conflict of conflicts) {
       const nodes = conflict.nodeIds
@@ -70,12 +73,25 @@ export class ConflictReflector {
       }
 
       candidateNodeIds.push(candidate.id);
+      const audit = this.graphStore.createEvent({
+        type: ContextEventType.METABOLIC_OUTPUT,
+        project: conflict.project,
+        actor: 'metabolism.reflect',
+        content: `Created reflection candidate ${candidate.id} for conflict ${conflict.id}.`,
+        metadata: {
+          conflictId: conflict.id,
+          candidateNodeId: candidate.id,
+          sourceNodeIds: conflict.nodeIds,
+        },
+      });
+      auditEventIds.push(audit.id);
     }
 
     return {
       scannedConflicts: conflicts.length,
       candidateNodesCreated: candidateNodeIds.length,
       candidateNodeIds,
+      auditEventIds,
     };
   }
 

@@ -52,6 +52,7 @@ describe('ConflictReflector', () => {
 
     const result = reflector.reflectConflicts({ project: 'mindstrate' });
     expect(result.candidateNodesCreated).toBe(1);
+    expect(result.auditEventIds).toHaveLength(1);
 
     const candidates = graphStore.listNodes({
       sourceRef: conflict.id,
@@ -64,6 +65,12 @@ describe('ConflictReflector', () => {
 
     const incoming = graphStore.listIncomingEdges(candidates[0].id, ContextRelationType.DERIVED_FROM);
     expect(incoming).toHaveLength(2);
+
+    const auditEvents = graphStore.listEvents({ project: 'mindstrate', limit: 10 });
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0].type).toBe('metabolic_output');
+    expect(auditEvents[0].metadata?.['conflictId']).toBe(conflict.id);
+    expect(auditEvents[0].metadata?.['candidateNodeId']).toBe(candidates[0].id);
   });
 
   it('does not create duplicate reflection nodes for the same conflict', () => {
