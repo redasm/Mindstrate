@@ -70,4 +70,31 @@ export interface PortableContextBundle {
   nodeIds: string[];
   edgeIds: string[];
   exportedAt: string;
+  nodes?: PortableContextBundleNode[];
+  edges?: PortableContextBundleEdge[];
+}
+
+export interface PortableContextBundleNode {
+  id: string;
+  substrateType: string;
+  domainType: string;
+  title: string;
+  content: string;
+  tags: string[];
+  project?: string;
+  compressionLevel: number;
+  confidence: number;
+  qualityScore: number;
+  status: string;
+  sourceRef?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PortableContextBundleEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  relationType: string;
+  strength: number;
+  evidence?: Record<string, unknown>;
 }

@@ -98,6 +98,12 @@ export {
   type IngestLspDiagnosticInput,
   type IngestUserFeedbackInput,
 } from './events/index.js';
+export {
+  PortableContextBundleManager,
+  type CreateBundleOptions,
+  type InstallBundleResult,
+  type ValidateBundleResult,
+} from './bundles/index.js';
 
 // Processing
 export { Embedder } from './processing/embedder.js';

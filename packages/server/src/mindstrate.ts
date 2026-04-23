@@ -81,6 +81,7 @@ import {
   ingestUserFeedback,
   type IngestContextEventInput,
 } from './events/index.js';
+import { PortableContextBundleManager, type CreateBundleOptions, type InstallBundleResult, type ValidateBundleResult } from './bundles/index.js';
 
 /**
  * Optional sink invoked whenever a knowledge mutation is committed by the facade.
@@ -115,6 +116,7 @@ export class Mindstrate {
   private pipeline: Pipeline;
   private sessionCompressor: SessionCompressor;
   private retriever: Retriever;
+  private bundleManager: PortableContextBundleManager;
   private scorer: QualityScorer;
   private feedbackLoop: FeedbackLoop;
   private evolution: KnowledgeEvolution;
@@ -172,6 +174,7 @@ export class Mindstrate {
       this.embedder,
     );
     this.sessionStore = new SessionStore(this.metadataStore.getDb());
+    this.bundleManager = new PortableContextBundleManager(this.contextGraphStore);
     this.sessionCompressor = new SessionCompressor(this.config.openaiApiKey, this.config.llmModel, llmBaseUrl);
 
     // 自动反馈闭环
@@ -870,6 +873,18 @@ export class Mindstrate {
 
   listMetabolismRuns(project?: string, limit?: number): MetabolismRun[] {
     return this.contextGraphStore.listMetabolismRuns({ project, limit });
+  }
+
+  createBundle(options: CreateBundleOptions) {
+    return this.bundleManager.createBundle(options);
+  }
+
+  validateBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): ValidateBundleResult {
+    return this.bundleManager.validateBundle(bundle);
+  }
+
+  installBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): InstallBundleResult {
+    return this.bundleManager.installBundle(bundle);
   }
 
   listProjectedKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {

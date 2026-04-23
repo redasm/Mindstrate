@@ -25,6 +25,7 @@
  *   mindstrate context-graph        查询 ECS 上下文图
  *   mindstrate conflicts            查看 ECS 冲突记录
  *   mindstrate metabolism           运行 ECS 代谢引擎
+ *   mindstrate bundle               管理可移植 ECS 上下文包
  */
 
 import { Command } from 'commander';
@@ -47,6 +48,7 @@ import { registerCurateCommand } from './commands/curate.js';
 import { contextGraphCommand } from './commands/context-graph.js';
 import { conflictsCommand } from './commands/conflicts.js';
 import { metabolismCommand } from './commands/metabolism.js';
+import { bundleCommand } from './commands/bundle.js';
 import { vaultCommand } from './commands/vault.js';
 
 const program = new Command();
@@ -74,6 +76,7 @@ program.addCommand(vaultCommand);
 program.addCommand(contextGraphCommand);
 program.addCommand(conflictsCommand);
 program.addCommand(metabolismCommand);
+program.addCommand(bundleCommand);
 registerEvolveCommand(program);
 registerEvaluateCommand(program);
 registerCurateCommand(program);
