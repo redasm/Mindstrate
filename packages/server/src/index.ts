@@ -27,7 +27,7 @@ export {
 export { PROMPT_VERSION } from './prompts.js';
 
 // Math
-export { cosineSimilarity, daysSince } from './math.js';
+export { cosineSimilarity, daysSince, isPast } from './math.js';
 
 // OpenAI Client Factory
 export { getOpenAIClient, clearOpenAIClientCache, type OpenAIClient } from './openai-client.js';

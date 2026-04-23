@@ -19,7 +19,7 @@ import { MetadataStore } from '../storage/metadata-store.js';
 import type { IVectorStore } from '../storage/vector-store-interface.js';
 import { Embedder } from '../processing/embedder.js';
 import type { FeedbackLoop } from '../quality/feedback-loop.js';
-import { daysSince } from '../math.js';
+import { daysSince, isPast } from '../math.js';
 
 export class Retriever {
   private metadataStore: MetadataStore;
@@ -338,7 +338,7 @@ export class Retriever {
       score *= 1.02; // 有步骤的加 2%
     }
 
-    if (knowledge.metadata.expiresAt && daysSince(knowledge.metadata.expiresAt) > 0) {
+    if (knowledge.metadata.expiresAt && isPast(knowledge.metadata.expiresAt)) {
       score *= 0.85;
     }
 
@@ -347,8 +347,7 @@ export class Retriever {
 
   private computeTemporalScore(knowledge: KnowledgeUnit): number {
     if (knowledge.metadata.expiresAt) {
-      const expiresInDays = daysSince(knowledge.metadata.expiresAt);
-      if (expiresInDays > 0) {
+      if (isPast(knowledge.metadata.expiresAt)) {
         return 0;
       }
     }
@@ -393,7 +392,7 @@ export class Retriever {
       parts.push(`Used ${knowledge.quality.useCount} times`);
     }
 
-    if (knowledge.metadata.expiresAt && daysSince(knowledge.metadata.expiresAt) > 0) {
+    if (knowledge.metadata.expiresAt && isPast(knowledge.metadata.expiresAt)) {
       parts.push('Expired');
     }
 

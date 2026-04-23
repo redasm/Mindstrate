@@ -195,5 +195,25 @@ describe('Retriever', () => {
 
       expect(expiredScore).toBeLessThan(freshScore);
     });
+
+    it('should treat knowledge as expired immediately after the expiration timestamp passes', () => {
+      const expiredAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      const staleKnowledge = metadataStore.create(makeKnowledgeInput({
+        type: KnowledgeType.HOW_TO,
+        title: 'Just expired rollout note',
+        solution: 'Do not use the retired rollout window.',
+      }));
+
+      metadataStore.getDb().prepare(
+        'UPDATE knowledge_units SET expires_at = ? WHERE id = ?',
+      ).run(expiredAt, staleKnowledge.id);
+
+      const expired = metadataStore.getById(staleKnowledge.id)!;
+      const expiredScore = (retriever as any).computeFinalScore(expired, 0.9);
+      const matchReason = (retriever as any).generateMatchReason(expired);
+
+      expect(expiredScore).toBeLessThan(0.9);
+      expect(matchReason).toContain('Expired');
+    });
   });
 });

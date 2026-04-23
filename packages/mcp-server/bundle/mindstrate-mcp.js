@@ -6835,7 +6835,9 @@ var require_team_client = __commonJS({
           language: options?.filter?.language,
           framework: options?.filter?.framework,
           project: options?.filter?.project,
-          type: options?.filter?.types?.[0],
+          types: options?.filter?.types,
+          tags: options?.filter?.tags,
+          status: options?.filter?.status,
           minScore: options?.filter?.minScore
         });
         return data.results ?? [];
@@ -6851,14 +6853,20 @@ var require_team_client = __commonJS({
       /** List knowledge on the team server. Note: only the first type in filter.types is sent. */
       async list(filter, limit) {
         const params = new URLSearchParams();
-        if (filter?.types?.[0])
-          params.set("type", filter.types[0]);
+        for (const type of filter?.types ?? [])
+          params.append("type", type);
         if (filter?.language)
           params.set("language", filter.language);
         if (filter?.framework)
           params.set("framework", filter.framework);
         if (filter?.project)
           params.set("project", filter.project);
+        for (const tag of filter?.tags ?? [])
+          params.append("tag", tag);
+        for (const status of filter?.status ?? [])
+          params.append("status", status);
+        if (filter?.minScore !== void 0)
+          params.set("minScore", String(filter.minScore));
         if (limit)
           params.set("limit", String(limit));
         const data = await this.fetch(`/api/knowledge?${params}`);
@@ -6894,6 +6902,23 @@ var require_team_client = __commonJS({
       }
       async restoreSession(project = "") {
         return this.fetch(`/api/session/restore?project=${encodeURIComponent(project)}`);
+      }
+      async getSession(id) {
+        try {
+          return await this.fetch(`/api/session/${id}`);
+        } catch (err) {
+          console.warn(`[TeamClient] Failed to get session ${id}: ${err instanceof Error ? err.message : String(err)}`);
+          return null;
+        }
+      }
+      async getActiveSession(project = "") {
+        try {
+          const data = await this.fetch(`/api/session/active?project=${encodeURIComponent(project)}`);
+          return data.session ?? null;
+        } catch (err) {
+          console.warn(`[TeamClient] Failed to get active session for ${project || "(default)"}: ${err instanceof Error ? err.message : String(err)}`);
+          return null;
+        }
       }
       // ============================================================
       // Stats & Sync
@@ -33211,7 +33236,8 @@ var SessionSaveSchema = external_exports.object({
     "knowledge_applied",
     "knowledge_rejected"
   ]),
-  content: external_exports.string().min(1, "content is required")
+  content: external_exports.string().min(1, "content is required"),
+  metadata: external_exports.record(external_exports.string(), external_exports.string()).optional()
 });
 var MemoryFeedbackAutoSchema = external_exports.object({
   retrievalId: external_exports.string().min(1, "retrievalId is required"),
@@ -33550,7 +33576,7 @@ async function handleSessionSave(api2, input, session) {
       isError: true
     };
   }
-  await api2.saveObservation(sessionId, input.type, input.content);
+  await api2.saveObservation(sessionId, input.type, input.content, input.metadata);
   return {
     content: [{ type: "text", text: `Observation saved: [${input.type}] ${input.content.substring(0, 80)}` }]
   };
@@ -33860,9 +33886,9 @@ var api = {
     const context = memory.formatSessionContext(project);
     return { session, context: context || null };
   },
-  async saveObservation(sessionId, type, content) {
-    if (teamClient) return teamClient.saveObservation(sessionId, type, content);
-    memory.saveObservation({ sessionId, type, content });
+  async saveObservation(sessionId, type, content, metadata) {
+    if (teamClient) return teamClient.saveObservation(sessionId, type, content, metadata);
+    memory.saveObservation({ sessionId, type, content, metadata });
   },
   async endSession(sessionId, summary, openTasks) {
     if (teamClient) return teamClient.endSession(sessionId, summary, openTasks);
@@ -33872,11 +33898,11 @@ var api = {
     await memory.endSession(sessionId);
   },
   async getSession(id) {
-    if (teamClient) return null;
+    if (teamClient) return teamClient.getSession(id);
     return memory.getSession(id);
   },
   async getActiveSession(project) {
-    if (teamClient) return null;
+    if (teamClient) return teamClient.getActiveSession(project);
     return memory.getActiveSession(project);
   },
   async formatSessionContext(project) {

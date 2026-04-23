@@ -38,3 +38,8 @@ export function daysSince(dateStr: string): number {
   const diffMs = now.getTime() - date.getTime();
   return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 }
+
+/** Whether the given ISO date is already in the past. */
+export function isPast(dateStr: string): boolean {
+  return new Date(dateStr).getTime() <= Date.now();
+}
