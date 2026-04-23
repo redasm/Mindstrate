@@ -1,0 +1,46 @@
+{
+  "name": "@mindstrate/mcp-server",
+  "version": "0.1.0",
+  "description": "MCP Server for Mindstrate — exposes the team knowledge base to AI coding assistants (Cursor, OpenCode, Claude Desktop, ...)",
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "bin": {
+    "mindstrate-mcp": "./bundle/mindstrate-mcp.js"
+  },
+  "files": [
+    "dist",
+    "bundle",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc && npm run bundle",
+    "bundle": "node scripts/bundle.mjs",
+    "dev": "tsc --watch",
+    "start": "node bundle/mindstrate-mcp.js",
+    "clean": "rimraf dist bundle"
+  },
+  "dependencies": {
+    "@mindstrate/client": "*",
+    "@mindstrate/protocol": "*",
+    "@modelcontextprotocol/sdk": "^1.4.0",
+    "pino": "^10.3.1",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "@mindstrate/obsidian-sync": "*",
+    "@mindstrate/server": "*"
+  },
+  "peerDependenciesMeta": {
+    "@mindstrate/server": {
+      "optional": true
+    },
+    "@mindstrate/obsidian-sync": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.7.0"
+  }
+}

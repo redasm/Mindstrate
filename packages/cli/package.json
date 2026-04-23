@@ -1,0 +1,24 @@
+{
+  "name": "@mindstrate/cli",
+  "version": "0.1.0",
+  "description": "CLI tool for Mindstrate",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mindstrate": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@mindstrate/server": "*",
+    "@mindstrate/obsidian-sync": "*",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.0",
+    "typescript": "^5.7.0"
+  }
+}

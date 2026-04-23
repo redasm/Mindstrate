@@ -1,0 +1,27 @@
+{
+  "name": "@mindstrate/repo-scanner",
+  "version": "0.1.0",
+  "description": "Incremental repository scanner and capture orchestrator for Mindstrate",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mindstrate-scan": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@mindstrate/server": "*",
+    "better-sqlite3": "^11.7.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^25.6.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.4"
+  }
+}
