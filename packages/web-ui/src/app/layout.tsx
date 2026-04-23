@@ -18,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const NAV_ITEMS = [
     { href: '/',               label: t.nav.dashboard },
     { href: '/knowledge',      label: t.nav.knowledge },
+    { href: '/bundles',        label: 'Bundles' },
     { href: '/ecs',            label: 'ECS' },
     { href: '/graph-knowledge', label: 'Graph' },
     { href: '/search',         label: t.nav.search },
