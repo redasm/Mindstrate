@@ -4,7 +4,6 @@
  * Subcommands:
  *   mindstrate vault init <path>     Configure & seed vault (writes .env hint, creates folders)
  *   mindstrate vault export [path]   One-shot full export of Mindstrate into the vault
- *   mindstrate vault sync [path]     Same as export, then exit (alias)
  *   mindstrate vault watch [path]    Long-running bidirectional sync (Ctrl+C to stop)
  *   mindstrate vault status [path]   Show vault stats (file count, last sync, drift)
  */

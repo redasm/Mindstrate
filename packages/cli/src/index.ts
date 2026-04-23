@@ -11,9 +11,6 @@
  *   mindstrate stats                查看统计信息
  *   mindstrate vote <id> <up|down>  投票
  *   mindstrate delete <id>          删除知识
- *   mindstrate scan                 从 git commit 采集知识
- *   mindstrate hook install         安装 git hook
- *   mindstrate hook uninstall       卸载 git hook
  *   mindstrate export [file]        导出知识库
  *   mindstrate import <file>        导入知识
  *   mindstrate mcp setup            生成 MCP Server 配置
@@ -39,8 +36,6 @@ import { statsCommand } from './commands/stats.js';
 import { maintainCommand } from './commands/maintain.js';
 import { voteCommand } from './commands/vote.js';
 import { deleteCommand } from './commands/delete.js';
-import { captureCommand } from './commands/capture.js';
-import { hookCommand } from './commands/hook.js';
 import { exportCommand, importCommand } from './commands/export-import.js';
 import { setupMcpCommand } from './commands/setup-mcp.js';
 import { webCommand } from './commands/web.js';
@@ -69,8 +64,6 @@ program.addCommand(listCommand);
 program.addCommand(statsCommand);
 program.addCommand(voteCommand);
 program.addCommand(deleteCommand);
-program.addCommand(captureCommand);
-program.addCommand(hookCommand);
 program.addCommand(exportCommand);
 program.addCommand(importCommand);
 program.addCommand(setupMcpCommand);

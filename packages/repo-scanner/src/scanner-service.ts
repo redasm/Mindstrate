@@ -1,9 +1,9 @@
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { Mindstrate, KnowledgeExtractor, loadConfig } from '@mindstrate/server';
+import { CaptureSource, Mindstrate, KnowledgeExtractor, loadConfig, type CommitInfo } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
 import { SourceStore } from './source-store.js';
-import type { GitLocalSourceInput, ScanExecutionResult, ScanSource } from './types.js';
+import type { CommitIngestionOptions, CommitIngestionResult, GitLocalSourceInput, ScanExecutionResult, ScanSource } from './types.js';
 
 export interface RepoScannerOptions {
   scannerDbPath?: string;
@@ -168,6 +168,56 @@ export class RepoScannerService {
     }
   }
 
+  async ingestCommit(options: CommitIngestionOptions): Promise<CommitIngestionResult> {
+    const { project, commit, recordGitActivity = false, dryRun = false } = options;
+
+    if (recordGitActivity) {
+      this.memory.ingestGitActivity({
+        content: `${commit.message.split('\n')[0]}\nFiles: ${commit.files.join(', ')}`,
+        project,
+        actor: commit.author,
+        sourceRef: commit.hash,
+        metadata: {
+          commitHash: commit.hash,
+          files: commit.files,
+        },
+      });
+    }
+
+    const extraction = await this.extractor.extractFromCommit(commit);
+    if (!extraction.extracted || !extraction.knowledge) {
+      return {
+        status: 'skipped',
+        reason: extraction.reason,
+      };
+    }
+
+    const knowledge = {
+      ...extraction.knowledge,
+      source: options.captureSource ?? extraction.knowledge.source ?? CaptureSource.CLI,
+      context: {
+        ...(extraction.knowledge.context ?? {}),
+        project,
+        filePaths: commit.files,
+      },
+    };
+
+    if (dryRun) {
+      return {
+        status: 'imported',
+        reason: 'Preview only',
+        knowledge,
+      };
+    }
+
+    const result = await this.memory.add(knowledge);
+    return {
+      status: result.success ? 'imported' : 'skipped',
+      reason: result.message ?? 'Commit processed',
+      knowledge,
+    };
+  }
+
   private async executeGitLocalSource(source: ScanSource): Promise<ScanExecutionResult> {
     const head = getHeadCommit(source.repoPath, source.branch);
 
@@ -249,20 +299,12 @@ export class RepoScannerService {
   }
 
   private async processCommit(source: ScanSource, commit: { hash: string; files: string[]; message: string; diff: string; author: string }) {
-    const extraction = await this.extractor.extractFromCommit(commit);
-    if (!extraction.extracted || !extraction.knowledge) {
-      return 'skipped' as const;
-    }
-
-    const knowledge = {
-      ...extraction.knowledge,
-      context: {
-        ...(extraction.knowledge.context ?? {}),
-        project: source.project,
-        filePaths: commit.files,
-      },
-    };
-    const result = await this.memory.add(knowledge);
-    return result.success ? 'imported' as const : 'skipped' as const;
+    const result = await this.ingestCommit({
+      project: source.project,
+      commit: commit as CommitInfo,
+      captureSource: CaptureSource.GIT_HOOK,
+      dryRun: false,
+    });
+    return result.status;
   }
 }

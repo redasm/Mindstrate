@@ -124,17 +124,6 @@ export {
   KnowledgeExtractor,
   type CommitInfo,
   type ExtractionResult,
-  getGitRoot,
-  getLastCommit,
-  getCommitInfo,
-  getRecentCommits,
-  installGitHook,
-  uninstallGitHook,
-  isP4Available,
-  isP4Connected,
-  getChangelistInfo,
-  getRecentChangelists,
-  getPendingChangelists,
 } from './capture/index.js';
 
 // Project detection / snapshot

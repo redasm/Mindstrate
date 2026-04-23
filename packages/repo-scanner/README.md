@@ -1,24 +1,30 @@
 # Repo Scanner
 
-`@mindstrate/repo-scanner` 是一个独立的增量变更扫描工具。
+`@mindstrate/repo-scanner` 是一个独立的外部采集工具。
 
 它的职责不是直接“发明知识”，而是：
 
-- 发现仓库中的新提交
+- 发现 Git / P4 等外部数据源中的新变更
 - 维护扫描游标
 - 收集 diff / 提交说明 / 文件列表
-- 调用现有 `Mindstrate` capture / extractor / LLM 流程
+- 调用框架提供的知识 / 事件注入接口
 
-当前第一版只支持：
+当前支持：
 
-- `git-local`
-- 手动运行
-- 简单 daemon 轮询
-- failed item 持久化与重试
+- `ingest git`：一次性导入 Git 提交
+- `ingest p4`：一次性导入 P4 changelist
+- `hook install|uninstall`：安装 Git post-commit hook
+- `source add-git`：注册增量 Git source
+- 手动运行 / daemon 轮询 / failed item 持久化与重试
 
 ## 当前命令
 
 ```bash
+mindstrate-scan ingest git --last-commit
+mindstrate-scan ingest git --recent 10 --dry-run
+mindstrate-scan ingest p4 --recent 10
+mindstrate-scan hook install
+
 mindstrate-scan source add-git --name my-repo --project my-project --repo-path /path/to/repo
 mindstrate-scan source list
 mindstrate-scan source enable <source-id>
@@ -118,10 +124,10 @@ repo-scanner 故意不做这些事：
 
 - 不直接改 `Mindstrate` 主逻辑
 - 不复用主知识库 SQLite 存游标
-- 不在 scanner 内重复实现知识抽取
+- 不让框架自己去读取 Git / P4 / hook 数据源
 - 第一版不支持 `git-mirror`
 - 第一版不支持 `git-remote`
-- 第一版不支持 `P4`
+- 第一版不支持增量 `P4 source`
 
 如果要看完整设计，请参考：
 

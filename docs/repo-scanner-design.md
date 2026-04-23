@@ -468,7 +468,7 @@ mindstrate-scan runs
 mindstrate-scan retry-failed <id>
 ```
 
-如果以后用户接受度高，再考虑把部分命令折叠进 `mindstrate scan ...`。
+如果以后用户接受度高，再考虑为 `mindstrate-scan` 增加更短的别名入口。
 
 ## 15. MVP 范围
 

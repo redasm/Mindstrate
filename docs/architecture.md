@@ -10,7 +10,7 @@
                   ┌───────────────┼───────────────┐
                   │                               │
        @mindstrate/client            @mindstrate/server
-        (HTTP client, fetch only)       (SQLite + OpenAI + capture
+        (HTTP client, fetch only)       (SQLite + OpenAI + ingestion
                   ▲                      + retrieval + quality)
                   │                               ▲
                   │                               │
@@ -45,7 +45,7 @@ mode. This is enforced at lint time — see `.eslintrc.cjs`.
 |---------|------|---------------|
 | `protocol` | TypeScript types/enums for KnowledgeUnit, Session, RetrievalResult, PipelineResult, EvolutionRunResult, errors | Any runtime dependency, any `@mindstrate/*` import |
 | `client` | `TeamClient` HTTP wrapper around the Team Server REST API | `server`, `obsidian-sync`, native modules |
-| `server` | SQLite metadata store, vector index, embedder, quality engine, retrieval, capture, project detection, the `Mindstrate` facade class | Any platform-specific concern (HTTP framing, MCP, Next.js) |
+| `server` | SQLite metadata store, vector index, embedder, quality engine, retrieval, injection interfaces, project detection, the `Mindstrate` facade class | Any platform-specific concern (HTTP framing, MCP, Next.js) |
 | `mcp-server` | MCP protocol handlers, `bin/mindstrate-mcp` esbuild bundle | Static import of `server` or `obsidian-sync` |
 | `team-server` | Express HTTP API in front of `Mindstrate`, API-key auth | Direct DB access; goes through `server` facade |
 | `cli` | Commander.js commands wrapping `Mindstrate` for terminal use | — |

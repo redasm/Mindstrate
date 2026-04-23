@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import { RepoScannerService } from './scanner-service.js';
 import { RepoScannerDaemon } from './scheduler.js';
+import { CaptureSource, type KnowledgeType } from '@mindstrate/server';
+import { getCommitInfo, getGitRoot, getLastCommit, getRecentCommits } from './git-source.js';
+import { installGitHook, uninstallGitHook } from './hook-installer.js';
+import { getChangelistInfo, getRecentChangelists, isP4Available, isP4Connected } from './p4-source.js';
+import * as path from 'node:path';
 
 function value(flag: string, args: string[], fallback?: string): string | undefined {
   const index = args.indexOf(flag);
@@ -59,6 +64,80 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (command === 'ingest' && subcommand === 'git') {
+      const repoPath = value('--repo-path', args, process.cwd())!;
+      const project = value('--project', args, path.basename(repoPath))!;
+      const dryRun = args.includes('--dry-run');
+      const auto = args.includes('--auto');
+      const recent = Number(value('--recent', args, '0'));
+
+      const commits = collectGitCommits({
+        repoPath,
+        commit: value('--commit', args),
+        lastCommit: args.includes('--last-commit'),
+        recent,
+      });
+
+      await ingestCommits(service, commits, {
+        project,
+        dryRun,
+        auto,
+        captureSource: CaptureSource.GIT_HOOK,
+        recordGitActivity: !auto && !dryRun,
+      });
+      return;
+    }
+
+    if (command === 'ingest' && subcommand === 'p4') {
+      if (!isP4Available()) {
+        throw new Error('p4 command not found');
+      }
+      if (!isP4Connected()) {
+        throw new Error('Cannot connect to Perforce server');
+      }
+
+      const project = value('--project', args, path.basename(process.cwd()))!;
+      const dryRun = args.includes('--dry-run');
+      const changelist = value('--changelist', args);
+      const depot = value('--depot', args);
+      const recent = Number(value('--recent', args, '10'));
+      const commits = changelist
+        ? [getChangelistInfo(changelist)].filter(Boolean)
+        : getRecentChangelists(recent, depot).map((id) => getChangelistInfo(id)).filter(Boolean);
+
+      await ingestCommits(service, commits, {
+        project,
+        dryRun,
+        auto: false,
+        captureSource: CaptureSource.P4_TRIGGER,
+        recordGitActivity: false,
+      });
+      return;
+    }
+
+    if (command === 'hook' && subcommand === 'install') {
+      const repoPath = value('--repo-path', args, process.cwd())!;
+      const gitRoot = getGitRoot(repoPath);
+      if (!gitRoot) {
+        throw new Error('Not a git repository');
+      }
+      const cliPath = path.resolve(__dirname, 'cli.js');
+      if (!installGitHook(repoPath, cliPath)) {
+        throw new Error('Failed to install git hook');
+      }
+      console.log(`Git hook installed in ${gitRoot}`);
+      return;
+    }
+
+    if (command === 'hook' && subcommand === 'uninstall') {
+      const repoPath = value('--repo-path', args, process.cwd())!;
+      if (!uninstallGitHook(repoPath)) {
+        throw new Error('Failed to uninstall git hook');
+      }
+      console.log('Git hook removed');
+      return;
+    }
+
     if (command === 'run') {
       const sourceId = args[1];
       if (!sourceId) throw new Error('Usage: mindstrate-scan run <source-id>');
@@ -114,6 +193,10 @@ async function main(): Promise<void> {
 
     console.log([
       'Usage:',
+      '  mindstrate-scan ingest git [--repo-path <path>] [--project <project>] [--last-commit | --commit <hash> | --recent <n>] [--dry-run] [--auto]',
+      '  mindstrate-scan ingest p4 [--project <project>] [--changelist <cl> | --recent <n>] [--depot <path>] [--dry-run]',
+      '  mindstrate-scan hook install [--repo-path <path>]',
+      '  mindstrate-scan hook uninstall [--repo-path <path>]',
       '  mindstrate-scan source add-git --name <name> --project <project> --repo-path <path> [--branch main]',
       '  mindstrate-scan source list',
       '  mindstrate-scan source enable <source-id>',
@@ -134,6 +217,77 @@ async function main(): Promise<void> {
 
 function commandExits(args: string[]): boolean {
   return args[0] !== 'daemon';
+}
+
+function collectGitCommits(options: {
+  repoPath: string;
+  commit?: string;
+  lastCommit: boolean;
+  recent: number;
+}) {
+  if (options.lastCommit) {
+    const commit = getLastCommit(options.repoPath);
+    if (!commit) throw new Error('Failed to read last commit');
+    return [commit];
+  }
+
+  if (options.commit) {
+    const commit = getCommitInfo(options.commit, options.repoPath);
+    if (!commit) throw new Error(`Failed to read commit: ${options.commit}`);
+    return [commit];
+  }
+
+  const count = options.recent > 0 ? options.recent : 5;
+  return getRecentCommits(count, options.repoPath)
+    .map((hash) => getCommitInfo(hash, options.repoPath))
+    .filter(Boolean);
+}
+
+async function ingestCommits(
+  service: RepoScannerService,
+  commits: Array<Awaited<ReturnType<typeof getLastCommit>>>,
+  options: {
+    project: string;
+    dryRun: boolean;
+    auto: boolean;
+    captureSource: CaptureSource;
+    recordGitActivity: boolean;
+  },
+): Promise<void> {
+  let imported = 0;
+  let skipped = 0;
+
+  for (const commit of commits) {
+    if (!commit) continue;
+    const result = await service.ingestCommit({
+      project: options.project,
+      commit,
+      captureSource: options.captureSource,
+      recordGitActivity: options.recordGitActivity,
+      dryRun: options.dryRun,
+    });
+
+    if (result.status === 'imported') {
+      imported++;
+      if (!options.auto) {
+        const knowledge = result.knowledge;
+        if (options.dryRun && knowledge) {
+          console.log(`WOULD IMPORT  [${knowledge.type}] ${knowledge.title}`);
+        } else if (knowledge) {
+          console.log(`IMPORTED      [${knowledge.type}] ${knowledge.title}`);
+        }
+      }
+    } else {
+      skipped++;
+      if (!options.auto) {
+        console.log(`SKIP          ${commit.hash.substring(0, 12)}  ${result.reason}`);
+      }
+    }
+  }
+
+  if (!options.auto) {
+    console.log(`\nDone: ${imported} imported, ${skipped} skipped.`);
+  }
 }
 
 void main().catch((error) => {

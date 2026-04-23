@@ -1,3 +1,5 @@
+import type { CaptureSource, CommitInfo, CreateKnowledgeInput } from '@mindstrate/server';
+
 export type ScanSourceKind = 'git-local';
 export type ScanInitMode = 'from_now' | 'backfill_recent';
 
@@ -64,4 +66,18 @@ export interface ScanExecutionResult {
   itemsSkipped: number;
   itemsFailed: number;
   cursor?: string;
+}
+
+export interface CommitIngestionOptions {
+  project: string;
+  commit: CommitInfo;
+  captureSource?: CaptureSource;
+  recordGitActivity?: boolean;
+  dryRun?: boolean;
+}
+
+export interface CommitIngestionResult {
+  status: 'imported' | 'skipped';
+  reason: string;
+  knowledge?: CreateKnowledgeInput;
 }

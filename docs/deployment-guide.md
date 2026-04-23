@@ -105,7 +105,7 @@ Mindstrate 支持两种部署模式：
 mindstrate init
 
 # 接入 AI 工具
-mindstrate setup-mcp --tool cursor
+mindstrate mcp setup --tool cursor
 ```
 
 数据默认存储在 `~/.mindstrate/`。
@@ -262,12 +262,12 @@ Mindstrate 通过 MCP (Model Context Protocol) 接入各种 AI 编程工具。
 
 ```bash
 # 一键生成配置
-mindstrate setup-mcp
+mindstrate mcp setup
 
 # 仅为指定工具生成
-mindstrate setup-mcp --tool cursor
-mindstrate setup-mcp --tool opencode
-mindstrate setup-mcp --tool claude-desktop
+mindstrate mcp setup --tool cursor
+mindstrate mcp setup --tool opencode
+mindstrate mcp setup --tool claude-desktop
 ```
 
 **Cursor：** 生成 `.cursor/mcp.json`，重启 Cursor 生效。
@@ -276,7 +276,7 @@ mindstrate setup-mcp --tool claude-desktop
 
 **Claude Desktop：**
 ```bash
-mindstrate setup-mcp --tool claude-desktop --global
+mindstrate mcp setup --tool claude-desktop --global
 ```
 
 ### 团队模式接入
@@ -379,38 +379,38 @@ mindstrate add \
 
 ```bash
 # 扫描最近 20 次 commit
-mindstrate capture --recent 20
+mindstrate-scan ingest git --recent 20
 
 # 扫描最近一次 commit
-mindstrate capture --last-commit
+mindstrate-scan ingest git --last-commit
 
 # 扫描指定 commit
-mindstrate capture --commit abc1234
+mindstrate-scan ingest git --commit abc1234
 
 # 预览（不实际写入）
-mindstrate capture --recent 10 --dry-run
+mindstrate-scan ingest git --recent 10 --dry-run
 
 # 安装 git hook（每次 commit 后自动采集）
-mindstrate hook install
+mindstrate-scan hook install
 
 # 卸载 hook
-mindstrate hook uninstall
+mindstrate-scan hook uninstall
 ```
 
 ### P4 (Perforce) 采集
 
 ```bash
 # 扫描最近 10 个 P4 提交
-mindstrate capture --p4 --recent 10
+mindstrate-scan ingest p4 --recent 10
 
 # 只扫描特定 depot 路径
-mindstrate capture --p4 --recent 20 --depot //depot/MyProject/...
+mindstrate-scan ingest p4 --recent 20 --depot //depot/MyProject/...
 
 # 采集指定 changelist
-mindstrate capture --p4 --changelist 12345
+mindstrate-scan ingest p4 --changelist 12345
 
 # 预览
-mindstrate capture --p4 --recent 10 --dry-run
+mindstrate-scan ingest p4 --recent 10 --dry-run
 ```
 
 前提条件：
@@ -421,10 +421,10 @@ mindstrate capture --p4 --recent 10 --dry-run
 
 ```bash
 # 采集 Git 提交
-mindstrate capture --recent 20
+mindstrate-scan ingest git --recent 20
 
 # 采集 P4 提交
-mindstrate capture --p4 --recent 20 --depot //depot/UnrealProject/...
+mindstrate-scan ingest p4 --recent 20 --depot //depot/UnrealProject/...
 ```
 
 所有知识进入同一个知识库，搜索时不区分来源。
@@ -586,7 +586,7 @@ GET    /api/session/restore?project=xxx    恢复上下文
 ### 定期维护
 
 ```bash
-mindstrate maintain
+mindstrate doctor
 ```
 
 维护任务：重新评分 → 标记低质量为「已废弃」→ 标记过期为「已过期」→ 输出报告。
@@ -637,18 +637,18 @@ mindstrate evolve --max 50
 
 ```bash
 # 运行评估
-mindstrate evaluate
+mindstrate eval
 
 # 查看趋势
-mindstrate evaluate --trend
+mindstrate eval --trend
 ```
 
 ### 上下文策划
 
 ```bash
 # 为任务自动组装知识包
-mindstrate curate "实现 React 表单验证"
-mindstrate curate "优化 Docker 构建" --language typescript --framework docker
+mindstrate ctx "实现 React 表单验证"
+mindstrate ctx "优化 Docker 构建" --language typescript --framework docker
 ```
 
 ### 数据备份
@@ -676,15 +676,15 @@ cp -r /data/team-memory /backup/team-memory-$(date +%Y%m%d)
 
 知识库中已存在相似度 > 92% 的知识。修改标题或描述使其差异更明显。
 
-**Q: `mindstrate capture` 没有采集到知识**
+**Q: `mindstrate-scan ingest git` 没有采集到知识**
 
-commit 可能太简单或匹配了跳过模式。用 `mindstrate capture --recent 5 --dry-run` 预览。
+commit 可能太简单或匹配了跳过模式。用 `mindstrate-scan ingest git --recent 5 --dry-run` 预览。
 
 **Q: MCP Server 连接失败**
 
 1. 确认已构建：`ls packages/mcp-server/dist/server.js`
 2. 手动测试：`mindstrate-mcp` 或 `node packages/mcp-server/dist/server.js`
-3. 重新生成配置：`mindstrate setup-mcp --tool <工具>`
+3. 重新生成配置：`mindstrate mcp setup --tool <工具>`
 4. 重启 AI 工具
 
 **Q: Team Server 连接失败**
