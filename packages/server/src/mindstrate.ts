@@ -393,7 +393,7 @@ export class Mindstrate {
   ): Promise<RetrievalResult[]> {
     await this.ensureInit();
     const topK = options?.topK ?? this.config.defaultTopK;
-    const projected = this.searchProjectedKnowledge(query, {
+    const projected = this.queryGraphKnowledge(query, {
       project: options?.context?.project ?? options?.filter?.project,
       topK,
       limit: 50,
@@ -939,14 +939,6 @@ export class Mindstrate {
 
   installBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): InstallBundleResult {
     return this.bundleManager.installBundle(bundle);
-  }
-
-  listProjectedKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {
-    return this.graphKnowledgeProjector.project(options);
-  }
-
-  searchProjectedKnowledge(query: string, options?: ProjectedKnowledgeSearchOptions) {
-    return this.projectedKnowledgeSearch.search(query, options);
   }
 
   readGraphKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {
