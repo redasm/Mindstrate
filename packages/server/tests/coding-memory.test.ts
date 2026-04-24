@@ -59,7 +59,7 @@ describe('Mindstrate', () => {
       expect(contextNodes).toHaveLength(1);
 
       const projections = memory.listProjectionRecords({
-        target: ProjectionTarget.KNOWLEDGE_UNIT,
+        target: ProjectionTarget.GRAPH_KNOWLEDGE,
         limit: 10,
       });
       expect(projections.some((projection) => projection.targetRef === result.view!.id)).toBe(true);
@@ -366,7 +366,7 @@ describe('Mindstrate', () => {
       const pruning = memory.runPruning({ project: 'proj' });
       const reflection = memory.runReflection({ project: 'proj' });
       const context = await memory.assembleWorkingContext('fix hydration mismatch', { project: 'proj' });
-      const projections = memory.projectKnowledgeUnit({ project: 'proj', limit: 10 });
+      const graphKnowledge = memory.readGraphKnowledge({ project: 'proj', limit: 10 });
 
       expect(digest.stage).toBe('digest');
       expect(assimilation.stage).toBe('assimilate');
@@ -374,7 +374,7 @@ describe('Mindstrate', () => {
       expect(pruning.scannedNodes).toBeGreaterThanOrEqual(0);
       expect(reflection.candidateNodesCreated).toBeGreaterThanOrEqual(0);
       expect(context.project).toBe('proj');
-      expect(projections.length).toBeGreaterThan(0);
+      expect(graphKnowledge.length).toBeGreaterThan(0);
     });
   });
 
@@ -527,7 +527,7 @@ describe('Mindstrate', () => {
       const runs = memory.listMetabolismRuns('proj');
       expect(runs).toHaveLength(1);
 
-      const projections = memory.listProjectionRecords({ target: ProjectionTarget.KNOWLEDGE_UNIT });
+      const projections = memory.listProjectionRecords({ target: ProjectionTarget.GRAPH_KNOWLEDGE });
       expect(projections.length).toBeGreaterThan(0);
     });
   });

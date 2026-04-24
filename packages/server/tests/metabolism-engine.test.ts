@@ -78,6 +78,6 @@ describe('MetabolismEngine', () => {
 
     const runs = graphStore.listMetabolismRuns({ project: 'mindstrate' });
     expect(runs).toHaveLength(1);
-    expect(graphStore.listProjectionRecords({ target: ProjectionTarget.KNOWLEDGE_UNIT }).length).toBeGreaterThan(0);
+    expect(graphStore.listProjectionRecords({ target: ProjectionTarget.GRAPH_KNOWLEDGE }).length).toBeGreaterThan(0);
   });
 });

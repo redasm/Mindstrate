@@ -104,7 +104,7 @@ describe('ECS enum stability', () => {
       'cancelled',
     ]);
     expect(Object.values(ProjectionTarget)).toEqual([
-      'knowledge_unit',
+      'graph_knowledge',
       'session_summary',
       'project_snapshot',
       'obsidian_document',

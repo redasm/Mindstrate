@@ -11710,7 +11710,7 @@ var require_metabolism = __commonJS({
     })(MetabolismRunStatus || (exports2.MetabolismRunStatus = MetabolismRunStatus = {}));
     var ProjectionTarget;
     (function(ProjectionTarget2) {
-      ProjectionTarget2["KNOWLEDGE_UNIT"] = "knowledge_unit";
+      ProjectionTarget2["GRAPH_KNOWLEDGE"] = "graph_knowledge";
       ProjectionTarget2["SESSION_SUMMARY"] = "session_summary";
       ProjectionTarget2["PROJECT_SNAPSHOT"] = "project_snapshot";
       ProjectionTarget2["OBSIDIAN_DOCUMENT"] = "obsidian_document";

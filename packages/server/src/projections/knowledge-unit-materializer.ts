@@ -73,10 +73,10 @@ export class KnowledgeUnitMaterializer {
     }
 
     const projection = this.graphStore.upsertProjectionRecord({
-      id: `projection:${ProjectionTarget.KNOWLEDGE_UNIT}:${node.id}`,
+      id: `projection:${ProjectionTarget.GRAPH_KNOWLEDGE}:${node.id}`,
       nodeId: node.id,
-      target: ProjectionTarget.KNOWLEDGE_UNIT,
-      targetRef: knowledge.id,
+      target: ProjectionTarget.GRAPH_KNOWLEDGE,
+      targetRef: node.id,
       version: knowledge.version,
     });
 

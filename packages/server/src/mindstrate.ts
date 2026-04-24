@@ -891,10 +891,6 @@ export class Mindstrate {
     return this.conflictReflector.rejectCandidate(input);
   }
 
-  projectKnowledgeUnit(options?: GraphKnowledgeProjectionOptions): ProjectionRecord[] {
-    return this.projectionMaterializer.materialize(options);
-  }
-
   projectSessionSummaries(options?: { project?: string; limit?: number }): ProjectionRecord[] {
     return this.sessionProjectionMaterializer.materialize(options);
   }

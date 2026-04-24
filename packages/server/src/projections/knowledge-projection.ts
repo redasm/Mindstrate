@@ -19,9 +19,9 @@ export class KnowledgeProjectionMaterializer {
     });
 
     return projected.map((view, index) => this.graphStore.upsertProjectionRecord({
-      id: `projection:${ProjectionTarget.KNOWLEDGE_UNIT}:${view.id}`,
+      id: `projection:${ProjectionTarget.GRAPH_KNOWLEDGE}:${view.id}`,
       nodeId: view.id,
-      target: ProjectionTarget.KNOWLEDGE_UNIT,
+      target: ProjectionTarget.GRAPH_KNOWLEDGE,
       targetRef: view.id,
       version: index + 1,
     }));

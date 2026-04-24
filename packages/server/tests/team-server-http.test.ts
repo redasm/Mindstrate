@@ -156,10 +156,10 @@ describe('team-server HTTP integration', () => {
       context: { project: 'proj-projection' },
     }));
 
-    const records = await client.listProjectionRecords({ target: 'knowledge_unit' });
+    const records = await client.listProjectionRecords({ target: 'graph_knowledge' });
 
     expect(records.length).toBeGreaterThan(0);
-    expect(records[0].target).toBe('knowledge_unit');
+    expect(records[0].target).toBe('graph_knowledge');
   });
 
   it('publishes portable bundles through the team HTTP API', async () => {

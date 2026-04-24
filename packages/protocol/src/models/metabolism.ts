@@ -46,7 +46,7 @@ export interface ConflictRecord {
 }
 
 export enum ProjectionTarget {
-  KNOWLEDGE_UNIT = 'knowledge_unit',
+  GRAPH_KNOWLEDGE = 'graph_knowledge',
   SESSION_SUMMARY = 'session_summary',
   PROJECT_SNAPSHOT = 'project_snapshot',
   OBSIDIAN_DOCUMENT = 'obsidian_document',
