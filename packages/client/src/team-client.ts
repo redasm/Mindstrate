@@ -92,6 +92,13 @@ export interface ObsidianProjectionWriteResult {
   files: string[];
 }
 
+export interface ObsidianProjectionImportResult {
+  sourceNodeId?: string;
+  candidateNode?: unknown;
+  event?: unknown;
+  changed: boolean;
+}
+
 export interface TeamClientConfig {
   /** Team Server URL (如 http://192.168.1.100:3388) */
   serverUrl: string;
@@ -443,6 +450,10 @@ export class TeamClient {
     limit?: number;
   }): Promise<ObsidianProjectionWriteResult> {
     return this.post('/api/context/obsidian-projection/write', options);
+  }
+
+  async importObsidianProjectionFile(filePath: string): Promise<ObsidianProjectionImportResult> {
+    return this.post('/api/context/obsidian-projection/import', { filePath });
   }
 
   // ============================================================

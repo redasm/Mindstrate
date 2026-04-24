@@ -233,6 +233,17 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'context_obsidian_projection_import',
+    description: 'Import an edited ECS Obsidian projection markdown file as a candidate graph node.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        filePath: { type: 'string', description: 'Markdown projection file path to import' },
+      },
+      required: ['filePath'],
+    },
+  },
+  {
     name: 'bundle_create',
     description: 'Create a portable ECS context bundle from the current graph.',
     inputSchema: {

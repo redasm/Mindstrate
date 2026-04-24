@@ -56,6 +56,7 @@ import {
   ContextConflictRejectSchema,
   MetabolismRunSchema,
   ObsidianProjectionWriteSchema,
+  ObsidianProjectionImportSchema,
   BundleCreateSchema,
   BundleValidateSchema,
   BundleInstallSchema,
@@ -80,6 +81,7 @@ import {
   handleContextConflictReject,
   handleMetabolismRun,
   handleObsidianProjectionWrite,
+  handleObsidianProjectionImport,
   handleBundleCreate,
   handleBundleValidate,
   handleBundleInstall,
@@ -350,6 +352,11 @@ const api: McpApi = {
     return { files: memory!.writeObsidianProjectionFiles(options) };
   },
 
+  async importObsidianProjectionFile(filePath) {
+    if (teamClient) return teamClient.importObsidianProjectionFile(filePath);
+    return memory!.importObsidianProjectionFile(filePath);
+  },
+
   async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory!.readGraphKnowledge(opts);
@@ -463,6 +470,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(ObsidianProjectionWriteSchema, args);
       if ('error' in v) return v.error;
       return handleObsidianProjectionWrite(api, v.data);
+    }
+    case 'context_obsidian_projection_import': {
+      const v = validateArgs(ObsidianProjectionImportSchema, args);
+      if ('error' in v) return v.error;
+      return handleObsidianProjectionImport(api, v.data);
     }
     case 'bundle_create': {
       const v = validateArgs(BundleCreateSchema, args);

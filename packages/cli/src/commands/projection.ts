@@ -129,3 +129,28 @@ projectionCommand
       memory.close();
     }
   });
+
+projectionCommand
+  .command('import-obsidian <file>')
+  .description('Import an edited ECS Obsidian projection markdown file as a candidate node')
+  .action(async (filePath: string) => {
+    const memory = createMemory();
+
+    try {
+      await memory.init();
+      const result = memory.importObsidianProjectionFile(path.resolve(filePath));
+      if (!result.changed) {
+        console.log('No ECS projection changes imported.');
+        return;
+      }
+      console.log('Obsidian projection edit imported.');
+      console.log(`  Source node: ${result.sourceNodeId}`);
+      console.log(`  Candidate:   ${result.candidateNode?.id}`);
+      console.log(`  Event:       ${result.event?.id}`);
+    } catch (error) {
+      console.error('Projection import failed:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    } finally {
+      memory.close();
+    }
+  });

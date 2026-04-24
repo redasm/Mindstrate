@@ -7052,6 +7052,9 @@ var require_team_client = __commonJS({
       async writeObsidianProjectionFiles(options) {
         return this.post("/api/context/obsidian-projection/write", options);
       }
+      async importObsidianProjectionFile(filePath) {
+        return this.post("/api/context/obsidian-projection/import", { filePath });
+      }
       // ============================================================
       // Knowledge Evolution (知识进化)
       // ============================================================
@@ -19163,6 +19166,17 @@ var TOOL_DEFINITIONS = [
         limit: { type: "number", description: "Maximum files to write" }
       },
       required: ["rootDir"]
+    }
+  },
+  {
+    name: "context_obsidian_projection_import",
+    description: "Import an edited ECS Obsidian projection markdown file as a candidate graph node.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        filePath: { type: "string", description: "Markdown projection file path to import" }
+      },
+      required: ["filePath"]
     }
   },
   {
@@ -33263,6 +33277,9 @@ var ObsidianProjectionWriteSchema = external_exports.object({
   project: external_exports.string().optional(),
   limit: external_exports.number().int().min(1).max(200).optional()
 });
+var ObsidianProjectionImportSchema = external_exports.object({
+  filePath: external_exports.string().min(1, "filePath is required")
+});
 var BundleCreateSchema = external_exports.object({
   name: external_exports.string().min(1, "name is required"),
   version: external_exports.string().optional(),
@@ -33617,6 +33634,20 @@ async function handleObsidianProjectionWrite(api2, input) {
       type: "text",
       text: result.files.length > 0 ? `Wrote ${result.files.length} Obsidian projection files:
 ${result.files.map((file2) => `- ${file2}`).join("\n")}` : "No Obsidian projection files were written."
+    }]
+  };
+}
+async function handleObsidianProjectionImport(api2, input) {
+  const result = await api2.importObsidianProjectionFile(input.filePath);
+  return {
+    content: [{
+      type: "text",
+      text: result.changed ? [
+        "Obsidian projection edit imported.",
+        `Source node: ${result.sourceNodeId}`,
+        `Candidate: ${result.candidateNode?.id ?? "unknown"}`,
+        `Event: ${result.event?.id ?? "unknown"}`
+      ].join("\n") : "No ECS projection changes imported."
     }]
   };
 }
@@ -34176,6 +34207,10 @@ var api = {
     if (teamClient) return teamClient.writeObsidianProjectionFiles(options);
     return { files: memory.writeObsidianProjectionFiles(options) };
   },
+  async importObsidianProjectionFile(filePath) {
+    if (teamClient) return teamClient.importObsidianProjectionFile(filePath);
+    return memory.importObsidianProjectionFile(filePath);
+  },
   async readGraphKnowledge(opts) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory.readGraphKnowledge(opts);
@@ -34272,6 +34307,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(ObsidianProjectionWriteSchema, args);
       if ("error" in v) return v.error;
       return handleObsidianProjectionWrite(api, v.data);
+    }
+    case "context_obsidian_projection_import": {
+      const v = validateArgs(ObsidianProjectionImportSchema, args);
+      if ("error" in v) return v.error;
+      return handleObsidianProjectionImport(api, v.data);
     }
     case "bundle_create": {
       const v = validateArgs(BundleCreateSchema, args);

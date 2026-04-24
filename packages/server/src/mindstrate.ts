@@ -994,6 +994,10 @@ export class Mindstrate {
     return this.obsidianProjectionMaterializer.writeFiles(options);
   }
 
+  importObsidianProjectionFile(filePath: string) {
+    return this.obsidianProjectionMaterializer.importFile(filePath);
+  }
+
   generateInternalizationSuggestions(options?: InternalizationSuggestionOptions): InternalizationSuggestions {
     return this.contextInternalizer.generateSuggestions(options);
   }

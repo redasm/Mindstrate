@@ -168,6 +168,16 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json({ files });
   }));
 
+  app.post('/api/context/obsidian-projection/import', withInitializedMemory(memory, async (req, res) => {
+    const { filePath } = req.body;
+    if (!filePath) {
+      res.status(400).json({ error: 'filePath is required' });
+      return;
+    }
+
+    res.json(memory.importObsidianProjectionFile(filePath));
+  }));
+
   app.post('/api/evolve', withInitializedMemory(memory, async (req, res) => {
     const { autoApply, maxItems, mode } = req.body;
     res.json(await memory.runEvolution({ autoApply, maxItems, mode }));

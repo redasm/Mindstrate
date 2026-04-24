@@ -76,6 +76,10 @@ export const ObsidianProjectionWriteSchema = z.object({
   limit: z.number().int().min(1).max(200).optional(),
 });
 
+export const ObsidianProjectionImportSchema = z.object({
+  filePath: z.string().min(1, 'filePath is required'),
+});
+
 export const BundleCreateSchema = z.object({
   name: z.string().min(1, 'name is required'),
   version: z.string().optional(),

@@ -109,4 +109,31 @@ describe('ECS projections', () => {
     expect(files).toEqual([filePath]);
     expect(fs.readFileSync(filePath, 'utf8')).toContain('Graph nodes remain canonical');
   });
+
+  it('imports edited obsidian projection markdown as a user edit candidate', () => {
+    const source = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Keep ECS canonical',
+      content: 'Graph nodes remain canonical while markdown is editable projection.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.VERIFIED,
+      tags: ['ecs'],
+    });
+    const materializer = new ObsidianProjectionMaterializer(graphStore);
+    const [filePath] = materializer.writeFiles({
+      project: 'mindstrate',
+      rootDir: tempDir,
+    });
+    const edited = fs.readFileSync(filePath, 'utf8')
+      .replace('Graph nodes remain canonical while markdown is editable projection.', 'Graph nodes remain canonical; edited markdown should become a candidate.');
+    fs.writeFileSync(filePath, edited, 'utf8');
+
+    const result = materializer.importFile(filePath);
+
+    expect(result.sourceNodeId).toBe(source.id);
+    expect(result.candidateNode?.status).toBe(ContextNodeStatus.CANDIDATE);
+    expect(result.candidateNode?.content).toContain('edited markdown should become a candidate');
+    expect(result.event?.type).toBe('user_edit');
+  });
 });

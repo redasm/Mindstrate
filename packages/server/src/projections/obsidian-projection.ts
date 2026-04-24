@@ -1,8 +1,11 @@
 import {
+  ContextEventType,
   ContextNodeStatus,
+  ContextRelationType,
   ProjectionTarget,
   SubstrateType,
   type ContextNode,
+  type ContextEvent,
   type ProjectionRecord,
 } from '@mindstrate/protocol/models';
 import * as fs from 'node:fs';
@@ -16,6 +19,13 @@ export interface ObsidianProjectionOptions {
 
 export interface ObsidianProjectionWriteOptions extends ObsidianProjectionOptions {
   rootDir: string;
+}
+
+export interface ObsidianProjectionImportResult {
+  sourceNodeId?: string;
+  candidateNode?: ContextNode;
+  event?: ContextEvent;
+  changed: boolean;
 }
 
 const OBSIDIAN_FOLDERS: Partial<Record<SubstrateType, string>> = {
@@ -57,6 +67,63 @@ export class ObsidianProjectionMaterializer {
     return written;
   }
 
+  importFile(filePath: string): ObsidianProjectionImportResult {
+    const parsed = parseObsidianNodeMarkdown(fs.readFileSync(filePath, 'utf8'));
+    if (!parsed.id) return { changed: false };
+
+    const source = this.graphStore.getNodeById(parsed.id);
+    if (!source) return { sourceNodeId: parsed.id, changed: false };
+    if (source.content.trim() === parsed.content.trim() && source.title === parsed.title) {
+      return { sourceNodeId: source.id, changed: false };
+    }
+
+    const event = this.graphStore.createEvent({
+      type: ContextEventType.USER_EDIT,
+      project: source.project,
+      actor: 'obsidian-projection',
+      content: `Obsidian projection edit for ${source.title}`,
+      metadata: {
+        sourceNodeId: source.id,
+        filePath,
+      },
+    });
+    const candidateNode = this.graphStore.createNode({
+      substrateType: source.substrateType,
+      domainType: source.domainType,
+      title: parsed.title,
+      content: parsed.content,
+      tags: Array.from(new Set([...source.tags, 'obsidian-edit-candidate'])),
+      project: source.project,
+      compressionLevel: source.compressionLevel,
+      confidence: Math.min(source.confidence, 0.7),
+      qualityScore: Math.min(source.qualityScore, 70),
+      status: ContextNodeStatus.CANDIDATE,
+      sourceRef: source.id,
+      metadata: {
+        sourceNodeId: source.id,
+        userEditEventId: event.id,
+        filePath,
+      },
+    });
+    this.graphStore.createEdge({
+      sourceId: source.id,
+      targetId: candidateNode.id,
+      relationType: ContextRelationType.DERIVED_FROM,
+      strength: 1,
+      evidence: {
+        eventId: event.id,
+        filePath,
+      },
+    });
+
+    return {
+      sourceNodeId: source.id,
+      candidateNode,
+      event,
+      changed: true,
+    };
+  }
+
   private loadProjectableNodes(options: ObsidianProjectionOptions): ContextNode[] {
     return [
       ...this.loadStableNodes(SubstrateType.RULE, options),
@@ -91,6 +158,28 @@ const serializeObsidianNode = (node: ContextNode): string => [
   node.content,
   '',
 ].filter((line) => line !== undefined).join('\n');
+
+const parseObsidianNodeMarkdown = (text: string): { id?: string; title: string; content: string } => {
+  const normalized = text.replace(/\r\n/g, '\n');
+  const frontmatterMatch = normalized.match(/^---\n([\s\S]*?)\n---\n?/);
+  const frontmatter = frontmatterMatch?.[1] ?? '';
+  const body = frontmatterMatch ? normalized.slice(frontmatterMatch[0].length) : normalized;
+  const id = frontmatter.split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('id:'))
+    ?.slice(3)
+    .trim();
+  const lines = body.split('\n');
+  const titleLineIndex = lines.findIndex((line) => line.startsWith('# '));
+  const title = titleLineIndex >= 0
+    ? lines[titleLineIndex].slice(2).trim()
+    : 'Untitled projection edit';
+  const content = titleLineIndex >= 0
+    ? lines.slice(titleLineIndex + 1).join('\n').trim()
+    : body.trim();
+
+  return { id, title, content };
+};
 
 const slugify = (value: string): string => value
   .toLowerCase()
