@@ -89,4 +89,35 @@ describe('Pruner', () => {
     expect(graphStore.getNodeById(snapshot.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
     expect(graphStore.getNodeById(rule.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
+
+  it('deprecates nodes whose runtime environment no longer matches the project snapshot', () => {
+    const staleRule = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Use old framework API',
+      content: 'Use the legacy framework API for routing.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 80,
+      metadata: {
+        framework: 'next@14',
+      },
+    });
+    graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.PROJECT_SNAPSHOT,
+      title: 'Current project snapshot',
+      content: 'Project now runs Next 15.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      metadata: {
+        framework: 'next@15',
+      },
+    });
+
+    const result = pruner.prune({ project: 'mindstrate' });
+
+    expect(result.deprecatedNodes).toBe(1);
+    expect(graphStore.getNodeById(staleRule.id)?.status).toBe(ContextNodeStatus.DEPRECATED);
+  });
 });

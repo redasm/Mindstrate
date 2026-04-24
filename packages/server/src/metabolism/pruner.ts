@@ -1,4 +1,5 @@
 import {
+  ContextDomainType,
   ContextRelationType,
   ContextNodeStatus,
   SubstrateType,
@@ -37,6 +38,7 @@ export class Pruner {
       project: options.project,
       limit: 1000,
     });
+    const projectEnvironment = loadProjectEnvironment(nodes);
 
     let archivedNodes = 0;
     let deprecatedNodes = 0;
@@ -53,6 +55,19 @@ export class Pruner {
 
       if (shouldDeprecate(node, deprecateQualityScoreAtMost, deprecateNegativeFeedbackDeltaAtLeast)) {
         this.graphStore.updateNode(node.id, { status: ContextNodeStatus.DEPRECATED });
+        deprecatedNodes++;
+        continue;
+      }
+
+      if (isEnvironmentMismatch(node, projectEnvironment)) {
+        this.graphStore.updateNode(node.id, {
+          status: ContextNodeStatus.DEPRECATED,
+          metadata: {
+            ...(node.metadata ?? {}),
+            pruneReason: 'project_environment_mismatch',
+            currentProjectEnvironment: projectEnvironment,
+          },
+        });
         deprecatedNodes++;
         continue;
       }
@@ -76,6 +91,33 @@ export class Pruner {
       skippedConflictedNodes,
     };
   }
+}
+
+function loadProjectEnvironment(nodes: ContextNode[]): Record<string, unknown> {
+  const snapshots = nodes
+    .filter((node) => node.substrateType === SubstrateType.SNAPSHOT
+      && node.domainType === ContextDomainType.PROJECT_SNAPSHOT
+      && node.status !== ContextNodeStatus.DEPRECATED
+      && node.status !== ContextNodeStatus.ARCHIVED)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  return snapshots[0]?.metadata ?? {};
+}
+
+function isEnvironmentMismatch(node: ContextNode, projectEnvironment: Record<string, unknown>): boolean {
+  if (node.domainType === ContextDomainType.PROJECT_SNAPSHOT) return false;
+  if (node.status === ContextNodeStatus.VERIFIED) return false;
+
+  const keys = ['runtime', 'language', 'framework'];
+  return keys.some((key) => {
+    const nodeValue = node.metadata?.[key];
+    const projectValue = projectEnvironment[key];
+    return typeof nodeValue === 'string'
+      && typeof projectValue === 'string'
+      && nodeValue.length > 0
+      && projectValue.length > 0
+      && nodeValue !== projectValue;
+  });
 }
 
 function shouldDeprecate(
