@@ -1,3 +1,4 @@
+import { HighOrderCompressor } from '../context-graph/high-order-compressor.js';
 import { PatternCompressor } from '../context-graph/pattern-compressor.js';
 import { RuleCompressor } from '../context-graph/rule-compressor.js';
 import { SummaryCompressor } from '../context-graph/summary-compressor.js';
@@ -8,6 +9,7 @@ export class MetabolicCompressor {
     summaryCompressor: SummaryCompressor;
     patternCompressor: PatternCompressor;
     ruleCompressor: RuleCompressor;
+    highOrderCompressor?: HighOrderCompressor;
   }) {}
 
   async run(options: MetabolismStageOptions = {}): Promise<CompressionStageResult> {
@@ -23,7 +25,23 @@ export class MetabolicCompressor {
       project: options.project,
       similarityThreshold: 0.75,
     });
+    const highOrder = this.deps.highOrderCompressor
+      ? {
+        skill: await this.deps.highOrderCompressor.compressRulesToSkills({
+          project: options.project,
+          similarityThreshold: 0.75,
+        }),
+        heuristic: await this.deps.highOrderCompressor.compressSkillsToHeuristics({
+          project: options.project,
+          similarityThreshold: 0.75,
+        }),
+        axiom: await this.deps.highOrderCompressor.compressHeuristicsToAxioms({
+          project: options.project,
+          similarityThreshold: 0.75,
+        }),
+      }
+      : undefined;
 
-    return { summary, pattern, rule };
+    return { summary, pattern, rule, highOrder };
   }
 }

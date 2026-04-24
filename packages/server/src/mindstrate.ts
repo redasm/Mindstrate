@@ -67,6 +67,7 @@ import { digestCompletedSession, digestSessionObservation } from './context-grap
 import { PatternCompressor, type PatternCompressionOptions, type PatternCompressionResult } from './context-graph/pattern-compressor.js';
 import { RuleCompressor, type RuleCompressionOptions, type RuleCompressionResult } from './context-graph/rule-compressor.js';
 import { SummaryCompressor, type SummaryCompressionOptions, type SummaryCompressionResult } from './context-graph/summary-compressor.js';
+import { HighOrderCompressor } from './context-graph/high-order-compressor.js';
 import {
   MetabolismEngine,
   MetabolismScheduler,
@@ -138,6 +139,7 @@ export class Mindstrate {
   private patternCompressor: PatternCompressor;
   private ruleCompressor: RuleCompressor;
   private summaryCompressor: SummaryCompressor;
+  private highOrderCompressor: HighOrderCompressor;
   private vectorStore: IVectorStore;
   private sessionStore: SessionStore;
   private embedder: Embedder;
@@ -187,12 +189,14 @@ export class Mindstrate {
     this.patternCompressor = new PatternCompressor(this.contextGraphStore, this.embedder);
     this.ruleCompressor = new RuleCompressor(this.contextGraphStore, this.embedder);
     this.summaryCompressor = new SummaryCompressor(this.contextGraphStore, this.embedder);
+    this.highOrderCompressor = new HighOrderCompressor(this.contextGraphStore, this.embedder);
     this.pruner = new Pruner(this.contextGraphStore);
     this.metabolismEngine = new MetabolismEngine({
       graphStore: this.contextGraphStore,
       summaryCompressor: this.summaryCompressor,
       patternCompressor: this.patternCompressor,
       ruleCompressor: this.ruleCompressor,
+      highOrderCompressor: this.highOrderCompressor,
       conflictDetector: this.conflictDetector,
       conflictReflector: this.conflictReflector,
       projectionMaterializer: this.projectionMaterializer,

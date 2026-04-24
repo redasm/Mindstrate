@@ -40,6 +40,11 @@ export {
   type RuleCompressionResult,
 } from './rule-compressor.js';
 export {
+  HighOrderCompressor,
+  type HighOrderCompressionOptions,
+  type HighOrderCompressionResult,
+} from './high-order-compressor.js';
+export {
   ConflictDetector,
   type ConflictDetectionOptions,
   type ConflictDetectionResult,

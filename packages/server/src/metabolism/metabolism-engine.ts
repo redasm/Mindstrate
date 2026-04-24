@@ -4,6 +4,7 @@ import {
   type MetabolismRun,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
+import { HighOrderCompressor, type HighOrderCompressionResult } from '../context-graph/high-order-compressor.js';
 import { SummaryCompressor } from '../context-graph/summary-compressor.js';
 import { PatternCompressor } from '../context-graph/pattern-compressor.js';
 import { RuleCompressor } from '../context-graph/rule-compressor.js';
@@ -34,6 +35,11 @@ export interface CompressionStageResult {
   summary: Awaited<ReturnType<SummaryCompressor['compressProjectSnapshots']>>;
   pattern: Awaited<ReturnType<PatternCompressor['compressProjectSummaries']>>;
   rule: Awaited<ReturnType<RuleCompressor['compressProjectPatterns']>>;
+  highOrder?: {
+    skill: HighOrderCompressionResult;
+    heuristic: HighOrderCompressionResult;
+    axiom: HighOrderCompressionResult;
+  };
 }
 
 export class MetabolismEngine {
@@ -41,6 +47,7 @@ export class MetabolismEngine {
   private readonly summaryCompressor: SummaryCompressor;
   private readonly patternCompressor: PatternCompressor;
   private readonly ruleCompressor: RuleCompressor;
+  private readonly highOrderCompressor?: HighOrderCompressor;
   private readonly conflictDetector: ConflictDetector;
   private readonly conflictReflector: ConflictReflector;
   private readonly projectionMaterializer: KnowledgeProjectionMaterializer;
@@ -58,6 +65,7 @@ export class MetabolismEngine {
     summaryCompressor: SummaryCompressor;
     patternCompressor: PatternCompressor;
     ruleCompressor: RuleCompressor;
+    highOrderCompressor?: HighOrderCompressor;
     conflictDetector: ConflictDetector;
     conflictReflector: ConflictReflector;
     projectionMaterializer: KnowledgeProjectionMaterializer;
@@ -70,6 +78,7 @@ export class MetabolismEngine {
     this.summaryCompressor = deps.summaryCompressor;
     this.patternCompressor = deps.patternCompressor;
     this.ruleCompressor = deps.ruleCompressor;
+    this.highOrderCompressor = deps.highOrderCompressor;
     this.conflictDetector = deps.conflictDetector;
     this.conflictReflector = deps.conflictReflector;
     this.projectionMaterializer = deps.projectionMaterializer;
@@ -83,6 +92,7 @@ export class MetabolismEngine {
       summaryCompressor: this.summaryCompressor,
       patternCompressor: this.patternCompressor,
       ruleCompressor: this.ruleCompressor,
+      highOrderCompressor: this.highOrderCompressor,
     });
     this.reflector = new Reflector({
       conflictDetector: this.conflictDetector,
@@ -115,7 +125,7 @@ export class MetabolismEngine {
     const assimilate = this.runAssimilation(options);
     const { stage: _digestStage, ...digestStats } = digest;
     const { stage: _assimilateStage, ...assimilateStats } = assimilate;
-    const { summary, pattern, rule } = await this.runCompression(options);
+    const { summary, pattern, rule, highOrder } = await this.runCompression(options);
     const reflection = await this.reflector.run(options);
     const prune = this.pruner.prune({
       project: options.project,
@@ -146,8 +156,14 @@ export class MetabolismEngine {
         [MetabolismStage.DIGEST]: digestStats,
         [MetabolismStage.ASSIMILATE]: assimilateStats,
         [MetabolismStage.COMPRESS]: {
-          scanned: summary.scannedSnapshots + pattern.scannedSummaries + rule.scannedPatterns,
-          created: summary.summaryNodesCreated + pattern.patternNodesCreated + rule.ruleNodesCreated,
+          scanned: summary.scannedSnapshots + pattern.scannedSummaries + rule.scannedPatterns
+            + (highOrder?.skill.scannedNodes ?? 0)
+            + (highOrder?.heuristic.scannedNodes ?? 0)
+            + (highOrder?.axiom.scannedNodes ?? 0),
+          created: summary.summaryNodesCreated + pattern.patternNodesCreated + rule.ruleNodesCreated
+            + (highOrder?.skill.nodesCreated ?? 0)
+            + (highOrder?.heuristic.nodesCreated ?? 0)
+            + (highOrder?.axiom.nodesCreated ?? 0),
           updated: 0,
           skipped: 0,
         },
@@ -168,6 +184,9 @@ export class MetabolismEngine {
         `summaryNodesCreated=${summary.summaryNodesCreated}`,
         `patternNodesCreated=${pattern.patternNodesCreated}`,
         `ruleNodesCreated=${rule.ruleNodesCreated}`,
+        `skillNodesCreated=${highOrder?.skill.nodesCreated ?? 0}`,
+        `heuristicNodesCreated=${highOrder?.heuristic.nodesCreated ?? 0}`,
+        `axiomNodesCreated=${highOrder?.axiom.nodesCreated ?? 0}`,
         `conflictsDetected=${reflection.conflictsDetected}`,
         `reflectionCandidates=${reflection.candidateNodesCreated}`,
         `archivedNodes=${prune.archivedNodes}`,
