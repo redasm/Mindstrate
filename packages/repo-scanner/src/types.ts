@@ -79,6 +79,6 @@ export interface CommitIngestionOptions {
 export interface CommitIngestionResult {
   status: 'imported' | 'skipped';
   reason: string;
-  knowledge?: CreateKnowledgeInput;
+  preview?: CreateKnowledgeInput;
   view?: GraphKnowledgeView;
 }

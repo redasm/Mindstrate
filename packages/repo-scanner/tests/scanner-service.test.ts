@@ -85,8 +85,9 @@ describe('RepoScannerService', () => {
     const result = await service.runSource(source.id);
     expect(result.itemsSeen).toBe(1);
     expect(result.itemsImported).toBe(1);
-    expect(memory.list()).toHaveLength(1);
-    expect(memory.list()[0].context.project).toBe('proj');
+    const entries = memory.readGraphKnowledge({ project: 'proj', limit: 10 });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].project).toBe('proj');
   });
 
   it('records failed commits and supports retrying them', async () => {

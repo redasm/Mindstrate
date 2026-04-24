@@ -225,7 +225,7 @@ export class RepoScannerService {
       return {
         status: 'imported',
         reason: 'Preview only',
-        knowledge,
+        preview: knowledge,
       };
     }
 
@@ -233,7 +233,6 @@ export class RepoScannerService {
     return {
       status: result.success ? 'imported' : 'skipped',
       reason: result.message ?? 'Commit processed',
-      knowledge,
       view: result.view,
     };
   }

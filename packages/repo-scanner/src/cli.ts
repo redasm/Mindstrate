@@ -270,9 +270,8 @@ async function ingestCommits(
     if (result.status === 'imported') {
       imported++;
       if (!options.auto) {
-        if (options.dryRun && result.knowledge) {
-          const knowledge = result.knowledge;
-          console.log(`WOULD IMPORT  [${knowledge.type}] ${knowledge.title}`);
+        if (options.dryRun && result.preview) {
+          console.log(`WOULD IMPORT  [${result.preview.type}] ${result.preview.title}`);
         } else if (result.view) {
           console.log(`IMPORTED      [${result.view.domainType}] ${result.view.title}`);
         }
