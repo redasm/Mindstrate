@@ -18,6 +18,18 @@ const apiKey = process.env['TEAM_API_KEY'] ?? '';
 const memory = new Mindstrate();
 const app = createApp({ apiKey, memory });
 
+export interface SchedulerEnvConfig {
+  enabled: boolean;
+  intervalMs: number;
+  project?: string;
+}
+
+export const readSchedulerEnvConfig = (env: NodeJS.ProcessEnv = process.env): SchedulerEnvConfig => ({
+  enabled: env['MINDSTRATE_METABOLISM_SCHEDULER'] === 'true',
+  intervalMs: parseInt(env['MINDSTRATE_METABOLISM_INTERVAL_MS'] ?? '300000', 10),
+  project: env['MINDSTRATE_METABOLISM_PROJECT'] || undefined,
+});
+
 const warnIfAuthDisabled = (): void => {
   if (apiKey) {
     logger.info('Authentication: API Key required');
@@ -40,6 +52,17 @@ const shutdown = (signal: 'SIGINT' | 'SIGTERM'): void => {
 
 const main = async (): Promise<void> => {
   await memory.init();
+  const scheduler = readSchedulerEnvConfig();
+  if (scheduler.enabled) {
+    memory.startMetabolismScheduler({
+      project: scheduler.project,
+      intervalMs: scheduler.intervalMs,
+    });
+    logger.info({
+      intervalMs: scheduler.intervalMs,
+      project: scheduler.project ?? 'global',
+    }, 'ECS metabolism scheduler started');
+  }
 
   app.listen(port, () => {
     logger.info({ port, dataDir: memory.getConfig().dataDir }, 'Mindstrate Team Server started');

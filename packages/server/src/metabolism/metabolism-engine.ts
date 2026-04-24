@@ -16,6 +16,11 @@ import { RuleCompressor } from '../context-graph/rule-compressor.js';
 import { ConflictDetector } from '../context-graph/conflict-detector.js';
 import { ConflictReflector } from '../context-graph/conflict-reflector.js';
 import { KnowledgeProjectionMaterializer } from '../projections/knowledge-projection.js';
+import type {
+  ObsidianProjectionMaterializer,
+  ProjectSnapshotProjectionMaterializer,
+  SessionProjectionMaterializer,
+} from '../projections/index.js';
 import { Pruner } from './pruner.js';
 
 export interface RunMetabolismOptions {
@@ -53,6 +58,9 @@ export class MetabolismEngine {
   private readonly conflictDetector: ConflictDetector;
   private readonly conflictReflector: ConflictReflector;
   private readonly projectionMaterializer: KnowledgeProjectionMaterializer;
+  private readonly sessionProjectionMaterializer?: SessionProjectionMaterializer;
+  private readonly projectSnapshotProjectionMaterializer?: ProjectSnapshotProjectionMaterializer;
+  private readonly obsidianProjectionMaterializer?: ObsidianProjectionMaterializer;
   private readonly pruner: Pruner;
 
   constructor(deps: {
@@ -63,6 +71,9 @@ export class MetabolismEngine {
     conflictDetector: ConflictDetector;
     conflictReflector: ConflictReflector;
     projectionMaterializer: KnowledgeProjectionMaterializer;
+    sessionProjectionMaterializer?: SessionProjectionMaterializer;
+    projectSnapshotProjectionMaterializer?: ProjectSnapshotProjectionMaterializer;
+    obsidianProjectionMaterializer?: ObsidianProjectionMaterializer;
     pruner: Pruner;
   }) {
     this.graphStore = deps.graphStore;
@@ -72,6 +83,9 @@ export class MetabolismEngine {
     this.conflictDetector = deps.conflictDetector;
     this.conflictReflector = deps.conflictReflector;
     this.projectionMaterializer = deps.projectionMaterializer;
+    this.sessionProjectionMaterializer = deps.sessionProjectionMaterializer;
+    this.projectSnapshotProjectionMaterializer = deps.projectSnapshotProjectionMaterializer;
+    this.obsidianProjectionMaterializer = deps.obsidianProjectionMaterializer;
     this.pruner = deps.pruner;
   }
 
@@ -195,10 +209,24 @@ export class MetabolismEngine {
     const prune = this.pruner.prune({
       project: options.project,
     });
-    const projections = this.projectionMaterializer.materialize({
-      project: options.project,
-      limit: 50,
-    });
+    const projections = [
+      ...this.projectionMaterializer.materialize({
+        project: options.project,
+        limit: 50,
+      }),
+      ...(this.sessionProjectionMaterializer?.materialize({
+        project: options.project,
+        limit: 50,
+      }) ?? []),
+      ...(this.projectSnapshotProjectionMaterializer?.materialize({
+        project: options.project,
+        limit: 50,
+      }) ?? []),
+      ...(this.obsidianProjectionMaterializer?.materialize({
+        project: options.project,
+        limit: 50,
+      }) ?? []),
+    ];
 
     return this.graphStore.updateMetabolismRun(run.id, {
       status: MetabolismRunStatus.COMPLETED,

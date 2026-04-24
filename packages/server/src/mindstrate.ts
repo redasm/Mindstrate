@@ -61,8 +61,22 @@ import { digestCompletedSession, digestSessionObservation } from './context-grap
 import { PatternCompressor, type PatternCompressionOptions, type PatternCompressionResult } from './context-graph/pattern-compressor.js';
 import { RuleCompressor, type RuleCompressionOptions, type RuleCompressionResult } from './context-graph/rule-compressor.js';
 import { SummaryCompressor, type SummaryCompressionOptions, type SummaryCompressionResult } from './context-graph/summary-compressor.js';
-import { MetabolismEngine, Pruner, type RunMetabolismOptions, type PruneOptions, type PruneResult } from './metabolism/index.js';
-import { KnowledgeProjectionMaterializer, KnowledgeUnitMaterializer } from './projections/index.js';
+import {
+  MetabolismEngine,
+  MetabolismScheduler,
+  Pruner,
+  type MetabolismSchedulerOptions,
+  type RunMetabolismOptions,
+  type PruneOptions,
+  type PruneResult,
+} from './metabolism/index.js';
+import {
+  KnowledgeProjectionMaterializer,
+  KnowledgeUnitMaterializer,
+  ObsidianProjectionMaterializer,
+  ProjectSnapshotProjectionMaterializer,
+  SessionProjectionMaterializer,
+} from './projections/index.js';
 import { ContextDomainType, SubstrateType } from '@mindstrate/protocol/models';
 import type {
   ConflictRecord,
@@ -107,6 +121,9 @@ export class Mindstrate {
   private graphKnowledgeProjector: GraphKnowledgeProjector;
   private projectedKnowledgeSearch: ProjectedKnowledgeSearch;
   private projectionMaterializer: KnowledgeProjectionMaterializer;
+  private sessionProjectionMaterializer: SessionProjectionMaterializer;
+  private projectSnapshotProjectionMaterializer: ProjectSnapshotProjectionMaterializer;
+  private obsidianProjectionMaterializer: ObsidianProjectionMaterializer;
   private knowledgeUnitMaterializer: KnowledgeUnitMaterializer;
   private metabolismEngine: MetabolismEngine;
   private pruner: Pruner;
@@ -126,6 +143,7 @@ export class Mindstrate {
   private feedbackLoop: FeedbackLoop;
   private evolution: KnowledgeEvolution;
   private evaluator: RetrievalEvaluator;
+  private metabolismScheduler: MetabolismScheduler | null = null;
   private mutationSinks: KnowledgeMutationSink[] = [];
   private initialized = false;
   private initPromise: Promise<void> | null = null;
@@ -154,6 +172,9 @@ export class Mindstrate {
     this.graphKnowledgeProjector = new GraphKnowledgeProjector(this.contextGraphStore);
     this.projectedKnowledgeSearch = new ProjectedKnowledgeSearch(this.graphKnowledgeProjector);
     this.projectionMaterializer = new KnowledgeProjectionMaterializer(this.contextGraphStore, this.graphKnowledgeProjector);
+    this.sessionProjectionMaterializer = new SessionProjectionMaterializer(this.contextGraphStore);
+    this.projectSnapshotProjectionMaterializer = new ProjectSnapshotProjectionMaterializer(this.contextGraphStore);
+    this.obsidianProjectionMaterializer = new ObsidianProjectionMaterializer(this.contextGraphStore);
     this.embedder = new Embedder(this.config.openaiApiKey, this.config.embeddingModel, embeddingBaseUrl);
     this.conflictDetector = new ConflictDetector(this.contextGraphStore, this.embedder);
     this.conflictReflector = new ConflictReflector(this.contextGraphStore);
@@ -169,6 +190,9 @@ export class Mindstrate {
       conflictDetector: this.conflictDetector,
       conflictReflector: this.conflictReflector,
       projectionMaterializer: this.projectionMaterializer,
+      sessionProjectionMaterializer: this.sessionProjectionMaterializer,
+      projectSnapshotProjectionMaterializer: this.projectSnapshotProjectionMaterializer,
+      obsidianProjectionMaterializer: this.obsidianProjectionMaterializer,
       pruner: this.pruner,
     });
     this.vectorStore = configOverrides?.vectorStore
@@ -893,6 +917,20 @@ export class Mindstrate {
     return this.metabolismEngine.run(options);
   }
 
+  startMetabolismScheduler(options: Omit<MetabolismSchedulerOptions, 'runMetabolism'>): void {
+    this.stopMetabolismScheduler();
+    this.metabolismScheduler = new MetabolismScheduler({
+      ...options,
+      runMetabolism: (runOptions) => this.runMetabolism(runOptions),
+    });
+    this.metabolismScheduler.start();
+  }
+
+  stopMetabolismScheduler(): void {
+    this.metabolismScheduler?.stop();
+    this.metabolismScheduler = null;
+  }
+
   runDigest(options?: { project?: string }) {
     return this.metabolismEngine.runDigest(options);
   }
@@ -916,6 +954,22 @@ export class Mindstrate {
 
   projectKnowledgeUnit(options?: GraphKnowledgeProjectionOptions): ProjectionRecord[] {
     return this.projectionMaterializer.materialize(options);
+  }
+
+  projectSessionSummaries(options?: { project?: string; limit?: number }): ProjectionRecord[] {
+    return this.sessionProjectionMaterializer.materialize(options);
+  }
+
+  projectProjectSnapshots(options?: { project?: string; limit?: number }): ProjectionRecord[] {
+    return this.projectSnapshotProjectionMaterializer.materialize(options);
+  }
+
+  projectObsidianDocuments(options?: { project?: string; limit?: number }): ProjectionRecord[] {
+    return this.obsidianProjectionMaterializer.materialize(options);
+  }
+
+  writeObsidianProjectionFiles(options: { project?: string; limit?: number; rootDir: string }): string[] {
+    return this.obsidianProjectionMaterializer.writeFiles(options);
   }
 
   generateInternalizationSuggestions(options?: InternalizationSuggestionOptions): InternalizationSuggestions {
@@ -1060,6 +1114,7 @@ export class Mindstrate {
 
   /** 关闭所有连接，确保数据持久化 */
   close(): void {
+    this.stopMetabolismScheduler();
     this.vectorStore.flush();
     this.metadataStore.close();
   }

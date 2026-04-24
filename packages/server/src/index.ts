@@ -84,7 +84,13 @@ export {
   type SummaryCompressionResult,
   type UpdateContextNodeInput,
 } from './context-graph/index.js';
-export { KnowledgeProjectionMaterializer, KnowledgeUnitMaterializer } from './projections/index.js';
+export {
+  KnowledgeProjectionMaterializer,
+  KnowledgeUnitMaterializer,
+  ObsidianProjectionMaterializer,
+  ProjectSnapshotProjectionMaterializer,
+  SessionProjectionMaterializer,
+} from './projections/index.js';
 export { MetabolismEngine, Pruner, type RunMetabolismOptions, type PruneOptions, type PruneResult } from './metabolism/index.js';
 export {
   ingestContextEvent,
