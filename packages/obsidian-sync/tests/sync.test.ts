@@ -74,7 +74,7 @@ describe('SyncManager (integration)', () => {
     expect(Object.keys(idx.files)).toHaveLength(2);
   });
 
-  it('exportOne is invoked via mutation sink on add/update/delete', async () => {
+  it('exports graph updates and deletes during full sync', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
     memory.addMutationSink(sync);
 
@@ -96,7 +96,8 @@ describe('SyncManager (integration)', () => {
     expect(fs.existsSync(abs)).toBe(true);
 
     // Update title and ensure file moves to new slug
-    memory.update(r.view!.id, { title: 'Renamed: HMR gotcha with default export' });
+    memory.updateContextNode(r.view!.id, { title: 'Renamed: HMR gotcha with default export' });
+    await sync.exportAll();
     const idx2 = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
     const newRel = idx2.files[r.view!.id];
     expect(newRel).not.toBe(rel);
@@ -104,7 +105,8 @@ describe('SyncManager (integration)', () => {
     expect(fs.existsSync(abs)).toBe(false);
 
     // Delete propagates
-    await memory.delete(r.view!.id);
+    memory.deleteContextNode(r.view!.id);
+    await sync.exportAll();
     expect(fs.existsSync(path.join(vaultDir, newRel.split('/').join(path.sep)))).toBe(false);
     const idx3 = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
     expect(idx3.files[r.view!.id]).toBeUndefined();
@@ -188,8 +190,8 @@ describe('SyncManager (integration)', () => {
 
     await (sync.watcher as any).handleAddOrChange(rel);
 
-    const unchanged = memory.get(r.view!.id);
-    expect(unchanged!.solution).toBe('Original volatile guidance');
+    const unchanged = memory.listContextNodes({ limit: 100 }).find((node) => node.id === r.view!.id);
+    expect(unchanged!.content).toBe('Original volatile guidance');
   });
 
   it('ignores stale vault edits when Mindstrate has newer content', async () => {
@@ -209,7 +211,7 @@ describe('SyncManager (integration)', () => {
     const abs = path.join(vaultDir, rel.split('/').join(path.sep));
     const staleText = fs.readFileSync(abs, 'utf8');
 
-    memory.update(r.view!.id, { solution: 'Version two from Mindstrate.' });
+    memory.updateContextNode(r.view!.id, { content: 'Version two from Mindstrate.' });
 
     const staleEdited = staleText.replace(
       'Version one of the lifecycle note.',
@@ -219,8 +221,8 @@ describe('SyncManager (integration)', () => {
 
     await (sync.watcher as any).handleAddOrChange(rel);
 
-    const current = memory.get(r.view!.id);
-    expect(current!.solution).toBe('Version two from Mindstrate.');
+    const current = memory.listContextNodes({ limit: 100 }).find((node) => node.id === r.view!.id);
+    expect(current!.content).toBe('Version two from Mindstrate.');
   });
 
   it('does not delete mirror-only knowledge when the vault file is removed', async () => {
@@ -243,6 +245,6 @@ describe('SyncManager (integration)', () => {
     await (sync.watcher as any).handleUnlink(abs);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(memory.get(r.view!.id)).not.toBeNull();
+    expect(memory.listContextNodes({ limit: 100 }).some((node) => node.id === r.view!.id)).toBe(true);
   });
 });

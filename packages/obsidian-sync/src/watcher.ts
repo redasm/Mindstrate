@@ -18,15 +18,16 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import {
+  KnowledgeType,
+  type ContextNode,
   type Mindstrate,
-  type KnowledgeUnit,
 } from '@mindstrate/server';
 import {
   parseMarkdown,
   parsedToCreate,
   parsedToUpdate,
   computeBodyHash,
-  serializeKnowledge,
+  serializeGraphKnowledge,
   getVaultSyncMode,
 } from './markdown.js';
 import { VaultLayout, extractIdSuffixFromFilename, idMatchesSuffix } from './vault-layout.js';
@@ -175,26 +176,48 @@ export class VaultWatcher {
     const id = parsed.frontmatter.id;
     const existing = this.findByIdOrSuffix(id, rel);
     if (existing) {
-      const currentHash = computeBodyHash(serializeKnowledge(existing));
+      const currentHash = computeBodyHash(serializeGraphKnowledge({
+        id: existing.id,
+        title: existing.title,
+        summary: existing.content,
+        substrateType: existing.substrateType,
+        domainType: existing.domainType,
+        project: existing.project,
+        priorityScore: Math.min(1, existing.qualityScore / 100),
+        status: existing.status,
+        sourceRef: existing.sourceRef,
+        tags: existing.tags,
+      }));
       if (
         parsed.frontmatter.bodyHash
         && parsed.frontmatter.bodyHash !== currentHash
         && parsed.frontmatter.updatedAt
-        && new Date(existing.metadata.updatedAt).getTime() > new Date(parsed.frontmatter.updatedAt).getTime()
+        && new Date(existing.updatedAt).getTime() > new Date(parsed.frontmatter.updatedAt).getTime()
       ) {
         this.emit({ type: 'ignored', relPath: rel, knowledgeId: existing.id, message: 'Stale vault edit conflicts with newer Mindstrate content' });
         return;
       }
       // Update path
       const update = parsedToUpdate(parsed);
-      const maybeReindexingMemory = this.memory as Mindstrate & {
-        updateAndReindex?: (id: string, input: ReturnType<typeof parsedToUpdate>) => Promise<KnowledgeUnit | null>;
-      };
-      if (maybeReindexingMemory.updateAndReindex) {
-        await maybeReindexingMemory.updateAndReindex(existing.id, update);
-      } else {
-        this.memory.update(existing.id, update);
-      }
+      this.memory.updateContextNode(existing.id, {
+        title: update.title,
+        content: update.solution,
+        tags: update.tags,
+        project: parsed.frontmatter.project,
+        metadata: {
+          ...existing.metadata,
+          problem: update.problem,
+          codeSnippets: update.codeSnippets,
+          actionable: update.actionable,
+          context: {
+            project: parsed.frontmatter.project,
+            language: parsed.frontmatter.language,
+            framework: parsed.frontmatter.framework,
+            filePaths: parsed.frontmatter.filePaths,
+            dependencies: parsed.frontmatter.dependencies,
+          },
+        },
+      });
       this.knownHashes.set(rel, hash);
       this.emit({ type: 'updated', relPath: rel, knowledgeId: existing.id });
       return;
@@ -232,7 +255,7 @@ export class VaultWatcher {
       const base = path.basename(rel);
       const suffix = extractIdSuffixFromFilename(base);
       if (suffix) {
-        const all = this.memory.list({}, 100000);
+        const all = this.memory.readGraphKnowledge({ limit: 100000 });
         const match = all.find((k) => idMatchesSuffix(k.id, suffix));
         knowledgeId = match?.id;
       }
@@ -243,8 +266,8 @@ export class VaultWatcher {
       return;
     }
 
-    const existing = this.memory.get(knowledgeId);
-    if (existing && getVaultSyncMode(existing.type) === 'mirror') {
+    const existing = this.findByIdOrSuffix(knowledgeId, rel);
+    if (existing && getVaultSyncMode(graphNodeToKnowledgeType(existing)) === 'mirror') {
       this.knownHashes.delete(rel);
       this.emit({
         type: 'ignored',
@@ -255,7 +278,7 @@ export class VaultWatcher {
       return;
     }
 
-    this.memory.delete(knowledgeId).then((deleted) => {
+    Promise.resolve(this.memory.deleteContextNode(knowledgeId)).then((deleted) => {
       this.knownHashes.delete(rel);
       // Also drop from index
       const idx2 = this.layout.loadIndex();
@@ -272,18 +295,17 @@ export class VaultWatcher {
     });
   }
 
-  private findByIdOrSuffix(id: string, rel: string): KnowledgeUnit | null {
+  private findByIdOrSuffix(id: string, rel: string): ContextNode | null {
     if (id) {
-      // Try exact / prefix match via the Mindstrate facade (uses SQL LIKE under the hood)
-      const exact = this.memory.findByIdOrPrefix(id);
+      const exact = this.memory.queryContextGraph({ limit: 100000 }).find((node) => node.id === id || node.id.startsWith(id));
       if (exact) return exact;
     }
     // Fall back to filename suffix
     const base = path.basename(rel);
     const suffix = extractIdSuffixFromFilename(base);
     if (!suffix) return null;
-    const candidate = this.memory.findByIdOrPrefix(suffix);
-    return candidate;
+    const candidate = this.memory.queryContextGraph({ limit: 100000 }).find((node) => node.id === suffix || node.id.startsWith(suffix));
+    return candidate ?? null;
   }
 
   private toRel(absPath: string): string | null {
@@ -314,4 +336,15 @@ function safeRead(p: string): string | null {
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+function graphNodeToKnowledgeType(node: ContextNode): KnowledgeType {
+  const explicit = node.metadata?.['knowledgeType'];
+  if (typeof explicit === 'string' && Object.values(KnowledgeType).includes(explicit as KnowledgeType)) {
+    return explicit as KnowledgeType;
+  }
+  const domainType = String(node.domainType);
+  return Object.values(KnowledgeType).includes(domainType as KnowledgeType)
+    ? domainType as KnowledgeType
+    : KnowledgeType.BEST_PRACTICE;
 }
