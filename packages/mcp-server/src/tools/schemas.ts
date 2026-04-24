@@ -128,7 +128,9 @@ export const BundleValidateSchema = z.object({
 });
 
 export const BundleInstallSchema = z.object({
-  bundle: BundlePayloadSchema,
+  bundle: BundlePayloadSchema.optional(),
+  registry: z.string().optional(),
+  reference: z.string().optional(),
 });
 
 export const BundlePublishSchema = z.object({

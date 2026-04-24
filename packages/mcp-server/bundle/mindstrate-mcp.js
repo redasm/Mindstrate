@@ -7039,6 +7039,9 @@ var require_team_client = __commonJS({
       async installBundle(bundle) {
         return this.post("/api/bundles/install", { bundle });
       }
+      async installBundleFromRegistry(options) {
+        return this.post("/api/bundles/install-ref", options);
+      }
       async publishBundle(bundle, options = {}) {
         return this.post("/api/bundles/publish", {
           bundle,
@@ -19208,13 +19211,14 @@ var TOOL_DEFINITIONS = [
   },
   {
     name: "bundle_install",
-    description: "Install a portable ECS context bundle payload into the current graph.",
+    description: "Install a portable ECS context bundle payload or local registry reference into the current graph.",
     inputSchema: {
       type: "object",
       properties: {
-        bundle: { type: "object", description: "Portable bundle payload" }
-      },
-      required: ["bundle"]
+        bundle: { type: "object", description: "Portable bundle payload" },
+        registry: { type: "string", description: "Local registry directory for reference installs" },
+        reference: { type: "string", description: "Bundle reference, for example name@version" }
+      }
     }
   },
   {
@@ -33325,7 +33329,9 @@ var BundleValidateSchema = external_exports.object({
   bundle: BundlePayloadSchema
 });
 var BundleInstallSchema = external_exports.object({
-  bundle: BundlePayloadSchema
+  bundle: BundlePayloadSchema.optional(),
+  registry: external_exports.string().optional(),
+  reference: external_exports.string().optional()
 });
 var BundlePublishSchema = external_exports.object({
   bundle: BundlePayloadSchema,
@@ -33676,7 +33682,19 @@ ${result.errors.map((error49) => `- ${error49}`).join("\n")}`
   };
 }
 async function handleBundleInstall(api2, input) {
-  const result = await api2.installBundle(input.bundle);
+  if (!input.bundle && (!input.registry || !input.reference)) {
+    return {
+      content: [{
+        type: "text",
+        text: "Bundle install requires either bundle or registry plus reference."
+      }],
+      isError: true
+    };
+  }
+  const result = input.bundle ? await api2.installBundle(input.bundle) : await api2.installBundleFromRegistry({
+    registry: input.registry,
+    reference: input.reference
+  });
   return {
     content: [{
       type: "text",
@@ -34194,6 +34212,10 @@ var api = {
   async installBundle(bundle) {
     if (teamClient) return teamClient.installBundle(bundle);
     return memory.installBundle(bundle);
+  },
+  async installBundleFromRegistry(options) {
+    if (teamClient) return teamClient.installBundleFromRegistry(options);
+    return memory.installBundleFromRegistry(options);
   },
   async publishBundle(bundle, options) {
     if (teamClient) return teamClient.publishBundle(bundle, options);

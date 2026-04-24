@@ -46,6 +46,18 @@ export interface PublishBundleResult {
   };
 }
 
+export interface InstallBundleResult {
+  installedNodes: number;
+  updatedNodes: number;
+  installedEdges: number;
+  skippedEdges: number;
+}
+
+export interface InstallBundleFromRegistryOptions {
+  registry: string;
+  reference: string;
+}
+
 export interface InternalizationSuggestions {
   agentsMd: string;
   projectSnapshotFragment: string;
@@ -118,12 +130,8 @@ export interface LocalMemory {
     includeRelatedEdges?: boolean;
   }): PortableContextBundle;
   validateBundle(bundle: PortableContextBundle): { valid: boolean; errors: string[] };
-  installBundle(bundle: PortableContextBundle): {
-    installedNodes: number;
-    updatedNodes: number;
-    installedEdges: number;
-    skippedEdges: number;
-  };
+  installBundle(bundle: PortableContextBundle): InstallBundleResult;
+  installBundleFromRegistry(options: InstallBundleFromRegistryOptions): InstallBundleResult;
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult;
   generateInternalizationSuggestions(options?: { project?: string; limit?: number }): InternalizationSuggestions;
   writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): string[];
@@ -192,12 +200,8 @@ export interface McpApi {
     includeRelatedEdges?: boolean;
   }): Promise<PortableContextBundle>;
   validateBundle(bundle: PortableContextBundle): Promise<{ valid: boolean; errors: string[] }>;
-  installBundle(bundle: PortableContextBundle): Promise<{
-    installedNodes: number;
-    updatedNodes: number;
-    installedEdges: number;
-    skippedEdges: number;
-  }>;
+  installBundle(bundle: PortableContextBundle): Promise<InstallBundleResult>;
+  installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult>;
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): Promise<PublishBundleResult>;
   generateInternalizationSuggestions(options?: { project?: string; limit?: number }): Promise<InternalizationSuggestions>;
   writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): Promise<{ files: string[] }>;

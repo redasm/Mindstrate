@@ -272,13 +272,14 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'bundle_install',
-    description: 'Install a portable ECS context bundle payload into the current graph.',
+    description: 'Install a portable ECS context bundle payload or local registry reference into the current graph.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         bundle: { type: 'object', description: 'Portable bundle payload' },
+        registry: { type: 'string', description: 'Local registry directory for reference installs' },
+        reference: { type: 'string', description: 'Bundle reference, for example name@version' },
       },
-      required: ['bundle'],
     },
   },
   {

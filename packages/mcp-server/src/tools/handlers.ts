@@ -362,7 +362,22 @@ export async function handleBundleInstall(
   api: McpApi,
   input: z.infer<typeof BundleInstallSchema>,
 ): Promise<McpToolResponse> {
-  const result = await api.installBundle(input.bundle);
+  if (!input.bundle && (!input.registry || !input.reference)) {
+    return {
+      content: [{
+        type: 'text',
+        text: 'Bundle install requires either bundle or registry plus reference.',
+      }],
+      isError: true,
+    };
+  }
+
+  const result = input.bundle
+    ? await api.installBundle(input.bundle)
+    : await api.installBundleFromRegistry({
+        registry: input.registry!,
+        reference: input.reference!,
+      });
   return {
     content: [{
       type: 'text',

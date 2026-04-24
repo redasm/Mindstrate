@@ -337,6 +337,11 @@ const api: McpApi = {
     return memory!.installBundle(bundle);
   },
 
+  async installBundleFromRegistry(options) {
+    if (teamClient) return teamClient.installBundleFromRegistry(options);
+    return memory!.installBundleFromRegistry(options);
+  },
+
   async publishBundle(bundle, options) {
     if (teamClient) return teamClient.publishBundle(bundle, options);
     return memory!.publishBundle(bundle, options);
