@@ -1,4 +1,5 @@
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { PortableContextBundleManager } from '../src/bundles/portable-context-bundle.js';
@@ -94,6 +95,44 @@ describe('PortableContextBundleManager', () => {
     expect(publication.manifest.nodeCount).toBe(1);
     expect(publication.manifest.edgeCount).toBe(0);
     expect(publication.manifest.digest).toMatch(/^sha256:/);
+  });
+
+  it('publishes to a local registry and installs by bundle reference', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Registry Rule',
+      content: 'Registry-backed bundles can be shared and installed by name.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+
+    const bundle = bundles.createBundle({
+      name: 'registry-ecs-rules',
+      version: '1.2.3',
+      project: 'mindstrate',
+    });
+    const registryDir = path.join(tempDir, 'registry');
+    const publication = bundles.publishBundle(bundle, {
+      registry: registryDir,
+      visibility: 'public',
+    });
+
+    expect(fs.existsSync(path.join(registryDir, 'index.json'))).toBe(true);
+    expect(fs.existsSync(path.join(registryDir, 'bundles', bundle.id, bundle.version, 'bundle.json'))).toBe(true);
+    expect(publication.manifest.registry).toBe(registryDir);
+
+    const freshStore = new ContextGraphStore(path.join(tempDir, 'registry-install.db'));
+    const freshBundles = new PortableContextBundleManager(freshStore);
+    const install = freshBundles.installBundleFromRegistry({
+      registry: registryDir,
+      reference: 'registry-ecs-rules@1.2.3',
+    });
+
+    expect(install.installedNodes).toBe(1);
+    expect(freshStore.listNodes({ project: 'mindstrate', limit: 10 })).toHaveLength(1);
+
+    freshStore.close();
   });
 
   it('creates editable bundle files for filesystem workflows', () => {

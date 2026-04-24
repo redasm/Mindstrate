@@ -113,6 +113,32 @@ bundleCommand
   });
 
 bundleCommand
+  .command('install-ref <reference>')
+  .description('Install a portable ECS context bundle from a local registry reference')
+  .option('-r, --registry <dir>', 'Local bundle registry directory', 'local')
+  .action(async (reference, options) => {
+    const memory = createMemory();
+
+    try {
+      await memory.init();
+      const result = memory.installBundleFromRegistry({
+        registry: options.registry,
+        reference,
+      });
+      console.log('Bundle installed from registry.');
+      console.log(`  Installed nodes: ${result.installedNodes}`);
+      console.log(`  Updated nodes:   ${result.updatedNodes}`);
+      console.log(`  Installed edges: ${result.installedEdges}`);
+      console.log(`  Skipped edges:   ${result.skippedEdges}`);
+    } catch (error) {
+      console.error('Bundle registry install failed:', error instanceof Error ? error.message : error);
+      process.exit(1);
+    } finally {
+      memory.close();
+    }
+  });
+
+bundleCommand
   .command('publish <file>')
   .description('Prepare a portable ECS context bundle for distribution')
   .option('-r, --registry <url>', 'Bundle registry URL', 'local')

@@ -1,6 +1,7 @@
 export {
   PortableContextBundleManager,
   type CreateBundleOptions,
+  type InstallBundleFromRegistryOptions,
   type InstallBundleResult,
   type EditableBundleFiles,
   type PublishBundleOptions,

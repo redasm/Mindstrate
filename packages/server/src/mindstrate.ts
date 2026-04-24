@@ -106,7 +106,7 @@ import {
   ingestUserFeedback,
   type IngestContextEventInput,
 } from './events/index.js';
-import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
+import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleFromRegistryOptions, type InstallBundleResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
 
 /**
  * Optional sink invoked whenever a knowledge mutation is committed by the facade.
@@ -1080,6 +1080,10 @@ export class Mindstrate {
 
   installBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): InstallBundleResult {
     return this.bundleManager.installBundle(bundle);
+  }
+
+  installBundleFromRegistry(options: InstallBundleFromRegistryOptions): InstallBundleResult {
+    return this.bundleManager.installBundleFromRegistry(options);
   }
 
   publishBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult {
