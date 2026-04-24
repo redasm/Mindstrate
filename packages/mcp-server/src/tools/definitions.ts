@@ -194,6 +194,19 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'context_obsidian_projection_write',
+    description: 'Write verified ECS rules, heuristics, axioms, and skills as editable Obsidian markdown projection files.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        rootDir: { type: 'string', description: 'Target Obsidian vault or folder path' },
+        project: { type: 'string', description: 'Optional project scope' },
+        limit: { type: 'number', description: 'Maximum files to write' },
+      },
+      required: ['rootDir'],
+    },
+  },
+  {
     name: 'bundle_create',
     description: 'Create a portable ECS context bundle from the current graph.',
     inputSchema: {

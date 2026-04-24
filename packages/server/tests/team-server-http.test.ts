@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
@@ -179,5 +181,32 @@ describe('team-server HTTP integration', () => {
     expect(suggestions.agentsMd).toContain('Review ECS changes with tests');
     expect(suggestions.systemPromptFragment).toContain('Run focused tests before publishing ECS runtime changes.');
     expect(suggestions.sourceNodeIds).toHaveLength(1);
+  });
+
+  it('exports obsidian projection files through the team HTTP API', async () => {
+    const { client, memory, tempDir } = await startTeamServer();
+    const internal = memory as unknown as {
+      contextGraphStore: {
+        createNode(input: Record<string, unknown>): { id: string };
+      };
+    };
+
+    internal.contextGraphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Export ECS rule',
+      content: 'Team API should write verified ECS rules as markdown projections.',
+      project: 'proj-obsidian',
+      status: ContextNodeStatus.VERIFIED,
+    });
+
+    const rootDir = path.join(tempDir, 'vault');
+    const result = await client.writeObsidianProjectionFiles({
+      project: 'proj-obsidian',
+      rootDir,
+    });
+
+    expect(result.files).toHaveLength(1);
+    expect(fs.readFileSync(result.files[0], 'utf8')).toContain('Team API should write verified ECS rules');
   });
 });

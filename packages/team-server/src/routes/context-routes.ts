@@ -133,6 +133,21 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     }));
   }));
 
+  app.post('/api/context/obsidian-projection/write', withInitializedMemory(memory, async (req, res) => {
+    const { project, limit, rootDir } = req.body;
+    if (!rootDir) {
+      res.status(400).json({ error: 'rootDir is required' });
+      return;
+    }
+
+    const files = memory.writeObsidianProjectionFiles({
+      project,
+      limit,
+      rootDir,
+    });
+    res.json({ files });
+  }));
+
   app.post('/api/evolve', withInitializedMemory(memory, async (req, res) => {
     const { autoApply, maxItems, mode } = req.body;
     res.json(await memory.runEvolution({ autoApply, maxItems, mode }));

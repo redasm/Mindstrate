@@ -7043,6 +7043,9 @@ var require_team_client = __commonJS({
       async generateInternalizationSuggestions(options) {
         return this.post("/api/context/internalize", options ?? {});
       }
+      async writeObsidianProjectionFiles(options) {
+        return this.post("/api/context/obsidian-projection/write", options);
+      }
       // ============================================================
       // Knowledge Evolution (知识进化)
       // ============================================================
@@ -19115,6 +19118,19 @@ var TOOL_DEFINITIONS = [
           description: "Why the metabolism run was triggered"
         }
       }
+    }
+  },
+  {
+    name: "context_obsidian_projection_write",
+    description: "Write verified ECS rules, heuristics, axioms, and skills as editable Obsidian markdown projection files.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        rootDir: { type: "string", description: "Target Obsidian vault or folder path" },
+        project: { type: "string", description: "Optional project scope" },
+        limit: { type: "number", description: "Maximum files to write" }
+      },
+      required: ["rootDir"]
     }
   },
   {
@@ -33200,6 +33216,11 @@ var MetabolismRunSchema = external_exports.object({
   project: external_exports.string().optional(),
   trigger: external_exports.enum(["manual", "scheduled", "event_driven"]).optional()
 });
+var ObsidianProjectionWriteSchema = external_exports.object({
+  rootDir: external_exports.string().min(1, "rootDir is required"),
+  project: external_exports.string().optional(),
+  limit: external_exports.number().int().min(1).max(200).optional()
+});
 var BundleCreateSchema = external_exports.object({
   name: external_exports.string().min(1, "name is required"),
   version: external_exports.string().optional(),
@@ -33517,6 +33538,20 @@ ${stats}` : null,
 Notes:
 ${run.notes.map((note) => `- ${note}`).join("\n")}` : null
       ].filter(Boolean).join("\n")
+    }]
+  };
+}
+async function handleObsidianProjectionWrite(api2, input) {
+  const result = await api2.writeObsidianProjectionFiles({
+    rootDir: input.rootDir,
+    project: input.project,
+    limit: input.limit
+  });
+  return {
+    content: [{
+      type: "text",
+      text: result.files.length > 0 ? `Wrote ${result.files.length} Obsidian projection files:
+${result.files.map((file2) => `- ${file2}`).join("\n")}` : "No Obsidian projection files were written."
     }]
   };
 }
@@ -34064,6 +34099,10 @@ var api = {
     if (teamClient) return teamClient.generateInternalizationSuggestions(options);
     return memory.generateInternalizationSuggestions(options);
   },
+  async writeObsidianProjectionFiles(options) {
+    if (teamClient) return teamClient.writeObsidianProjectionFiles(options);
+    return { files: memory.writeObsidianProjectionFiles(options) };
+  },
   async readGraphKnowledge(opts) {
     if (teamClient) return teamClient.readGraphKnowledge(opts);
     return memory.readGraphKnowledge(opts);
@@ -34145,6 +34184,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(MetabolismRunSchema, args);
       if ("error" in v) return v.error;
       return handleMetabolismRun(api, v.data);
+    }
+    case "context_obsidian_projection_write": {
+      const v = validateArgs(ObsidianProjectionWriteSchema, args);
+      if ("error" in v) return v.error;
+      return handleObsidianProjectionWrite(api, v.data);
     }
     case "bundle_create": {
       const v = validateArgs(BundleCreateSchema, args);

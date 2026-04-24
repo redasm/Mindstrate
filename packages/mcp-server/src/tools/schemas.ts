@@ -58,6 +58,12 @@ export const MetabolismRunSchema = z.object({
   trigger: z.enum(['manual', 'scheduled', 'event_driven']).optional(),
 });
 
+export const ObsidianProjectionWriteSchema = z.object({
+  rootDir: z.string().min(1, 'rootDir is required'),
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
 export const BundleCreateSchema = z.object({
   name: z.string().min(1, 'name is required'),
   version: z.string().optional(),

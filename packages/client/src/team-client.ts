@@ -88,6 +88,10 @@ export interface InternalizationSuggestions {
   sourceNodeIds: string[];
 }
 
+export interface ObsidianProjectionWriteResult {
+  files: string[];
+}
+
 export interface TeamClientConfig {
   /** Team Server URL (如 http://192.168.1.100:3388) */
   serverUrl: string;
@@ -415,6 +419,14 @@ export class TeamClient {
     limit?: number;
   }): Promise<InternalizationSuggestions> {
     return this.post('/api/context/internalize', options ?? {});
+  }
+
+  async writeObsidianProjectionFiles(options: {
+    rootDir: string;
+    project?: string;
+    limit?: number;
+  }): Promise<ObsidianProjectionWriteResult> {
+    return this.post('/api/context/obsidian-projection/write', options);
   }
 
   // ============================================================

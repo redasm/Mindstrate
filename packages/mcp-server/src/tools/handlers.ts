@@ -14,6 +14,7 @@ import type {
   ContextEdgesSchema,
   ContextConflictsSchema,
   MetabolismRunSchema,
+  ObsidianProjectionWriteSchema,
   BundleCreateSchema,
   BundleValidateSchema,
   BundleInstallSchema,
@@ -252,6 +253,26 @@ export async function handleMetabolismRun(
         stats ? `\nStage Stats:\n${stats}` : null,
         run.notes?.length ? `\nNotes:\n${run.notes.map((note) => `- ${note}`).join('\n')}` : null,
       ].filter(Boolean).join('\n'),
+    }],
+  };
+}
+
+export async function handleObsidianProjectionWrite(
+  api: McpApi,
+  input: z.infer<typeof ObsidianProjectionWriteSchema>,
+): Promise<McpToolResponse> {
+  const result = await api.writeObsidianProjectionFiles({
+    rootDir: input.rootDir,
+    project: input.project,
+    limit: input.limit,
+  });
+
+  return {
+    content: [{
+      type: 'text',
+      text: result.files.length > 0
+        ? `Wrote ${result.files.length} Obsidian projection files:\n${result.files.map((file) => `- ${file}`).join('\n')}`
+        : 'No Obsidian projection files were written.',
     }],
   };
 }

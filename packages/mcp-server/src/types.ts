@@ -124,6 +124,7 @@ export interface LocalMemory {
   };
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult;
   generateInternalizationSuggestions(options?: { project?: string; limit?: number }): InternalizationSuggestions;
+  writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): string[];
   addMutationSink(sink: unknown): void;
   close(): void;
 }
@@ -194,6 +195,7 @@ export interface McpApi {
   }>;
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): Promise<PublishBundleResult>;
   generateInternalizationSuggestions(options?: { project?: string; limit?: number }): Promise<InternalizationSuggestions>;
+  writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): Promise<{ files: string[] }>;
   close(): void;
 }
 
