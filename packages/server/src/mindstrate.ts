@@ -1084,7 +1084,7 @@ export class Mindstrate {
     return this.bundleManager.installBundle(bundle);
   }
 
-  installBundleFromRegistry(options: InstallBundleFromRegistryOptions): InstallBundleResult {
+  installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult> {
     return this.bundleManager.installBundleFromRegistry(options);
   }
 

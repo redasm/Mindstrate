@@ -121,7 +121,7 @@ bundleCommand
 
     try {
       await memory.init();
-      const result = memory.installBundleFromRegistry({
+      const result = await memory.installBundleFromRegistry({
         registry: options.registry,
         reference,
       });

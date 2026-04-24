@@ -97,7 +97,7 @@ describe('PortableContextBundleManager', () => {
     expect(publication.manifest.digest).toMatch(/^sha256:/);
   });
 
-  it('publishes to a local registry and installs by bundle reference', () => {
+  it('publishes to a local registry and installs by bundle reference', async () => {
     graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
@@ -124,7 +124,7 @@ describe('PortableContextBundleManager', () => {
 
     const freshStore = new ContextGraphStore(path.join(tempDir, 'registry-install.db'));
     const freshBundles = new PortableContextBundleManager(freshStore);
-    const install = freshBundles.installBundleFromRegistry({
+    const install = await freshBundles.installBundleFromRegistry({
       registry: registryDir,
       reference: 'registry-ecs-rules@1.2.3',
     });
@@ -133,6 +133,57 @@ describe('PortableContextBundleManager', () => {
     expect(freshStore.listNodes({ project: 'mindstrate', limit: 10 })).toHaveLength(1);
 
     freshStore.close();
+  });
+
+  it('installs a remote registry bundle by reference', async () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Remote Registry Rule',
+      content: 'Remote registry bundles can be installed by versioned reference.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    const bundle = bundles.createBundle({
+      name: 'remote-ecs-rules',
+      version: '2.0.0',
+      project: 'mindstrate',
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const href = String(url);
+      if (href.endsWith('/index.json')) {
+        return new Response(JSON.stringify({
+          bundles: [{
+            id: bundle.id,
+            name: bundle.name,
+            version: bundle.version,
+            registry: 'https://registry.example.test',
+            visibility: 'public',
+            nodeCount: bundle.nodeIds.length,
+            edgeCount: bundle.edgeIds.length,
+            digest: 'sha256:test',
+            publishedAt: new Date().toISOString(),
+            bundlePath: 'bundles/remote-ecs-rules/2.0.0/bundle.json',
+          }],
+        }));
+      }
+      return new Response(JSON.stringify(bundle));
+    }) as typeof fetch;
+
+    try {
+      const freshStore = new ContextGraphStore(path.join(tempDir, 'remote-registry-install.db'));
+      const freshBundles = new PortableContextBundleManager(freshStore);
+      const install = await freshBundles.installBundleFromRegistry({
+        registry: 'https://registry.example.test',
+        reference: 'remote-ecs-rules@2.0.0',
+      });
+
+      expect(install.installedNodes).toBe(bundle.nodes?.length ?? 0);
+      freshStore.close();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   it('creates editable bundle files for filesystem workflows', () => {

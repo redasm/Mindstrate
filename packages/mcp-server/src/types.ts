@@ -136,7 +136,7 @@ export interface LocalMemory {
   }): PortableContextBundle;
   validateBundle(bundle: PortableContextBundle): { valid: boolean; errors: string[] };
   installBundle(bundle: PortableContextBundle): InstallBundleResult;
-  installBundleFromRegistry(options: InstallBundleFromRegistryOptions): InstallBundleResult;
+  installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult>;
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult;
   generateInternalizationSuggestions(options?: { project?: string; limit?: number }): InternalizationSuggestions;
   writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): string[];

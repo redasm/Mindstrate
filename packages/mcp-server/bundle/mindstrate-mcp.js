@@ -7011,6 +7011,17 @@ var require_team_client = __commonJS({
         const data = await this.fetch(`/api/context/conflicts?${params}`);
         return data.conflicts ?? [];
       }
+      async listProjectionRecords(options) {
+        const params = new URLSearchParams();
+        if (options?.nodeId)
+          params.set("nodeId", options.nodeId);
+        if (options?.target)
+          params.set("target", options.target);
+        if (options?.limit)
+          params.set("limit", String(options.limit));
+        const data = await this.fetch(`/api/context/projections?${params}`);
+        return data.records ?? [];
+      }
       async acceptConflictCandidate(input) {
         return this.post("/api/context/conflicts/accept", input);
       }

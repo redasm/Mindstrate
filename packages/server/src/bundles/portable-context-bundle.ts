@@ -237,8 +237,8 @@ export class PortableContextBundleManager {
     };
   }
 
-  installBundleFromRegistry(options: InstallBundleFromRegistryOptions): InstallBundleResult {
-    const bundle = readBundleFromLocalRegistry(options.registry, options.reference);
+  async installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult> {
+    const bundle = await readBundleFromRegistry(options.registry, options.reference);
     return this.installBundle(bundle);
   }
 
@@ -351,12 +351,10 @@ function writeBundleToLocalRegistry(
   fs.writeFileSync(path.join(registry, 'index.json'), JSON.stringify(index, null, 2), 'utf-8');
 }
 
-function readBundleFromLocalRegistry(registry: string, reference: string): PortableContextBundle {
-  if (!isLocalRegistry(registry)) {
-    throw new Error(`Remote bundle registries are not supported yet: ${registry}`);
-  }
-
-  const index = readRegistryIndex(registry);
+async function readBundleFromRegistry(registry: string, reference: string): Promise<PortableContextBundle> {
+  const index = isLocalRegistry(registry)
+    ? readRegistryIndex(registry)
+    : await fetchRemoteRegistryIndex(registry);
   const { name, version } = parseBundleReference(reference);
   const candidates = index.bundles.filter((entry) => entry.name === name || entry.id === name);
   const entry = version
@@ -367,8 +365,12 @@ function readBundleFromLocalRegistry(registry: string, reference: string): Porta
     throw new Error(`Bundle not found in registry: ${reference}`);
   }
 
-  const bundlePath = path.join(registry, entry.bundlePath);
-  return JSON.parse(fs.readFileSync(bundlePath, 'utf-8')) as PortableContextBundle;
+  if (isLocalRegistry(registry)) {
+    const bundlePath = path.join(registry, entry.bundlePath);
+    return JSON.parse(fs.readFileSync(bundlePath, 'utf-8')) as PortableContextBundle;
+  }
+
+  return fetchRemoteBundle(registry, entry.bundlePath);
 }
 
 function readRegistryIndex(registry: string): BundleRegistryIndex {
@@ -400,4 +402,27 @@ function compareVersionsDescending(a: string, b: string): number {
 
 function normalizeRegistryPath(value: string): string {
   return value.split(path.sep).join('/');
+}
+
+async function fetchRemoteRegistryIndex(registry: string): Promise<BundleRegistryIndex> {
+  const response = await fetch(new URL('index.json', ensureTrailingSlash(registry)));
+  if (!response.ok) {
+    throw new Error(`Failed to fetch bundle registry index: ${response.status} ${response.statusText}`);
+  }
+  const parsed = await response.json() as Partial<BundleRegistryIndex>;
+  return {
+    bundles: Array.isArray(parsed.bundles) ? parsed.bundles : [],
+  };
+}
+
+async function fetchRemoteBundle(registry: string, bundlePath: string): Promise<PortableContextBundle> {
+  const response = await fetch(new URL(bundlePath, ensureTrailingSlash(registry)));
+  if (!response.ok) {
+    throw new Error(`Failed to fetch bundle: ${response.status} ${response.statusText}`);
+  }
+  return await response.json() as PortableContextBundle;
+}
+
+function ensureTrailingSlash(value: string): string {
+  return value.endsWith('/') ? value : `${value}/`;
 }

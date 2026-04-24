@@ -265,7 +265,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.installBundleFromRegistry({ registry, reference }));
+    res.json(await memory.installBundleFromRegistry({ registry, reference }));
   }));
 
   app.post('/api/bundles/publish', withInitializedMemory(memory, async (req, res) => {
