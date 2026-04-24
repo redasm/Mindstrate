@@ -47,6 +47,7 @@
 
 import * as yaml from 'yaml';
 import {
+  type GraphKnowledgeView,
   type KnowledgeUnit,
   type CreateKnowledgeInput,
   type UpdateKnowledgeInput,
@@ -188,6 +189,50 @@ export function serializeKnowledge(
   return out;
 }
 
+export function serializeGraphKnowledge(
+  knowledge: GraphKnowledgeView,
+  options: { syncedAt?: string; preserveUserNotes?: string } = {},
+): string {
+  const type = graphDomainToKnowledgeType(knowledge.domainType);
+  const fm: MarkdownFrontmatter = {
+    id: knowledge.id,
+    type,
+    tags: knowledge.tags ?? [],
+    status: graphStatusToKnowledgeStatus(knowledge.status),
+    score: round(knowledge.priorityScore * 100),
+    upvotes: 0,
+    downvotes: 0,
+    useCount: 0,
+    verified: knowledge.status === 'verified',
+    source: CaptureSource.AUTO_DETECT,
+    author: 'ecs-graph',
+    confidence: round(knowledge.priorityScore, 2),
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+    syncedAt: options.syncedAt ?? new Date().toISOString(),
+    syncMode: 'mirror',
+  };
+  if (knowledge.project) fm.project = knowledge.project;
+
+  const body = [
+    `# ${escapeTitle(knowledge.title)}`,
+    '',
+    '## Summary',
+    '',
+    knowledge.summary.trim(),
+  ].join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+
+  fm.bodyHash = simpleHash(body);
+
+  const fmText = yaml.stringify(fm, { lineWidth: 0 });
+  let out = `---\n${fmText}---\n\n${body}\n${END_MARKER}\n`;
+  if (options.preserveUserNotes) {
+    out += '\n' + options.preserveUserNotes.trimStart();
+    if (!out.endsWith('\n')) out += '\n';
+  }
+  return out;
+}
+
 // ============================================================
 // Parse (Markdown text -> Knowledge fields)
 // ============================================================
@@ -264,6 +309,26 @@ export function getVaultSyncMode(type: KnowledgeType): VaultSyncMode {
     case KnowledgeType.TROUBLESHOOTING:
     default:
       return 'mirror';
+  }
+}
+
+function graphDomainToKnowledgeType(domainType: string): KnowledgeType {
+  return Object.values(KnowledgeType).includes(domainType as KnowledgeType)
+    ? domainType as KnowledgeType
+    : KnowledgeType.BEST_PRACTICE;
+}
+
+function graphStatusToKnowledgeStatus(status: string): KnowledgeStatus {
+  switch (status) {
+    case 'verified':
+      return KnowledgeStatus.VERIFIED;
+    case 'deprecated':
+    case 'archived':
+      return KnowledgeStatus.DEPRECATED;
+    case 'active':
+      return KnowledgeStatus.ACTIVE;
+    default:
+      return KnowledgeStatus.PROBATION;
   }
 }
 

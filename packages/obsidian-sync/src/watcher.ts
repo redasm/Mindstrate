@@ -203,9 +203,9 @@ export class VaultWatcher {
     // No existing KU -> create
     const create = parsedToCreate(parsed);
     const result = await this.memory.add(create);
-    if (result.success && result.knowledge) {
+    if (result.success && result.view) {
       this.knownHashes.set(rel, hash);
-      this.emit({ type: 'created', relPath: rel, knowledgeId: result.knowledge.id });
+      this.emit({ type: 'created', relPath: rel, knowledgeId: result.view.id });
     } else {
       this.emit({
         type: 'ignored',

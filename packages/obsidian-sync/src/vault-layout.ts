@@ -20,7 +20,7 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { type KnowledgeUnit, KnowledgeType } from '@mindstrate/server';
+import { type GraphKnowledgeView, type KnowledgeUnit, KnowledgeType } from '@mindstrate/server';
 
 const TYPE_FOLDERS: Record<KnowledgeType, string> = {
   [KnowledgeType.BUG_FIX]: 'bug-fixes',
@@ -65,6 +65,17 @@ export class VaultLayout {
   relativePath(k: KnowledgeUnit): string {
     const project = sanitizeFolder(k.context.project) || GLOBAL_PROJECT_FOLDER;
     const typeFolder = TYPE_FOLDERS[k.type] ?? 'misc';
+    const filename = makeFilename(k.title, k.id);
+    return joinForward(project, typeFolder, filename);
+  }
+
+  relativePathForGraphView(k: GraphKnowledgeView): string {
+    const project = sanitizeFolder(k.project) || GLOBAL_PROJECT_FOLDER;
+    const domainType = String(k.domainType);
+    const type = Object.values(KnowledgeType).includes(domainType as KnowledgeType)
+      ? domainType as KnowledgeType
+      : KnowledgeType.BEST_PRACTICE;
+    const typeFolder = TYPE_FOLDERS[type] ?? 'misc';
     const filename = makeFilename(k.title, k.id);
     return joinForward(project, typeFolder, filename);
   }

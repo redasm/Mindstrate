@@ -89,25 +89,25 @@ describe('SyncManager (integration)', () => {
     expect(r.success).toBe(true);
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
-    const rel = idx.files[r.knowledge!.id];
+    const rel = idx.files[r.view!.id];
     expect(rel).toBeDefined();
 
     const abs = path.join(vaultDir, rel.split('/').join(path.sep));
     expect(fs.existsSync(abs)).toBe(true);
 
     // Update title and ensure file moves to new slug
-    memory.update(r.knowledge!.id, { title: 'Renamed: HMR gotcha with default export' });
+    memory.update(r.view!.id, { title: 'Renamed: HMR gotcha with default export' });
     const idx2 = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
-    const newRel = idx2.files[r.knowledge!.id];
+    const newRel = idx2.files[r.view!.id];
     expect(newRel).not.toBe(rel);
     expect(fs.existsSync(path.join(vaultDir, newRel.split('/').join(path.sep)))).toBe(true);
     expect(fs.existsSync(abs)).toBe(false);
 
     // Delete propagates
-    await memory.delete(r.knowledge!.id);
+    await memory.delete(r.view!.id);
     expect(fs.existsSync(path.join(vaultDir, newRel.split('/').join(path.sep)))).toBe(false);
     const idx3 = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
-    expect(idx3.files[r.knowledge!.id]).toBeUndefined();
+    expect(idx3.files[r.view!.id]).toBeUndefined();
   });
 
   it('orphan files (KU removed without sink) are cleaned up on full re-export', async () => {
@@ -122,8 +122,8 @@ describe('SyncManager (integration)', () => {
     });
     await sync.exportAll();
 
-    // Now delete via metadata directly (simulating a sink-less deletion)
-    await memory.delete(r.knowledge!.id);
+    // Now delete via graph directly (simulating a sink-less deletion)
+    memory.deleteContextNode(r.view!.id);
 
     const r2 = await sync.exportAll();
     expect(r2.removed).toBe(1);
@@ -148,7 +148,7 @@ describe('SyncManager (integration)', () => {
     });
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
-    const rel = idx.files[r.knowledge!.id];
+    const rel = idx.files[r.view!.id];
     const abs = path.join(vaultDir, rel.split('/').join(path.sep));
 
     // User edits the markdown manually
@@ -179,7 +179,7 @@ describe('SyncManager (integration)', () => {
     });
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
-    const rel = idx.files[r.knowledge!.id];
+    const rel = idx.files[r.view!.id];
     const abs = path.join(vaultDir, rel.split('/').join(path.sep));
 
     let text = fs.readFileSync(abs, 'utf8');
@@ -188,7 +188,7 @@ describe('SyncManager (integration)', () => {
 
     await (sync.watcher as any).handleAddOrChange(rel);
 
-    const unchanged = memory.get(r.knowledge!.id);
+    const unchanged = memory.get(r.view!.id);
     expect(unchanged!.solution).toBe('Original volatile guidance');
   });
 
@@ -205,11 +205,11 @@ describe('SyncManager (integration)', () => {
     });
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
-    const rel = idx.files[r.knowledge!.id];
+    const rel = idx.files[r.view!.id];
     const abs = path.join(vaultDir, rel.split('/').join(path.sep));
     const staleText = fs.readFileSync(abs, 'utf8');
 
-    memory.update(r.knowledge!.id, { solution: 'Version two from Mindstrate.' });
+    memory.update(r.view!.id, { solution: 'Version two from Mindstrate.' });
 
     const staleEdited = staleText.replace(
       'Version one of the lifecycle note.',
@@ -219,7 +219,7 @@ describe('SyncManager (integration)', () => {
 
     await (sync.watcher as any).handleAddOrChange(rel);
 
-    const current = memory.get(r.knowledge!.id);
+    const current = memory.get(r.view!.id);
     expect(current!.solution).toBe('Version two from Mindstrate.');
   });
 
@@ -236,13 +236,13 @@ describe('SyncManager (integration)', () => {
     });
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
-    const rel = idx.files[r.knowledge!.id];
+    const rel = idx.files[r.view!.id];
     const abs = path.join(vaultDir, rel.split('/').join(path.sep));
     fs.unlinkSync(abs);
 
     await (sync.watcher as any).handleUnlink(abs);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(memory.get(r.knowledge!.id)).not.toBeNull();
+    expect(memory.get(r.view!.id)).not.toBeNull();
   });
 });

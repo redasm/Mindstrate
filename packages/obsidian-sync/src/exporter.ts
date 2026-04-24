@@ -14,10 +14,12 @@
 
 import * as fs from 'node:fs';
 import {
+  type GraphKnowledgeView,
   type Mindstrate,
   type KnowledgeUnit,
 } from '@mindstrate/server';
 import {
+  serializeGraphKnowledge,
   serializeKnowledge,
   parseMarkdown,
   computeBodyHash,
@@ -56,7 +58,7 @@ export class VaultExporter {
     this.layout.ensureRoot();
     const result: ExportResult = { written: 0, skipped: 0, removed: 0, moved: 0, errors: [] };
 
-    const all = memory.list({}, 100000);
+    const all = memory.readGraphKnowledge({ limit: 100000 });
     const idx: VaultIndex = this.layout.loadIndex();
     const newIndex: VaultIndex = { files: {}, version: idx.version, lastFullSyncAt: new Date().toISOString() };
 
@@ -64,9 +66,9 @@ export class VaultExporter {
 
     for (const k of all) {
       try {
-        const rel = this.layout.relativePath(k);
+        const rel = this.layout.relativePathForGraphView(k);
         const oldRel = idx.files[k.id];
-        const writeRes = this.writeOne(k, rel, oldRel);
+        const writeRes = this.writeGraphView(k, rel, oldRel);
         if (writeRes === 'written') result.written++;
         else if (writeRes === 'moved') { result.moved++; result.written++; }
         else result.skipped++;
@@ -194,6 +196,49 @@ export class VaultExporter {
       // Body unchanged — but frontmatter (score, status, useCount) may have changed.
       // We still skip, because frontmatter-only diffs would create needless churn
       // and trigger the watcher. Score/usage updates can wait for next full sync.
+      return 'skipped';
+    }
+
+    this.layout.ensureDirFor(rel);
+    fs.writeFileSync(absNew, out, 'utf8');
+    return moved ?? 'written';
+  }
+
+  private writeGraphView(
+    k: GraphKnowledgeView,
+    rel: string,
+    oldRel?: string,
+  ): 'written' | 'skipped' | 'moved' {
+    const absNew = this.layout.absolutePath(rel);
+    let moved: 'moved' | undefined;
+    let preservedUserNotes: string | undefined;
+    if (oldRel && oldRel !== rel) {
+      const absOld = this.layout.absolutePath(oldRel);
+      if (fs.existsSync(absOld)) {
+        const text = safeRead(absOld);
+        if (text) preservedUserNotes = parseMarkdown(text)?.userNotes;
+        try {
+          fs.unlinkSync(absOld);
+          moved = 'moved';
+        } catch { /* ignore */ }
+      }
+    }
+
+    let existingBodyHash: string | undefined;
+    if (fs.existsSync(absNew)) {
+      const text = safeRead(absNew);
+      if (text) {
+        const parsed = parseMarkdown(text);
+        if (parsed) {
+          if (preservedUserNotes === undefined) preservedUserNotes = parsed.userNotes;
+          existingBodyHash = parsed.frontmatter.bodyHash;
+        }
+      }
+    }
+
+    const out = serializeGraphKnowledge(k, { preserveUserNotes: preservedUserNotes });
+    const newBodyHash = computeBodyHash(out);
+    if (existingBodyHash && existingBodyHash === newBodyHash && !moved) {
       return 'skipped';
     }
 
