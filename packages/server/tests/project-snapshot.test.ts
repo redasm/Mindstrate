@@ -164,7 +164,7 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     expect(b.changed).toBe(false);
     expect(c.changed).toBe(false);
     // Only one record exists
-    expect(memory.list({}, 100).filter((k) => k.id === a.knowledge.id)).toHaveLength(1);
+    expect(memory.listContextNodes({ sourceRef: a.view.sourceRef ?? a.view.id, limit: 100 })).toHaveLength(1);
   });
 
   it('detects stack changes and re-renders, but keeps preserve blocks', async () => {
@@ -172,13 +172,17 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     const r1 = await memory.upsertProjectSnapshot(p1);
 
     // User edits the Critical Invariants section in the DB.
-    const edited = r1.knowledge.solution.replace(
+    const node = memory.listContextNodes({
+      sourceRef: r1.view.id,
+      limit: 10,
+    })[0];
+    const edited = node.content.replace(
       new RegExp(
         `(## Critical Invariants[\\s\\S]*?${escape(PRESERVE_OPEN)})[\\s\\S]*?(${escape(PRESERVE_CLOSE)})`,
       ),
       `$1\nDB writes go through the repository layer only.\n$2`,
     );
-    memory.update(r1.knowledge.id, { solution: edited });
+    memory.updateContextNode(node.id, { content: edited });
 
     // Stack changes (add a new framework dep)
     writePackageJson(root, {
@@ -189,10 +193,11 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     const r2 = await memory.upsertProjectSnapshot(p2);
     expect(r2.created).toBe(false);
     expect(r2.changed).toBe(true);
-    expect(r2.knowledge.solution).toContain('DB writes go through the repository layer only.');
-    expect(r2.knowledge.solution).toContain('@nestjs/core');
+    const updatedNode = memory.listContextNodes({ sourceRef: r2.view.id, limit: 10 })[0];
+    expect(updatedNode.content).toContain('DB writes go through the repository layer only.');
+    expect(updatedNode.content).toContain('@nestjs/core');
     // Framework hint detection picked up nestjs (higher specificity)
-    expect(r2.knowledge.solution).toContain('nestjs');
+    expect(updatedNode.content).toContain('nestjs');
   });
 
   it('keeps two different projects isolated (different ids, both stored)', async () => {
@@ -204,9 +209,8 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
       const r1 = await memory.upsertProjectSnapshot(p1);
       const r2 = await memory.upsertProjectSnapshot(p2);
       expect(r1.knowledge.id).not.toBe(r2.knowledge.id);
-      const all = memory.list({}, 100);
-      expect(all.find((k) => k.id === r1.knowledge.id)).toBeDefined();
-      expect(all.find((k) => k.id === r2.knowledge.id)).toBeDefined();
+      expect(memory.listContextNodes({ sourceRef: r1.view.sourceRef ?? r1.view.id, limit: 100 })).toHaveLength(1);
+      expect(memory.listContextNodes({ sourceRef: r2.view.sourceRef ?? r2.view.id, limit: 100 })).toHaveLength(1);
     } finally {
       fs.rmSync(root2, { recursive: true, force: true });
     }

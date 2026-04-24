@@ -16,9 +16,7 @@ import * as fs from 'node:fs';
 import { loadConfig, type MindstrateConfig } from './config.js';
 import type {
   CreateKnowledgeInput,
-  UpdateKnowledgeInput,
   RetrievalContext,
-  RetrievalFilter,
   KnowledgeUnit,
   AssembledContext,
   FeedbackEvent,
@@ -343,7 +341,13 @@ export class Mindstrate {
     // Build with knowledge of the existing solution (so preserve blocks survive).
     const { id } = buildProjectSnapshot(project, options);
     const existing = this.metadataStore.getById(id);
-    const previousSolution = existing?.solution;
+    const existingNode = this.contextGraphStore.listNodes({
+      project: project.name,
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.PROJECT_SNAPSHOT,
+      limit: 100,
+    }).find((node) => node.sourceRef === id);
+    const previousSolution = existingNode?.content ?? existing?.solution;
     const built = buildProjectSnapshot(project, { ...options, previousSolution });
 
     let knowledge: KnowledgeUnit;
@@ -530,69 +534,6 @@ export class Mindstrate {
     },
   ): Promise<AssembledContext> {
     return this.assembleContext(taskDescription, options);
-  }
-
-  // ============================================================
-  // 知识 CRUD
-  // ============================================================
-
-  get(id: string): KnowledgeUnit | null {
-    return this.metadataStore.getById(id);
-  }
-
-  /** Find knowledge by full ID or ID prefix */
-  findByIdOrPrefix(idOrPrefix: string): KnowledgeUnit | null {
-    // Try exact match first
-    const exact = this.metadataStore.getById(idOrPrefix);
-    if (exact) return exact;
-    // Fallback to prefix search via SQL LIKE
-    return this.metadataStore.findByIdPrefix(idOrPrefix);
-  }
-
-  update(id: string, input: UpdateKnowledgeInput): KnowledgeUnit | null {
-    const updated = this.metadataStore.update(id, input);
-    if (updated) {
-      void this.notifySinks('updated', updated);
-    }
-    return updated;
-  }
-
-  async updateAndReindex(id: string, input: UpdateKnowledgeInput): Promise<KnowledgeUnit | null> {
-    await this.ensureInit();
-
-    const updated = this.metadataStore.update(id, input);
-    if (!updated) return null;
-
-    const text = this.embedder.knowledgeToText(updated);
-    const embedding = await this.embedder.embed(text);
-    await this.vectorStore.update({
-      id: updated.id,
-      embedding,
-      text,
-      metadata: {
-        type: updated.type,
-        language: updated.context.language ?? '',
-        framework: updated.context.framework ?? '',
-        project: updated.context.project ?? '',
-      },
-    });
-
-    await this.notifySinks('updated', updated);
-    return updated;
-  }
-
-  async delete(id: string): Promise<boolean> {
-    await this.ensureInit();
-    const deleted = this.metadataStore.delete(id);
-    if (deleted) {
-      await this.vectorStore.delete(id);
-      await this.notifySinks('deleted', id);
-    }
-    return deleted;
-  }
-
-  list(filter?: RetrievalFilter, limit?: number): KnowledgeUnit[] {
-    return this.metadataStore.query(filter ?? {}, limit);
   }
 
   updateContextNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
