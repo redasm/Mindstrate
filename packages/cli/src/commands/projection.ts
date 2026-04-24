@@ -24,29 +24,6 @@ const printProjectionRecords = (label: string, records: ProjectionRecord[]): voi
 };
 
 projectionCommand
-  .command('knowledge')
-  .description('Materialize graph knowledge views as legacy KnowledgeUnit projection records')
-  .option('-p, --project <project>', 'Project scope')
-  .option('-l, --limit <limit>', 'Maximum records to materialize', '100')
-  .action(async (options) => {
-    const memory = createMemory();
-
-    try {
-      await memory.init();
-      const records = memory.projectKnowledgeUnit({
-        project: options.project,
-        limit: Number(options.limit) || 100,
-      });
-      printProjectionRecords('Knowledge projection', records);
-    } catch (error) {
-      console.error('Knowledge projection failed:', error instanceof Error ? error.message : error);
-      process.exit(1);
-    } finally {
-      memory.close();
-    }
-  });
-
-projectionCommand
   .command('sessions')
   .description('Materialize ECS session snapshots as session summary projection records')
   .option('-p, --project <project>', 'Project scope')
