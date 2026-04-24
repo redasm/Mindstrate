@@ -101,4 +101,74 @@ describe('ConflictReflector', () => {
 
     expect(secondRun.candidateNodesCreated).toBe(0);
   });
+
+  it('accepts a reflection candidate and resolves the source conflict', () => {
+    const first = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Rule A',
+      content: 'Use hydration-safe SSR and browser checks during render are supported.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.CONFLICTED,
+    });
+    const second = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Rule B',
+      content: 'Use hydration-safe SSR but do not run browser checks during render.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.CONFLICTED,
+    });
+    const conflict = graphStore.createConflictRecord({
+      project: 'mindstrate',
+      nodeIds: [first.id, second.id],
+      reason: 'High-similarity contradictory nodes detected (0.91)',
+    });
+    const { candidateNodeIds } = reflector.reflectConflicts({ project: 'mindstrate' });
+
+    const result = reflector.acceptCandidate({
+      conflictId: conflict.id,
+      candidateNodeId: candidateNodeIds[0],
+      resolution: 'Accepted narrower SSR rule.',
+    });
+
+    expect(result.resolved?.resolvedAt).toBeTruthy();
+    expect(result.acceptedNode?.status).toBe(ContextNodeStatus.VERIFIED);
+    expect(graphStore.getNodeById(first.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
+    expect(graphStore.getNodeById(second.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
+  });
+
+  it('rejects a reflection candidate without resolving the source conflict', () => {
+    const first = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Rule A',
+      content: 'Use hydration-safe SSR and browser checks during render are supported.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.CONFLICTED,
+    });
+    const second = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Rule B',
+      content: 'Use hydration-safe SSR but do not run browser checks during render.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.CONFLICTED,
+    });
+    const conflict = graphStore.createConflictRecord({
+      project: 'mindstrate',
+      nodeIds: [first.id, second.id],
+      reason: 'High-similarity contradictory nodes detected (0.91)',
+    });
+    const { candidateNodeIds } = reflector.reflectConflicts({ project: 'mindstrate' });
+
+    const result = reflector.rejectCandidate({
+      conflictId: conflict.id,
+      candidateNodeId: candidateNodeIds[0],
+      reason: 'Candidate is too vague.',
+    });
+
+    expect(result.rejectedNode?.status).toBe(ContextNodeStatus.DEPRECATED);
+    expect(graphStore.getConflictRecordById(conflict.id)?.resolvedAt).toBeUndefined();
+  });
 });

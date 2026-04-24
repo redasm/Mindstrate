@@ -7011,6 +7011,12 @@ var require_team_client = __commonJS({
         const data = await this.fetch(`/api/context/conflicts?${params}`);
         return data.conflicts ?? [];
       }
+      async acceptConflictCandidate(input) {
+        return this.post("/api/context/conflicts/accept", input);
+      }
+      async rejectConflictCandidate(input) {
+        return this.post("/api/context/conflicts/reject", input);
+      }
       async listContextEdges(options) {
         const params = new URLSearchParams();
         if (options?.sourceId)
@@ -19103,6 +19109,32 @@ var TOOL_DEFINITIONS = [
         project: { type: "string", description: "Optional project scope" },
         limit: { type: "number", description: "Maximum number of conflicts to return (default: 20)" }
       }
+    }
+  },
+  {
+    name: "context_conflict_accept",
+    description: "Accept a reflected conflict-resolution candidate and mark the source conflict resolved.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        conflictId: { type: "string", description: "Conflict record id" },
+        candidateNodeId: { type: "string", description: "Reflection candidate node id" },
+        resolution: { type: "string", description: "Human-readable resolution note" }
+      },
+      required: ["conflictId", "candidateNodeId", "resolution"]
+    }
+  },
+  {
+    name: "context_conflict_reject",
+    description: "Reject a reflected conflict-resolution candidate without resolving the source conflict.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        conflictId: { type: "string", description: "Conflict record id" },
+        candidateNodeId: { type: "string", description: "Reflection candidate node id" },
+        reason: { type: "string", description: "Why the candidate was rejected" }
+      },
+      required: ["conflictId", "candidateNodeId", "reason"]
     }
   },
   {
@@ -33212,6 +33244,16 @@ var ContextConflictsSchema = external_exports.object({
   project: external_exports.string().optional(),
   limit: external_exports.number().int().min(1).max(100).optional()
 });
+var ContextConflictAcceptSchema = external_exports.object({
+  conflictId: external_exports.string().min(1, "conflictId is required"),
+  candidateNodeId: external_exports.string().min(1, "candidateNodeId is required"),
+  resolution: external_exports.string().min(1, "resolution is required")
+});
+var ContextConflictRejectSchema = external_exports.object({
+  conflictId: external_exports.string().min(1, "conflictId is required"),
+  candidateNodeId: external_exports.string().min(1, "candidateNodeId is required"),
+  reason: external_exports.string().min(1, "reason is required")
+});
 var MetabolismRunSchema = external_exports.object({
   project: external_exports.string().optional(),
   trigger: external_exports.enum(["manual", "scheduled", "event_driven"]).optional()
@@ -33513,6 +33555,29 @@ async function handleContextConflicts(api2, input) {
       text: `Found ${conflicts.length} ECS conflicts:
 
 ${formatted}`
+    }]
+  };
+}
+async function handleContextConflictAccept(api2, input) {
+  const result = await api2.acceptConflictCandidate(input);
+  return {
+    content: [{
+      type: "text",
+      text: result.resolved ? `Conflict resolved.
+ID: ${result.resolved.id}
+Resolution: ${result.resolved.resolution ?? input.resolution}` : `Conflict candidate was not accepted: ${input.candidateNodeId}`
+    }],
+    isError: result.resolved ? void 0 : true
+  };
+}
+async function handleContextConflictReject(api2, input) {
+  await api2.rejectConflictCandidate(input);
+  return {
+    content: [{
+      type: "text",
+      text: `Conflict candidate rejected.
+Conflict: ${input.conflictId}
+Candidate: ${input.candidateNodeId}`
     }]
   };
 }
@@ -34075,6 +34140,14 @@ var api = {
     if (teamClient) return teamClient.listContextConflicts(options);
     return memory.listConflictRecords(options?.project, options?.limit);
   },
+  async acceptConflictCandidate(input) {
+    if (teamClient) return teamClient.acceptConflictCandidate(input);
+    return memory.acceptConflictCandidate(input);
+  },
+  async rejectConflictCandidate(input) {
+    if (teamClient) return teamClient.rejectConflictCandidate(input);
+    return memory.rejectConflictCandidate(input);
+  },
   async runMetabolism(options) {
     if (teamClient) return teamClient.runMetabolism(options);
     return memory.runMetabolism(options);
@@ -34179,6 +34252,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(ContextConflictsSchema, args);
       if ("error" in v) return v.error;
       return handleContextConflicts(api, v.data);
+    }
+    case "context_conflict_accept": {
+      const v = validateArgs(ContextConflictAcceptSchema, args);
+      if ("error" in v) return v.error;
+      return handleContextConflictAccept(api, v.data);
+    }
+    case "context_conflict_reject": {
+      const v = validateArgs(ContextConflictRejectSchema, args);
+      if ("error" in v) return v.error;
+      return handleContextConflictReject(api, v.data);
     }
     case "metabolism_run": {
       const v = validateArgs(MetabolismRunSchema, args);

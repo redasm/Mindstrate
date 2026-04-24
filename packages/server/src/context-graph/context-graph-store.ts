@@ -594,6 +594,19 @@ export class ContextGraphStore {
     return row ? this.rowToConflict(row) : null;
   }
 
+  resolveConflictRecord(id: string, resolution: string, resolvedAt: string = new Date().toISOString()): ConflictRecord | null {
+    const existing = this.getConflictRecordById(id);
+    if (!existing) return null;
+
+    this.db.prepare(`
+      UPDATE conflict_records
+      SET resolved_at = ?, resolution = ?
+      WHERE id = ?
+    `).run(resolvedAt, resolution, id);
+
+    return this.getConflictRecordById(id);
+  }
+
   listConflictRecords(options: { project?: string; limit?: number } = {}): ConflictRecord[] {
     const conditions: string[] = [];
     const params: unknown[] = [];

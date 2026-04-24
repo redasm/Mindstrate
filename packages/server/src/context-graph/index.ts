@@ -46,8 +46,12 @@ export {
 } from './conflict-detector.js';
 export {
   ConflictReflector,
+  type AcceptReflectionCandidateInput,
+  type AcceptReflectionCandidateResult,
   type ConflictReflectionOptions,
   type ConflictReflectionResult,
+  type RejectReflectionCandidateInput,
+  type RejectReflectionCandidateResult,
 } from './conflict-reflector.js';
 export {
   ContextPrioritySelector,

@@ -53,6 +53,18 @@ export const ContextConflictsSchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
 });
 
+export const ContextConflictAcceptSchema = z.object({
+  conflictId: z.string().min(1, 'conflictId is required'),
+  candidateNodeId: z.string().min(1, 'candidateNodeId is required'),
+  resolution: z.string().min(1, 'resolution is required'),
+});
+
+export const ContextConflictRejectSchema = z.object({
+  conflictId: z.string().min(1, 'conflictId is required'),
+  candidateNodeId: z.string().min(1, 'candidateNodeId is required'),
+  reason: z.string().min(1, 'reason is required'),
+});
+
 export const MetabolismRunSchema = z.object({
   project: z.string().optional(),
   trigger: z.enum(['manual', 'scheduled', 'event_driven']).optional(),

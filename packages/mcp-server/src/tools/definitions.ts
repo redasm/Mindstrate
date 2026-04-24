@@ -179,6 +179,32 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'context_conflict_accept',
+    description: 'Accept a reflected conflict-resolution candidate and mark the source conflict resolved.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        conflictId: { type: 'string', description: 'Conflict record id' },
+        candidateNodeId: { type: 'string', description: 'Reflection candidate node id' },
+        resolution: { type: 'string', description: 'Human-readable resolution note' },
+      },
+      required: ['conflictId', 'candidateNodeId', 'resolution'],
+    },
+  },
+  {
+    name: 'context_conflict_reject',
+    description: 'Reject a reflected conflict-resolution candidate without resolving the source conflict.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        conflictId: { type: 'string', description: 'Conflict record id' },
+        candidateNodeId: { type: 'string', description: 'Reflection candidate node id' },
+        reason: { type: 'string', description: 'Why the candidate was rejected' },
+      },
+      required: ['conflictId', 'candidateNodeId', 'reason'],
+    },
+  },
+  {
     name: 'metabolism_run',
     description: 'Run the ECS metabolism engine and return the run summary.',
     inputSchema: {

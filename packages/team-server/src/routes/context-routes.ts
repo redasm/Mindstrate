@@ -79,6 +79,26 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json({ conflicts, total: conflicts.length });
   }));
 
+  app.post('/api/context/conflicts/accept', withInitializedMemory(memory, async (req, res) => {
+    const { conflictId, candidateNodeId, resolution } = req.body;
+    if (!conflictId || !candidateNodeId || !resolution) {
+      res.status(400).json({ error: 'conflictId, candidateNodeId, and resolution are required' });
+      return;
+    }
+
+    res.json(memory.acceptConflictCandidate({ conflictId, candidateNodeId, resolution }));
+  }));
+
+  app.post('/api/context/conflicts/reject', withInitializedMemory(memory, async (req, res) => {
+    const { conflictId, candidateNodeId, reason } = req.body;
+    if (!conflictId || !candidateNodeId || !reason) {
+      res.status(400).json({ error: 'conflictId, candidateNodeId, and reason are required' });
+      return;
+    }
+
+    res.json(memory.rejectConflictCandidate({ conflictId, candidateNodeId, reason }));
+  }));
+
   app.get('/api/context/edges', withInitializedMemory(memory, async (req, res) => {
     const edges = memory.listContextEdges({
       sourceId: typeof req.query.sourceId === 'string' ? req.query.sourceId : undefined,

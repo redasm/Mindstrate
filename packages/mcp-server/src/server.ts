@@ -52,6 +52,8 @@ import {
   ContextQueryGraphSchema,
   ContextEdgesSchema,
   ContextConflictsSchema,
+  ContextConflictAcceptSchema,
+  ContextConflictRejectSchema,
   MetabolismRunSchema,
   ObsidianProjectionWriteSchema,
   BundleCreateSchema,
@@ -74,6 +76,8 @@ import {
   handleContextQueryGraph,
   handleContextEdges,
   handleContextConflicts,
+  handleContextConflictAccept,
+  handleContextConflictReject,
   handleMetabolismRun,
   handleObsidianProjectionWrite,
   handleBundleCreate,
@@ -301,6 +305,16 @@ const api: McpApi = {
     return memory!.listConflictRecords(options?.project, options?.limit);
   },
 
+  async acceptConflictCandidate(input) {
+    if (teamClient) return teamClient.acceptConflictCandidate(input);
+    return memory!.acceptConflictCandidate(input);
+  },
+
+  async rejectConflictCandidate(input) {
+    if (teamClient) return teamClient.rejectConflictCandidate(input);
+    return memory!.rejectConflictCandidate(input);
+  },
+
   async runMetabolism(options) {
     if (teamClient) return teamClient.runMetabolism(options);
     return memory!.runMetabolism(options);
@@ -429,6 +443,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const v = validateArgs(ContextConflictsSchema, args);
       if ('error' in v) return v.error;
       return handleContextConflicts(api, v.data);
+    }
+    case 'context_conflict_accept': {
+      const v = validateArgs(ContextConflictAcceptSchema, args);
+      if ('error' in v) return v.error;
+      return handleContextConflictAccept(api, v.data);
+    }
+    case 'context_conflict_reject': {
+      const v = validateArgs(ContextConflictRejectSchema, args);
+      if ('error' in v) return v.error;
+      return handleContextConflictReject(api, v.data);
     }
     case 'metabolism_run': {
       const v = validateArgs(MetabolismRunSchema, args);

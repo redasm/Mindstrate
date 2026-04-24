@@ -13,6 +13,8 @@ import type {
   ContextQueryGraphSchema,
   ContextEdgesSchema,
   ContextConflictsSchema,
+  ContextConflictAcceptSchema,
+  ContextConflictRejectSchema,
   MetabolismRunSchema,
   ObsidianProjectionWriteSchema,
   BundleCreateSchema,
@@ -224,6 +226,35 @@ export async function handleContextConflicts(
     content: [{
       type: 'text',
       text: `Found ${conflicts.length} ECS conflicts:\n\n${formatted}`,
+    }],
+  };
+}
+
+export async function handleContextConflictAccept(
+  api: McpApi,
+  input: z.infer<typeof ContextConflictAcceptSchema>,
+): Promise<McpToolResponse> {
+  const result = await api.acceptConflictCandidate(input);
+  return {
+    content: [{
+      type: 'text',
+      text: result.resolved
+        ? `Conflict resolved.\nID: ${result.resolved.id}\nResolution: ${result.resolved.resolution ?? input.resolution}`
+        : `Conflict candidate was not accepted: ${input.candidateNodeId}`,
+    }],
+    isError: result.resolved ? undefined : true,
+  };
+}
+
+export async function handleContextConflictReject(
+  api: McpApi,
+  input: z.infer<typeof ContextConflictRejectSchema>,
+): Promise<McpToolResponse> {
+  await api.rejectConflictCandidate(input);
+  return {
+    content: [{
+      type: 'text',
+      text: `Conflict candidate rejected.\nConflict: ${input.conflictId}\nCandidate: ${input.candidateNodeId}`,
     }],
   };
 }

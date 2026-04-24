@@ -106,6 +106,8 @@ export interface LocalMemory {
     limit?: number;
   }): ContextEdge[];
   listConflictRecords(project?: string, limit?: number): ConflictRecord[];
+  acceptConflictCandidate(input: { conflictId: string; candidateNodeId: string; resolution: string }): { resolved: ConflictRecord | null };
+  rejectConflictCandidate(input: { conflictId: string; candidateNodeId: string; reason: string }): { rejectedNode: unknown };
   runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
   createBundle(options: {
     name: string;
@@ -177,6 +179,8 @@ export interface McpApi {
     limit?: number;
   }): Promise<ContextEdge[]>;
   listContextConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]>;
+  acceptConflictCandidate(input: { conflictId: string; candidateNodeId: string; resolution: string }): Promise<{ resolved: ConflictRecord | null }>;
+  rejectConflictCandidate(input: { conflictId: string; candidateNodeId: string; reason: string }): Promise<{ rejected: boolean } | { rejectedNode: unknown }>;
   runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
   createBundle(options: {
     name: string;

@@ -20,6 +20,29 @@ export interface ConflictReflectionResult {
   auditEventIds: string[];
 }
 
+export interface AcceptReflectionCandidateInput {
+  conflictId: string;
+  candidateNodeId: string;
+  resolution: string;
+}
+
+export interface AcceptReflectionCandidateResult {
+  resolved: ConflictRecord | null;
+  acceptedNode: ReturnType<ContextGraphStore['getNodeById']>;
+  auditEventId?: string;
+}
+
+export interface RejectReflectionCandidateInput {
+  conflictId: string;
+  candidateNodeId: string;
+  reason: string;
+}
+
+export interface RejectReflectionCandidateResult {
+  rejectedNode: ReturnType<ContextGraphStore['getNodeById']>;
+  auditEventId?: string;
+}
+
 export class ConflictReflector {
   private readonly graphStore: ContextGraphStore;
 
@@ -93,6 +116,74 @@ export class ConflictReflector {
       candidateNodeIds,
       auditEventIds,
     };
+  }
+
+  acceptCandidate(input: AcceptReflectionCandidateInput): AcceptReflectionCandidateResult {
+    const conflict = this.graphStore.getConflictRecordById(input.conflictId);
+    const candidate = this.graphStore.getNodeById(input.candidateNodeId);
+    if (!conflict || !candidate || candidate.sourceRef !== input.conflictId) {
+      return { resolved: null, acceptedNode: candidate };
+    }
+
+    const acceptedNode = this.graphStore.updateNode(candidate.id, {
+      status: ContextNodeStatus.VERIFIED,
+      confidence: Math.max(candidate.confidence, 0.8),
+      qualityScore: Math.max(candidate.qualityScore, 80),
+      metadata: {
+        ...candidate.metadata,
+        acceptedAt: new Date().toISOString(),
+        resolution: input.resolution,
+      },
+    });
+
+    for (const nodeId of conflict.nodeIds) {
+      this.graphStore.updateNode(nodeId, { status: ContextNodeStatus.ARCHIVED });
+    }
+
+    const resolved = this.graphStore.resolveConflictRecord(input.conflictId, input.resolution);
+    const audit = this.graphStore.createEvent({
+      type: ContextEventType.METABOLIC_OUTPUT,
+      project: conflict.project,
+      actor: 'metabolism.reflect',
+      content: `Accepted reflection candidate ${candidate.id} for conflict ${conflict.id}.`,
+      metadata: {
+        conflictId: conflict.id,
+        candidateNodeId: candidate.id,
+        resolution: input.resolution,
+      },
+    });
+
+    return { resolved, acceptedNode, auditEventId: audit.id };
+  }
+
+  rejectCandidate(input: RejectReflectionCandidateInput): RejectReflectionCandidateResult {
+    const conflict = this.graphStore.getConflictRecordById(input.conflictId);
+    const candidate = this.graphStore.getNodeById(input.candidateNodeId);
+    if (!conflict || !candidate || candidate.sourceRef !== input.conflictId) {
+      return { rejectedNode: candidate };
+    }
+
+    const rejectedNode = this.graphStore.updateNode(candidate.id, {
+      status: ContextNodeStatus.DEPRECATED,
+      metadata: {
+        ...candidate.metadata,
+        rejectedAt: new Date().toISOString(),
+        rejectionReason: input.reason,
+      },
+    });
+    const audit = this.graphStore.createEvent({
+      type: ContextEventType.METABOLIC_OUTPUT,
+      project: conflict.project,
+      actor: 'metabolism.reflect',
+      content: `Rejected reflection candidate ${candidate.id} for conflict ${conflict.id}.`,
+      metadata: {
+        conflictId: conflict.id,
+        candidateNodeId: candidate.id,
+        reason: input.reason,
+      },
+    });
+
+    return { rejectedNode, auditEventId: audit.id };
   }
 
   private hasReflectionNode(conflictId: string): boolean {

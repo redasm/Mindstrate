@@ -363,6 +363,22 @@ export class TeamClient {
     return data.conflicts ?? [];
   }
 
+  async acceptConflictCandidate(input: {
+    conflictId: string;
+    candidateNodeId: string;
+    resolution: string;
+  }): Promise<{ resolved: ConflictRecord | null }> {
+    return this.post('/api/context/conflicts/accept', input);
+  }
+
+  async rejectConflictCandidate(input: {
+    conflictId: string;
+    candidateNodeId: string;
+    reason: string;
+  }): Promise<{ rejected: boolean }> {
+    return this.post('/api/context/conflicts/reject', input);
+  }
+
   async listContextEdges(options?: {
     sourceId?: string;
     targetId?: string;

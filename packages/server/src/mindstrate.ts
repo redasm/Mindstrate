@@ -56,7 +56,13 @@ import { ContextGraphStore } from './context-graph/context-graph-store.js';
 import { GraphKnowledgeProjector, type GraphKnowledgeProjectionOptions } from './context-graph/knowledge-projector.js';
 import { ProjectedKnowledgeSearch, type ProjectedKnowledgeSearchOptions } from './context-graph/projected-knowledge-search.js';
 import { ConflictDetector, type ConflictDetectionOptions, type ConflictDetectionResult } from './context-graph/conflict-detector.js';
-import { ConflictReflector, type ConflictReflectionOptions, type ConflictReflectionResult } from './context-graph/conflict-reflector.js';
+import {
+  ConflictReflector,
+  type AcceptReflectionCandidateResult,
+  type ConflictReflectionOptions,
+  type ConflictReflectionResult,
+  type RejectReflectionCandidateResult,
+} from './context-graph/conflict-reflector.js';
 import { digestCompletedSession, digestSessionObservation } from './context-graph/session-digest.js';
 import { PatternCompressor, type PatternCompressionOptions, type PatternCompressionResult } from './context-graph/pattern-compressor.js';
 import { RuleCompressor, type RuleCompressionOptions, type RuleCompressionResult } from './context-graph/rule-compressor.js';
@@ -950,6 +956,22 @@ export class Mindstrate {
 
   runReflection(options?: ConflictReflectionOptions): ConflictReflectionResult {
     return this.runConflictReflection(options);
+  }
+
+  acceptConflictCandidate(input: {
+    conflictId: string;
+    candidateNodeId: string;
+    resolution: string;
+  }): AcceptReflectionCandidateResult {
+    return this.conflictReflector.acceptCandidate(input);
+  }
+
+  rejectConflictCandidate(input: {
+    conflictId: string;
+    candidateNodeId: string;
+    reason: string;
+  }): RejectReflectionCandidateResult {
+    return this.conflictReflector.rejectCandidate(input);
   }
 
   projectKnowledgeUnit(options?: GraphKnowledgeProjectionOptions): ProjectionRecord[] {
