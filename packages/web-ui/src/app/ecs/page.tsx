@@ -29,6 +29,8 @@ export default function EcsPage() {
   const [runs, setRuns] = useState<MetabolismRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
+  const [stage, setStage] = useState('');
+  const [stageResult, setStageResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,14 +56,20 @@ export default function EcsPage() {
 
   const triggerMetabolism = async () => {
     setTriggering(true);
+    setStageResult(null);
     try {
       const res = await fetch('/api/metabolism-runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trigger: 'manual' }),
+        body: JSON.stringify(stage ? { stage } : { trigger: 'manual' }),
       });
       if (res.ok) {
-        await load();
+        if (stage) {
+          const data = await res.json();
+          setStageResult(JSON.stringify(data, null, 2));
+        } else {
+          await load();
+        }
       }
     } finally {
       setTriggering(false);
@@ -78,18 +86,40 @@ export default function EcsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
+        <select
+          value={stage}
+          onChange={(event) => setStage(event.target.value)}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700"
+          aria-label="Metabolism stage"
+        >
+          <option value="">Full run</option>
+          <option value="digest">Digest</option>
+          <option value="assimilate">Assimilate</option>
+          <option value="compress">Compress</option>
+          <option value="prune">Prune</option>
+          <option value="reflect">Reflect</option>
+        </select>
         <button
           type="button"
           onClick={triggerMetabolism}
           disabled={triggering}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
         >
-          {triggering ? 'Running...' : 'Run Metabolism'}
+          {triggering ? 'Running...' : stage ? 'Run Stage' : 'Run Metabolism'}
         </button>
         <Link href="/lineage" className="text-sm font-medium text-brand-600 hover:text-brand-700">
           Open Lineage View
         </Link>
       </div>
+
+      {stageResult ? (
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">Stage Result</h2>
+          <pre className="mt-3 overflow-x-auto rounded-lg bg-gray-950 p-4 text-xs text-gray-100">
+            {stageResult}
+          </pre>
+        </section>
+      ) : null}
 
       {loading ? <div className="py-12 text-center text-gray-400">Loading ECS panels...</div> : null}
 
