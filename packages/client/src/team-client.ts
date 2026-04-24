@@ -426,6 +426,18 @@ export class TeamClient {
     return this.post('/api/bundles/install', { bundle });
   }
 
+  async installBundleFromRegistry(options: {
+    registry: string;
+    reference: string;
+  }): Promise<{
+    installedNodes: number;
+    updatedNodes: number;
+    installedEdges: number;
+    skippedEdges: number;
+  }> {
+    return this.post('/api/bundles/install-ref', options);
+  }
+
   async publishBundle(
     bundle: PortableContextBundle,
     options: PublishBundleOptions = {},

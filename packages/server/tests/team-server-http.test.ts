@@ -129,7 +129,7 @@ describe('team-server HTTP integration', () => {
   });
 
   it('publishes portable bundles through the team HTTP API', async () => {
-    const { client } = await startTeamServer();
+    const { client, tempDir } = await startTeamServer();
 
     await client.add(makeKnowledgeInput({
       title: 'Publishable team rule',
@@ -153,6 +153,19 @@ describe('team-server HTTP integration', () => {
     expect(publication.manifest.visibility).toBe('public');
     expect(publication.manifest.nodeCount).toBeGreaterThan(0);
     expect(publication.manifest.digest).toMatch(/^sha256:/);
+
+    const registryDir = path.join(tempDir, 'team-registry');
+    const localPublication = await client.publishBundle(bundle, {
+      registry: registryDir,
+      visibility: 'public',
+    });
+    const install = await client.installBundleFromRegistry({
+      registry: registryDir,
+      reference: `${localPublication.manifest.name}@${localPublication.manifest.version}`,
+    });
+
+    expect(fs.existsSync(path.join(registryDir, 'index.json'))).toBe(true);
+    expect(install.updatedNodes + install.installedNodes).toBeGreaterThan(0);
   });
 
   it('generates internalization suggestions through the team HTTP API', async () => {

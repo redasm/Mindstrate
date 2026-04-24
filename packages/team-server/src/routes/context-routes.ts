@@ -225,6 +225,16 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json(memory.installBundle(bundle));
   }));
 
+  app.post('/api/bundles/install-ref', withInitializedMemory(memory, async (req, res) => {
+    const { registry, reference } = req.body;
+    if (!registry || !reference) {
+      res.status(400).json({ error: 'registry and reference are required' });
+      return;
+    }
+
+    res.json(memory.installBundleFromRegistry({ registry, reference }));
+  }));
+
   app.post('/api/bundles/publish', withInitializedMemory(memory, async (req, res) => {
     const bundle = req.body.bundle as PortableContextBundle | undefined;
     if (!bundle) {
