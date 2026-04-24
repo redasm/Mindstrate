@@ -22,6 +22,7 @@
  *   mindstrate graph                查询 ECS 上下文图
  *   mindstrate conflict             查看 ECS 冲突记录
  *   mindstrate gc                   运行 ECS 代谢引擎
+ *   mindstrate projection           导出 ECS 投影视图
  *   mindstrate bundle               管理可移植 ECS 上下文包
  *   mindstrate test                 写入测试结果到 ECS 事件流
  *   mindstrate diag                 写入诊断到 ECS 事件流
@@ -45,6 +46,7 @@ import { registerCurateCommand } from './commands/curate.js';
 import { contextGraphCommand } from './commands/context-graph.js';
 import { conflictsCommand } from './commands/conflicts.js';
 import { metabolismCommand } from './commands/metabolism.js';
+import { projectionCommand } from './commands/projection.js';
 import { bundleCommand } from './commands/bundle.js';
 import { lspDiagnosticCommand } from './commands/lsp-diagnostic.js';
 import { testResultCommand } from './commands/test-result.js';
@@ -73,6 +75,7 @@ program.addCommand(vaultCommand);
 program.addCommand(contextGraphCommand);
 program.addCommand(conflictsCommand);
 program.addCommand(metabolismCommand);
+program.addCommand(projectionCommand);
 program.addCommand(bundleCommand);
 program.addCommand(testResultCommand);
 program.addCommand(lspDiagnosticCommand);
