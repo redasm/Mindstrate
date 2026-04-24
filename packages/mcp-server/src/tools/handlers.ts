@@ -264,6 +264,16 @@ export async function handleMetabolismRun(
   api: McpApi,
   input: z.infer<typeof MetabolismRunSchema>,
 ): Promise<McpToolResponse> {
+  if (input.stage) {
+    const result = await api.runMetabolismStage(input.stage, { project: input.project });
+    return {
+      content: [{
+        type: 'text',
+        text: `Metabolism stage completed.\n${JSON.stringify(result, null, 2)}`,
+      }],
+    };
+  }
+
   const run = await api.runMetabolism({
     project: input.project,
     trigger: input.trigger ?? 'manual',

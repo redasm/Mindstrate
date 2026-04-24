@@ -211,6 +211,11 @@ export const TOOL_DEFINITIONS = [
       type: 'object' as const,
       properties: {
         project: { type: 'string', description: 'Optional project scope' },
+        stage: {
+          type: 'string',
+          enum: ['digest', 'assimilate', 'compress', 'prune', 'reflect'],
+          description: 'Optional single metabolism stage to run',
+        },
         trigger: {
           type: 'string',
           enum: ['manual', 'scheduled', 'event_driven'],

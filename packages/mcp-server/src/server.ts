@@ -322,6 +322,22 @@ const api: McpApi = {
     return memory!.runMetabolism(options);
   },
 
+  async runMetabolismStage(stage, options) {
+    if (teamClient) return teamClient.runMetabolismStage(stage, options);
+    switch (stage) {
+      case 'digest':
+        return memory!.runDigest(options);
+      case 'assimilate':
+        return memory!.runAssimilation(options);
+      case 'compress':
+        return memory!.runCompression(options);
+      case 'prune':
+        return memory!.runPruning(options);
+      case 'reflect':
+        return memory!.runReflection(options);
+    }
+  },
+
   async createBundle(options) {
     if (teamClient) return teamClient.createBundle(options);
     return memory!.createBundle(options);

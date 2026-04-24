@@ -121,6 +121,11 @@ export interface LocalMemory {
   acceptConflictCandidate(input: { conflictId: string; candidateNodeId: string; resolution: string }): { resolved: ConflictRecord | null };
   rejectConflictCandidate(input: { conflictId: string; candidateNodeId: string; reason: string }): { rejectedNode: unknown };
   runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
+  runDigest(options?: { project?: string }): unknown;
+  runAssimilation(options?: { project?: string }): unknown;
+  runCompression(options?: { project?: string }): Promise<unknown>;
+  runPruning(options?: { project?: string }): unknown;
+  runReflection(options?: { project?: string }): unknown;
   createBundle(options: {
     name: string;
     version?: string;
@@ -191,6 +196,7 @@ export interface McpApi {
   acceptConflictCandidate(input: { conflictId: string; candidateNodeId: string; resolution: string }): Promise<{ resolved: ConflictRecord | null }>;
   rejectConflictCandidate(input: { conflictId: string; candidateNodeId: string; reason: string }): Promise<{ rejected: boolean } | { rejectedNode: unknown }>;
   runMetabolism(options?: { project?: string; trigger?: 'manual' | 'scheduled' | 'event_driven' }): Promise<MetabolismRun>;
+  runMetabolismStage(stage: 'digest' | 'assimilate' | 'compress' | 'prune' | 'reflect', options?: { project?: string }): Promise<unknown>;
   createBundle(options: {
     name: string;
     version?: string;

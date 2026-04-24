@@ -7067,6 +7067,12 @@ var require_team_client = __commonJS({
       async runMetabolism(options) {
         return this.post("/api/metabolism/run", options ?? {});
       }
+      async runMetabolismStage(stage, options) {
+        return this.post("/api/metabolism/stage", {
+          stage,
+          project: options?.project
+        });
+      }
       // ============================================================
       // HTTP helpers
       // ============================================================
@@ -19150,6 +19156,11 @@ var TOOL_DEFINITIONS = [
       type: "object",
       properties: {
         project: { type: "string", description: "Optional project scope" },
+        stage: {
+          type: "string",
+          enum: ["digest", "assimilate", "compress", "prune", "reflect"],
+          description: "Optional single metabolism stage to run"
+        },
         trigger: {
           type: "string",
           enum: ["manual", "scheduled", "event_driven"],
@@ -33274,7 +33285,8 @@ var ContextConflictRejectSchema = external_exports.object({
 });
 var MetabolismRunSchema = external_exports.object({
   project: external_exports.string().optional(),
-  trigger: external_exports.enum(["manual", "scheduled", "event_driven"]).optional()
+  trigger: external_exports.enum(["manual", "scheduled", "event_driven"]).optional(),
+  stage: external_exports.enum(["digest", "assimilate", "compress", "prune", "reflect"]).optional()
 });
 var ObsidianProjectionWriteSchema = external_exports.object({
   rootDir: external_exports.string().min(1, "rootDir is required"),
@@ -33605,6 +33617,16 @@ Candidate: ${input.candidateNodeId}`
   };
 }
 async function handleMetabolismRun(api2, input) {
+  if (input.stage) {
+    const result = await api2.runMetabolismStage(input.stage, { project: input.project });
+    return {
+      content: [{
+        type: "text",
+        text: `Metabolism stage completed.
+${JSON.stringify(result, null, 2)}`
+      }]
+    };
+  }
   const run = await api2.runMetabolism({
     project: input.project,
     trigger: input.trigger ?? "manual"
@@ -34200,6 +34222,21 @@ var api = {
   async runMetabolism(options) {
     if (teamClient) return teamClient.runMetabolism(options);
     return memory.runMetabolism(options);
+  },
+  async runMetabolismStage(stage, options) {
+    if (teamClient) return teamClient.runMetabolismStage(stage, options);
+    switch (stage) {
+      case "digest":
+        return memory.runDigest(options);
+      case "assimilate":
+        return memory.runAssimilation(options);
+      case "compress":
+        return memory.runCompression(options);
+      case "prune":
+        return memory.runPruning(options);
+      case "reflect":
+        return memory.runReflection(options);
+    }
   },
   async createBundle(options) {
     if (teamClient) return teamClient.createBundle(options);

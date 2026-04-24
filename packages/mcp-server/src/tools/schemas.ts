@@ -68,6 +68,7 @@ export const ContextConflictRejectSchema = z.object({
 export const MetabolismRunSchema = z.object({
   project: z.string().optional(),
   trigger: z.enum(['manual', 'scheduled', 'event_driven']).optional(),
+  stage: z.enum(['digest', 'assimilate', 'compress', 'prune', 'reflect']).optional(),
 });
 
 export const ObsidianProjectionWriteSchema = z.object({
