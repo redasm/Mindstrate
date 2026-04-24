@@ -19,13 +19,11 @@ export function KnowledgeCard({
   knowledge: k,
   relevance,
   showActions = false,
-  onVote,
   onDelete,
 }: {
   knowledge: GraphKnowledgeView;
   relevance?: number;
   showActions?: boolean;
-  onVote?: (id: string, dir: 'up' | 'down') => void;
   onDelete?: (id: string) => void;
 }) {
   return (
@@ -71,22 +69,8 @@ export function KnowledgeCard({
         {showActions && (
           <div className="flex items-center gap-1">
             <button
-              onClick={() => onVote?.(k.id, 'up')}
-              className="p-1 rounded hover:bg-green-100 text-gray-400 hover:text-green-600 transition-colors"
-              title="Upvote"
-            >
-              +
-            </button>
-            <button
-              onClick={() => onVote?.(k.id, 'down')}
-              className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors"
-              title="Downvote"
-            >
-              -
-            </button>
-            <button
               onClick={() => onDelete?.(k.id)}
-              className="ml-2 p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors text-xs"
+              className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors text-xs"
               title="Delete"
             >
               Delete

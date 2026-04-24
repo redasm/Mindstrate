@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getMemoryReady } from '@/lib/memory';
-import { getTypeInfo, getStatusInfo, formatDate } from '@/lib/constants';
+import { getTypeInfo, getStatusInfo } from '@/lib/constants';
 import { detectLocale } from '@/lib/i18n/index';
 import { getTranslations } from '@/lib/i18n/translations';
 
@@ -11,7 +11,7 @@ export default async function DashboardPage() {
   const t = getTranslations(locale);
   const memory = await getMemoryReady();
   const stats = await memory.getStats();
-  const recent = memory.list({}, 5);
+  const recent = memory.readGraphKnowledge({ limit: 5 });
 
   const statCards = [
     { label: t.dashboard.totalKnowledge, value: stats.total, color: 'text-brand-600' },
@@ -129,7 +129,7 @@ export default async function DashboardPage() {
         ) : (
           <div className="divide-y divide-gray-100">
             {recent.map(k => {
-              const typeInfo = getTypeInfo(k.type, locale);
+              const typeInfo = getTypeInfo(k.domainType, locale);
               return (
                 <Link key={k.id} href={`/knowledge/${k.id}`} className="block py-3 hover:bg-gray-50 -mx-2 px-2 rounded transition-colors">
                   <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ export default async function DashboardPage() {
                       {typeInfo.label}
                     </span>
                     <span className="font-medium text-gray-900 text-sm truncate">{k.title}</span>
-                    <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{formatDate(k.metadata.createdAt, locale)}</span>
+                    <span className="ml-auto text-xs text-gray-400 flex-shrink-0">{k.substrateType}</span>
                   </div>
                 </Link>
               );

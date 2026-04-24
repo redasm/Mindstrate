@@ -31,15 +31,6 @@ export default function KnowledgeListPage() {
 
   useEffect(() => { fetchEntries(); }, [fetchEntries]);
 
-  const handleVote = async (id: string, dir: 'up' | 'down') => {
-    await fetch(`/api/knowledge/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: dir === 'up' ? 'upvote' : 'downvote' }),
-    });
-    fetchEntries();
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm(t.knowledgeList.confirmDelete)) return;
     await fetch(`/api/knowledge/${id}`, { method: 'DELETE' });
@@ -88,7 +79,6 @@ export default function KnowledgeListPage() {
               key={k.id}
               knowledge={k}
               showActions
-              onVote={handleVote}
               onDelete={handleDelete}
             />
           ))}

@@ -3,8 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { KnowledgeType } from '@mindstrate/server';
-import { createMemory, formatDate, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
+import { createMemory, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
 
 export const searchCommand = new Command('search')
   .description('Search the knowledge base')
@@ -21,15 +20,14 @@ export const searchCommand = new Command('search')
     try {
       await memory.init();
 
-      const results = await memory.search(query, {
+      const minScore = parseFloat(options.minScore);
+      const results = memory.queryGraphKnowledge(query, {
         topK: parseInt(options.topK, 10),
-        filter: {
-          types: options.type ? [options.type as KnowledgeType] : undefined,
-          language: options.language,
-          framework: options.framework,
-          minScore: parseFloat(options.minScore),
-        },
-      });
+        limit: 100,
+      }).filter((result) => !options.type || result.view.domainType === options.type)
+        .filter((result) => !options.language || result.view.tags.includes(options.language))
+        .filter((result) => !options.framework || result.view.tags.includes(options.framework))
+        .filter((result) => Number.isNaN(minScore) || result.view.priorityScore >= minScore);
 
       if (results.length === 0) {
         console.log('No results found.\n');
@@ -44,17 +42,14 @@ export const searchCommand = new Command('search')
 
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
-        const k = r.knowledge;
-        const typeLabel = TYPE_LABELS[k.type] ?? k.type;
-        const statusLabel = STATUS_LABELS[k.quality.status] ?? k.quality.status;
+        const k = r.view;
+        const typeLabel = TYPE_LABELS[k.domainType] ?? k.domainType;
+        const statusLabel = STATUS_LABELS[k.status] ?? k.status;
 
         console.log(`  ${i + 1}. [${typeLabel}] ${k.title}`);
-        console.log(`     Relevance: ${(r.relevanceScore * 100).toFixed(1)}% | Score: ${k.quality.score.toFixed(0)} | Status: ${statusLabel}`);
+        console.log(`     Relevance: ${(r.relevanceScore * 100).toFixed(1)}% | Priority: ${k.priorityScore.toFixed(2)} | Status: ${statusLabel}`);
 
-        if (k.problem) {
-          console.log(`     Problem:  ${truncate(k.problem, 80)}`);
-        }
-        console.log(`     Solution: ${truncate(k.solution, 80)}`);
+        console.log(`     Summary: ${truncate(k.summary, 80)}`);
 
         if (k.tags.length > 0) {
           console.log(`     Tags: ${k.tags.join(', ')}`);
@@ -62,8 +57,7 @@ export const searchCommand = new Command('search')
 
         if (options.verbose) {
           console.log(`     ID: ${k.id}`);
-          console.log(`     Author: ${k.metadata.author} | Created: ${formatDate(k.metadata.createdAt)}`);
-          console.log(`     Used: ${k.quality.useCount} times`);
+          console.log(`     Substrate: ${k.substrateType} | Domain: ${k.domainType}`);
           if (r.matchReason) {
             console.log(`     Match: ${r.matchReason}`);
           }

@@ -3,8 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { KnowledgeType } from '@mindstrate/server';
-import { createMemory, formatDate, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
+import { createMemory, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
 
 export const listCommand = new Command('list')
   .description('List knowledge entries')
@@ -15,13 +14,10 @@ export const listCommand = new Command('list')
     const memory = createMemory();
 
     try {
-      const entries = memory.list(
-        {
-          types: options.type ? [options.type as KnowledgeType] : undefined,
-          language: options.language,
-        },
-        parseInt(options.limit, 10),
-      );
+      const entries = memory.readGraphKnowledge({ limit: 100000 })
+        .filter((entry) => !options.type || entry.domainType === options.type)
+        .filter((entry) => !options.language || entry.tags.includes(options.language))
+        .slice(0, parseInt(options.limit, 10));
 
       if (entries.length === 0) {
         console.log('No knowledge entries found.');
@@ -32,12 +28,12 @@ export const listCommand = new Command('list')
       console.log(`Showing ${entries.length} knowledge entries:\n`);
 
       for (const k of entries) {
-        const typeLabel = TYPE_LABELS[k.type] ?? k.type;
-        const statusLabel = STATUS_LABELS[k.quality.status] ?? k.quality.status;
+        const typeLabel = TYPE_LABELS[k.domainType] ?? k.domainType;
+        const statusLabel = STATUS_LABELS[k.status] ?? k.status;
 
         console.log(`  [${typeLabel}] ${k.title}`);
-        console.log(`  ID: ${k.id.substring(0, 8)}... | Score: ${k.quality.score.toFixed(0)} | ${statusLabel} | ${formatDate(k.metadata.createdAt)}`);
-        console.log(`  ${truncate(k.solution, 100)}`);
+        console.log(`  ID: ${k.id.substring(0, 8)}... | Priority: ${k.priorityScore.toFixed(2)} | ${k.substrateType} | ${statusLabel}`);
+        console.log(`  ${truncate(k.summary, 100)}`);
         console.log('');
       }
     } catch (error) {

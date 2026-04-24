@@ -2,7 +2,7 @@
  * CLI Helper - 创建 Mindstrate 实例
  */
 
-import { Mindstrate } from '@mindstrate/server';
+import { Mindstrate, type GraphKnowledgeView } from '@mindstrate/server';
 
 export function createMemory(): Mindstrate {
   return new Mindstrate();
@@ -48,7 +48,8 @@ export const STATUS_LABELS: Record<string, string> = {
   outdated: '已过期',
 };
 
-/** 根据完整 ID 或部分 ID 前缀查找知识 */
-export function findKnowledge(memory: Mindstrate, idOrPrefix: string) {
-  return memory.findByIdOrPrefix(idOrPrefix);
+/** 根据完整 ID 或部分 ID 前缀查找 ECS 图知识视图 */
+export function findGraphKnowledge(memory: Mindstrate, idOrPrefix: string): GraphKnowledgeView | null {
+  const entries = memory.readGraphKnowledge({ limit: 100000 });
+  return entries.find((entry) => entry.id === idOrPrefix || entry.id.startsWith(idOrPrefix)) ?? null;
 }

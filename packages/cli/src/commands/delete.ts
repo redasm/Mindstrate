@@ -3,7 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, findKnowledge } from '../helpers.js';
+import { createMemory, findGraphKnowledge } from '../helpers.js';
 
 export const deleteCommand = new Command('delete')
   .description('Delete a knowledge entry')
@@ -15,8 +15,7 @@ export const deleteCommand = new Command('delete')
     try {
       await memory.init();
 
-      // 支持部分 ID 匹配
-      const knowledge = findKnowledge(memory, id);
+      const knowledge = findGraphKnowledge(memory, id);
 
       if (!knowledge) {
         console.error(`Knowledge not found: ${id}`);
@@ -44,7 +43,7 @@ export const deleteCommand = new Command('delete')
         }
       }
 
-      const deleted = await memory.delete(knowledge.id);
+      const deleted = memory.deleteContextNode(knowledge.id);
       if (deleted) {
         console.log(`Deleted: ${knowledge.title}`);
       } else {
