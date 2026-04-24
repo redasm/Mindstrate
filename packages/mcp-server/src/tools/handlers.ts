@@ -604,20 +604,6 @@ export async function handleMemoryCurate(
     }
   }
 
-  const allResults = [
-    ...curated.knowledge,
-    ...curated.workflows,
-    ...curated.warnings,
-  ];
-  if (allResults.length > 0) {
-    text += '\n\n### Knowledge IDs for Feedback\n';
-    for (const r of allResults) {
-      text += `- ${r.knowledge.id}`;
-      if (r.retrievalId) text += ` (retrievalId: ${r.retrievalId})`;
-      text += '\n';
-    }
-  }
-
   return { content: [{ type: 'text', text }] };
 }
 
@@ -662,20 +648,6 @@ export async function handleContextAssemble(
     text += '\n### ECS Graph Conflicts\n';
     for (const conflict of assembled.graphConflicts ?? []) {
       text += `- ${conflict}\n`;
-    }
-  }
-
-  const allResults = [
-    ...assembled.curated.knowledge,
-    ...assembled.curated.workflows,
-    ...assembled.curated.warnings,
-  ];
-  if (allResults.length > 0) {
-    text += '\n### Knowledge IDs for Feedback\n';
-    for (const result of allResults) {
-      text += `- ${result.knowledge.id}`;
-      if (result.retrievalId) text += ` (retrievalId: ${result.retrievalId})`;
-      text += '\n';
     }
   }
 
