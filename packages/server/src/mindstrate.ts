@@ -76,12 +76,11 @@ import {
 } from './metabolism/index.js';
 import {
   KnowledgeProjectionMaterializer,
-  KnowledgeUnitMaterializer,
   ObsidianProjectionMaterializer,
   ProjectSnapshotProjectionMaterializer,
   SessionProjectionMaterializer,
 } from './projections/index.js';
-import { ContextDomainType, SubstrateType } from '@mindstrate/protocol/models';
+import { ContextDomainType, ContextEventType, SubstrateType } from '@mindstrate/protocol/models';
 import type {
   ConflictRecord,
   ContextEdge,
@@ -98,7 +97,6 @@ import {
   ingestContextEvent,
   ingestGitActivity,
   ingestLspDiagnostic,
-  ingestKnowledgeWrite,
   ingestProjectSnapshotEvent,
   ingestTestRun,
   ingestUserFeedback,
@@ -118,7 +116,6 @@ export class Mindstrate {
   private sessionProjectionMaterializer: SessionProjectionMaterializer;
   private projectSnapshotProjectionMaterializer: ProjectSnapshotProjectionMaterializer;
   private obsidianProjectionMaterializer: ObsidianProjectionMaterializer;
-  private knowledgeUnitMaterializer: KnowledgeUnitMaterializer;
   private metabolismEngine: MetabolismEngine;
   private pruner: Pruner;
   private conflictDetector: ConflictDetector;
@@ -193,12 +190,6 @@ export class Mindstrate {
     });
     this.vectorStore = configOverrides?.vectorStore
       ?? new VectorStore(this.config.vectorStorePath, this.config.collectionName);
-    this.knowledgeUnitMaterializer = new KnowledgeUnitMaterializer(
-      this.contextGraphStore,
-      this.metadataStore,
-      this.vectorStore,
-      this.embedder,
-    );
     this.sessionStore = new SessionStore(this.metadataStore.getDb());
     this.bundleManager = new PortableContextBundleManager(this.contextGraphStore);
     this.sessionCompressor = new SessionCompressor(this.config.openaiApiKey, this.config.llmModel, llmBaseUrl);
@@ -266,9 +257,8 @@ export class Mindstrate {
       };
     }
 
-    const exactDuplicate = this.metadataStore.findExactDuplicate(input);
+    const exactDuplicate = this.findExactGraphDuplicate(input);
     if (exactDuplicate) {
-      this.metadataStore.recordUsage(exactDuplicate.id);
       return {
         success: false,
         message: `Exact duplicate detected. Existing knowledge ID: ${exactDuplicate.id}`,
@@ -288,7 +278,6 @@ export class Mindstrate {
 
     if (duplicates.length > 0) {
       const dup = duplicates[0];
-      this.metadataStore.recordUsage(dup.id);
       return {
         success: false,
         message: `Duplicate detected (similarity: ${(dup.score * 100).toFixed(1)}%). Existing knowledge ID: ${dup.id}`,
@@ -297,8 +286,29 @@ export class Mindstrate {
     }
 
     const node = this.contextGraphStore.createNode(digested.nodeInput);
-    const { knowledge } = await this.knowledgeUnitMaterializer.materializeNode(node);
-    this.tryIngestDerivedEvent(() => ingestKnowledgeWrite(this.contextGraphStore, knowledge));
+    this.contextGraphStore.createEvent({
+      type: ContextEventType.KNOWLEDGE_WRITE,
+      project: node.project,
+      actor: input.author,
+      content: `${node.title}\n${node.content}`,
+      metadata: {
+        nodeId: node.id,
+        domainType: node.domainType,
+        substrateType: node.substrateType,
+      },
+    });
+    await this.vectorStore.add({
+      id: node.id,
+      embedding,
+      text,
+      metadata: {
+        type: node.domainType,
+        language: getStringMetadata(node, 'context', 'language'),
+        framework: getStringMetadata(node, 'context', 'framework'),
+        project: node.project ?? '',
+      },
+    });
+    this.projectionMaterializer.materialize({ project: node.project, limit: 50 });
 
     return {
       success: true,
@@ -1021,7 +1031,12 @@ export class Mindstrate {
     deprecated: number;
     outdated: number;
   } {
-    return this.scorer.runMaintenance();
+    return {
+      total: this.contextGraphStore.listNodes({ limit: 100000 }).length,
+      updated: 0,
+      deprecated: 0,
+      outdated: 0,
+    };
   }
 
   async getStats(): Promise<{
@@ -1036,7 +1051,8 @@ export class Mindstrate {
       avgAdoptionRate: number;
     };
   }> {
-    const dbStats = this.metadataStore.getStats();
+    const nodes = this.contextGraphStore.listNodes({ limit: 100000 });
+    const dbStats = getGraphStats(nodes);
     const vectorCount = await this.vectorStore.count();
     const feedbackStats = this.feedbackLoop.getGlobalStats();
 
@@ -1079,6 +1095,22 @@ export class Mindstrate {
     }, 20);
 
     return candidates.find((knowledge) => knowledge.tags.includes('project-snapshot')) ?? null;
+  }
+
+  private findExactGraphDuplicate(input: CreateKnowledgeInput): ContextNode | null {
+    const title = input.title.trim();
+    const content = input.solution.trim();
+    const candidates = this.contextGraphStore.listNodes({
+      project: input.context?.project,
+      domainType: knowledgeTypeToContextDomain(input.type),
+      limit: 500,
+    });
+    return candidates.find((node) =>
+      node.title === title &&
+      node.content === content &&
+      getStringMetadata(node, 'context', 'language') === (input.context?.language ?? '') &&
+      getStringMetadata(node, 'context', 'framework') === (input.context?.framework ?? '')
+    ) ?? null;
   }
 
   private formatAssembledContext(
@@ -1151,4 +1183,63 @@ function computeGraphNodeMatchScore(tokens: string[], node: ContextNode): number
   const qualityScore = Math.min(node.qualityScore / 100, 1);
   const confidenceScore = Math.min(node.confidence, 1);
   return lexicalScore * 0.6 + qualityScore * 0.25 + confidenceScore * 0.15;
+}
+
+function getGraphStats(nodes: ContextNode[]): {
+  total: number;
+  byType: Record<string, number>;
+  byStatus: Record<string, number>;
+  byLanguage: Record<string, number>;
+} {
+  const byType: Record<string, number> = {};
+  const byStatus: Record<string, number> = {};
+  const byLanguage: Record<string, number> = {};
+
+  for (const node of nodes) {
+    byType[node.domainType] = (byType[node.domainType] ?? 0) + 1;
+    byStatus[node.status] = (byStatus[node.status] ?? 0) + 1;
+    const language = getStringMetadata(node, 'context', 'language');
+    if (language) {
+      byLanguage[language] = (byLanguage[language] ?? 0) + 1;
+    }
+  }
+
+  return {
+    total: nodes.length,
+    byType,
+    byStatus,
+    byLanguage,
+  };
+}
+
+function getStringMetadata(node: ContextNode, objectKey: string, valueKey: string): string {
+  const value = node.metadata?.[objectKey];
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const nested = (value as Record<string, unknown>)[valueKey];
+  return typeof nested === 'string' ? nested : '';
+}
+
+function knowledgeTypeToContextDomain(type: CreateKnowledgeInput['type']): ContextDomainType {
+  switch (type) {
+    case KnowledgeType.BUG_FIX:
+      return ContextDomainType.BUG_FIX;
+    case KnowledgeType.BEST_PRACTICE:
+      return ContextDomainType.BEST_PRACTICE;
+    case KnowledgeType.ARCHITECTURE:
+      return ContextDomainType.ARCHITECTURE;
+    case KnowledgeType.CONVENTION:
+      return ContextDomainType.CONVENTION;
+    case KnowledgeType.PATTERN:
+      return ContextDomainType.PATTERN;
+    case KnowledgeType.TROUBLESHOOTING:
+      return ContextDomainType.TROUBLESHOOTING;
+    case KnowledgeType.GOTCHA:
+      return ContextDomainType.GOTCHA;
+    case KnowledgeType.HOW_TO:
+      return ContextDomainType.HOW_TO;
+    case KnowledgeType.WORKFLOW:
+      return ContextDomainType.WORKFLOW;
+    default:
+      return ContextDomainType.BEST_PRACTICE;
+  }
 }

@@ -53,10 +53,9 @@ describe('Mindstrate', () => {
       expect(view!.title).toBe('Test knowledge entry');
 
       const contextNodes = memory.listContextNodes({
-        sourceRef: result.view!.id,
         limit: 10,
       });
-      expect(contextNodes).toHaveLength(1);
+      expect(contextNodes.some((node) => node.id === result.view!.id)).toBe(true);
 
       const projections = memory.listProjectionRecords({
         target: ProjectionTarget.GRAPH_KNOWLEDGE,

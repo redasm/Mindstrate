@@ -98,7 +98,6 @@ export {
 } from './context-graph/index.js';
 export {
   KnowledgeProjectionMaterializer,
-  KnowledgeUnitMaterializer,
   ObsidianProjectionMaterializer,
   ProjectSnapshotProjectionMaterializer,
   SessionProjectionMaterializer,
@@ -123,7 +122,6 @@ export {
   ingestTestRun,
   ingestLspDiagnostic,
   ingestUserFeedback,
-  ingestKnowledgeWrite,
   ingestProjectSnapshotEvent,
   type IngestContextEventInput,
   type IngestContextEventResult,
