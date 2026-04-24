@@ -361,9 +361,14 @@ mindstrate vault watch ~/Documents/MindstrateVault
 
 # 查看状态
 mindstrate vault status ~/Documents/MindstrateVault
+
+# 导出 ECS 高价值规则/技能投影（Rule / Heuristic / Axiom / Skill）
+mindstrate projection obsidian ~/Documents/MindstrateVault --project my-project
 ```
 
 **自动模式**：在 `.env` 设置 `OBSIDIAN_VAULT_PATH=...` 后，MCP Server 启动时会自动把所有新增/更新/删除写入 Vault；要同时监听 Vault 改动，再加 `OBSIDIAN_WATCH=true`。
+
+**ECS 投影导出**：`mindstrate projection obsidian <path>` 只导出 ECS 图中已验证的 `Rule / Heuristic / Axiom / Skill`，适合把稳定规则写成可编辑 Markdown；`mindstrate vault export` 则导出现有 KnowledgeUnit 镜像。
 
 **当前同步策略**：
 - `editable`：适合人类维护的知识类型，允许从 Vault 回写到 Mindstrate
@@ -462,6 +467,10 @@ mindstrate vault init <path>       初始化 Obsidian vault 同步目录
 mindstrate vault export [path]     全量导出 Mindstrate 知识到 vault（一次性）
 mindstrate vault watch [path]      持续双向同步：导出 + 监听 vault 改动
 mindstrate vault status [path]     查看 vault 同步状态 + canonical-source readiness
+mindstrate projection knowledge    生成 KnowledgeUnit 投影记录
+mindstrate projection sessions     生成会话摘要投影记录
+mindstrate projection project-snapshots 生成项目快照投影记录
+mindstrate projection obsidian <path>   导出 ECS 稳定规则/技能到 Markdown
 ```
 
 示例：
