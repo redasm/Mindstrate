@@ -9,7 +9,6 @@
  *   mindstrate search <query>       搜索相关知识
  *   mindstrate list                 列出知识
  *   mindstrate stats                查看统计信息
- *   mindstrate vote <id> <up|down>  投票
  *   mindstrate delete <id>          删除知识
  *   mindstrate export [file]        导出知识库
  *   mindstrate import <file>        导入知识
@@ -35,7 +34,6 @@ import { searchCommand } from './commands/search.js';
 import { listCommand } from './commands/list.js';
 import { statsCommand } from './commands/stats.js';
 import { maintainCommand } from './commands/maintain.js';
-import { voteCommand } from './commands/vote.js';
 import { deleteCommand } from './commands/delete.js';
 import { exportCommand, importCommand } from './commands/export-import.js';
 import { setupMcpCommand } from './commands/setup-mcp.js';
@@ -64,7 +62,6 @@ program.addCommand(addCommand);
 program.addCommand(searchCommand);
 program.addCommand(listCommand);
 program.addCommand(statsCommand);
-program.addCommand(voteCommand);
 program.addCommand(deleteCommand);
 program.addCommand(exportCommand);
 program.addCommand(importCommand);

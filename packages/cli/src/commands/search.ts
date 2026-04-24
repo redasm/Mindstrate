@@ -63,7 +63,7 @@ export const searchCommand = new Command('search')
         if (options.verbose) {
           console.log(`     ID: ${k.id}`);
           console.log(`     Author: ${k.metadata.author} | Created: ${formatDate(k.metadata.createdAt)}`);
-          console.log(`     Used: ${k.quality.useCount} times | Votes: +${k.quality.upvotes}/-${k.quality.downvotes}`);
+          console.log(`     Used: ${k.quality.useCount} times`);
           if (r.matchReason) {
             console.log(`     Match: ${r.matchReason}`);
           }

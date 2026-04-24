@@ -6881,13 +6881,6 @@ var require_team_client = __commonJS({
           return false;
         }
       }
-      async vote(id, direction) {
-        await this.doFetch(`/api/knowledge/${id}/vote`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ direction })
-        });
-      }
       // ============================================================
       // Session
       // ============================================================
@@ -19262,21 +19255,25 @@ var TOOL_DEFINITIONS = [
   },
   {
     name: "memory_feedback",
-    description: "Provide feedback on a knowledge entry (upvote or downvote).",
+    description: "Record an ECS feedback signal for a context node or retrieval result.",
     inputSchema: {
       type: "object",
       properties: {
         id: {
           type: "string",
-          description: "Knowledge entry ID"
+          description: "Context node or retrieval result ID"
         },
-        vote: {
+        signal: {
           type: "string",
-          enum: ["up", "down"],
-          description: "Vote direction"
+          enum: ["adopted", "rejected", "ignored", "partial"],
+          description: "Feedback signal"
+        },
+        context: {
+          type: "string",
+          description: "Optional explanation of the feedback"
         }
       },
-      required: ["id", "vote"]
+      required: ["id", "signal"]
     }
   },
   {
@@ -33378,7 +33375,8 @@ var MemoryAddSchema = external_exports.object({
 });
 var MemoryFeedbackSchema = external_exports.object({
   id: external_exports.string().min(1, "id is required"),
-  vote: external_exports.enum(["up", "down"])
+  signal: external_exports.enum(["adopted", "rejected", "ignored", "partial"]),
+  context: external_exports.string().optional()
 });
 var SessionSaveSchema = external_exports.object({
   type: external_exports.enum([
@@ -33770,21 +33768,10 @@ Substrate: ${result.view.substrateType}` : `Note: ${result.message}`
   };
 }
 async function handleMemoryFeedback(api2, input) {
-  const { id, vote } = input;
-  const existing = await api2.get(id);
-  if (!existing) {
-    return {
-      content: [{ type: "text", text: `Knowledge not found: ${id}` }],
-      isError: true
-    };
-  }
-  if (vote === "up") {
-    await api2.upvote(id);
-  } else {
-    await api2.downvote(id);
-  }
+  const { id, signal, context } = input;
+  await api2.recordFeedback(id, signal, context);
   return {
-    content: [{ type: "text", text: `Feedback recorded: ${vote}vote for ${id}` }]
+    content: [{ type: "text", text: `ECS feedback signal recorded: ${signal} for ${id}` }]
   };
 }
 async function handleSessionStart(api2, args, session) {
@@ -34126,14 +34113,6 @@ var api = {
   async get(id) {
     if (teamClient) return teamClient.get(id);
     return memory.readGraphKnowledge({ limit: 500 }).find((view) => view.id === id) ?? null;
-  },
-  async upvote(id) {
-    if (teamClient) return teamClient.vote(id, "up");
-    memory.upvote(id);
-  },
-  async downvote(id) {
-    if (teamClient) return teamClient.vote(id, "down");
-    memory.downvote(id);
   },
   async startSession(project, techContext) {
     if (teamClient) {

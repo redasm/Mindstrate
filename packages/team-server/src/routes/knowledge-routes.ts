@@ -118,10 +118,6 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
     res.json({ success: true });
   }));
 
-  app.patch('/api/knowledge/:id/vote', asyncRoute((req, res) => {
-    res.status(410).json({ error: 'Knowledge voting was removed; use ECS feedback signals instead' });
-  }));
-
   app.post('/api/search', withInitializedMemory(memory, async (req, res) => {
     const { query, topK, language, framework, project, minScore } = req.body;
     const types = readStringArray(req.body.types ?? req.body.type);

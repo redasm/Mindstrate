@@ -448,24 +448,11 @@ export async function handleMemoryFeedback(
   api: McpApi,
   input: z.infer<typeof MemoryFeedbackSchema>,
 ): Promise<McpToolResponse> {
-  const { id, vote } = input;
-
-  const existing = await api.get(id);
-  if (!existing) {
-    return {
-      content: [{ type: 'text', text: `Knowledge not found: ${id}` }],
-      isError: true,
-    };
-  }
-
-  if (vote === 'up') {
-    await api.upvote(id);
-  } else {
-    await api.downvote(id);
-  }
+  const { id, signal, context } = input;
+  await api.recordFeedback(id, signal, context);
 
   return {
-    content: [{ type: 'text', text: `Feedback recorded: ${vote}vote for ${id}` }],
+    content: [{ type: 'text', text: `ECS feedback signal recorded: ${signal} for ${id}` }],
   };
 }
 

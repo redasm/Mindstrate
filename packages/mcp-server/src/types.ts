@@ -75,8 +75,6 @@ export interface LocalMemory {
   search(query: string, opts?: { topK?: number; filter?: RetrievalFilter }): Promise<RetrievalResult[]>;
   add(input: CreateKnowledgeInput): Promise<PipelineResult>;
   get(id: string): KnowledgeUnit | null;
-  upvote(id: string): void;
-  downvote(id: string): void;
   startSession(input: { project?: string; techContext?: string }): Promise<Session>;
   saveObservation(input: { sessionId: string; type: string; content: string; metadata?: Record<string, string> }): void;
   compressSession(input: { sessionId: string; summary: string; openTasks?: string[] }): void;
@@ -151,8 +149,6 @@ export interface McpApi {
   search(query: string, opts?: { topK?: number; filter?: RetrievalFilter }): Promise<RetrievalResult[]>;
   add(input: CreateKnowledgeInput): Promise<PipelineResult>;
   get(id: string): Promise<GraphKnowledgeView | null>;
-  upvote(id: string): Promise<void>;
-  downvote(id: string): Promise<void>;
   startSession(project: string, techContext?: string): Promise<{ session: Session; context: string | null }>;
   saveObservation(sessionId: string, type: string, content: string, metadata?: Record<string, string>): Promise<void>;
   endSession(sessionId: string, summary?: string, openTasks?: string[]): Promise<void>;

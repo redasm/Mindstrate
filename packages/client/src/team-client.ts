@@ -192,14 +192,6 @@ export class TeamClient {
     }
   }
 
-  async vote(id: string, direction: 'up' | 'down'): Promise<void> {
-    await this.doFetch(`/api/knowledge/${id}/vote`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ direction }),
-    });
-  }
-
   // ============================================================
   // Session
   // ============================================================

@@ -207,16 +207,6 @@ const api: McpApi = {
     return memory!.readGraphKnowledge({ limit: 500 }).find((view) => view.id === id) ?? null;
   },
 
-  async upvote(id: string) {
-    if (teamClient) return teamClient.vote(id, 'up');
-    memory!.upvote(id);
-  },
-
-  async downvote(id: string) {
-    if (teamClient) return teamClient.vote(id, 'down');
-    memory!.downvote(id);
-  },
-
   async startSession(project: string, techContext?: string): Promise<{ session: Session; context: string | null }> {
     if (teamClient) {
       const result = await teamClient.startSession(project, techContext);

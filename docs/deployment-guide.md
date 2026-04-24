@@ -451,12 +451,11 @@ mindstrate list --language python
 mindstrate list --limit 50
 ```
 
-### 投票
+### 反馈
 
 ```bash
-mindstrate vote <知识ID> up      # 有用，+5 分
-mindstrate vote <知识ID> down    # 无用，-10 分
-mindstrate vote a1b2c3 up        # 支持部分 ID 前缀
+# MCP: memory_feedback { id, signal: "adopted" | "rejected" | "ignored" | "partial", context? }
+# HTTP: POST /api/feedback { retrievalId, signal, context? }
 ```
 
 ### 删除
@@ -561,7 +560,6 @@ POST   /api/knowledge                      添加知识
 GET    /api/knowledge                      列出知识 (?type=&language=&limit=)
 GET    /api/knowledge/:id                  获取详情
 DELETE /api/knowledge/:id                  删除
-PATCH  /api/knowledge/:id/vote             投票 (body: {direction:"up"|"down"})
 POST   /api/search                         语义搜索 (body: {query, topK, ...})
 POST   /api/sync                           批量同步 (body: {entries: [...]})
 POST   /api/feedback                       记录自动反馈 (body: {retrievalId, signal, context?})

@@ -306,21 +306,25 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'memory_feedback',
-    description: 'Provide feedback on a knowledge entry (upvote or downvote).',
+    description: 'Record an ECS feedback signal for a context node or retrieval result.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         id: {
           type: 'string',
-          description: 'Knowledge entry ID',
+          description: 'Context node or retrieval result ID',
         },
-        vote: {
+        signal: {
           type: 'string',
-          enum: ['up', 'down'],
-          description: 'Vote direction',
+          enum: ['adopted', 'rejected', 'ignored', 'partial'],
+          description: 'Feedback signal',
+        },
+        context: {
+          type: 'string',
+          description: 'Optional explanation of the feedback',
         },
       },
-      required: ['id', 'vote'],
+      required: ['id', 'signal'],
     },
   },
   {

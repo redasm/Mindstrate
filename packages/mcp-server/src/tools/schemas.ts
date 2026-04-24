@@ -158,7 +158,8 @@ export const MemoryAddSchema = z.object({
 
 export const MemoryFeedbackSchema = z.object({
   id: z.string().min(1, 'id is required'),
-  vote: z.enum(['up', 'down']),
+  signal: z.enum(['adopted', 'rejected', 'ignored', 'partial']),
+  context: z.string().optional(),
 });
 
 export const SessionSaveSchema = z.object({

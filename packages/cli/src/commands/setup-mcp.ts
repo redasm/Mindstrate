@@ -138,7 +138,7 @@ setupMcpCommand
       console.log('\nThe AI assistant will now have access to:');
       console.log('  - memory_search: Search team knowledge base');
       console.log('  - memory_add:    Save new knowledge');
-      console.log('  - memory_feedback: Upvote/downvote knowledge');
+      console.log('  - memory_feedback: Record ECS feedback signals');
     } catch (err) {
       console.error('Error:', err instanceof Error ? err.message : err);
       process.exit(1);
