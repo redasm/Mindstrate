@@ -338,7 +338,7 @@ export class Mindstrate {
   async upsertProjectSnapshot(
     project: DetectedProject,
     options: { author?: string; trusted?: boolean } = {},
-  ): Promise<{ knowledge: KnowledgeUnit; changed: boolean; created: boolean }> {
+  ): Promise<{ knowledge: KnowledgeUnit; view: GraphKnowledgeView; changed: boolean; created: boolean }> {
     await this.ensureInit();
 
     // Build with knowledge of the existing solution (so preserve blocks survive).
@@ -399,7 +399,15 @@ export class Mindstrate {
       await this.notifySinks('updated', knowledge);
     }
 
-    return { knowledge, changed: built.changed || created, created };
+    const view = this.readGraphKnowledge({ project: knowledge.context.project, limit: 100 })
+      .find((entry) => entry.sourceRef === knowledge.id || entry.id === knowledge.id);
+
+    return {
+      knowledge,
+      view: view ?? projectSnapshotToGraphKnowledgeView(knowledge),
+      changed: built.changed || created,
+      created,
+    };
   }
 
   /**
@@ -1317,6 +1325,21 @@ function mergeRetrievalResults(
   }
 
   return merged;
+}
+
+function projectSnapshotToGraphKnowledgeView(knowledge: KnowledgeUnit): GraphKnowledgeView {
+  return {
+    id: knowledge.id,
+    title: knowledge.title,
+    summary: knowledge.solution.split('\n\n')[0]?.trim() ?? knowledge.solution,
+    substrateType: SubstrateType.SNAPSHOT,
+    domainType: ContextDomainType.PROJECT_SNAPSHOT,
+    project: knowledge.context.project,
+    priorityScore: Math.min(1, knowledge.quality.score / 100),
+    status: 'active' as ContextNodeStatus,
+    sourceRef: knowledge.id,
+    tags: knowledge.tags,
+  };
 }
 
 function mapGraphViewType(view: GraphKnowledgeView): KnowledgeType {

@@ -102,16 +102,16 @@ export const initCommand = new Command('init')
         // a no-op write. But we surface the "no change" status to the user.
         const result = await memory.upsertProjectSnapshot(project, { author: 'mindstrate-init' });
         snapshotSummary = result.changed
-          ? `  Updated: ${result.knowledge.id}`
-          : `  Up-to-date: ${result.knowledge.id}`;
-        meta.snapshotKnowledgeId = result.knowledge.id;
+          ? `  Updated: ${result.view.id}`
+          : `  Up-to-date: ${result.view.id}`;
+        meta.snapshotKnowledgeId = result.view.id;
       } else {
         const result = await memory.upsertProjectSnapshot(project, { author: 'mindstrate-init' });
-        meta.snapshotKnowledgeId = result.knowledge.id;
+        meta.snapshotKnowledgeId = result.view.id;
         if (result.created) {
-          snapshotSummary = `  Created: ${result.knowledge.id}`;
+          snapshotSummary = `  Created: ${result.view.id}`;
         } else {
-          snapshotSummary = `  Updated: ${result.knowledge.id} (stack changed)`;
+          snapshotSummary = `  Updated: ${result.view.id} (stack changed)`;
         }
       }
 

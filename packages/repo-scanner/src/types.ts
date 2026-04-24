@@ -1,4 +1,4 @@
-import type { CaptureSource, CommitInfo, CreateKnowledgeInput } from '@mindstrate/server';
+import type { CaptureSource, CommitInfo, CreateKnowledgeInput, GraphKnowledgeView } from '@mindstrate/server';
 
 export type ScanSourceKind = 'git-local';
 export type ScanInitMode = 'from_now' | 'backfill_recent';
@@ -80,4 +80,5 @@ export interface CommitIngestionResult {
   status: 'imported' | 'skipped';
   reason: string;
   knowledge?: CreateKnowledgeInput;
+  view?: GraphKnowledgeView;
 }

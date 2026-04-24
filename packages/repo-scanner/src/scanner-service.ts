@@ -8,6 +8,7 @@ import {
   Mindstrate,
   KnowledgeExtractor,
   loadConfig,
+  type PipelineResult,
   type CommitInfo,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
@@ -21,7 +22,7 @@ export interface RepoScannerOptions {
 
 interface KnowledgeSink {
   init(): Promise<void>;
-  addKnowledge(input: any): Promise<{ success: boolean; message?: string }>;
+  addKnowledge(input: any): Promise<PipelineResult>;
   ingestGitActivity(input: {
     content: string;
     project?: string;
@@ -233,6 +234,7 @@ export class RepoScannerService {
       status: result.success ? 'imported' : 'skipped',
       reason: result.message ?? 'Commit processed',
       knowledge,
+      view: result.view,
     };
   }
 
