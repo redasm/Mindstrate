@@ -48,7 +48,6 @@
 import * as yaml from 'yaml';
 import {
   type GraphKnowledgeView,
-  type KnowledgeUnit,
   type CreateKnowledgeInput,
   type UpdateKnowledgeInput,
   type CodeSnippet,
@@ -104,90 +103,8 @@ export interface ParsedMarkdown {
 }
 
 // ============================================================
-// Serialize (Knowledge -> Markdown text)
+// Serialize (GraphKnowledgeView -> Markdown text)
 // ============================================================
-
-export function serializeKnowledge(
-  knowledge: KnowledgeUnit,
-  options: { syncedAt?: string; preserveUserNotes?: string } = {},
-): string {
-  const fm: MarkdownFrontmatter = {
-    id: knowledge.id,
-    type: knowledge.type,
-    tags: knowledge.tags ?? [],
-    status: knowledge.quality.status,
-    score: round(knowledge.quality.score),
-    upvotes: knowledge.quality.upvotes,
-    downvotes: knowledge.quality.downvotes,
-    useCount: knowledge.quality.useCount,
-    verified: knowledge.quality.verified,
-    source: knowledge.metadata.source,
-    author: knowledge.metadata.author,
-    confidence: round(knowledge.metadata.confidence, 2),
-    createdAt: knowledge.metadata.createdAt,
-    updatedAt: knowledge.metadata.updatedAt,
-    syncedAt: options.syncedAt ?? new Date().toISOString(),
-    syncMode: getVaultSyncMode(knowledge.type),
-  };
-  if (knowledge.metadata.expiresAt) fm.expiresAt = knowledge.metadata.expiresAt;
-  if (knowledge.metadata.commitHash) fm.commitHash = knowledge.metadata.commitHash;
-  if (knowledge.context.project) fm.project = knowledge.context.project;
-  if (knowledge.context.language) fm.language = knowledge.context.language;
-  if (knowledge.context.framework) fm.framework = knowledge.context.framework;
-  if (knowledge.context.filePaths?.length) fm.filePaths = knowledge.context.filePaths;
-  if (knowledge.context.dependencies?.length) fm.dependencies = knowledge.context.dependencies;
-
-  const bodyParts: string[] = [];
-  bodyParts.push(`# ${escapeTitle(knowledge.title)}`);
-
-  if (knowledge.problem?.trim()) {
-    bodyParts.push('', '## Problem', '', knowledge.problem.trim());
-  }
-
-  bodyParts.push('', '## Solution', '', knowledge.solution.trim());
-
-  if (knowledge.codeSnippets?.length) {
-    bodyParts.push('', '## Code');
-    for (const snip of knowledge.codeSnippets) {
-      const header = snip.description ? `\n_${snip.description}_\n` : '';
-      const lang = snip.language || '';
-      const fp = snip.filePath ? `\n_File: \`${snip.filePath}\`_\n` : '';
-      bodyParts.push('', header, fp, '```' + lang, snip.code.replace(/\r\n/g, '\n'), '```');
-    }
-  }
-
-  if (knowledge.actionable) {
-    const a = knowledge.actionable;
-    if (a.preconditions?.length) {
-      bodyParts.push('', '## Preconditions', '', ...a.preconditions.map(p => `- ${p}`));
-    }
-    if (a.steps?.length) {
-      bodyParts.push('', '## Steps', '', ...a.steps.map((s, i) => `${i + 1}. ${s}`));
-    }
-    if (a.verification) {
-      bodyParts.push('', '## Verification', '', a.verification);
-    }
-    if (a.antiPatterns?.length) {
-      bodyParts.push('', '## Anti-patterns', '', ...a.antiPatterns.map(p => `- ${p}`));
-    }
-    if (a.relatedKnowledge?.length) {
-      bodyParts.push('', '## Related', '', ...a.relatedKnowledge.map(id => `- [[${id}]]`));
-    }
-  }
-
-  const body = bodyParts.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
-
-  // Compute body hash for change detection (excludes user notes)
-  fm.bodyHash = simpleHash(body);
-
-  const fmText = yaml.stringify(fm, { lineWidth: 0 });
-  let out = `---\n${fmText}---\n\n${body}\n${END_MARKER}\n`;
-  if (options.preserveUserNotes) {
-    out += '\n' + options.preserveUserNotes.trimStart();
-    if (!out.endsWith('\n')) out += '\n';
-  }
-  return out;
-}
 
 export function serializeGraphKnowledge(
   knowledge: GraphKnowledgeView,
@@ -217,7 +134,7 @@ export function serializeGraphKnowledge(
   const body = [
     `# ${escapeTitle(knowledge.title)}`,
     '',
-    '## Summary',
+    '## Solution',
     '',
     knowledge.summary.trim(),
   ].join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';

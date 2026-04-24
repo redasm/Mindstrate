@@ -5,7 +5,7 @@
  */
 
 // Main facade
-export { Mindstrate, type KnowledgeMutationSink } from './mindstrate.js';
+export { Mindstrate } from './mindstrate.js';
 
 // Config
 export { loadConfig, type MindstrateConfig } from './config.js';

@@ -106,17 +106,6 @@ import {
 } from './events/index.js';
 import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleFromRegistryOptions, type InstallBundleResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
 
-/**
- * Optional sink invoked whenever a knowledge mutation is committed by the facade.
- * Used by external integrations (e.g. obsidian-sync) to mirror state without
- * coupling core to those packages.
- */
-export interface KnowledgeMutationSink {
-  onAdded?(knowledge: KnowledgeUnit): void | Promise<void>;
-  onUpdated?(knowledge: KnowledgeUnit): void | Promise<void>;
-  onDeleted?(id: string): void | Promise<void>;
-}
-
 export class Mindstrate {
   private config: MindstrateConfig;
   private metadataStore: MetadataStore;
@@ -150,7 +139,6 @@ export class Mindstrate {
   private evolution: KnowledgeEvolution;
   private evaluator: RetrievalEvaluator;
   private metabolismScheduler: MetabolismScheduler | null = null;
-  private mutationSinks: KnowledgeMutationSink[] = [];
   private initialized = false;
   private initPromise: Promise<void> | null = null;
 
@@ -311,7 +299,6 @@ export class Mindstrate {
     const node = this.contextGraphStore.createNode(digested.nodeInput);
     const { knowledge } = await this.knowledgeUnitMaterializer.materializeNode(node);
     this.tryIngestDerivedEvent(() => ingestKnowledgeWrite(this.contextGraphStore, knowledge));
-    await this.notifySinks('added', knowledge);
 
     return {
       success: true,
@@ -395,11 +382,9 @@ export class Mindstrate {
     if (created) {
       this.tryIngestDerivedEvent(() => ingestProjectSnapshotEvent(this.contextGraphStore, knowledge));
       this.projectSnapshotProjectionMaterializer.materialize({ project: knowledge.context.project, limit: 10 });
-      await this.notifySinks('added', knowledge);
     } else if (built.changed) {
       this.tryIngestDerivedEvent(() => ingestProjectSnapshotEvent(this.contextGraphStore, knowledge));
       this.projectSnapshotProjectionMaterializer.materialize({ project: knowledge.context.project, limit: 10 });
-      await this.notifySinks('updated', knowledge);
     }
 
     const view = this.readGraphKnowledge({ project: knowledge.context.project, limit: 100 })
@@ -1133,41 +1118,6 @@ export class Mindstrate {
     }
 
     return sections.join('\n').trim();
-  }
-
-  // ============================================================
-  // Mutation sinks (for external mirrors like obsidian-sync)
-  // ============================================================
-
-  /** Register a sink that will be notified after every successful add/update/delete. */
-  addMutationSink(sink: KnowledgeMutationSink): void {
-    this.mutationSinks.push(sink);
-  }
-
-  removeMutationSink(sink: KnowledgeMutationSink): void {
-    this.mutationSinks = this.mutationSinks.filter((s) => s !== sink);
-  }
-
-  private async notifySinks(
-    kind: 'added' | 'updated' | 'deleted',
-    payload: KnowledgeUnit | string,
-  ): Promise<void> {
-    for (const sink of this.mutationSinks) {
-      try {
-        if (kind === 'added' && sink.onAdded) {
-          await sink.onAdded(payload as KnowledgeUnit);
-        } else if (kind === 'updated' && sink.onUpdated) {
-          await sink.onUpdated(payload as KnowledgeUnit);
-        } else if (kind === 'deleted' && sink.onDeleted) {
-          await sink.onDeleted(payload as string);
-        }
-      } catch (err) {
-        // Sinks must never break the main mutation flow.
-        console.warn(
-          `[Mindstrate] mutation sink ${kind} failed: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
   }
 
   private tryIngestDerivedEvent(work: () => void): void {

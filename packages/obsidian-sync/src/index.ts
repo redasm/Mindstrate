@@ -5,7 +5,7 @@
  */
 
 export {
-  serializeKnowledge,
+  serializeGraphKnowledge,
   parseMarkdown,
   parsedToCreate,
   parsedToUpdate,

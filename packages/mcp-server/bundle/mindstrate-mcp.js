@@ -34056,7 +34056,6 @@ var api = {
         try {
           const { SyncManager } = await import("@mindstrate/obsidian-sync");
           vaultSync = new SyncManager(localMemory, { vaultRoot: OBSIDIAN_VAULT_PATH, silent: true });
-          localMemory.addMutationSink(vaultSync);
           const r = await vaultSync.exportAll();
           logger.info(
             { written: r.written, removed: r.removed, vaultPath: OBSIDIAN_VAULT_PATH },

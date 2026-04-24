@@ -76,7 +76,6 @@ describe('SyncManager (integration)', () => {
 
   it('exports graph updates and deletes during full sync', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
-    memory.addMutationSink(sync);
 
     const r = await memory.add({
       type: KnowledgeType.GOTCHA,
@@ -87,6 +86,7 @@ describe('SyncManager (integration)', () => {
       source: CaptureSource.CLI,
     });
     expect(r.success).toBe(true);
+    await sync.exportAll();
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
     const rel = idx.files[r.view!.id];
@@ -138,7 +138,6 @@ describe('SyncManager (integration)', () => {
     // We don't start the watcher in this test (chokidar tests are flaky/timeouty);
     // we exercise the same code path used by the watcher.
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
-    memory.addMutationSink(sync);
 
     const r = await memory.add({
       type: KnowledgeType.PATTERN,
@@ -148,6 +147,7 @@ describe('SyncManager (integration)', () => {
       context: { project: 'api', language: 'typescript' },
       source: CaptureSource.CLI,
     });
+    await sync.exportAll();
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
     const rel = idx.files[r.view!.id];
@@ -170,7 +170,6 @@ describe('SyncManager (integration)', () => {
 
   it('ignores vault edits for mirror-only knowledge types', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
-    memory.addMutationSink(sync);
 
     const r = await memory.add({
       type: KnowledgeType.GOTCHA,
@@ -179,6 +178,7 @@ describe('SyncManager (integration)', () => {
       context: { project: 'api', language: 'typescript' },
       source: CaptureSource.CLI,
     });
+    await sync.exportAll();
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
     const rel = idx.files[r.view!.id];
@@ -196,7 +196,6 @@ describe('SyncManager (integration)', () => {
 
   it('ignores stale vault edits when Mindstrate has newer content', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
-    memory.addMutationSink(sync);
 
     const r = await memory.add({
       type: KnowledgeType.ARCHITECTURE,
@@ -205,6 +204,7 @@ describe('SyncManager (integration)', () => {
       context: { project: 'api', language: 'typescript' },
       source: CaptureSource.CLI,
     });
+    await sync.exportAll();
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
     const rel = idx.files[r.view!.id];
@@ -227,7 +227,6 @@ describe('SyncManager (integration)', () => {
 
   it('does not delete mirror-only knowledge when the vault file is removed', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
-    memory.addMutationSink(sync);
 
     const r = await memory.add({
       type: KnowledgeType.BUG_FIX,
@@ -236,6 +235,7 @@ describe('SyncManager (integration)', () => {
       context: { project: 'api', language: 'typescript' },
       source: CaptureSource.CLI,
     });
+    await sync.exportAll();
 
     const idx = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
     const rel = idx.files[r.view!.id];

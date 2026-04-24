@@ -20,7 +20,7 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { type GraphKnowledgeView, type KnowledgeUnit, KnowledgeType } from '@mindstrate/server';
+import { type GraphKnowledgeView, KnowledgeType } from '@mindstrate/server';
 
 const TYPE_FOLDERS: Record<KnowledgeType, string> = {
   [KnowledgeType.BUG_FIX]: 'bug-fixes',
@@ -59,14 +59,6 @@ export class VaultLayout {
 
   constructor(opts: VaultLayoutOptions) {
     this.root = path.resolve(opts.vaultRoot);
-  }
-
-  /** Compute the relative path (within vault) for a knowledge unit. */
-  relativePath(k: KnowledgeUnit): string {
-    const project = sanitizeFolder(k.context.project) || GLOBAL_PROJECT_FOLDER;
-    const typeFolder = TYPE_FOLDERS[k.type] ?? 'misc';
-    const filename = makeFilename(k.title, k.id);
-    return joinForward(project, typeFolder, filename);
   }
 
   relativePathForGraphView(k: GraphKnowledgeView): string {

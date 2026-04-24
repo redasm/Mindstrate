@@ -9,18 +9,18 @@
  *   await sync.exportAll();   // initial Mindstrate -> vault snapshot
  *   sync.startWatching();     // pick up edits made in Obsidian
  *
- *   // Later, after Mindstrate mutations:
- *   sync.exportOne(knowledge);
+ *   // Later, after graph mutations:
+ *   sync.exportGraphView(view);
  *   sync.removeOne(id);
  *
  *   await sync.stop();
  */
 
-import { type Mindstrate, type KnowledgeUnit, type KnowledgeMutationSink } from '@mindstrate/server';
+import { type GraphKnowledgeView, type Mindstrate } from '@mindstrate/server';
 import { VaultLayout } from './vault-layout.js';
 import { VaultExporter, type ExportResult } from './exporter.js';
 import { VaultWatcher, type SyncEvent } from './watcher.js';
-import { computeBodyHash, serializeKnowledge } from './markdown.js';
+import { computeBodyHash, serializeGraphKnowledge } from './markdown.js';
 
 export interface SyncManagerOptions {
   vaultRoot: string;
@@ -32,7 +32,7 @@ export interface SyncManagerOptions {
   onWatchEvent?: (event: SyncEvent) => void;
 }
 
-export class SyncManager implements KnowledgeMutationSink {
+export class SyncManager {
   readonly layout: VaultLayout;
   readonly exporter: VaultExporter;
   readonly watcher: VaultWatcher;
@@ -58,15 +58,10 @@ export class SyncManager implements KnowledgeMutationSink {
     return r;
   }
 
-  /**
-   * Incrementally write a single knowledge unit.
-   * Also marks the resulting file as known to the watcher so it won't echo back.
-   */
-  exportOne(k: KnowledgeUnit): 'written' | 'skipped' | 'moved' {
-    const res = this.exporter.exportOne(k);
-    // Mark watcher as already-having-seen this hash to avoid loop
-    const rel = this.layout.relativePath(k);
-    const text = serializeKnowledge(k);
+  exportGraphView(k: GraphKnowledgeView): 'written' | 'skipped' | 'moved' {
+    const res = this.exporter.exportGraphView(k);
+    const rel = this.layout.relativePathForGraphView(k);
+    const text = serializeGraphKnowledge(k);
     this.watcher.markWritten(rel, computeBodyHash(text));
     return res;
   }
@@ -74,20 +69,6 @@ export class SyncManager implements KnowledgeMutationSink {
   /** Incrementally delete a single knowledge file. */
   removeOne(id: string): boolean {
     return this.exporter.removeOne(id);
-  }
-
-  // ----- KnowledgeMutationSink implementation -----
-
-  onAdded(k: KnowledgeUnit): void {
-    this.exportOne(k);
-  }
-
-  onUpdated(k: KnowledgeUnit): void {
-    this.exportOne(k);
-  }
-
-  onDeleted(id: string): void {
-    this.removeOne(id);
   }
 
   /** Begin watching the vault for changes. */

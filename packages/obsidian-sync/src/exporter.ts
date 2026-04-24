@@ -16,11 +16,9 @@ import * as fs from 'node:fs';
 import {
   type GraphKnowledgeView,
   type Mindstrate,
-  type KnowledgeUnit,
 } from '@mindstrate/server';
 import {
   serializeGraphKnowledge,
-  serializeKnowledge,
   parseMarkdown,
   computeBodyHash,
 } from './markdown.js';
@@ -109,16 +107,12 @@ export class VaultExporter {
     return result;
   }
 
-  /**
-   * Write a single knowledge unit. Used for incremental sync after add/update.
-   * Updates the vault index in place.
-   */
-  exportOne(k: KnowledgeUnit): 'written' | 'skipped' | 'moved' {
+  exportGraphView(k: GraphKnowledgeView): 'written' | 'skipped' | 'moved' {
     this.layout.ensureRoot();
     const idx = this.layout.loadIndex();
-    const rel = this.layout.relativePath(k);
+    const rel = this.layout.relativePathForGraphView(k);
     const oldRel = idx.files[k.id];
-    const res = this.writeOne(k, rel, oldRel);
+    const res = this.writeGraphView(k, rel, oldRel);
     idx.files[k.id] = rel;
     this.layout.saveIndex(idx);
     return res;
@@ -150,59 +144,6 @@ export class VaultExporter {
   }
 
   // ----------------------------------------
-
-  private writeOne(
-    k: KnowledgeUnit,
-    rel: string,
-    oldRel?: string,
-  ): 'written' | 'skipped' | 'moved' {
-    const absNew = this.layout.absolutePath(rel);
-    let moved: 'moved' | undefined;
-
-    // If path changed, we may need to move (preserving user notes from old file).
-    let preservedUserNotes: string | undefined;
-    if (oldRel && oldRel !== rel) {
-      const absOld = this.layout.absolutePath(oldRel);
-      if (fs.existsSync(absOld)) {
-        const text = safeRead(absOld);
-        if (text) {
-          const parsed = parseMarkdown(text);
-          preservedUserNotes = parsed?.userNotes;
-        }
-        try {
-          fs.unlinkSync(absOld);
-          moved = 'moved';
-        } catch { /* ignore */ }
-      }
-    }
-
-    // If existing file at new path, parse its user notes and check if body actually changed.
-    let existingBodyHash: string | undefined;
-    if (fs.existsSync(absNew)) {
-      const text = safeRead(absNew);
-      if (text) {
-        const parsed = parseMarkdown(text);
-        if (parsed) {
-          if (preservedUserNotes === undefined) preservedUserNotes = parsed.userNotes;
-          existingBodyHash = parsed.frontmatter.bodyHash;
-        }
-      }
-    }
-
-    const out = serializeKnowledge(k, { preserveUserNotes: preservedUserNotes });
-    const newBodyHash = computeBodyHash(out);
-
-    if (existingBodyHash && existingBodyHash === newBodyHash && !moved) {
-      // Body unchanged — but frontmatter (score, status, useCount) may have changed.
-      // We still skip, because frontmatter-only diffs would create needless churn
-      // and trigger the watcher. Score/usage updates can wait for next full sync.
-      return 'skipped';
-    }
-
-    this.layout.ensureDirFor(rel);
-    fs.writeFileSync(absNew, out, 'utf8');
-    return moved ?? 'written';
-  }
 
   private writeGraphView(
     k: GraphKnowledgeView,

@@ -135,7 +135,6 @@ export interface LocalMemory {
   generateInternalizationSuggestions(options?: { project?: string; limit?: number }): InternalizationSuggestions;
   writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): string[];
   importObsidianProjectionFile(filePath: string): { sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean };
-  addMutationSink(sink: unknown): void;
   close(): void;
 }
 

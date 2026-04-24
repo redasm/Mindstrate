@@ -130,7 +130,7 @@ const teamClient = isTeamMode
 const OBSIDIAN_VAULT_PATH = process.env['OBSIDIAN_VAULT_PATH'] ?? '';
 const OBSIDIAN_AUTO_SYNC = process.env['OBSIDIAN_AUTO_SYNC'] !== 'false';
 const OBSIDIAN_WATCH = process.env['OBSIDIAN_WATCH'] === 'true';
-let vaultSync: { onAdded(k: any): void; onUpdated(k: any): void; onDeleted(id: string): void; exportAll(): Promise<{ written: number; removed: number }>; startWatching(): void; stop(): Promise<void> } | null = null;
+let vaultSync: { exportAll(): Promise<{ written: number; removed: number }>; startWatching(): void; stop(): Promise<void> } | null = null;
 
 // 追踪当前活跃会话
 const sessionState: SessionState = {
@@ -169,7 +169,6 @@ const api: McpApi = {
         try {
           const { SyncManager } = await import('@mindstrate/obsidian-sync');
           vaultSync = new SyncManager(localMemory as any, { vaultRoot: OBSIDIAN_VAULT_PATH, silent: true });
-          localMemory.addMutationSink(vaultSync as any);
           const r = await vaultSync!.exportAll();
           logger.info(
             { written: r.written, removed: r.removed, vaultPath: OBSIDIAN_VAULT_PATH },
