@@ -128,6 +128,22 @@ describe('team-server HTTP integration', () => {
     expect(filtered[0].title).toBe('Workflow entry');
   });
 
+  it('runs staged metabolism through the team HTTP API', async () => {
+    const { client } = await startTeamServer();
+
+    await client.add(makeKnowledgeInput({
+      title: 'Digestible team rule',
+      type: KnowledgeType.CONVENTION,
+      solution: 'Team staged metabolism should expose digest as a first-class operation.',
+      context: { project: 'proj-stage' },
+    }));
+
+    const digest = await client.runMetabolismStage('digest', { project: 'proj-stage' });
+
+    expect(digest.stage).toBe('digest');
+    expect(digest.scanned).toBeGreaterThan(0);
+  });
+
   it('publishes portable bundles through the team HTTP API', async () => {
     const { client, tempDir } = await startTeamServer();
 

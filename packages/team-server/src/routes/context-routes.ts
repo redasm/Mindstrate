@@ -188,6 +188,29 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json(await memory.runMetabolism({ project, trigger }));
   }));
 
+  app.post('/api/metabolism/stage', withInitializedMemory(memory, async (req, res) => {
+    const { project, stage } = req.body;
+    switch (stage) {
+      case 'digest':
+        res.json(memory.runDigest({ project }));
+        return;
+      case 'assimilate':
+        res.json(memory.runAssimilation({ project }));
+        return;
+      case 'compress':
+        res.json(await memory.runCompression({ project }));
+        return;
+      case 'prune':
+        res.json(memory.runPruning({ project }));
+        return;
+      case 'reflect':
+        res.json(memory.runReflection({ project }));
+        return;
+      default:
+        res.status(400).json({ error: 'stage must be digest, assimilate, compress, prune, or reflect' });
+    }
+  }));
+
   app.post('/api/bundles/create', withInitializedMemory(memory, async (req, res) => {
     const { name, version, description, project, nodeIds, includeRelatedEdges } = req.body;
     if (!name) {

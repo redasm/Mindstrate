@@ -487,6 +487,16 @@ export class TeamClient {
     return this.post('/api/metabolism/run', options ?? {});
   }
 
+  async runMetabolismStage(
+    stage: 'digest' | 'assimilate' | 'compress' | 'prune' | 'reflect',
+    options?: { project?: string },
+  ): Promise<any> {
+    return this.post('/api/metabolism/stage', {
+      stage,
+      project: options?.project,
+    });
+  }
+
   // ============================================================
   // HTTP helpers
   // ============================================================
