@@ -79,6 +79,16 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json({ conflicts, total: conflicts.length });
   }));
 
+  app.get('/api/context/projections', withInitializedMemory(memory, async (req, res) => {
+    const records = memory.listProjectionRecords({
+      nodeId: typeof req.query.nodeId === 'string' ? req.query.nodeId : undefined,
+      target: typeof req.query.target === 'string' ? req.query.target : undefined,
+      limit: parseLimit(req.query.limit, 50),
+    });
+
+    res.json({ records, total: records.length });
+  }));
+
   app.post('/api/context/conflicts/accept', withInitializedMemory(memory, async (req, res) => {
     const { conflictId, candidateNodeId, resolution } = req.body;
     if (!conflictId || !candidateNodeId || !resolution) {

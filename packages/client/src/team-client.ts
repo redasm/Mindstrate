@@ -26,6 +26,7 @@ import type {
   PipelineResult,
   EvolutionRunResult,
   PortableContextBundle,
+  ProjectionRecord,
 } from '@mindstrate/protocol';
 
 /** Stats returned by the team server */
@@ -368,6 +369,20 @@ export class TeamClient {
 
     const data = await this.fetch<{ conflicts?: ConflictRecord[] }>(`/api/context/conflicts?${params}`);
     return data.conflicts ?? [];
+  }
+
+  async listProjectionRecords(options?: {
+    nodeId?: string;
+    target?: string;
+    limit?: number;
+  }): Promise<ProjectionRecord[]> {
+    const params = new URLSearchParams();
+    if (options?.nodeId) params.set('nodeId', options.nodeId);
+    if (options?.target) params.set('target', options.target);
+    if (options?.limit) params.set('limit', String(options.limit));
+
+    const data = await this.fetch<{ records?: ProjectionRecord[] }>(`/api/context/projections?${params}`);
+    return data.records ?? [];
   }
 
   async acceptConflictCandidate(input: {

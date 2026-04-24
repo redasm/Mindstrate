@@ -144,6 +144,22 @@ describe('team-server HTTP integration', () => {
     expect(digest.scanned).toBeGreaterThan(0);
   });
 
+  it('lists ECS projection records through the team HTTP API', async () => {
+    const { client } = await startTeamServer();
+
+    await client.add(makeKnowledgeInput({
+      title: 'Projected team rule',
+      type: KnowledgeType.CONVENTION,
+      solution: 'Team APIs should expose ECS projection records for observability.',
+      context: { project: 'proj-projection' },
+    }));
+
+    const records = await client.listProjectionRecords({ target: 'knowledge_unit' });
+
+    expect(records.length).toBeGreaterThan(0);
+    expect(records[0].target).toBe('knowledge_unit');
+  });
+
   it('publishes portable bundles through the team HTTP API', async () => {
     const { client, tempDir } = await startTeamServer();
 
