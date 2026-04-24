@@ -95,7 +95,20 @@ export {
   ProjectSnapshotProjectionMaterializer,
   SessionProjectionMaterializer,
 } from './projections/index.js';
-export { MetabolismEngine, Pruner, type RunMetabolismOptions, type PruneOptions, type PruneResult } from './metabolism/index.js';
+export {
+  Assimilator,
+  DigestEngine,
+  MetabolicCompressor,
+  MetabolismEngine,
+  MetabolismScheduler,
+  Pruner,
+  Reflector,
+  type MetabolismSchedulerOptions,
+  type ReflectionStageResult,
+  type RunMetabolismOptions,
+  type PruneOptions,
+  type PruneResult,
+} from './metabolism/index.js';
 export {
   ingestContextEvent,
   ingestGitActivity,
