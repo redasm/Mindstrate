@@ -4,7 +4,6 @@ import {
   isValidKnowledgeType,
   KnowledgeType,
   toGraphKnowledgeView,
-  type KnowledgeStatus,
   type CreateKnowledgeInput,
   type GraphKnowledgeView,
 } from '@mindstrate/server';
@@ -128,18 +127,16 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       return;
     }
 
-    const results = await memory.search(query, {
+    const results = memory.queryGraphKnowledge(query, {
       topK: topK || 10,
-      filter: {
-        language,
-        framework,
-        project,
-        types: types as KnowledgeType[] | undefined,
-        tags,
-        status: status as KnowledgeStatus[] | undefined,
-        minScore,
-      },
-    });
+      project,
+      limit: 100,
+    }).filter((result) => !types || types.includes(result.view.domainType))
+      .filter((result) => !tags || matchesAll(result.view.tags ?? [], tags))
+      .filter((result) => !status || status.includes(result.view.status))
+      .filter((result) => !language || result.view.tags.includes(language))
+      .filter((result) => !framework || result.view.tags.includes(framework))
+      .filter((result) => minScore === undefined || result.view.priorityScore >= minScore);
 
     res.json({ results, total: results.length });
   }));

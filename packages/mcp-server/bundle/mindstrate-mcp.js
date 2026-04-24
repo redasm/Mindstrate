@@ -6827,7 +6827,7 @@ var require_team_client = __commonJS({
           duplicateOf: data.duplicateOf
         };
       }
-      /** Search knowledge on the team server. Note: only the first type in filter.types is sent. */
+      /** Search graph knowledge on the team server. */
       async search(query, options) {
         const data = await this.post("/api/search", {
           query,
@@ -34101,10 +34101,6 @@ var api = {
       const ok = await teamClient.health();
       if (!ok) logger.warn({ url: TEAM_SERVER_URL }, "Team Server is not reachable");
     }
-  },
-  async search(query, opts) {
-    if (teamClient) return teamClient.search(query, opts);
-    return memory.search(query, opts);
   },
   async add(input) {
     if (teamClient) return teamClient.add(input);

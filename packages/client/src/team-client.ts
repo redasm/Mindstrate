@@ -16,7 +16,6 @@ import type {
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
   MetabolismRun,
-  RetrievalResult,
   RetrievalFilter,
   CuratedContext,
   AssembledContext,
@@ -138,12 +137,12 @@ export class TeamClient {
     };
   }
 
-  /** Search knowledge on the team server. Note: only the first type in filter.types is sent. */
+  /** Search graph knowledge on the team server. */
   async search(query: string, options?: {
     topK?: number;
     filter?: RetrievalFilter;
-  }): Promise<RetrievalResult[]> {
-    const data = await this.post<{ results?: RetrievalResult[] }>('/api/search', {
+  }): Promise<GraphKnowledgeSearchResult[]> {
+    const data = await this.post<{ results?: GraphKnowledgeSearchResult[] }>('/api/search', {
       query,
       topK: options?.topK ?? 5,
       language: options?.filter?.language,

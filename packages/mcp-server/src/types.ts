@@ -14,8 +14,6 @@ import type {
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
   MetabolismRun,
-  RetrievalFilter,
-  RetrievalResult,
   RetrievalContext,
   KnowledgeUnit,
   CuratedContext,
@@ -72,7 +70,6 @@ export interface InternalizationSuggestions {
  */
 export interface LocalMemory {
   init(): Promise<void>;
-  search(query: string, opts?: { topK?: number; filter?: RetrievalFilter }): Promise<RetrievalResult[]>;
   add(input: CreateKnowledgeInput): Promise<PipelineResult>;
   get(id: string): KnowledgeUnit | null;
   startSession(input: { project?: string; techContext?: string }): Promise<Session>;
@@ -146,7 +143,6 @@ export interface LocalMemory {
 /** Unified API interface that abstracts local/team mode differences */
 export interface McpApi {
   init(): Promise<void>;
-  search(query: string, opts?: { topK?: number; filter?: RetrievalFilter }): Promise<RetrievalResult[]>;
   add(input: CreateKnowledgeInput): Promise<PipelineResult>;
   get(id: string): Promise<GraphKnowledgeView | null>;
   startSession(project: string, techContext?: string): Promise<{ session: Session; context: string | null }>;

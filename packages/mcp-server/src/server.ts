@@ -33,8 +33,6 @@ import {
 import { TeamClient } from '@mindstrate/client';
 import type {
   CreateKnowledgeInput,
-  RetrievalFilter,
-  RetrievalResult,
   RetrievalContext,
   CuratedContext,
   EvolutionRunResult,
@@ -190,11 +188,6 @@ const api: McpApi = {
       const ok = await teamClient.health();
       if (!ok) logger.warn({ url: TEAM_SERVER_URL }, 'Team Server is not reachable');
     }
-  },
-
-  async search(query: string, opts?: { topK?: number; filter?: RetrievalFilter }): Promise<RetrievalResult[]> {
-    if (teamClient) return teamClient.search(query, opts);
-    return memory!.search(query, opts);
   },
 
   async add(input: CreateKnowledgeInput) {
