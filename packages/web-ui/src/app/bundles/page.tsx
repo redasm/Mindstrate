@@ -22,11 +22,15 @@ export default function BundlesPage() {
     project: '',
   });
   const [bundleJson, setBundleJson] = useState('');
+  const [registryInstall, setRegistryInstall] = useState({
+    registry: '',
+    reference: '',
+  });
   const [createdBundle, setCreatedBundle] = useState('');
   const [validation, setValidation] = useState<BundleValidation | null>(null);
   const [installResult, setInstallResult] = useState<BundleInstallResult | null>(null);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState<'create' | 'validate' | 'install' | null>(null);
+  const [busy, setBusy] = useState<'create' | 'validate' | 'install' | 'install-ref' | null>(null);
 
   const createBundle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,6 +103,28 @@ export default function BundlesPage() {
       setInstallResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to install bundle');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const installRegistryBundle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy('install-ref');
+    setError('');
+    setInstallResult(null);
+
+    try {
+      const res = await fetch('/api/bundles/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(registryInstall),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to install bundle reference');
+      setInstallResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to install bundle reference');
     } finally {
       setBusy(null);
     }
@@ -195,6 +221,42 @@ export default function BundlesPage() {
           </div>
         </div>
       </section>
+
+      <form onSubmit={installRegistryBundle} className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Install from Registry</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Install a versioned bundle from a local registry index, for example <code>ecs-core-rules@1.0.0</code>.
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Registry Directory</label>
+            <input
+              value={registryInstall.registry}
+              onChange={(e) => setRegistryInstall((f) => ({ ...f, registry: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder=".mindstrate/bundles-registry"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Bundle Reference</label>
+            <input
+              value={registryInstall.reference}
+              onChange={(e) => setRegistryInstall((f) => ({ ...f, reference: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder="ecs-core-rules@1.0.0"
+            />
+          </div>
+        </div>
+        <button
+          type="submit"
+          disabled={busy === 'install-ref' || !registryInstall.registry.trim() || !registryInstall.reference.trim()}
+          className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+        >
+          {busy === 'install-ref' ? 'Installing...' : 'Install Reference'}
+        </button>
+      </form>
 
       {validation ? (
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

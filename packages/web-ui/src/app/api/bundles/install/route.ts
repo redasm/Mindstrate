@@ -7,11 +7,16 @@ export async function POST(request: NextRequest) {
     const memory = await getMemoryReady();
     const body = await request.json();
 
-    if (!body.bundle) {
-      return NextResponse.json({ error: 'bundle is required' }, { status: 400 });
+    if (!body.bundle && (!body.registry || !body.reference)) {
+      return NextResponse.json({ error: 'bundle or registry plus reference is required' }, { status: 400 });
     }
 
-    const result = memory.installBundle(body.bundle);
+    const result = body.bundle
+      ? memory.installBundle(body.bundle)
+      : memory.installBundleFromRegistry({
+          registry: body.registry,
+          reference: body.reference,
+        });
     return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
