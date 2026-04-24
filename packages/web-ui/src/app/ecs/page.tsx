@@ -24,9 +24,19 @@ type MetabolismRun = {
   notes?: string[];
 };
 
+type ProjectionRecord = {
+  id: string;
+  nodeId: string;
+  target: string;
+  targetRef: string;
+  version: number;
+  projectedAt: string;
+};
+
 export default function EcsPage() {
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [runs, setRuns] = useState<MetabolismRun[]>([]);
+  const [projections, setProjections] = useState<ProjectionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [stage, setStage] = useState('');
@@ -34,9 +44,10 @@ export default function EcsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [conflictsRes, runsRes] = await Promise.all([
+    const [conflictsRes, runsRes, projectionsRes] = await Promise.all([
       fetch('/api/context-conflicts?limit=20'),
       fetch('/api/metabolism-runs?limit=10'),
+      fetch('/api/projection-records?limit=10'),
     ]);
 
     if (conflictsRes.ok) {
@@ -46,6 +57,10 @@ export default function EcsPage() {
     if (runsRes.ok) {
       const data = await runsRes.json();
       setRuns(data.runs || []);
+    }
+    if (projectionsRes.ok) {
+      const data = await projectionsRes.json();
+      setProjections(data.records || []);
     }
     setLoading(false);
   }, []);
@@ -204,6 +219,41 @@ export default function EcsPage() {
             </div>
           )}
         </div>
+      </section>
+
+      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Projection Records</h2>
+          <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700">
+            {projections.length}
+          </span>
+        </div>
+        {projections.length === 0 ? (
+          <p className="py-8 text-sm text-gray-400">No projection records materialized yet.</p>
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-gray-100">
+            <table className="min-w-full divide-y divide-gray-100 text-sm">
+              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-400">
+                <tr>
+                  <th className="px-4 py-3">Target</th>
+                  <th className="px-4 py-3">Target Ref</th>
+                  <th className="px-4 py-3">Version</th>
+                  <th className="px-4 py-3">Projected</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-gray-600">
+                {projections.map((record) => (
+                  <tr key={record.id}>
+                    <td className="px-4 py-3 font-medium text-gray-900">{record.target}</td>
+                    <td className="max-w-md truncate px-4 py-3">{record.targetRef}</td>
+                    <td className="px-4 py-3">{record.version}</td>
+                    <td className="px-4 py-3">{new Date(record.projectedAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );
