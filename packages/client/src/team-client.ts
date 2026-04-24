@@ -6,7 +6,6 @@
  */
 
 import type {
-  KnowledgeUnit,
   CreateKnowledgeInput,
   ConflictRecord,
   ContextDomainType,
@@ -127,13 +126,13 @@ export class TeamClient {
   async add(input: CreateKnowledgeInput): Promise<PipelineResult> {
     const data = await this.post<{
       success?: boolean;
-      knowledge?: KnowledgeUnit;
+      view?: GraphKnowledgeView;
       message?: string;
       duplicateOf?: string;
     }>('/api/knowledge', input);
     return {
       success: data.success ?? false,
-      knowledge: data.knowledge,
+      view: data.view,
       message: data.message ?? (data.success ? 'Added' : 'Failed'),
       duplicateOf: data.duplicateOf,
     };
@@ -158,9 +157,9 @@ export class TeamClient {
     return data.results ?? [];
   }
 
-  async get(id: string): Promise<KnowledgeUnit | null> {
+  async get(id: string): Promise<GraphKnowledgeView | null> {
     try {
-      return await this.fetch<KnowledgeUnit>(`/api/knowledge/${id}`);
+      return await this.fetch<GraphKnowledgeView>(`/api/knowledge/${id}`);
     } catch (err) {
       console.warn(`[TeamClient] Failed to get knowledge ${id}: ${err instanceof Error ? err.message : String(err)}`);
       return null;
@@ -168,7 +167,7 @@ export class TeamClient {
   }
 
   /** List knowledge on the team server. Note: only the first type in filter.types is sent. */
-  async list(filter?: RetrievalFilter, limit?: number): Promise<KnowledgeUnit[]> {
+  async list(filter?: RetrievalFilter, limit?: number): Promise<GraphKnowledgeView[]> {
     const params = new URLSearchParams();
     for (const type of filter?.types ?? []) params.append('type', type);
     if (filter?.language) params.set('language', filter.language);
@@ -179,7 +178,7 @@ export class TeamClient {
     if (filter?.minScore !== undefined) params.set('minScore', String(filter.minScore));
     if (limit) params.set('limit', String(limit));
 
-    const data = await this.fetch<{ entries?: KnowledgeUnit[] }>(`/api/knowledge?${params}`);
+    const data = await this.fetch<{ entries?: GraphKnowledgeView[] }>(`/api/knowledge?${params}`);
     return data.entries ?? [];
   }
 

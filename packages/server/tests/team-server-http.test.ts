@@ -85,15 +85,17 @@ describe('team-server HTTP integration', () => {
     }));
 
     expect(result.success).toBe(true);
-    const stored = memory.get(result.knowledge!.id);
-    expect(stored?.actionable?.steps).toEqual([
-      'Disable old secret',
-      'Create new secret',
-      'Roll restart services',
-    ]);
-    expect(stored?.actionable?.verification).toBe(
-      'Confirm all services authenticate with the new secret.',
-    );
+    const stored = memory.listContextNodes({ limit: 50 })
+      .find((node) => node.id === result.view!.id);
+    expect(stored?.metadata?.['actionable']).toMatchObject({
+      steps: [
+        'Disable old secret',
+        'Create new secret',
+        'Roll restart services',
+      ],
+      verification: 'Confirm all services authenticate with the new secret.',
+    });
+    expect(result.view?.summary).toBe('Follow the rotation workflow.');
   });
 
   it('restores active sessions and supports richer filters in team mode', async () => {

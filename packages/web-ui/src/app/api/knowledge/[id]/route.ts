@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMemory, getMemoryReady } from '@/lib/memory';
+import { getMemory } from '@/lib/memory';
+import { toGraphKnowledgeView } from '@mindstrate/server';
 
 /** GET /api/knowledge/[id] */
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const memory = getMemory();
-    const knowledge = memory.get(id);
+    const node = memory.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
 
-    if (!knowledge) {
+    if (!node) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    return NextResponse.json(knowledge);
+    return NextResponse.json(toGraphKnowledgeView(node));
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
@@ -22,17 +23,13 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const memory = await getMemoryReady();
+    const memory = getMemory();
     const body = await request.json();
 
-    const updated = await memory.updateAndReindex(id, {
+    const updated = memory.updateContextNode(id, {
       title: body.title,
-      problem: body.problem,
-      solution: body.solution,
-      codeSnippets: body.codeSnippets,
+      content: body.summary ?? body.content,
       tags: body.tags,
-      context: body.context,
-      actionable: body.actionable,
       confidence: body.confidence,
     });
 
@@ -40,7 +37,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    return NextResponse.json(updated);
+    return NextResponse.json(toGraphKnowledgeView(updated));
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
@@ -50,8 +47,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const memory = await getMemoryReady();
-    const deleted = await memory.delete(id);
+    const memory = getMemory();
+    const deleted = memory.deleteContextNode(id);
 
     if (!deleted) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -63,23 +60,13 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-/** PATCH /api/knowledge/[id] - 投票 */
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+/** PATCH /api/knowledge/[id] - retained endpoint, returns the ECS node view */
+export async function PATCH(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const memory = getMemory();
-    const body = await request.json();
-
-    if (body.action === 'upvote') {
-      memory.upvote(id);
-    } else if (body.action === 'downvote') {
-      memory.downvote(id);
-    } else {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-    }
-
-    const updated = memory.get(id);
-    return NextResponse.json(updated);
+    const node = memory.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
+    return NextResponse.json(node ? toGraphKnowledgeView(node) : null);
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }

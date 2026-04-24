@@ -37,42 +37,35 @@ export async function handleMemorySearch(
   api: McpApi,
   input: z.infer<typeof MemorySearchSchema>,
 ): Promise<McpToolResponse> {
-  const { query, topK, language, framework, type } = input;
+  const { query, topK } = input;
 
-  const results = await api.search(query, {
+  const results = await api.queryGraphKnowledge(query, {
     topK: topK ?? 5,
-    filter: {
-      language,
-      framework,
-      types: type ? [type] : undefined,
-    },
+    limit: Math.max(topK ?? 5, 10),
   });
 
   if (results.length === 0) {
     return {
-      content: [{ type: 'text', text: 'No relevant knowledge found in the team knowledge base.' }],
+      content: [{ type: 'text', text: 'No relevant ECS graph knowledge found.' }],
     };
   }
 
   const formatted = results.map((r, i) => {
-    const k = r.knowledge;
-    let text = `### ${i + 1}. [${k.type}] ${k.title}\n`;
-    text += `Relevance: ${(r.relevanceScore * 100).toFixed(1)}% | Quality: ${k.quality.score.toFixed(0)}/100\n`;
-    if (k.problem) text += `**Problem:** ${k.problem}\n`;
-    text += `**Solution:** ${k.solution}\n`;
-    if (k.actionable?.steps) {
-      text += `**Steps:**\n${k.actionable.steps.map((s, j) => `  ${j + 1}. ${s}`).join('\n')}\n`;
-    }
-    if (k.tags.length > 0) text += `**Tags:** ${k.tags.join(', ')}\n`;
-    text += `ID: ${k.id}\n`;
-    if (r.retrievalId) text += `RetrievalID: ${r.retrievalId}\n`;
-    return text;
+    const view = r.view;
+    return [
+      `### ${i + 1}. [${view.substrateType}] ${view.title}`,
+      `Relevance: ${(r.relevanceScore * 100).toFixed(1)}% | Priority: ${view.priorityScore.toFixed(2)}`,
+      `Domain: ${view.domainType}`,
+      `Summary: ${view.summary}`,
+      view.tags.length > 0 ? `Tags: ${view.tags.join(', ')}` : null,
+      `ID: ${view.id}`,
+    ].filter(Boolean).join('\n');
   }).join('\n---\n\n');
 
   return {
     content: [{
       type: 'text',
-      text: `Found ${results.length} relevant knowledge entries:\n\n${formatted}`,
+      text: `Found ${results.length} relevant ECS graph knowledge views:\n\n${formatted}`,
     }],
   };
 }
@@ -444,8 +437,8 @@ export async function handleMemoryAdd(
   return {
     content: [{
       type: 'text',
-      text: result.success && result.knowledge
-        ? `Knowledge added successfully!\nID: ${result.knowledge.id}\nTitle: ${result.knowledge.title}`
+      text: result.success && result.view
+        ? `ECS context node added successfully!\nID: ${result.view.id}\nTitle: ${result.view.title}\nSubstrate: ${result.view.substrateType}`
         : `Note: ${result.message}`,
     }],
   };

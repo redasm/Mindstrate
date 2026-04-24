@@ -150,7 +150,7 @@ export interface McpApi {
   init(): Promise<void>;
   search(query: string, opts?: { topK?: number; filter?: RetrievalFilter }): Promise<RetrievalResult[]>;
   add(input: CreateKnowledgeInput): Promise<PipelineResult>;
-  get(id: string): Promise<KnowledgeUnit | null>;
+  get(id: string): Promise<GraphKnowledgeView | null>;
   upvote(id: string): Promise<void>;
   downvote(id: string): Promise<void>;
   startSession(project: string, techContext?: string): Promise<{ session: Session; context: string | null }>;

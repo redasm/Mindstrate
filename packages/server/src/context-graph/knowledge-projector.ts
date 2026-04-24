@@ -65,7 +65,7 @@ function isProjectable(substrateType: SubstrateType): boolean {
   ].includes(substrateType);
 }
 
-function toGraphKnowledgeView(node: ContextNode): GraphKnowledgeView {
+export function toGraphKnowledgeView(node: ContextNode): GraphKnowledgeView {
   const priorityBase = SUBSTRATE_PRIORITY[node.substrateType];
   const qualityBoost = Math.min(node.qualityScore / 100, 0.1);
   const confidenceBoost = Math.min(node.confidence / 10, 0.1);

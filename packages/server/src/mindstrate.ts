@@ -53,7 +53,7 @@ import { runContextAssemblyDag } from './context-graph/context-assembly-dag.js';
 import { ContextInternalizer, type InternalizationSuggestionOptions, type InternalizationSuggestions } from './context-graph/context-internalizer.js';
 import { ContextPrioritySelector } from './context-graph/context-priority-selector.js';
 import { ContextGraphStore } from './context-graph/context-graph-store.js';
-import { GraphKnowledgeProjector, type GraphKnowledgeProjectionOptions } from './context-graph/knowledge-projector.js';
+import { GraphKnowledgeProjector, toGraphKnowledgeView, type GraphKnowledgeProjectionOptions } from './context-graph/knowledge-projector.js';
 import { ProjectedKnowledgeSearch, type ProjectedKnowledgeSearchOptions } from './context-graph/projected-knowledge-search.js';
 import { ConflictDetector, type ConflictDetectionOptions, type ConflictDetectionResult } from './context-graph/conflict-detector.js';
 import {
@@ -95,6 +95,7 @@ import type {
   MetabolismRun,
   ProjectionRecord,
 } from '@mindstrate/protocol/models';
+import type { UpdateContextNodeInput } from './context-graph/context-graph-store.js';
 import { digestKnowledgeInput } from './context-graph/knowledge-digest.js';
 import {
   ingestContextEvent,
@@ -317,8 +318,8 @@ export class Mindstrate {
 
     return {
       success: true,
-      knowledge,
-      message: `Knowledge added successfully: ${knowledge.title}`,
+      view: toGraphKnowledgeView(node),
+      message: `Context node added successfully: ${node.title}`,
       qualityWarnings: gateResult.warnings.length > 0 ? gateResult.warnings : undefined,
     };
   }
@@ -620,6 +621,14 @@ export class Mindstrate {
 
   list(filter?: RetrievalFilter, limit?: number): KnowledgeUnit[] {
     return this.metadataStore.query(filter ?? {}, limit);
+  }
+
+  updateContextNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
+    return this.contextGraphStore.updateNode(id, input);
+  }
+
+  deleteContextNode(id: string): boolean {
+    return this.contextGraphStore.deleteNode(id);
   }
 
   // ============================================================

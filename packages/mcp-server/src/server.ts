@@ -204,7 +204,7 @@ const api: McpApi = {
 
   async get(id: string) {
     if (teamClient) return teamClient.get(id);
-    return memory!.get(id);
+    return memory!.readGraphKnowledge({ limit: 500 }).find((view) => view.id === id) ?? null;
   },
 
   async upvote(id: string) {

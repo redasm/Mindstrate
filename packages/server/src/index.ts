@@ -47,6 +47,7 @@ export {
   GraphQuery,
   ContextPrioritySelector,
   GraphKnowledgeProjector,
+  toGraphKnowledgeView,
   ContextInternalizer,
   ProjectedKnowledgeSearch,
   runContextAssemblyDag,

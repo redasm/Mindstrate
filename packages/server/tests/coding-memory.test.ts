@@ -46,13 +46,14 @@ describe('Mindstrate', () => {
     it('should add and retrieve knowledge', async () => {
       const result = await memory.add(makeKnowledgeInput());
       expect(result.success).toBe(true);
+      expect(result.view).toBeDefined();
 
-      const k = memory.get(result.knowledge!.id);
-      expect(k).toBeDefined();
-      expect(k!.title).toBe('Test knowledge entry');
+      const view = memory.readGraphKnowledge().find((entry) => entry.id === result.view!.id);
+      expect(view).toBeDefined();
+      expect(view!.title).toBe('Test knowledge entry');
 
       const contextNodes = memory.listContextNodes({
-        sourceRef: result.knowledge!.id,
+        sourceRef: result.view!.id,
         limit: 10,
       });
       expect(contextNodes).toHaveLength(1);
@@ -61,7 +62,7 @@ describe('Mindstrate', () => {
         target: ProjectionTarget.KNOWLEDGE_UNIT,
         limit: 10,
       });
-      expect(projections.some((projection) => projection.targetRef === result.knowledge!.id)).toBe(true);
+      expect(projections.some((projection) => projection.targetRef === result.view!.id)).toBe(true);
     });
 
     it('should detect duplicate entries', async () => {
@@ -70,7 +71,7 @@ describe('Mindstrate', () => {
       const r2 = await memory.add(input);
       expect(r1.success).toBe(true);
       expect(r2.success).toBe(false);
-      expect(r2.duplicateOf).toBe(r1.knowledge!.id);
+      expect(r2.duplicateOf).toBe(r1.view!.id);
     });
   });
 
@@ -137,35 +138,35 @@ describe('Mindstrate', () => {
   });
 
   describe('update and delete', () => {
-    it('should update knowledge', async () => {
+    it('should update graph knowledge', async () => {
       const r = await memory.add(makeKnowledgeInput());
-      const updated = memory.update(r.knowledge!.id, { title: 'New title' });
+      const updated = memory.updateContextNode(r.view!.id, { title: 'New title' });
       expect(updated!.title).toBe('New title');
     });
 
-    it('should delete knowledge', async () => {
+    it('should delete graph knowledge', async () => {
       const r = await memory.add(makeKnowledgeInput());
-      const deleted = await memory.delete(r.knowledge!.id);
+      const deleted = memory.deleteContextNode(r.view!.id);
       expect(deleted).toBe(true);
-      expect(memory.get(r.knowledge!.id)).toBeNull();
+      expect(memory.readGraphKnowledge().some((entry) => entry.id === r.view!.id)).toBe(false);
     });
 
-    it('should reindex knowledge when updated through the reindexing path', async () => {
+    it('should expose graph updates through graph knowledge reads', async () => {
       const r = await memory.add(makeKnowledgeInput({
         title: 'Old architecture guidance',
         solution: 'legacy token rotation flow',
       }));
 
-      let results = await memory.search('legacy token rotation flow');
-      expect(results.some((item) => item.knowledge.id === r.knowledge!.id)).toBe(true);
+      let entries = memory.readGraphKnowledge();
+      expect(entries.some((item) => item.id === r.view!.id && item.summary === 'legacy token rotation flow')).toBe(true);
 
-      await memory.updateAndReindex(r.knowledge!.id, {
+      memory.updateContextNode(r.view!.id, {
         title: 'New architecture guidance',
-        solution: 'modern secret rotation flow',
+        content: 'modern secret rotation flow',
       });
 
-      results = await memory.search('modern secret rotation flow');
-      expect(results.some((item) => item.knowledge.id === r.knowledge!.id)).toBe(true);
+      entries = memory.readGraphKnowledge();
+      expect(entries.some((item) => item.id === r.view!.id && item.summary === 'modern secret rotation flow')).toBe(true);
     });
   });
 
@@ -178,16 +179,20 @@ describe('Mindstrate', () => {
     });
   });
 
-  describe('voting', () => {
-    it('should upvote and downvote', async () => {
+  describe('feedback', () => {
+    it('should record graph feedback signals', async () => {
       const r = await memory.add(makeKnowledgeInput());
-      memory.upvote(r.knowledge!.id);
-      memory.upvote(r.knowledge!.id);
-      memory.downvote(r.knowledge!.id);
+      memory.recordFeedback(r.view!.id, 'adopted', 'test');
 
-      const k = memory.get(r.knowledge!.id);
-      expect(k!.quality.upvotes).toBe(2);
-      expect(k!.quality.downvotes).toBe(1);
+      const signals = memory.listContextNodes({
+        substrateType: SubstrateType.EPISODE,
+        domainType: ContextDomainType.CONTEXT_EVENT,
+      });
+      expect(signals.some((signal) =>
+        signal.tags.includes('feedback-signal') &&
+        signal.tags.includes('adopted') &&
+        signal.metadata?.['retrievalId'] === r.view!.id
+      )).toBe(true);
     });
   });
 

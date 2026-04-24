@@ -3,9 +3,10 @@ import {
   CaptureSource,
   isValidKnowledgeType,
   KnowledgeType,
+  toGraphKnowledgeView,
   type KnowledgeStatus,
   type CreateKnowledgeInput,
-  type RetrievalFilter,
+  type GraphKnowledgeView,
 } from '@mindstrate/server';
 import { asyncRoute, parseLimit, readParam, readStringArray, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
 
@@ -30,22 +31,26 @@ const createKnowledgeInput = (body: any): CreateKnowledgeInput => ({
   actionable: body.actionable,
 });
 
-const createListFilter = (query: Record<string, unknown>): RetrievalFilter => {
-  const filter: RetrievalFilter = {};
-  const types = readStringArray(query.type);
-  const tags = readStringArray(query.tag ?? query.tags);
-  const status = readStringArray(query.status);
-
-  if (types) filter.types = types as KnowledgeType[];
-  if (typeof query.language === 'string') filter.language = query.language;
-  if (typeof query.framework === 'string') filter.framework = query.framework;
-  if (typeof query.project === 'string') filter.project = query.project;
-  if (tags) filter.tags = tags;
-  if (status) filter.status = status as KnowledgeStatus[];
-  if (typeof query.minScore === 'string') filter.minScore = Number(query.minScore);
-
-  return filter;
+const matchesAll = (actual: string[], expected: string[]): boolean => {
+  if (expected.length === 0) return true;
+  return expected.every((item) => actual.includes(item));
 };
+
+const filterGraphKnowledgeViews = (
+  entries: GraphKnowledgeView[],
+  filters: {
+    types: string[];
+    tags: string[];
+    status: string[];
+    minScore?: number;
+  },
+): GraphKnowledgeView[] => entries.filter((entry) => {
+  if (filters.types.length > 0 && !filters.types.includes(entry.domainType)) return false;
+  if (!matchesAll(entry.tags ?? [], filters.tags)) return false;
+  if (filters.status.length > 0 && !filters.status.includes(entry.status)) return false;
+  if (filters.minScore !== undefined && entry.priorityScore < filters.minScore) return false;
+  return true;
+});
 
 export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps): void => {
   app.post('/api/knowledge', withInitializedMemory(memory, async (req, res) => {
@@ -67,23 +72,34 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       return;
     }
 
-    res.status(201).json({ success: true, knowledge: result.knowledge });
+    res.status(201).json({ success: true, view: result.view });
   }));
 
   app.get('/api/knowledge', asyncRoute((req, res) => {
-    const entries = memory.list(createListFilter(req.query), parseLimit(req.query.limit, 50));
+    const minScore = typeof req.query.minScore === 'string' ? Number(req.query.minScore) : undefined;
+    const entries = filterGraphKnowledgeViews(memory.readGraphKnowledge({
+      project: typeof req.query.project === 'string' ? req.query.project : undefined,
+      limit: parseLimit(req.query.limit, 50),
+    }), {
+      types: readStringArray(req.query.type) ?? [],
+      tags: readStringArray(req.query.tag) ?? [],
+      status: readStringArray(req.query.status) ?? [],
+      minScore: Number.isFinite(minScore) ? minScore : undefined,
+    });
     res.json({ entries, total: entries.length });
   }));
 
   app.get('/api/knowledge/:id', asyncRoute((req, res) => {
     const id = readParam(req.params.id);
-    const knowledge = id ? memory.get(id) : null;
-    if (!knowledge) {
+    const view = id
+      ? memory.queryContextGraph({ query: id, limit: 50 }).find((node) => node.id === id)
+      : null;
+    if (!view) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
 
-    res.json(knowledge);
+    res.json(toGraphKnowledgeView(view));
   }));
 
   app.delete('/api/knowledge/:id', withInitializedMemory(memory, async (req, res) => {
@@ -93,7 +109,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       return;
     }
 
-    const deleted = await memory.delete(id);
+    const deleted = memory.deleteContextNode(id);
     if (!deleted) {
       res.status(404).json({ error: 'Not found' });
       return;
@@ -103,28 +119,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
   }));
 
   app.patch('/api/knowledge/:id/vote', asyncRoute((req, res) => {
-    const { direction } = req.body;
-    const id = readParam(req.params.id);
-    if (direction !== 'up' && direction !== 'down') {
-      res.status(400).json({ error: 'direction must be "up" or "down"' });
-      return;
-    }
-
-    if (!id) {
-      res.status(404).json({ error: 'Not found' });
-      return;
-    }
-
-    const knowledge = memory.get(id);
-    if (!knowledge) {
-      res.status(404).json({ error: 'Not found' });
-      return;
-    }
-
-    if (direction === 'up') memory.upvote(id);
-    else memory.downvote(id);
-
-    res.json(memory.get(id));
+    res.status(410).json({ error: 'Knowledge voting was removed; use ECS feedback signals instead' });
   }));
 
   app.post('/api/search', withInitializedMemory(memory, async (req, res) => {

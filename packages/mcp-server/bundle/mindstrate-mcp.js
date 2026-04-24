@@ -6822,7 +6822,7 @@ var require_team_client = __commonJS({
         const data = await this.post("/api/knowledge", input);
         return {
           success: data.success ?? false,
-          knowledge: data.knowledge,
+          view: data.view,
           message: data.message ?? (data.success ? "Added" : "Failed"),
           duplicateOf: data.duplicateOf
         };
@@ -33426,47 +33426,31 @@ var MemoryEvolveSchema = external_exports.object({
 // src/tools/handlers.ts
 var import_protocol4 = __toESM(require_dist3());
 async function handleMemorySearch(api2, input) {
-  const { query, topK, language, framework, type } = input;
-  const results = await api2.search(query, {
+  const { query, topK } = input;
+  const results = await api2.queryGraphKnowledge(query, {
     topK: topK ?? 5,
-    filter: {
-      language,
-      framework,
-      types: type ? [type] : void 0
-    }
+    limit: Math.max(topK ?? 5, 10)
   });
   if (results.length === 0) {
     return {
-      content: [{ type: "text", text: "No relevant knowledge found in the team knowledge base." }]
+      content: [{ type: "text", text: "No relevant ECS graph knowledge found." }]
     };
   }
   const formatted = results.map((r, i) => {
-    const k = r.knowledge;
-    let text = `### ${i + 1}. [${k.type}] ${k.title}
-`;
-    text += `Relevance: ${(r.relevanceScore * 100).toFixed(1)}% | Quality: ${k.quality.score.toFixed(0)}/100
-`;
-    if (k.problem) text += `**Problem:** ${k.problem}
-`;
-    text += `**Solution:** ${k.solution}
-`;
-    if (k.actionable?.steps) {
-      text += `**Steps:**
-${k.actionable.steps.map((s, j) => `  ${j + 1}. ${s}`).join("\n")}
-`;
-    }
-    if (k.tags.length > 0) text += `**Tags:** ${k.tags.join(", ")}
-`;
-    text += `ID: ${k.id}
-`;
-    if (r.retrievalId) text += `RetrievalID: ${r.retrievalId}
-`;
-    return text;
+    const view = r.view;
+    return [
+      `### ${i + 1}. [${view.substrateType}] ${view.title}`,
+      `Relevance: ${(r.relevanceScore * 100).toFixed(1)}% | Priority: ${view.priorityScore.toFixed(2)}`,
+      `Domain: ${view.domainType}`,
+      `Summary: ${view.summary}`,
+      view.tags.length > 0 ? `Tags: ${view.tags.join(", ")}` : null,
+      `ID: ${view.id}`
+    ].filter(Boolean).join("\n");
   }).join("\n---\n\n");
   return {
     content: [{
       type: "text",
-      text: `Found ${results.length} relevant knowledge entries:
+      text: `Found ${results.length} relevant ECS graph knowledge views:
 
 ${formatted}`
     }]
@@ -33778,9 +33762,10 @@ async function handleMemoryAdd(api2, input) {
   return {
     content: [{
       type: "text",
-      text: result.success && result.knowledge ? `Knowledge added successfully!
-ID: ${result.knowledge.id}
-Title: ${result.knowledge.title}` : `Note: ${result.message}`
+      text: result.success && result.view ? `ECS context node added successfully!
+ID: ${result.view.id}
+Title: ${result.view.title}
+Substrate: ${result.view.substrateType}` : `Note: ${result.message}`
     }]
   };
 }
@@ -34140,7 +34125,7 @@ var api = {
   },
   async get(id) {
     if (teamClient) return teamClient.get(id);
-    return memory.get(id);
+    return memory.readGraphKnowledge({ limit: 500 }).find((view) => view.id === id) ?? null;
   },
   async upvote(id) {
     if (teamClient) return teamClient.vote(id, "up");

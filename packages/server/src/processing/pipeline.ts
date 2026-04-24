@@ -109,7 +109,6 @@ export class Pipeline {
 
       return {
         success: true,
-        knowledge,
         message: `Knowledge added successfully: ${knowledge.title}`,
         qualityWarnings: warnings.length > 0 ? warnings : undefined,
       };

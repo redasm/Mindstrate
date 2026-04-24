@@ -6,7 +6,8 @@
  * implementation-agnostic — no SQLite, no embedder, no LLM types here.
  */
 
-import type { KnowledgeUnit, UpdateKnowledgeInput } from './models/knowledge.js';
+import type { UpdateKnowledgeInput } from './models/knowledge.js';
+import type { GraphKnowledgeView } from './models/projection.js';
 
 /**
  * Outcome of writing a single knowledge unit through the server pipeline
@@ -14,7 +15,7 @@ import type { KnowledgeUnit, UpdateKnowledgeInput } from './models/knowledge.js'
  */
 export interface PipelineResult {
   success: boolean;
-  knowledge?: KnowledgeUnit;
+  view?: GraphKnowledgeView;
   message: string;
   /** When success=false because of dedup, the existing knowledge id. */
   duplicateOf?: string;

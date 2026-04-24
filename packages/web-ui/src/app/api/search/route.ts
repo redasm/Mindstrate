@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemoryReady } from '@/lib/memory';
-import type { KnowledgeType } from '@mindstrate/server';
 
 /** POST /api/search */
 export async function POST(request: NextRequest) {
@@ -8,14 +7,10 @@ export async function POST(request: NextRequest) {
     const memory = await getMemoryReady();
     const body = await request.json();
 
-    const results = await memory.search(body.query, {
+    const results = memory.queryGraphKnowledge(body.query, {
+      project: body.project || undefined,
       topK: body.topK || 10,
-      filter: {
-        language: body.language || undefined,
-        framework: body.framework || undefined,
-        types: body.type ? [body.type as KnowledgeType] : undefined,
-        minScore: body.minScore,
-      },
+      limit: body.topK || 10,
     });
 
     return NextResponse.json({ results, total: results.length });

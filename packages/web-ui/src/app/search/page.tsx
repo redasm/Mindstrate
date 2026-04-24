@@ -98,8 +98,8 @@ export default function SearchPage() {
           <p className="text-sm text-gray-500">{results.length} {t.search.resultsFor} &ldquo;{query}&rdquo;</p>
           {results.map((r: any) => (
             <KnowledgeCard
-              key={r.knowledge.id}
-              knowledge={r.knowledge}
+              key={r.view.id}
+              knowledge={r.view}
               relevance={r.relevanceScore}
             />
           ))}

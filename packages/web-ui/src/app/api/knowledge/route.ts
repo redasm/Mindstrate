@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory, getMemoryReady } from '@/lib/memory';
-import { CaptureSource, isValidKnowledgeType, type KnowledgeType } from '@mindstrate/server';
+import { CaptureSource, isValidKnowledgeType } from '@mindstrate/server';
 
 /** GET /api/knowledge - 列出知识 */
 export async function GET(request: NextRequest) {
@@ -8,17 +8,13 @@ export async function GET(request: NextRequest) {
     const memory = getMemory();
     const params = request.nextUrl.searchParams;
 
-    const type = params.get('type') as KnowledgeType | null;
-    const language = params.get('language');
+    const project = params.get('project');
     const limit = parseInt(params.get('limit') || '50', 10);
 
-    const entries = memory.list(
-      {
-        types: type ? [type] : undefined,
-        language: language || undefined,
-      },
+    const entries = memory.readGraphKnowledge({
+      project: project || undefined,
       limit,
-    );
+    });
 
     return NextResponse.json({ entries, total: entries.length });
   } catch (error) {
@@ -62,7 +58,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (result.success) {
-      return NextResponse.json({ success: true, knowledge: result.knowledge }, { status: 201 });
+      return NextResponse.json({ success: true, view: result.view }, { status: 201 });
     } else {
       return NextResponse.json({ success: false, message: result.message, duplicateOf: result.duplicateOf });
     }

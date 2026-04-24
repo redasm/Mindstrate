@@ -58,7 +58,7 @@ export default function AddKnowledgePage() {
 
       const data = await res.json();
       if (data.success) {
-        router.push(`/knowledge/${data.knowledge.id}`);
+        router.push(`/knowledge/${data.view.id}`);
       } else {
         setError(data.message || t.addKnowledge.addFailed);
       }

@@ -65,6 +65,7 @@ export {
 } from './context-priority-selector.js';
 export {
   GraphKnowledgeProjector,
+  toGraphKnowledgeView,
   type GraphKnowledgeProjectionOptions,
 } from './knowledge-projector.js';
 export {

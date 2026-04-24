@@ -71,11 +71,11 @@ export const addCommand = new Command('add')
         source: CaptureSource.CLI,
       });
 
-      if (result.success && result.knowledge) {
-        console.log('Knowledge added successfully!\n');
-        console.log(`  ID:    ${result.knowledge.id}`);
-        console.log(`  Title: ${result.knowledge.title}`);
-        console.log(`  Type:  ${TYPE_LABELS[result.knowledge.type] ?? result.knowledge.type}`);
+      if (result.success && result.view) {
+        console.log('ECS context node added successfully!\n');
+        console.log(`  ID:        ${result.view.id}`);
+        console.log(`  Title:     ${result.view.title}`);
+        console.log(`  Substrate: ${result.view.substrateType}`);
         if (tags.length > 0) {
           console.log(`  Tags:  ${tags.join(', ')}`);
         }
