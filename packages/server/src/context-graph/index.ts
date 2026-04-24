@@ -5,6 +5,9 @@ export {
   type CreateContextNodeInput,
   type UpdateContextNodeInput,
 } from './context-graph-store.js';
+export { ContextNodeRepository } from './context-node-repository.js';
+export { ContextEdgeRepository } from './context-edge-repository.js';
+export { GraphQuery, type GraphNeighborhood } from './graph-query.js';
 export {
   runContextAssemblyDag,
   type ContextAssemblyDagDeps,
