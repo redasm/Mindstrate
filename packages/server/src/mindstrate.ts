@@ -19,13 +19,12 @@ import type {
   UpdateKnowledgeInput,
   RetrievalContext,
   RetrievalFilter,
-  RetrievalResult,
   KnowledgeUnit,
   AssembledContext,
   FeedbackEvent,
   GraphKnowledgeView,
 } from '@mindstrate/protocol';
-import { CaptureSource, KnowledgeStatus, KnowledgeType } from '@mindstrate/protocol';
+import { CaptureSource, KnowledgeType } from '@mindstrate/protocol';
 import type {
   Session,
   CreateSessionInput,
@@ -427,41 +426,6 @@ export class Mindstrate {
   // ============================================================
   // 知识检索
   // ============================================================
-
-  /** 搜索相关知识 */
-  async search(
-    query: string,
-    options?: {
-      context?: RetrievalContext;
-      filter?: RetrievalFilter;
-      topK?: number;
-      sessionId?: string;
-    },
-  ): Promise<RetrievalResult[]> {
-    await this.ensureInit();
-    const topK = options?.topK ?? this.config.defaultTopK;
-    const projected = this.queryGraphKnowledge(query, {
-      project: options?.context?.project ?? options?.filter?.project,
-      topK,
-      limit: 50,
-    });
-    const projectedResults = projected.map((item) =>
-      projectToRetrievalResult(item.view, item.relevanceScore, item.matchReason)
-    );
-    if (projectedResults.length >= topK) {
-      return projectedResults.slice(0, topK);
-    }
-
-    const fallbackResults = await this.retriever.search(
-      query,
-      options?.context,
-      options?.filter,
-      topK,
-      options?.sessionId,
-    );
-
-    return mergeRetrievalResults(projectedResults, fallbackResults, topK);
-  }
 
   /**
    * 上下文策划：自动组装任务知识包
@@ -1276,61 +1240,6 @@ export class Mindstrate {
   }
 }
 
-function projectToRetrievalResult(
-  view: GraphKnowledgeView,
-  relevanceScore: number,
-  matchReason?: string,
-): RetrievalResult {
-  return {
-    knowledge: {
-      id: view.id,
-      version: 1,
-      type: mapGraphViewType(view),
-      title: view.title,
-      solution: view.summary,
-      tags: view.tags,
-      context: {
-        project: view.project,
-      },
-      metadata: {
-        author: 'ecs-projection',
-        source: CaptureSource.AUTO_DETECT,
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-        confidence: view.priorityScore,
-      },
-      quality: {
-        score: Math.round(view.priorityScore * 100),
-        upvotes: 0,
-        downvotes: 0,
-        useCount: 0,
-        verified: view.status === 'verified',
-        status: KnowledgeStatus.ACTIVE,
-      },
-    },
-    relevanceScore: Math.min(0.99, relevanceScore),
-    matchReason: matchReason ?? `Graph projection | ${view.substrateType} | priority ${view.priorityScore.toFixed(2)}`,
-  };
-}
-
-function mergeRetrievalResults(
-  projected: RetrievalResult[],
-  base: RetrievalResult[],
-  topK: number,
-): RetrievalResult[] {
-  const merged: RetrievalResult[] = [];
-  const seen = new Set<string>();
-
-  for (const result of [...projected, ...base]) {
-    if (seen.has(result.knowledge.id)) continue;
-    seen.add(result.knowledge.id);
-    merged.push(result);
-    if (merged.length >= topK) break;
-  }
-
-  return merged;
-}
-
 function projectSnapshotToGraphKnowledgeView(knowledge: KnowledgeUnit): GraphKnowledgeView {
   return {
     id: knowledge.id,
@@ -1344,19 +1253,6 @@ function projectSnapshotToGraphKnowledgeView(knowledge: KnowledgeUnit): GraphKno
     sourceRef: knowledge.id,
     tags: knowledge.tags,
   };
-}
-
-function mapGraphViewType(view: GraphKnowledgeView): KnowledgeType {
-  switch (view.substrateType) {
-    case 'rule':
-      return KnowledgeType.CONVENTION;
-    case 'pattern':
-      return KnowledgeType.PATTERN;
-    case 'summary':
-      return KnowledgeType.ARCHITECTURE;
-    default:
-      return KnowledgeType.BEST_PRACTICE;
-  }
 }
 
 function computeGraphNodeMatchScore(tokens: string[], node: ContextNode): number {

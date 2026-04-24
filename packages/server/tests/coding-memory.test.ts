@@ -83,9 +83,9 @@ describe('Mindstrate', () => {
         context: { language: 'typescript', framework: 'react' },
       }));
 
-      const results = await memory.search('hydration error in react');
+      const results = memory.queryGraphKnowledge('hydration error in react');
       expect(results.length).toBeGreaterThan(0);
-      expect(results[0].knowledge.title).toContain('hydration');
+      expect(results[0].view.title).toContain('hydration');
     });
 
     it('should return empty for unrelated queries', async () => {
@@ -98,7 +98,7 @@ describe('Mindstrate', () => {
 
       // offline embeddings are word-based, so completely unrelated text should have low similarity
       // but may still return results - we just check it doesn't crash
-      const results = await memory.search('quantum physics formulas');
+      const results = memory.queryGraphKnowledge('quantum physics formulas');
       expect(results).toBeDefined();
     });
 
@@ -126,13 +126,13 @@ describe('Mindstrate', () => {
         context: { project: 'proj', language: 'typescript', framework: 'react' },
       }));
 
-      const results = await memory.search('hydration safe SSR', {
-        context: { project: 'proj' },
+      const results = memory.queryGraphKnowledge('hydration safe SSR', {
+        project: 'proj',
         topK: 5,
       });
 
       expect(results.length).toBeGreaterThan(0);
-      expect(results[0].knowledge.title).toBe('Hydration Safety Rule');
+      expect(results[0].view.title).toBe('Hydration Safety Rule');
       expect(results[0].matchReason).toContain('Graph projection');
     });
   });
@@ -174,7 +174,7 @@ describe('Mindstrate', () => {
     it('should list all knowledge', async () => {
       await memory.add(makeKnowledgeInput({ title: 'A', solution: 'sol a alpha unique' }));
       await memory.add(makeKnowledgeInput({ title: 'B', solution: 'sol b beta different topic' }));
-      const all = memory.list();
+      const all = memory.readGraphKnowledge({ limit: 10 });
       expect(all.length).toBe(2);
     });
   });
@@ -608,7 +608,7 @@ describe('Mindstrate', () => {
     it('should check quality without writing', () => {
       const result = memory.checkQuality(makeKnowledgeInput());
       expect(result.passed).toBe(true);
-      expect(memory.list()).toHaveLength(0);
+      expect(memory.readGraphKnowledge()).toHaveLength(0);
     });
   });
 
