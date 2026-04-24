@@ -4,6 +4,9 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {
   Mindstrate,
+  ContextDomainType,
+  ProjectionTarget,
+  SubstrateType,
   detectProject,
   buildProjectSnapshot,
   projectSnapshotId,
@@ -121,6 +124,31 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     expect(r.changed).toBe(true);
     expect(r.knowledge.id).toBe(projectSnapshotId(p));
     expect(r.knowledge.title).toContain('svc');
+  });
+
+  it('materializes project snapshots from ECS graph nodes', async () => {
+    const p = detectProject(root)!;
+    const r = await memory.upsertProjectSnapshot(p);
+    const internal = memory as unknown as {
+      contextGraphStore: {
+        listNodes(input: Record<string, unknown>): Array<{ id: string; sourceRef?: string }>;
+        listProjectionRecords(input: Record<string, unknown>): Array<{ nodeId: string; target: string; targetRef: string }>;
+      };
+    };
+
+    const nodes = internal.contextGraphStore.listNodes({
+      project: p.name,
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.PROJECT_SNAPSHOT,
+    });
+    const projection = internal.contextGraphStore.listProjectionRecords({
+      target: ProjectionTarget.PROJECT_SNAPSHOT,
+      limit: 10,
+    });
+
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].sourceRef).toBe(r.knowledge.id);
+    expect(projection.find((record) => record.nodeId === nodes[0].id)?.targetRef).toBe(r.knowledge.id);
   });
 
   it('is idempotent: repeated upserts converge to a single record', async () => {

@@ -390,9 +390,11 @@ export class Mindstrate {
 
     if (created) {
       this.tryIngestDerivedEvent(() => ingestProjectSnapshotEvent(this.contextGraphStore, knowledge));
+      this.projectSnapshotProjectionMaterializer.materialize({ project: knowledge.context.project, limit: 10 });
       await this.notifySinks('added', knowledge);
     } else if (built.changed) {
       this.tryIngestDerivedEvent(() => ingestProjectSnapshotEvent(this.contextGraphStore, knowledge));
+      this.projectSnapshotProjectionMaterializer.materialize({ project: knowledge.context.project, limit: 10 });
       await this.notifySinks('updated', knowledge);
     }
 
