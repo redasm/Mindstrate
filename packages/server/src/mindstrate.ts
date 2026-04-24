@@ -95,7 +95,7 @@ import type {
   MetabolismRun,
   ProjectionRecord,
 } from '@mindstrate/protocol/models';
-import type { UpdateContextNodeInput } from './context-graph/context-graph-store.js';
+import type { CreateContextNodeInput, UpdateContextNodeInput } from './context-graph/context-graph-store.js';
 import { digestKnowledgeInput } from './context-graph/knowledge-digest.js';
 import {
   ingestContextEvent,
@@ -633,6 +633,10 @@ export class Mindstrate {
 
   updateContextNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
     return this.contextGraphStore.updateNode(id, input);
+  }
+
+  createContextNode(input: CreateContextNodeInput): ContextNode {
+    return this.contextGraphStore.createNode(input);
   }
 
   deleteContextNode(id: string): boolean {

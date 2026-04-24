@@ -11,13 +11,20 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Command } from 'commander';
-import { Mindstrate } from '@mindstrate/server';
+import { KnowledgeType, Mindstrate, type GraphKnowledgeView } from '@mindstrate/server';
 import {
   SyncManager,
   VaultLayout,
   assessCanonicalSourceReadiness,
   getVaultSyncMode,
 } from '@mindstrate/obsidian-sync';
+
+function graphViewToKnowledgeType(view: GraphKnowledgeView): KnowledgeType {
+  const domainType = String(view.domainType);
+  return Object.values(KnowledgeType).includes(domainType as KnowledgeType)
+    ? domainType as KnowledgeType
+    : KnowledgeType.BEST_PRACTICE;
+}
 
 function resolveVaultPath(provided?: string): string {
   const p = provided
@@ -144,9 +151,9 @@ const statusCmd = new Command('status')
     const memory = new Mindstrate();
     await memory.init();
     const stats = await memory.getStats();
-    const allKnowledge = memory.list({}, 100000);
-    const editableKnowledge = allKnowledge.filter((k) => getVaultSyncMode(k.type) === 'editable').length;
-    const mirrorKnowledge = allKnowledge.length - editableKnowledge;
+    const graphKnowledge = memory.readGraphKnowledge({ limit: 100000 });
+    const editableKnowledge = graphKnowledge.filter((view) => getVaultSyncMode(graphViewToKnowledgeType(view)) === 'editable').length;
+    const mirrorKnowledge = graphKnowledge.length - editableKnowledge;
     const assessment = assessCanonicalSourceReadiness({
       totalKnowledge: stats.total,
       indexedEntries: Object.keys(idx.files).length,

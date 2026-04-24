@@ -9,22 +9,24 @@ import * as fs from 'node:fs';
 import { createMemory } from '../helpers.js';
 
 export const exportCommand = new Command('export')
-  .description('Export knowledge base to a JSON file')
+  .description('Export ECS graph knowledge views to a JSON file')
   .argument('[file]', 'Output file path', 'mindstrate-export.json')
   .option('--pretty', 'Pretty-print JSON', false)
   .action(async (file, options) => {
     const memory = createMemory();
 
     try {
-      const entries = memory.list({}, 10000);
+      await memory.init();
+      const entries = memory.readGraphKnowledge({ limit: 10000 });
 
       if (entries.length === 0) {
-        console.log('Nothing to export. Knowledge base is empty.');
+        console.log('Nothing to export. ECS graph knowledge is empty.');
         return;
       }
 
       const exportData = {
-        version: '0.1.0',
+        format: 'mindstrate.graph-knowledge',
+        version: '0.2.0',
         exportedAt: new Date().toISOString(),
         count: entries.length,
         entries,
@@ -45,7 +47,7 @@ export const exportCommand = new Command('export')
   });
 
 export const importCommand = new Command('import')
-  .description('Import knowledge from a JSON file')
+  .description('Import ECS graph knowledge from a JSON file')
   .argument('<file>', 'Input file path')
   .option('--skip-duplicates', 'Skip entries that already exist', true)
   .action(async (file, _options) => {
@@ -62,38 +64,37 @@ export const importCommand = new Command('import')
       const raw = fs.readFileSync(file, 'utf-8');
       const data = JSON.parse(raw);
 
-      if (!data.entries || !Array.isArray(data.entries)) {
-        console.error('Invalid export file format.');
+      if (data.format !== 'mindstrate.graph-knowledge' || !Array.isArray(data.entries)) {
+        console.error('Invalid ECS graph knowledge export file format.');
         process.exit(1);
       }
 
       let imported = 0;
-      let skipped = 0;
       let failed = 0;
 
       for (const entry of data.entries) {
         try {
-          const result = await memory.add({
-            type: entry.type,
-            title: entry.title,
-            problem: entry.problem,
-            solution: entry.solution,
-            codeSnippets: entry.codeSnippets,
-            tags: entry.tags,
-            context: entry.context,
-            author: entry.metadata?.author,
-            source: entry.metadata?.source,
-            commitHash: entry.metadata?.commitHash,
-            confidence: entry.metadata?.confidence,
-          });
+          const existing = memory.readGraphKnowledge({ limit: 100000 })
+            .find((view) => view.id === entry.id);
+          if (existing) continue;
 
-          if (result.success) {
-            imported++;
-          } else if (result.duplicateOf) {
-            skipped++;
-          } else {
-            failed++;
-          }
+          memory.createContextNode({
+            substrateType: entry.substrateType,
+            domainType: entry.domainType,
+            title: entry.title,
+            content: entry.summary,
+            tags: entry.tags ?? [],
+            project: entry.project,
+            status: entry.status,
+            sourceRef: entry.sourceRef,
+            confidence: Math.min(1, entry.priorityScore ?? 0.5),
+            qualityScore: Math.min(100, Math.round((entry.priorityScore ?? 0.5) * 100)),
+            metadata: {
+              importedFrom: 'mindstrate.graph-knowledge',
+              originalId: entry.id,
+            },
+          });
+          imported++;
         } catch {
           failed++;
         }
@@ -101,7 +102,6 @@ export const importCommand = new Command('import')
 
       console.log(`Import complete:`);
       console.log(`  Imported: ${imported}`);
-      console.log(`  Skipped (duplicates): ${skipped}`);
       if (failed > 0) console.log(`  Failed:   ${failed}`);
     } catch (error) {
       console.error('Import failed:', error instanceof Error ? error.message : error);
