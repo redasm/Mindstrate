@@ -14,6 +14,18 @@ type BundleInstallResult = {
   skippedEdges: number;
 };
 
+type BundlePublication = {
+  manifest: {
+    name: string;
+    version: string;
+    registry: string;
+    visibility: string;
+    nodeCount: number;
+    edgeCount: number;
+    digest: string;
+  };
+};
+
 export default function BundlesPage() {
   const [createForm, setCreateForm] = useState({
     name: '',
@@ -26,11 +38,16 @@ export default function BundlesPage() {
     registry: '',
     reference: '',
   });
+  const [publishForm, setPublishForm] = useState({
+    registry: '',
+    visibility: 'unlisted',
+  });
   const [createdBundle, setCreatedBundle] = useState('');
   const [validation, setValidation] = useState<BundleValidation | null>(null);
   const [installResult, setInstallResult] = useState<BundleInstallResult | null>(null);
+  const [publication, setPublication] = useState<BundlePublication | null>(null);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState<'create' | 'validate' | 'install' | 'install-ref' | null>(null);
+  const [busy, setBusy] = useState<'create' | 'validate' | 'install' | 'install-ref' | 'publish' | null>(null);
 
   const createBundle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +56,7 @@ export default function BundlesPage() {
     setCreatedBundle('');
     setValidation(null);
     setInstallResult(null);
+    setPublication(null);
 
     try {
       const res = await fetch('/api/bundles/create', {
@@ -125,6 +143,33 @@ export default function BundlesPage() {
       setInstallResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to install bundle reference');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const publishBundle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy('publish');
+    setError('');
+    setPublication(null);
+
+    try {
+      const bundle = JSON.parse(bundleJson);
+      const res = await fetch('/api/bundles/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bundle,
+          registry: publishForm.registry || undefined,
+          visibility: publishForm.visibility,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to publish bundle');
+      setPublication(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to publish bundle');
     } finally {
       setBusy(null);
     }
@@ -258,6 +303,45 @@ export default function BundlesPage() {
         </button>
       </form>
 
+      <form onSubmit={publishBundle} className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Publish Bundle</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Publish the payload editor bundle to a registry and capture a versioned manifest.
+          </p>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Registry</label>
+            <input
+              value={publishForm.registry}
+              onChange={(e) => setPublishForm((f) => ({ ...f, registry: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              placeholder="local registry directory or URL"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Visibility</label>
+            <select
+              value={publishForm.visibility}
+              onChange={(e) => setPublishForm((f) => ({ ...f, visibility: e.target.value }))}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="unlisted">Unlisted</option>
+              <option value="public">Public</option>
+              <option value="private">Private</option>
+            </select>
+          </div>
+        </div>
+        <button
+          type="submit"
+          disabled={busy === 'publish' || !bundleJson.trim()}
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {busy === 'publish' ? 'Publishing...' : 'Publish'}
+        </button>
+      </form>
+
       {validation ? (
         <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900">Validation Result</h2>
@@ -281,6 +365,22 @@ export default function BundlesPage() {
             <Stat label="Installed Edges" value={installResult.installedEdges} />
             <Stat label="Skipped Edges" value={installResult.skippedEdges} />
           </div>
+        </section>
+      ) : null}
+
+      {publication ? (
+        <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">Publication Manifest</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Stat label="Nodes" value={publication.manifest.nodeCount} />
+            <Stat label="Edges" value={publication.manifest.edgeCount} />
+          </div>
+          <dl className="mt-4 space-y-2 text-sm">
+            <div><dt className="inline font-medium text-gray-700">Name:</dt> <dd className="inline text-gray-600">{publication.manifest.name}@{publication.manifest.version}</dd></div>
+            <div><dt className="inline font-medium text-gray-700">Registry:</dt> <dd className="inline text-gray-600">{publication.manifest.registry}</dd></div>
+            <div><dt className="inline font-medium text-gray-700">Visibility:</dt> <dd className="inline text-gray-600">{publication.manifest.visibility}</dd></div>
+            <div><dt className="inline font-medium text-gray-700">Digest:</dt> <dd className="inline break-all text-gray-600">{publication.manifest.digest}</dd></div>
+          </dl>
         </section>
       ) : null}
 
