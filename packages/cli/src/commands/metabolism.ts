@@ -11,11 +11,18 @@ export const metabolismCommand = new Command('gc')
   .description('Run ECS garbage collection and compaction')
   .option('-p, --project <project>', 'Project scope')
   .option('-t, --trigger <trigger>', 'Trigger type: manual | scheduled | event_driven', 'manual')
+  .option('-s, --stage <stage>', 'Run a single stage: digest | assimilate | compress | prune | reflect')
   .action(async (options) => {
     const memory = createMemory();
 
     try {
       await memory.init();
+
+      if (options.stage) {
+        const result = await runStage(memory, options.stage, options.project);
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
 
       const run = await memory.runMetabolism({
         project: options.project,
@@ -51,3 +58,24 @@ export const metabolismCommand = new Command('gc')
       memory.close();
     }
   });
+
+async function runStage(memory: ReturnType<typeof createMemory>, stage: string, project?: string) {
+  switch (stage) {
+    case 'digest':
+      return memory.runDigest({ project });
+    case 'assimilate':
+    case 'assimilation':
+      return memory.runAssimilation({ project });
+    case 'compress':
+    case 'compression':
+      return memory.runCompression({ project });
+    case 'prune':
+    case 'pruning':
+      return memory.runPruning({ project });
+    case 'reflect':
+    case 'reflection':
+      return memory.runReflection({ project });
+    default:
+      throw new Error(`Unknown metabolism stage: ${stage}`);
+  }
+}
