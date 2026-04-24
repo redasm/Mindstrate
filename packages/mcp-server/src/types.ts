@@ -15,7 +15,6 @@ import type {
   GraphKnowledgeView,
   MetabolismRun,
   RetrievalContext,
-  KnowledgeUnit,
   CuratedContext,
   AssembledContext,
   Session,
@@ -71,7 +70,7 @@ export interface InternalizationSuggestions {
 export interface LocalMemory {
   init(): Promise<void>;
   add(input: CreateKnowledgeInput): Promise<PipelineResult>;
-  get(id: string): KnowledgeUnit | null;
+  readGraphKnowledge(options?: { project?: string; limit?: number }): GraphKnowledgeView[];
   startSession(input: { project?: string; techContext?: string }): Promise<Session>;
   saveObservation(input: { sessionId: string; type: string; content: string; metadata?: Record<string, string> }): void;
   compressSession(input: { sessionId: string; summary: string; openTasks?: string[] }): void;
