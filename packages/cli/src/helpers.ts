@@ -2,7 +2,7 @@
  * CLI Helper - 创建 Mindstrate 实例
  */
 
-import { Mindstrate, type GraphKnowledgeView } from '@mindstrate/server';
+import { errorMessage, Mindstrate, truncateText, type GraphKnowledgeView } from '@mindstrate/server';
 
 export function createMemory(): Mindstrate {
   return new Mindstrate();
@@ -21,15 +21,7 @@ export function formatDate(isoStr: string): string {
 }
 
 /** 截断字符串 */
-export function truncate(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return str.substring(0, maxLen - 3) + '...';
-}
-
-/** 统一 CLI 错误输出，避免每个命令重复判断 Error 类型 */
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+export { errorMessage, truncateText as truncate };
 
 /** 知识类型的中文映射 */
 export const TYPE_LABELS: Record<string, string> = {

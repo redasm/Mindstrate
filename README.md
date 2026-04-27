@@ -510,7 +510,7 @@ Mindstrate/
 │   │   └── src/
 │   │       ├── models/        # KnowledgeUnit / Session / Retrieval / Feedback
 │   │       ├── errors.ts      # 错误类层级
-│   │       └── results.ts     # PipelineResult / EvolutionRunResult 等线上契约
+│   │       └── results.ts     # AddKnowledgeResult / EvolutionRunResult 等线上契约
 │   ├── client/                # HTTP 客户端 — 纯 fetch，零 native 依赖
 │   │   └── src/team-client.ts # 给 mcp-server 等 HTTP 消费者用
 │   ├── server/                # 服务端运行时 — SQLite/OpenAI/检索/进化/采集

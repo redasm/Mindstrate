@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { errorMessage } from '@mindstrate/server';
 
 export function readTextIfExists(filePath: string): string | null {
   try {
@@ -8,6 +9,4 @@ export function readTextIfExists(filePath: string): string | null {
   }
 }
 
-export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+export { errorMessage };

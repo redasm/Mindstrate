@@ -13,3 +13,8 @@ export {
   type NodeFeedbackStats,
   type SyncResult,
 } from './team-client.js';
+
+export {
+  TeamHttpTransport,
+  type TeamHttpTransportConfig,
+} from './team-http-transport.js';

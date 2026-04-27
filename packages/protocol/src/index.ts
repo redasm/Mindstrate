@@ -15,3 +15,6 @@ export * from './errors.js';
 
 // Server-side result types that cross the wire
 export * from './results.js';
+
+// Small runtime-safe text helpers
+export * from './text.js';

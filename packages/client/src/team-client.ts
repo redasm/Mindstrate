@@ -31,6 +31,8 @@ import type {
   PublishBundleResult,
   ProjectionRecord,
 } from '@mindstrate/protocol';
+import { errorMessage } from '@mindstrate/protocol/text';
+import { TeamHttpTransport } from './team-http-transport.js';
 
 /** Stats returned by the team server */
 export interface TeamServerStats {
@@ -86,14 +88,10 @@ export interface TeamClientConfig {
 }
 
 export class TeamClient {
-  private baseUrl: string;
-  private apiKey: string;
-  private timeout: number;
+  private readonly transport: TeamHttpTransport;
 
   constructor(config: TeamClientConfig) {
-    this.baseUrl = config.serverUrl.replace(/\/+$/, '');
-    this.apiKey = config.apiKey ?? '';
-    this.timeout = config.timeout ?? 10000;
+    this.transport = new TeamHttpTransport(config);
   }
 
   // ============================================================
@@ -127,7 +125,7 @@ export class TeamClient {
     try {
       return await this.fetch<GraphKnowledgeView>(`/api/knowledge/${id}`);
     } catch (err) {
-      console.warn(`[TeamClient] Failed to get knowledge ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`[TeamClient] Failed to get knowledge ${id}: ${errorMessage(err)}`);
       return null;
     }
   }
@@ -153,7 +151,7 @@ export class TeamClient {
       await this.doFetch(`/api/knowledge/${id}`, { method: 'DELETE' });
       return true;
     } catch (err) {
-      console.warn(`[TeamClient] Failed to delete knowledge ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`[TeamClient] Failed to delete knowledge ${id}: ${errorMessage(err)}`);
       return false;
     }
   }
@@ -182,7 +180,7 @@ export class TeamClient {
     try {
       return await this.fetch<Session>(`/api/session/${id}`);
     } catch (err) {
-      console.warn(`[TeamClient] Failed to get session ${id}: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`[TeamClient] Failed to get session ${id}: ${errorMessage(err)}`);
       return null;
     }
   }
@@ -192,7 +190,7 @@ export class TeamClient {
       const data = await this.fetch<{ session?: Session | null }>(`/api/session/active?project=${encodeURIComponent(project)}`);
       return data.session ?? null;
     } catch (err) {
-      console.warn(`[TeamClient] Failed to get active session for ${project || '(default)'}: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`[TeamClient] Failed to get active session for ${project || '(default)'}: ${errorMessage(err)}`);
       return null;
     }
   }
@@ -473,46 +471,14 @@ export class TeamClient {
   // ============================================================
 
   private async fetch<T = unknown>(path: string): Promise<T> {
-    return this.doFetch(path, { method: 'GET' }).then(r => r.json() as Promise<T>);
+    return this.transport.get<T>(path);
   }
 
   private async post<T = unknown>(path: string, body: unknown): Promise<T> {
-    const res = await this.doFetch(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    return res.json() as Promise<T>;
+    return this.transport.post<T>(path, body);
   }
 
   private async doFetch(path: string, init: RequestInit): Promise<Response> {
-    const url = `${this.baseUrl}${path}`;
-    const headers: Record<string, string> = {
-      ...(init.headers as Record<string, string> ?? {}),
-    };
-
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeout);
-
-    try {
-      const res = await globalThis.fetch(url, {
-        ...init,
-        headers,
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => '');
-        throw new Error(`Team Server error ${res.status}: ${body}`);
-      }
-
-      return res;
-    } finally {
-      clearTimeout(timer);
-    }
+    return this.transport.request(path, init);
   }
 }

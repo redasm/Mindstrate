@@ -5,6 +5,7 @@ import {
   CaptureSource,
   ContextDomainType,
   ContextEventType,
+  errorMessage,
   Mindstrate,
   KnowledgeExtractor,
   loadConfig,
@@ -120,7 +121,7 @@ export class RepoScannerService {
       }
       return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       this.store.markError(sourceId, message);
       this.store.finishRun(run.id, 'failed', {
         itemsSeen: 0,
@@ -166,7 +167,7 @@ export class RepoScannerService {
         this.store.recordFailedItem(
           source.id,
           failed.externalId,
-          error instanceof Error ? error.message : String(error),
+          errorMessage(error),
         );
       }
     }
@@ -304,7 +305,7 @@ export class RepoScannerService {
         this.store.recordFailedItem(
           source.id,
           hash,
-          error instanceof Error ? error.message : String(error),
+          errorMessage(error),
         );
       }
     }

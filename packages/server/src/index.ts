@@ -29,6 +29,9 @@ export { PROMPT_VERSION } from './prompts.js';
 // Math
 export { cosineSimilarity, daysSince, isPast } from './math.js';
 
+// Text formatting
+export { errorMessage, slugifyAscii, truncateText } from './text-format.js';
+
 // OpenAI Client Factory
 export { getOpenAIClient, clearOpenAIClientCache, type OpenAIClient } from './openai-client.js';
 

@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { truncateText } from '@mindstrate/protocol/text';
 
 type ContextNode = {
   id: string;
@@ -184,7 +185,7 @@ function LineagePageContent() {
                         <span className="ml-auto text-xs text-gray-400">quality {node.qualityScore.toFixed(0)}</span>
                       </div>
                       <h3 className="mt-3 font-medium text-gray-900">{node.title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-gray-600">{truncate(node.content, 180)}</p>
+                      <p className="mt-2 text-sm leading-6 text-gray-600">{truncateText(node.content, 180)}</p>
                       {node.tags.length > 0 ? (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {node.tags.slice(0, 4).map((tag) => (
@@ -284,11 +285,6 @@ function LineagePageContent() {
       </section>
     </div>
   );
-}
-
-function truncate(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 3)}...`;
 }
 
 function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

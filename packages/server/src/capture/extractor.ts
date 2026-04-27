@@ -17,6 +17,7 @@ import {
 } from '../prompts.js';
 import { LLMError } from '@mindstrate/protocol';
 import { getOpenAIClient } from '../openai-client.js';
+import { errorMessage, truncateText } from '../text-format.js';
 
 export interface CommitInfo {
   hash: string;
@@ -100,9 +101,7 @@ export class KnowledgeExtractor {
       }
 
       // 限制 diff 长度避免 token 过大
-      const truncatedDiff = commit.diff.length > 4000
-        ? commit.diff.substring(0, 4000) + '\n... (truncated)'
-        : commit.diff;
+      const truncatedDiff = truncateText(commit.diff, 4016, '\n... (truncated)');
 
       const response = await client.chat.completions.create({
         model: this.model,
@@ -158,7 +157,7 @@ export class KnowledgeExtractor {
         reason: 'Extracted by LLM',
       };
     } catch (error) {
-      const errMsg = error instanceof Error ? error.message : String(error);
+      const errMsg = errorMessage(error);
       // Log as LLMError but fall through to rule-based extraction
       const llmErr = new LLMError(`LLM extraction failed: ${errMsg}`, {
         commitHash: commit.hash,

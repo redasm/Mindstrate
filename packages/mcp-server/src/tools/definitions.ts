@@ -96,7 +96,7 @@ export const TOOL_DEFINITIONS = [
     name: 'graph_knowledge_search',
     description:
       'Search ECS-native graph knowledge views derived from high-level context nodes such as rules, patterns, and summaries. ' +
-      'Use this when you want evolved substrate context instead of legacy knowledge-unit search.',
+      'Use this when you want substrate-level graph context instead of raw event records.',
     inputSchema: {
       type: 'object' as const,
       properties: {

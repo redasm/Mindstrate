@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { RepoScannerService } from './scanner-service.js';
 import { RepoScannerDaemon } from './scheduler.js';
-import { CaptureSource, type KnowledgeType } from '@mindstrate/server';
+import { CaptureSource, errorMessage, type KnowledgeType } from '@mindstrate/server';
 import { getCommitInfo, getGitRoot, getLastCommit, getRecentCommits } from './git-source.js';
 import { installGitHook, uninstallGitHook } from './hook-installer.js';
 import { getChangelistInfo, getRecentChangelists, isP4Available, isP4Connected } from './p4-source.js';
@@ -290,6 +290,6 @@ async function ingestCommits(
 }
 
 void main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  console.error(errorMessage(error));
   process.exit(1);
 });

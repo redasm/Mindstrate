@@ -1,5 +1,5 @@
 import type { Request, RequestHandler, Response } from 'express';
-import type { Mindstrate } from '@mindstrate/server';
+import { errorMessage, type Mindstrate } from '@mindstrate/server';
 import type { TeamScope } from './auth-middleware.js';
 
 export interface TeamRouteDeps {
@@ -10,7 +10,7 @@ type RouteHandler = (req: Request, res: Response) => void | Promise<void>;
 
 export const asyncRoute = (handler: RouteHandler): RequestHandler => (req, res) => {
   void Promise.resolve(handler(req, res)).catch((error: unknown) => {
-    res.status(500).json({ error: getErrorMessage(error) });
+    res.status(500).json({ error: errorMessage(error) });
   });
 };
 
@@ -46,9 +46,6 @@ export const readStringArray = (value: unknown): string[] | undefined => {
 
   return undefined;
 };
-
-export const getErrorMessage = (error: unknown): string =>
-  error instanceof Error ? error.message : 'Unknown error';
 
 export const authorizeProject = (
   req: Request,

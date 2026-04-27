@@ -27,6 +27,7 @@ import {
   type CreateKnowledgeInput,
 } from '@mindstrate/protocol';
 import type { DetectedProject } from './detector.js';
+import { truncateText } from '../text-format.js';
 
 /** Preserve markers — anything between them is kept across re-generations. */
 export const PRESERVE_OPEN = '<!-- preserve -->';
@@ -205,7 +206,7 @@ function renderSnapshotMarkdown(
     lines.push('## Scripts');
     lines.push('');
     for (const k of scriptKeys.slice(0, 20)) {
-      lines.push(`- \`${k}\` → \`${truncate(p.scripts[k], 80)}\``);
+      lines.push(`- \`${k}\` → \`${truncateText(p.scripts[k], 80, '…')}\``);
     }
     lines.push('');
   }
@@ -281,11 +282,6 @@ function buildTags(p: DetectedProject): string[] {
   if (p.framework) tags.add(p.framework);
   if (p.packageManager) tags.add(p.packageManager);
   return Array.from(tags);
-}
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + '…';
 }
 
 // ============================================================
