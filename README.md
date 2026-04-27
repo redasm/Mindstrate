@@ -637,4 +637,4 @@ MINDSTRATE_EMBEDDING_MODEL=text-embedding-3-small
 
 ## License
 
-MIT
+Apache-2.0
