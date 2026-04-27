@@ -12,6 +12,7 @@ import {
 export interface RuleCompressionOptions {
   project?: string;
   minClusterSize?: number;
+  minPositiveFeedback?: number;
   similarityThreshold?: number;
   limit?: number;
 }
@@ -38,6 +39,7 @@ export class RuleCompressor {
     options: RuleCompressionOptions = {},
   ): Promise<RuleCompressionResult> {
     const minClusterSize = options.minClusterSize ?? 2;
+    const minPositiveFeedback = options.minPositiveFeedback ?? 4;
     const similarityThreshold = options.similarityThreshold ?? 0.88;
     const limit = options.limit ?? 200;
 
@@ -79,6 +81,8 @@ export class RuleCompressor {
 
       if (cluster.length >= minClusterSize) {
         clusters.push(cluster);
+      } else if (pattern.positiveFeedback >= minPositiveFeedback && pattern.positiveFeedback > pattern.negativeFeedback) {
+        clusters.push([pattern]);
       }
     }
 
@@ -98,6 +102,7 @@ export class RuleCompressor {
         metadata: {
           sourcePatternIds: cluster.map((item) => item.id),
           clusterSize: cluster.length,
+          promotionReason: cluster.length === 1 ? 'high_positive_feedback' : 'similarity_cluster',
         },
       });
 
