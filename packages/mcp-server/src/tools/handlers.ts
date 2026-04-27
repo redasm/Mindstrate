@@ -5,38 +5,14 @@
  */
 
 import { CaptureSource, type ContextDomainType, type ContextEventType, type ContextNodeStatus } from '@mindstrate/protocol';
-import type { z } from 'zod';
 import type { McpApi, McpToolResponse, SessionState } from '../types.js';
-import type {
-  GraphKnowledgeSearchSchema,
-  ContextIngestEventSchema,
-  ContextQueryGraphSchema,
-  ContextEdgesSchema,
-  ContextConflictsSchema,
-  ContextConflictAcceptSchema,
-  ContextConflictRejectSchema,
-  MetabolismRunSchema,
-  ObsidianProjectionWriteSchema,
-  ObsidianProjectionImportSchema,
-  BundleCreateSchema,
-  BundleValidateSchema,
-  BundleInstallSchema,
-  BundlePublishSchema,
-  MemorySearchSchema,
-  MemoryAddSchema,
-  MemoryFeedbackSchema,
-  SessionSaveSchema,
-  MemoryFeedbackAutoSchema,
-  MemoryCurateSchema,
-  ContextAssembleSchema,
-  ContextInternalizeSchema,
-  MemoryEvolveSchema,
-} from './schemas.js';
 import { formatGraphKnowledgeResults } from './graph-knowledge-format.js';
+
+type ToolInput = any;
 
 export async function handleMemorySearch(
   api: McpApi,
-  input: z.infer<typeof MemorySearchSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const { query, topK } = input;
 
@@ -53,7 +29,7 @@ export async function handleMemorySearch(
 
 export async function handleGraphKnowledgeSearch(
   api: McpApi,
-  input: z.infer<typeof GraphKnowledgeSearchSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const { query, project, topK } = input;
   const results = await api.queryGraphKnowledge(query, {
@@ -70,7 +46,7 @@ export async function handleGraphKnowledgeSearch(
 
 export async function handleContextIngestEvent(
   api: McpApi,
-  input: z.infer<typeof ContextIngestEventSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const result = await api.ingestContextEvent({
     ...input,
@@ -87,7 +63,7 @@ export async function handleContextIngestEvent(
 
 export async function handleContextQueryGraph(
   api: McpApi,
-  input: z.infer<typeof ContextQueryGraphSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const nodes = await api.queryContextGraph({
     query: input.query,
@@ -122,7 +98,7 @@ export async function handleContextQueryGraph(
 
 export async function handleContextEdges(
   api: McpApi,
-  input: z.infer<typeof ContextEdgesSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const edges = await api.listContextEdges({
     sourceId: input.sourceId,
@@ -155,7 +131,7 @@ export async function handleContextEdges(
 
 export async function handleContextConflicts(
   api: McpApi,
-  input: z.infer<typeof ContextConflictsSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const conflicts = await api.listContextConflicts({
     project: input.project,
@@ -186,7 +162,7 @@ export async function handleContextConflicts(
 
 export async function handleContextConflictAccept(
   api: McpApi,
-  input: z.infer<typeof ContextConflictAcceptSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const result = await api.acceptConflictCandidate(input);
   return {
@@ -202,7 +178,7 @@ export async function handleContextConflictAccept(
 
 export async function handleContextConflictReject(
   api: McpApi,
-  input: z.infer<typeof ContextConflictRejectSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   await api.rejectConflictCandidate(input);
   return {
@@ -215,7 +191,7 @@ export async function handleContextConflictReject(
 
 export async function handleMetabolismRun(
   api: McpApi,
-  input: z.infer<typeof MetabolismRunSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   if (input.stage) {
     const result = await api.runMetabolismStage(input.stage, { project: input.project });
@@ -254,7 +230,7 @@ export async function handleMetabolismRun(
 
 export async function handleObsidianProjectionWrite(
   api: McpApi,
-  input: z.infer<typeof ObsidianProjectionWriteSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const result = await api.writeObsidianProjectionFiles({
     rootDir: input.rootDir,
@@ -274,7 +250,7 @@ export async function handleObsidianProjectionWrite(
 
 export async function handleObsidianProjectionImport(
   api: McpApi,
-  input: z.infer<typeof ObsidianProjectionImportSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const result = await api.importObsidianProjectionFile(input.filePath);
   return {
@@ -294,7 +270,7 @@ export async function handleObsidianProjectionImport(
 
 export async function handleBundleCreate(
   api: McpApi,
-  input: z.infer<typeof BundleCreateSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const bundle = await api.createBundle(input);
   return {
@@ -307,7 +283,7 @@ export async function handleBundleCreate(
 
 export async function handleBundleValidate(
   api: McpApi,
-  input: z.infer<typeof BundleValidateSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const result = await api.validateBundle(input.bundle);
   return {
@@ -323,7 +299,7 @@ export async function handleBundleValidate(
 
 export async function handleBundleInstall(
   api: McpApi,
-  input: z.infer<typeof BundleInstallSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   if (!input.bundle && (!input.registry || !input.reference)) {
     return {
@@ -351,7 +327,7 @@ export async function handleBundleInstall(
 
 export async function handleBundlePublish(
   api: McpApi,
-  input: z.infer<typeof BundlePublishSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const result = await api.publishBundle(input.bundle, {
     registry: input.registry,
@@ -378,7 +354,7 @@ export async function handleBundlePublish(
 
 export async function handleMemoryAdd(
   api: McpApi,
-  input: z.infer<typeof MemoryAddSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const result = await api.add({
     type: input.type,
@@ -406,7 +382,7 @@ export async function handleMemoryAdd(
 
 export async function handleMemoryFeedback(
   api: McpApi,
-  input: z.infer<typeof MemoryFeedbackSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const { id, signal, context } = input;
   await api.recordFeedback(id, signal, context);
@@ -442,7 +418,7 @@ export async function handleSessionStart(
 
 export async function handleSessionSave(
   api: McpApi,
-  input: z.infer<typeof SessionSaveSchema>,
+  input: ToolInput,
   session: SessionState,
 ): Promise<McpToolResponse> {
   let sessionId = session.currentSessionId;
@@ -517,7 +493,7 @@ export async function handleSessionRestore(
 
 export async function handleMemoryFeedbackAuto(
   api: McpApi,
-  input: z.infer<typeof MemoryFeedbackAutoSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const { retrievalId, signal, context: feedbackContext } = input;
   await api.recordFeedback(retrievalId, signal, feedbackContext);
@@ -529,7 +505,7 @@ export async function handleMemoryFeedbackAuto(
 
 export async function handleMemoryCurate(
   api: McpApi,
-  input: z.infer<typeof MemoryCurateSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const { task, language, framework } = input;
 
@@ -569,7 +545,7 @@ export async function handleMemoryCurate(
 
 export async function handleContextAssemble(
   api: McpApi,
-  input: z.infer<typeof ContextAssembleSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const { task, project, language, framework } = input;
 
@@ -616,7 +592,7 @@ export async function handleContextAssemble(
 
 export async function handleContextInternalize(
   api: McpApi,
-  input: z.infer<typeof ContextInternalizeSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const accepted = input.accept
     ? await api.acceptInternalizationSuggestions(input)
@@ -647,7 +623,7 @@ export async function handleContextInternalize(
 
 export async function handleMemoryEvolve(
   api: McpApi,
-  input: z.infer<typeof MemoryEvolveSchema>,
+  input: ToolInput,
 ): Promise<McpToolResponse> {
   const { autoApply, maxItems, mode } = input;
 

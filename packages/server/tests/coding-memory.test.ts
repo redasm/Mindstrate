@@ -120,7 +120,7 @@ describe('Mindstrate', () => {
       });
 
       await memory.add(makeKnowledgeInput({
-        title: 'Legacy hydration note',
+        title: 'Low-level hydration note',
         solution: 'Client-only logic may cause mismatch.',
         context: { project: 'proj', language: 'typescript', framework: 'react' },
       }));
@@ -152,12 +152,12 @@ describe('Mindstrate', () => {
 
     it('should expose graph updates through graph knowledge reads', async () => {
       const r = await memory.add(makeKnowledgeInput({
-        title: 'Old architecture guidance',
-        solution: 'legacy token rotation flow',
+        title: 'Previous architecture guidance',
+        solution: 'previous token rotation flow',
       }));
 
       let entries = memory.readGraphKnowledge();
-      expect(entries.some((item) => item.id === r.view!.id && item.summary === 'legacy token rotation flow')).toBe(true);
+      expect(entries.some((item) => item.id === r.view!.id && item.summary === 'previous token rotation flow')).toBe(true);
 
       memory.updateContextNode(r.view!.id, {
         title: 'New architecture guidance',
@@ -211,7 +211,7 @@ describe('Mindstrate', () => {
       expect(ended!.status).toBe('completed');
     });
 
-    it('should restore ECS session snapshot projections with legacy session context', async () => {
+    it('should restore ECS session snapshot projections with current session context', async () => {
       const session = await memory.startSession({ project: 'proj' });
       memory.saveObservation({
         sessionId: session.id,
@@ -334,7 +334,7 @@ describe('Mindstrate', () => {
     });
   });
 
-  describe('ECS facade compatibility', () => {
+  describe('ECS runtime API', () => {
     it('should expose the design-document ECS runtime methods', async () => {
       const internal = memory as unknown as {
         contextGraphStore: {

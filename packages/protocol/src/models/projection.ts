@@ -7,7 +7,7 @@ import type {
 /**
  * Graph-first knowledge projection for ECS-native consumers.
  *
- * Unlike the removed legacy unit shape, this view is explicitly derived from
+ * This view is explicitly derived from
  * the context graph and preserves substrate lineage in the payload.
  */
 export interface GraphKnowledgeView {

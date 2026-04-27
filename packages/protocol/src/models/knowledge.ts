@@ -2,7 +2,7 @@
  * Mindstrate - Graph knowledge input models
  *
  * These contracts describe graph write inputs and context assembly payloads.
- * Runtime read results are graph projections, not legacy unit records.
+ * Runtime read results are graph projections, not unit records.
  */
 
 // ============================================================

@@ -1,18 +1,13 @@
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { TeamClient } from '@mindstrate/client';
 import {
   CaptureSource,
-  ContextDomainType,
-  ContextEventType,
   errorMessage,
   Mindstrate,
   KnowledgeExtractor,
   loadConfig,
-  type AddKnowledgeResult,
   type CommitInfo,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
+import { createKnowledgeSink, defaultScannerDbPath, type KnowledgeSink } from './knowledge-sink.js';
 import { SourceStore } from './source-store.js';
 import type { CommitIngestionOptions, CommitIngestionResult, GitLocalSourceInput, ScanExecutionResult, ScanSource } from './types.js';
 
@@ -21,27 +16,13 @@ export interface RepoScannerOptions {
   memory?: Mindstrate;
 }
 
-interface KnowledgeSink {
-  init(): Promise<void>;
-  addKnowledge(input: any): Promise<AddKnowledgeResult>;
-  ingestGitActivity(input: {
-    content: string;
-    project?: string;
-    actor?: string;
-    sourceRef?: string;
-    metadata?: Record<string, unknown>;
-  }): Promise<void>;
-  close(): Promise<void>;
-}
-
 export class RepoScannerService {
   readonly store: SourceStore;
   private sink: KnowledgeSink;
   private extractor: KnowledgeExtractor;
 
   constructor(options: RepoScannerOptions = {}) {
-    const scannerDbPath = options.scannerDbPath
-      ?? path.join(os.homedir(), '.mindstrate-scanner', 'scanner.db');
+    const scannerDbPath = options.scannerDbPath ?? defaultScannerDbPath();
     this.store = new SourceStore(scannerDbPath);
     const config = loadConfig(options.memory?.getConfig());
     this.sink = createKnowledgeSink(options.memory);
@@ -327,78 +308,4 @@ export class RepoScannerService {
     });
     return result.status;
   }
-}
-
-function createKnowledgeSink(memory?: Mindstrate): KnowledgeSink {
-  if (memory) {
-    return {
-      async init() {
-        await memory.init();
-      },
-      async addKnowledge(input) {
-        return memory.add(input);
-      },
-      async ingestGitActivity(input) {
-        memory.ingestGitActivity(input);
-      },
-      async close() {
-        return;
-      },
-    };
-  }
-
-  const teamServerUrl = process.env['TEAM_SERVER_URL'] ?? '';
-  if (teamServerUrl) {
-    const client = new TeamClient({
-      serverUrl: teamServerUrl,
-      apiKey: process.env['TEAM_API_KEY'] ?? '',
-    });
-
-    return {
-      async init() {
-        const healthy = await client.admin.health();
-        if (!healthy) {
-          throw new Error(`Team Server is not reachable: ${teamServerUrl}`);
-        }
-      },
-      async addKnowledge(input) {
-        return client.knowledge.add(input);
-      },
-      async ingestGitActivity(input) {
-        await client.context.ingestEvent({
-          type: ContextEventType.GIT_ACTIVITY,
-          content: input.content,
-          project: input.project,
-          actor: input.actor ?? 'git',
-          domainType: ContextDomainType.ARCHITECTURE,
-          substrateType: 'episode',
-          title: `git activity: ${input.content.slice(0, 80)}`,
-          tags: ['git-activity'],
-          metadata: {
-            sourceRef: input.sourceRef,
-            ...input.metadata,
-          },
-        });
-      },
-      async close() {
-        return;
-      },
-    };
-  }
-
-  const localMemory = new Mindstrate();
-  return {
-    async init() {
-      await localMemory.init();
-    },
-    async addKnowledge(input) {
-      return localMemory.add(input);
-    },
-    async ingestGitActivity(input) {
-      localMemory.ingestGitActivity(input);
-    },
-    async close() {
-      localMemory.close();
-    },
-  };
 }

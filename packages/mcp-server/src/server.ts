@@ -39,64 +39,10 @@ import type {
   Session,
   SaveObservationInput,
 } from '@mindstrate/protocol';
-import { z } from 'zod';
 import pino from 'pino';
 
 // Tool & Resource modules
-import { TOOL_DEFINITIONS } from './tools/definitions.js';
-import {
-  GraphKnowledgeSearchSchema,
-  ContextIngestEventSchema,
-  ContextQueryGraphSchema,
-  ContextEdgesSchema,
-  ContextConflictsSchema,
-  ContextConflictAcceptSchema,
-  ContextConflictRejectSchema,
-  MetabolismRunSchema,
-  ObsidianProjectionWriteSchema,
-  ObsidianProjectionImportSchema,
-  BundleCreateSchema,
-  BundleValidateSchema,
-  BundleInstallSchema,
-  BundlePublishSchema,
-  MemorySearchSchema,
-  MemoryAddSchema,
-  MemoryFeedbackSchema,
-  SessionSaveSchema,
-  MemoryFeedbackAutoSchema,
-  MemoryCurateSchema,
-  ContextAssembleSchema,
-  ContextInternalizeSchema,
-  MemoryEvolveSchema,
-} from './tools/schemas.js';
-import {
-  handleGraphKnowledgeSearch,
-  handleContextIngestEvent,
-  handleContextQueryGraph,
-  handleContextEdges,
-  handleContextConflicts,
-  handleContextConflictAccept,
-  handleContextConflictReject,
-  handleMetabolismRun,
-  handleObsidianProjectionWrite,
-  handleObsidianProjectionImport,
-  handleBundleCreate,
-  handleBundleValidate,
-  handleBundleInstall,
-  handleBundlePublish,
-  handleMemorySearch,
-  handleMemoryAdd,
-  handleMemoryFeedback,
-  handleSessionStart,
-  handleSessionSave,
-  handleSessionEnd,
-  handleSessionRestore,
-  handleMemoryFeedbackAuto,
-  handleMemoryCurate,
-  handleContextAssemble,
-  handleContextInternalize,
-  handleMemoryEvolve,
-} from './tools/handlers.js';
+import { TOOL_DEFINITIONS, toolByName } from './tools/tool-registry.js';
 import { RESOURCE_DEFINITIONS, handleReadResource } from './resources/handlers.js';
 import type { McpApi, SessionState, LocalMemory } from './types.js';
 
@@ -384,25 +330,6 @@ const api: McpApi = {
 };
 
 // ============================================================
-// Zod validation helper
-// ============================================================
-
-function validateArgs<T>(schema: z.ZodSchema<T>, args: unknown): { data: T } | { error: { content: Array<{ type: string; text: string }>; isError: true } } {
-  const result = schema.safeParse(args ?? {});
-  if (!result.success) {
-    const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; ');
-    logger.warn({ issues, args }, 'MCP tool input validation failed');
-    return {
-      error: {
-        content: [{ type: 'text', text: `Invalid input: ${issues}` }],
-        isError: true,
-      },
-    };
-  }
-  return { data: result.data };
-}
-
-// ============================================================
 // MCP Server setup
 // ============================================================
 
@@ -427,135 +354,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 // Tools: call
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
+  const tool = toolByName.get(name);
 
-  switch (name) {
-    case 'memory_search': {
-      const v = validateArgs(MemorySearchSchema, args);
-      if ('error' in v) return v.error;
-      return handleMemorySearch(api, v.data);
-    }
-    case 'graph_knowledge_search': {
-      const v = validateArgs(GraphKnowledgeSearchSchema, args);
-      if ('error' in v) return v.error;
-      return handleGraphKnowledgeSearch(api, v.data);
-    }
-    case 'context_ingest_event': {
-      const v = validateArgs(ContextIngestEventSchema, args);
-      if ('error' in v) return v.error;
-      return handleContextIngestEvent(api, v.data);
-    }
-    case 'context_query_graph': {
-      const v = validateArgs(ContextQueryGraphSchema, args);
-      if ('error' in v) return v.error;
-      return handleContextQueryGraph(api, v.data);
-    }
-    case 'context_edges': {
-      const v = validateArgs(ContextEdgesSchema, args);
-      if ('error' in v) return v.error;
-      return handleContextEdges(api, v.data);
-    }
-    case 'context_conflicts': {
-      const v = validateArgs(ContextConflictsSchema, args);
-      if ('error' in v) return v.error;
-      return handleContextConflicts(api, v.data);
-    }
-    case 'context_conflict_accept': {
-      const v = validateArgs(ContextConflictAcceptSchema, args);
-      if ('error' in v) return v.error;
-      return handleContextConflictAccept(api, v.data);
-    }
-    case 'context_conflict_reject': {
-      const v = validateArgs(ContextConflictRejectSchema, args);
-      if ('error' in v) return v.error;
-      return handleContextConflictReject(api, v.data);
-    }
-    case 'metabolism_run': {
-      const v = validateArgs(MetabolismRunSchema, args);
-      if ('error' in v) return v.error;
-      return handleMetabolismRun(api, v.data);
-    }
-    case 'context_obsidian_projection_write': {
-      const v = validateArgs(ObsidianProjectionWriteSchema, args);
-      if ('error' in v) return v.error;
-      return handleObsidianProjectionWrite(api, v.data);
-    }
-    case 'context_obsidian_projection_import': {
-      const v = validateArgs(ObsidianProjectionImportSchema, args);
-      if ('error' in v) return v.error;
-      return handleObsidianProjectionImport(api, v.data);
-    }
-    case 'bundle_create': {
-      const v = validateArgs(BundleCreateSchema, args);
-      if ('error' in v) return v.error;
-      return handleBundleCreate(api, v.data);
-    }
-    case 'bundle_validate': {
-      const v = validateArgs(BundleValidateSchema, args);
-      if ('error' in v) return v.error;
-      return handleBundleValidate(api, v.data);
-    }
-    case 'bundle_install': {
-      const v = validateArgs(BundleInstallSchema, args);
-      if ('error' in v) return v.error;
-      return handleBundleInstall(api, v.data);
-    }
-    case 'bundle_publish': {
-      const v = validateArgs(BundlePublishSchema, args);
-      if ('error' in v) return v.error;
-      return handleBundlePublish(api, v.data);
-    }
-    case 'memory_add': {
-      const v = validateArgs(MemoryAddSchema, args);
-      if ('error' in v) return v.error;
-      return handleMemoryAdd(api, v.data);
-    }
-    case 'memory_feedback': {
-      const v = validateArgs(MemoryFeedbackSchema, args);
-      if ('error' in v) return v.error;
-      return handleMemoryFeedback(api, v.data);
-    }
-    case 'session_start':
-      return handleSessionStart(api, args as Record<string, unknown> | undefined, sessionState);
-    case 'session_save': {
-      const v = validateArgs(SessionSaveSchema, args);
-      if ('error' in v) return v.error;
-      return handleSessionSave(api, v.data, sessionState);
-    }
-    case 'session_end':
-      return handleSessionEnd(api, args as Record<string, unknown> | undefined, sessionState);
-    case 'session_restore':
-      return handleSessionRestore(api, args as Record<string, unknown> | undefined);
-    case 'memory_feedback_auto': {
-      const v = validateArgs(MemoryFeedbackAutoSchema, args);
-      if ('error' in v) return v.error;
-      return handleMemoryFeedbackAuto(api, v.data);
-    }
-    case 'memory_curate': {
-      const v = validateArgs(MemoryCurateSchema, args);
-      if ('error' in v) return v.error;
-      return handleMemoryCurate(api, v.data);
-    }
-    case 'context_assemble': {
-      const v = validateArgs(ContextAssembleSchema, args);
-      if ('error' in v) return v.error;
-      return handleContextAssemble(api, v.data);
-    }
-    case 'context_internalize': {
-      const v = validateArgs(ContextInternalizeSchema, args);
-      if ('error' in v) return v.error;
-      return handleContextInternalize(api, v.data);
-    }
-    case 'memory_evolve': {
-      const v = validateArgs(MemoryEvolveSchema, args);
-      if ('error' in v) return v.error;
-      return handleMemoryEvolve(api, v.data);
-    }
-    default:
-      return {
-        content: [{ type: 'text', text: `Unknown tool: ${name}` }],
-        isError: true,
-      };
+  if (!tool) {
+    return {
+      content: [{ type: 'text', text: `Unknown tool: ${name}` }],
+      isError: true,
+    };
   }
+
+  const parsed = tool.schema.safeParse(args ?? {});
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ');
+    logger.warn({ tool: name, issues, args }, 'MCP tool input validation failed');
+    return {
+      content: [{ type: 'text', text: `Invalid input: ${issues}` }],
+      isError: true,
+    };
+  }
+
+  return (tool.handler as (toolApi: McpApi, input: unknown, state: SessionState) => Promise<any>)(
+    api,
+    parsed.data,
+    sessionState,
+  );
 });
 
 // Resources: list
