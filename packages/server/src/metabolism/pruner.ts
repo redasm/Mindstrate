@@ -9,6 +9,7 @@ import type { ContextGraphStore } from '../context-graph/context-graph-store.js'
 
 export interface PruneOptions {
   project?: string;
+  apply?: boolean;
   archiveOlderThanDays?: number;
   archiveAccessCountAtMost?: number;
   deprecateQualityScoreAtMost?: number;
@@ -20,6 +21,8 @@ export interface PruneResult {
   archivedNodes: number;
   deprecatedNodes: number;
   skippedConflictedNodes: number;
+  archiveCandidates: string[];
+  deprecateCandidates: string[];
 }
 
 export class Pruner {
@@ -43,6 +46,9 @@ export class Pruner {
     let archivedNodes = 0;
     let deprecatedNodes = 0;
     let skippedConflictedNodes = 0;
+    const archiveCandidates: string[] = [];
+    const deprecateCandidates: string[] = [];
+    const apply = options.apply === true;
 
     for (const node of nodes) {
       if (node.status === ContextNodeStatus.CONFLICTED) {
@@ -52,35 +58,50 @@ export class Pruner {
       if (node.status === ContextNodeStatus.ARCHIVED || node.status === ContextNodeStatus.DEPRECATED) {
         continue;
       }
+      if (isProtected(node)) {
+        continue;
+      }
 
       if (shouldDeprecate(node, deprecateQualityScoreAtMost, deprecateNegativeFeedbackDeltaAtLeast)) {
-        this.graphStore.updateNode(node.id, { status: ContextNodeStatus.DEPRECATED });
-        deprecatedNodes++;
+        deprecateCandidates.push(node.id);
+        if (apply) {
+          this.graphStore.updateNode(node.id, { status: ContextNodeStatus.DEPRECATED });
+          deprecatedNodes++;
+        }
         continue;
       }
 
       if (isEnvironmentMismatch(node, projectEnvironment)) {
-        this.graphStore.updateNode(node.id, {
-          status: ContextNodeStatus.DEPRECATED,
-          metadata: {
-            ...(node.metadata ?? {}),
-            pruneReason: 'project_environment_mismatch',
-            currentProjectEnvironment: projectEnvironment,
-          },
-        });
-        deprecatedNodes++;
+        deprecateCandidates.push(node.id);
+        if (apply) {
+          this.graphStore.updateNode(node.id, {
+            status: ContextNodeStatus.DEPRECATED,
+            metadata: {
+              ...(node.metadata ?? {}),
+              pruneReason: 'project_environment_mismatch',
+              currentProjectEnvironment: projectEnvironment,
+            },
+          });
+          deprecatedNodes++;
+        }
         continue;
       }
 
       if (isCoveredByActiveHighLevelRule(this.graphStore, node)) {
-        this.graphStore.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
-        archivedNodes++;
+        archiveCandidates.push(node.id);
+        if (apply) {
+          this.graphStore.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
+          archivedNodes++;
+        }
         continue;
       }
 
       if (shouldArchive(node, archiveOlderThanDays, archiveAccessCountAtMost)) {
-        this.graphStore.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
-        archivedNodes++;
+        archiveCandidates.push(node.id);
+        if (apply) {
+          this.graphStore.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
+          archivedNodes++;
+        }
       }
     }
 
@@ -89,8 +110,17 @@ export class Pruner {
       archivedNodes,
       deprecatedNodes,
       skippedConflictedNodes,
+      archiveCandidates,
+      deprecateCandidates,
     };
   }
+}
+
+function isProtected(node: ContextNode): boolean {
+  if (node.status === ContextNodeStatus.VERIFIED) return true;
+  return node.metadata?.['pinned'] === true
+    || node.metadata?.['critical'] === true
+    || node.metadata?.['retentionPolicy'] === 'keep';
 }
 
 function loadProjectEnvironment(nodes: ContextNode[]): Record<string, unknown> {

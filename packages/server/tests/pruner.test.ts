@@ -26,7 +26,7 @@ describe('Pruner', () => {
     removeTempDir(tempDir);
   });
 
-  it('archives stale low-access episodic nodes and deprecates very low quality nodes', () => {
+  it('suggests stale and weak nodes without changing status by default', () => {
     const stale = graphStore.createNode({
       substrateType: SubstrateType.EPISODE,
       domainType: ContextDomainType.CONTEXT_EVENT,
@@ -52,10 +52,33 @@ describe('Pruner', () => {
 
     const result = pruner.prune({ project: 'mindstrate' });
 
+    expect(result.archiveCandidates).toContain(stale.id);
+    expect(result.deprecateCandidates).toContain(weak.id);
+    expect(result.archivedNodes).toBe(0);
+    expect(result.deprecatedNodes).toBe(0);
+    expect(graphStore.getNodeById(stale.id)?.status).toBe(ContextNodeStatus.ACTIVE);
+    expect(graphStore.getNodeById(weak.id)?.status).toBe(ContextNodeStatus.ACTIVE);
+  });
+
+  it('applies prune suggestions only when explicitly requested', () => {
+    const stale = graphStore.createNode({
+      substrateType: SubstrateType.EPISODE,
+      domainType: ContextDomainType.CONTEXT_EVENT,
+      title: 'Stale episode',
+      content: 'Old event',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    graphStore.updateNode(stale.id, {
+      lastAccessedAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString(),
+      accessCount: 0,
+    });
+
+    const result = pruner.prune({ project: 'mindstrate', apply: true });
+
     expect(result.archivedNodes).toBe(1);
-    expect(result.deprecatedNodes).toBe(1);
+    expect(result.archiveCandidates).toContain(stale.id);
     expect(graphStore.getNodeById(stale.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
-    expect(graphStore.getNodeById(weak.id)?.status).toBe(ContextNodeStatus.DEPRECATED);
   });
 
   it('archives lower-level nodes covered by active high-level rules', () => {
@@ -83,7 +106,7 @@ describe('Pruner', () => {
       relationType: ContextRelationType.GENERALIZES,
     });
 
-    const result = pruner.prune({ project: 'mindstrate' });
+    const result = pruner.prune({ project: 'mindstrate', apply: true });
 
     expect(result.archivedNodes).toBe(1);
     expect(graphStore.getNodeById(snapshot.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
@@ -115,9 +138,28 @@ describe('Pruner', () => {
       },
     });
 
-    const result = pruner.prune({ project: 'mindstrate' });
+    const result = pruner.prune({ project: 'mindstrate', apply: true });
 
     expect(result.deprecatedNodes).toBe(1);
     expect(graphStore.getNodeById(staleRule.id)?.status).toBe(ContextNodeStatus.DEPRECATED);
+  });
+
+  it('does not suggest pinned, critical, or verified nodes for pruning', () => {
+    const critical = graphStore.createNode({
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Critical historical summary',
+      content: 'Rare but important release recovery guidance.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 10,
+      metadata: { critical: true },
+    });
+
+    const result = pruner.prune({ project: 'mindstrate' });
+
+    expect(result.archiveCandidates).not.toContain(critical.id);
+    expect(result.deprecateCandidates).not.toContain(critical.id);
+    expect(graphStore.getNodeById(critical.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
 });
