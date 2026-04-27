@@ -356,16 +356,16 @@ function createKnowledgeSink(memory?: Mindstrate): KnowledgeSink {
 
     return {
       async init() {
-        const healthy = await client.health();
+        const healthy = await client.admin.health();
         if (!healthy) {
           throw new Error(`Team Server is not reachable: ${teamServerUrl}`);
         }
       },
       async addKnowledge(input) {
-        return client.add(input);
+        return client.knowledge.add(input);
       },
       async ingestGitActivity(input) {
-        await client.ingestContextEvent({
+        await client.context.ingestEvent({
           type: ContextEventType.GIT_ACTIVITY,
           content: input.content,
           project: input.project,

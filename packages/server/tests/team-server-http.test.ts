@@ -87,7 +87,7 @@ describe('team-server HTTP integration', () => {
   it('rejects unauthenticated team API requests', async () => {
     const { client } = await startTeamServer({ clientApiKey: '' });
 
-    await expect(client.list()).rejects.toThrow(/401/);
+    await expect(client.knowledge.list()).rejects.toThrow(/401/);
   });
 
   it('prevents scoped API keys from reading outside their project', async () => {
@@ -106,16 +106,16 @@ describe('team-server HTTP integration', () => {
       context: { project: 'proj-b' },
     }));
 
-    const visible = await client.list({ project: 'proj-a' });
+    const visible = await client.knowledge.list({ project: 'proj-a' });
     expect(visible.map((entry) => entry.title)).toContain('Project A workflow');
 
-    await expect(client.list({ project: 'proj-b' })).rejects.toThrow(/403/);
+    await expect(client.knowledge.list({ project: 'proj-b' })).rejects.toThrow(/403/);
   });
 
   it('preserves actionable guidance through the HTTP create path', async () => {
     const { client, memory } = await startTeamServer();
 
-    const result = await client.add(makeKnowledgeInput({
+    const result = await client.knowledge.add(makeKnowledgeInput({
       type: KnowledgeType.WORKFLOW,
       title: 'Rotate deployment secret',
       solution: 'Follow the rotation workflow.',
@@ -144,7 +144,7 @@ describe('team-server HTTP integration', () => {
   it('preserves quality warnings through the HTTP create path', async () => {
     const { client } = await startTeamServer();
 
-    const result = await client.add(makeKnowledgeInput({
+    const result = await client.knowledge.add(makeKnowledgeInput({
       title: 'Needs language warning',
       solution: 'This entry intentionally omits the programming language metadata.',
       context: {
@@ -159,7 +159,7 @@ describe('team-server HTTP integration', () => {
   it('accepts emergent custom knowledge types in team mode', async () => {
     const { client, memory } = await startTeamServer();
 
-    const result = await client.add(makeKnowledgeInput({
+    const result = await client.knowledge.add(makeKnowledgeInput({
       type: 'incident_review' as KnowledgeType,
       title: 'Capture incident review learnings',
       solution: 'Record the timeline, contributing factors, and prevention follow-ups.',
@@ -175,9 +175,9 @@ describe('team-server HTTP integration', () => {
   it('restores active sessions and supports richer filters in team mode', async () => {
     const { client, memory } = await startTeamServer();
 
-    const started = await client.startSession('proj-a', 'typescript');
-    const active = await client.getActiveSession('proj-a');
-    const loaded = await client.getSession(started.session.id);
+    const started = await client.sessions.start('proj-a', 'typescript');
+    const active = await client.sessions.getActive('proj-a');
+    const loaded = await client.sessions.get(started.session.id);
 
     expect(active?.id).toBe(started.session.id);
     expect(loaded?.id).toBe(started.session.id);
@@ -195,7 +195,7 @@ describe('team-server HTTP integration', () => {
       solution: 'Avoid global mutable state in render paths.',
     }));
 
-    const filtered = await client.list({
+    const filtered = await client.knowledge.list({
       types: [KnowledgeType.WORKFLOW, KnowledgeType.BEST_PRACTICE],
       tags: ['rotation'],
     });
@@ -207,14 +207,14 @@ describe('team-server HTTP integration', () => {
   it('runs staged metabolism through the team HTTP API', async () => {
     const { client } = await startTeamServer();
 
-    await client.add(makeKnowledgeInput({
+    await client.knowledge.add(makeKnowledgeInput({
       title: 'Digestible team rule',
       type: KnowledgeType.CONVENTION,
       solution: 'Team staged metabolism should expose digest as a first-class operation.',
       context: { project: 'proj-stage' },
     }));
 
-    const digest = await client.runMetabolismStage('digest', { project: 'proj-stage' });
+    const digest = await client.metabolism.runStage('digest', { project: 'proj-stage' });
 
     expect(digest.stage).toBe('digest');
     expect(digest.scanned).toBeGreaterThan(0);
@@ -223,14 +223,14 @@ describe('team-server HTTP integration', () => {
   it('lists ECS projection records through the team HTTP API', async () => {
     const { client } = await startTeamServer();
 
-    await client.add(makeKnowledgeInput({
+    await client.knowledge.add(makeKnowledgeInput({
       title: 'Projected team rule',
       type: KnowledgeType.CONVENTION,
       solution: 'Team APIs should expose ECS projection records for observability.',
       context: { project: 'proj-projection' },
     }));
 
-    const records = await client.listProjectionRecords({ target: 'graph_knowledge' });
+    const records = await client.context.listProjectionRecords({ target: 'graph_knowledge' });
 
     expect(records.length).toBeGreaterThan(0);
     expect(records[0].target).toBe('graph_knowledge');
@@ -239,18 +239,18 @@ describe('team-server HTTP integration', () => {
   it('publishes portable bundles through the team HTTP API', async () => {
     const { client, tempDir } = await startTeamServer();
 
-    await client.add(makeKnowledgeInput({
+    await client.knowledge.add(makeKnowledgeInput({
       title: 'Publishable team rule',
       type: KnowledgeType.CONVENTION,
       solution: 'Team bundle publication should produce a portable manifest.',
       context: { project: 'proj-bundle' },
     }));
 
-    const bundle = await client.createBundle({
+    const bundle = await client.bundles.create({
       name: 'team-ecs-rules',
       project: 'proj-bundle',
     });
-    const publication = await client.publishBundle(bundle, {
+    const publication = await client.bundles.publish(bundle, {
       registry: 'https://registry.example.test/mindstrate',
       visibility: 'public',
     });
@@ -263,11 +263,11 @@ describe('team-server HTTP integration', () => {
     expect(publication.manifest.digest).toMatch(/^sha256:/);
 
     const registryDir = path.join(tempDir, 'team-registry');
-    const localPublication = await client.publishBundle(bundle, {
+    const localPublication = await client.bundles.publish(bundle, {
       registry: registryDir,
       visibility: 'public',
     });
-    const install = await client.installBundleFromRegistry({
+    const install = await client.bundles.installFromRegistry({
       registry: registryDir,
       reference: `${localPublication.manifest.name}@${localPublication.manifest.version}`,
     });
@@ -295,7 +295,7 @@ describe('team-server HTTP integration', () => {
       confidence: 0.95,
     });
 
-    const suggestions = await client.generateInternalizationSuggestions({
+    const suggestions = await client.bundles.generateInternalizationSuggestions({
       project: 'proj-internalize',
     });
 
@@ -322,7 +322,7 @@ describe('team-server HTTP integration', () => {
     });
 
     const rootDir = path.join(tempDir, 'vault');
-    const result = await client.writeObsidianProjectionFiles({
+    const result = await client.context.writeObsidianProjectionFiles({
       project: 'proj-obsidian',
       rootDir,
     });

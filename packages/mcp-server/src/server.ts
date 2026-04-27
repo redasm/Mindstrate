@@ -184,24 +184,24 @@ const api: McpApi = {
       }
     }
     if (teamClient) {
-      const ok = await teamClient.health();
+      const ok = await teamClient.admin.health();
       if (!ok) logger.warn({ url: TEAM_SERVER_URL }, 'Team Server is not reachable');
     }
   },
 
   async add(input: CreateKnowledgeInput) {
-    if (teamClient) return teamClient.add(input);
+    if (teamClient) return teamClient.knowledge.add(input);
     return memory!.add(input);
   },
 
   async get(id: string) {
-    if (teamClient) return teamClient.get(id);
+    if (teamClient) return teamClient.knowledge.get(id);
     return memory!.readGraphKnowledge({ limit: 500 }).find((view) => view.id === id) ?? null;
   },
 
   async startSession(project: string, techContext?: string): Promise<{ session: Session; context: string | null }> {
     if (teamClient) {
-      const result = await teamClient.startSession(project, techContext);
+      const result = await teamClient.sessions.start(project, techContext);
       return { session: result.session, context: result.context };
     }
     const session = await memory!.startSession({ project, techContext });
@@ -210,12 +210,12 @@ const api: McpApi = {
   },
 
   async saveObservation(sessionId: string, type: string, content: string, metadata?: Record<string, string>) {
-    if (teamClient) return teamClient.saveObservation(sessionId, type, content, metadata);
+    if (teamClient) return teamClient.sessions.saveObservation(sessionId, type, content, metadata);
     memory!.saveObservation({ sessionId, type, content, metadata } as SaveObservationInput);
   },
 
   async endSession(sessionId: string, summary?: string, openTasks?: string[]) {
-    if (teamClient) return teamClient.endSession(sessionId, summary, openTasks);
+    if (teamClient) return teamClient.sessions.end(sessionId, summary, openTasks);
     if (summary) {
       memory!.compressSession({ sessionId, summary, openTasks });
     }
@@ -223,35 +223,35 @@ const api: McpApi = {
   },
 
   async getSession(id: string): Promise<Session | null> {
-    if (teamClient) return teamClient.getSession(id);
+    if (teamClient) return teamClient.sessions.get(id);
     return memory!.getSession(id);
   },
 
   async getActiveSession(project: string): Promise<Session | null> {
-    if (teamClient) return teamClient.getActiveSession(project);
+    if (teamClient) return teamClient.sessions.getActive(project);
     return memory!.getActiveSession(project);
   },
 
   async formatSessionContext(project: string): Promise<string | null> {
     if (teamClient) {
-      const result = await teamClient.restoreSession(project);
+      const result = await teamClient.sessions.restore(project);
       return result.formatted;
     }
     return memory!.formatSessionContext(project) || null;
   },
 
   async getStats() {
-    if (teamClient) return teamClient.getStats();
+    if (teamClient) return teamClient.admin.getStats();
     return memory!.getStats();
   },
 
   async recordFeedback(retrievalId: string, signal: 'adopted' | 'rejected' | 'ignored' | 'partial', context?: string) {
-    if (teamClient) return teamClient.recordFeedback(retrievalId, signal, context);
+    if (teamClient) return teamClient.feedback.record(retrievalId, signal, context);
     memory!.recordFeedback(retrievalId, signal, context);
   },
 
   async curateContext(task: string, context?: RetrievalContext): Promise<CuratedContext> {
-    if (teamClient) return teamClient.curateContext(task, context);
+    if (teamClient) return teamClient.context.curate(task, context);
     return memory!.curateContext(task, context);
   },
 
@@ -259,53 +259,53 @@ const api: McpApi = {
     task: string,
     options?: { project?: string; context?: RetrievalContext; sessionId?: string },
   ) {
-    if (teamClient) return teamClient.assembleContext(task, options);
+    if (teamClient) return teamClient.context.assemble(task, options);
     return memory!.assembleContext(task, options);
   },
 
   async runEvolution(options?: { autoApply?: boolean; maxItems?: number; mode?: 'standard' | 'background' }): Promise<EvolutionRunResult> {
-    if (teamClient) return teamClient.runEvolution(options);
+    if (teamClient) return teamClient.admin.runEvolution(options);
     return memory!.runEvolution(options);
   },
 
   async ingestContextEvent(input) {
-    if (teamClient) return teamClient.ingestContextEvent(input);
+    if (teamClient) return teamClient.context.ingestEvent(input);
     const result = memory!.ingestEvent(input);
     return { eventId: result.event.id, nodeId: result.node.id };
   },
 
   async queryContextGraph(options) {
-    if (teamClient) return teamClient.queryContextGraph(options);
+    if (teamClient) return teamClient.context.queryGraph(options);
     return memory!.queryContextGraph(options);
   },
 
   async listContextEdges(options) {
-    if (teamClient) return teamClient.listContextEdges(options);
+    if (teamClient) return teamClient.context.listEdges(options);
     return memory!.listContextEdges(options);
   },
 
   async listContextConflicts(options) {
-    if (teamClient) return teamClient.listContextConflicts(options);
+    if (teamClient) return teamClient.context.listConflicts(options);
     return memory!.listConflictRecords(options?.project, options?.limit);
   },
 
   async acceptConflictCandidate(input) {
-    if (teamClient) return teamClient.acceptConflictCandidate(input);
+    if (teamClient) return teamClient.context.acceptConflictCandidate(input);
     return memory!.acceptConflictCandidate(input);
   },
 
   async rejectConflictCandidate(input) {
-    if (teamClient) return teamClient.rejectConflictCandidate(input);
+    if (teamClient) return teamClient.context.rejectConflictCandidate(input);
     return memory!.rejectConflictCandidate(input);
   },
 
   async runMetabolism(options) {
-    if (teamClient) return teamClient.runMetabolism(options);
+    if (teamClient) return teamClient.metabolism.run(options);
     return memory!.runMetabolism(options);
   },
 
   async runMetabolismStage(stage, options) {
-    if (teamClient) return teamClient.runMetabolismStage(stage, options);
+    if (teamClient) return teamClient.metabolism.runStage(stage, options);
     switch (stage) {
       case 'digest':
         return memory!.runDigest(options);
@@ -321,57 +321,57 @@ const api: McpApi = {
   },
 
   async createBundle(options) {
-    if (teamClient) return teamClient.createBundle(options);
+    if (teamClient) return teamClient.bundles.create(options);
     return memory!.createBundle(options);
   },
 
   async validateBundle(bundle) {
-    if (teamClient) return teamClient.validateBundle(bundle);
+    if (teamClient) return teamClient.bundles.validate(bundle);
     return memory!.validateBundle(bundle);
   },
 
   async installBundle(bundle) {
-    if (teamClient) return teamClient.installBundle(bundle);
+    if (teamClient) return teamClient.bundles.install(bundle);
     return memory!.installBundle(bundle);
   },
 
   async installBundleFromRegistry(options) {
-    if (teamClient) return teamClient.installBundleFromRegistry(options);
+    if (teamClient) return teamClient.bundles.installFromRegistry(options);
     return memory!.installBundleFromRegistry(options);
   },
 
   async publishBundle(bundle, options) {
-    if (teamClient) return teamClient.publishBundle(bundle, options);
+    if (teamClient) return teamClient.bundles.publish(bundle, options);
     return memory!.publishBundle(bundle, options);
   },
 
   async generateInternalizationSuggestions(options) {
-    if (teamClient) return teamClient.generateInternalizationSuggestions(options);
+    if (teamClient) return teamClient.bundles.generateInternalizationSuggestions(options);
     return memory!.generateInternalizationSuggestions(options);
   },
 
   async acceptInternalizationSuggestions(options) {
-    if (teamClient) return teamClient.acceptInternalizationSuggestions(options);
+    if (teamClient) return teamClient.bundles.acceptInternalizationSuggestions(options);
     return memory!.acceptInternalizationSuggestions(options);
   },
 
   async writeObsidianProjectionFiles(options) {
-    if (teamClient) return teamClient.writeObsidianProjectionFiles(options);
+    if (teamClient) return teamClient.context.writeObsidianProjectionFiles(options);
     return { files: memory!.writeObsidianProjectionFiles(options) };
   },
 
   async importObsidianProjectionFile(filePath) {
-    if (teamClient) return teamClient.importObsidianProjectionFile(filePath);
+    if (teamClient) return teamClient.context.importObsidianProjectionFile(filePath);
     return memory!.importObsidianProjectionFile(filePath);
   },
 
   async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
-    if (teamClient) return teamClient.readGraphKnowledge(opts);
+    if (teamClient) return teamClient.context.readKnowledge(opts);
     return memory!.readGraphKnowledge(opts);
   },
 
   async queryGraphKnowledge(query: string, opts?: { project?: string; topK?: number; limit?: number }) {
-    if (teamClient) return teamClient.queryGraphKnowledge(query, opts);
+    if (teamClient) return teamClient.context.queryKnowledge(query, opts);
     return memory!.queryGraphKnowledge(query, opts);
   },
 
