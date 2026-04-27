@@ -120,11 +120,11 @@ export const TOOL_DEFINITIONS = [
     name: 'context_ingest_event',
     description:
       'Ingest a low-level ECS context event and materialize it as an episode node. ' +
-      'Use this for tool results, test failures, git activity, diagnostics, or explicit external signals.',
+      'Use this for tool results, terminal output, test failures, git activity, diagnostics, or explicit external signals.',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        type: { type: 'string', description: 'Context event type, such as test_result or git_activity' },
+        type: { type: 'string', description: 'Context event type, such as terminal_output, test_result, or git_activity' },
         content: { type: 'string', description: 'Raw event content to record' },
         project: { type: 'string', description: 'Optional project scope' },
         sessionId: { type: 'string', description: 'Optional session identifier' },

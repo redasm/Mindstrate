@@ -63,6 +63,7 @@ export enum ContextEventType {
   TEST_RESULT = 'test_result',
   GIT_ACTIVITY = 'git_activity',
   LSP_DIAGNOSTIC = 'lsp_diagnostic',
+  TERMINAL_OUTPUT = 'terminal_output',
   USER_EDIT = 'user_edit',
   METABOLIC_OUTPUT = 'metabolic_output',
 }

@@ -592,6 +592,28 @@ describe('Mindstrate', () => {
       expect(nodes).toHaveLength(1);
       expect(nodes[0].title).toContain('lsp diagnostic');
     });
+
+    it('should ingest terminal output into the context graph facade', () => {
+      const ingested = memory.ingestTerminalOutput({
+        content: 'npm run build failed with TS2322',
+        project: 'proj',
+        command: 'npm run build',
+        exitCode: 1,
+        sourceRef: 'terminal:build',
+      });
+
+      expect(ingested.event.type).toBe('terminal_output');
+      expect(ingested.node.sourceRef).toBe('terminal:build');
+      expect(ingested.node.metadata?.command).toBe('npm run build');
+
+      const nodes = memory.listContextNodes({
+        project: 'proj',
+        sourceRef: 'terminal:build',
+        limit: 10,
+      });
+      expect(nodes).toHaveLength(1);
+      expect(nodes[0].title).toContain('terminal output');
+    });
   });
 
   describe('stats', () => {

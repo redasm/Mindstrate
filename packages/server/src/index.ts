@@ -120,12 +120,14 @@ export {
   ingestGitActivity,
   ingestTestRun,
   ingestLspDiagnostic,
+  ingestTerminalOutput,
   ingestUserFeedback,
   type IngestContextEventInput,
   type IngestContextEventResult,
   type IngestGitActivityInput,
   type IngestTestRunInput,
   type IngestLspDiagnosticInput,
+  type IngestTerminalOutputInput,
   type IngestUserFeedbackInput,
 } from './events/index.js';
 export {

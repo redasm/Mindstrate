@@ -97,6 +97,7 @@ import {
   ingestContextEvent,
   ingestGitActivity,
   ingestLspDiagnostic,
+  ingestTerminalOutput,
   ingestTestRun,
   ingestUserFeedback,
   type IngestContextEventInput,
@@ -726,6 +727,19 @@ export class Mindstrate {
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
     return ingestLspDiagnostic(this.contextGraphStore, input);
+  }
+
+  ingestTerminalOutput(input: {
+    content: string;
+    project?: string;
+    sessionId?: string;
+    actor?: string;
+    command?: string;
+    exitCode?: number;
+    sourceRef?: string;
+    metadata?: Record<string, unknown>;
+  }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
+    return ingestTerminalOutput(this.contextGraphStore, input);
   }
 
   /** 压缩当前会话（由 AI 调用，传入摘要） */

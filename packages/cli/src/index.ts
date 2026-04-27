@@ -25,6 +25,7 @@
  *   mindstrate bundle               管理可移植 ECS 上下文包
  *   mindstrate test                 写入测试结果到 ECS 事件流
  *   mindstrate diag                 写入诊断到 ECS 事件流
+ *   mindstrate terminal             写入终端输出到 ECS 事件流
  */
 
 import { Command } from 'commander';
@@ -48,6 +49,7 @@ import { projectionCommand } from './commands/projection.js';
 import { bundleCommand } from './commands/bundle.js';
 import { lspDiagnosticCommand } from './commands/lsp-diagnostic.js';
 import { testResultCommand } from './commands/test-result.js';
+import { terminalOutputCommand } from './commands/terminal-output.js';
 import { vaultCommand } from './commands/vault.js';
 
 const program = new Command();
@@ -75,6 +77,7 @@ program.addCommand(metabolismCommand);
 program.addCommand(projectionCommand);
 program.addCommand(bundleCommand);
 program.addCommand(testResultCommand);
+program.addCommand(terminalOutputCommand);
 program.addCommand(lspDiagnosticCommand);
 registerEvolveCommand(program);
 registerEvaluateCommand(program);

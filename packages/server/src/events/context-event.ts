@@ -113,6 +113,7 @@ function defaultDomainTypeForEvent(type: ContextEventType): ContextDomainType {
       return ContextDomainType.ARCHITECTURE;
     case ContextEventType.TEST_RESULT:
     case ContextEventType.LSP_DIAGNOSTIC:
+    case ContextEventType.TERMINAL_OUTPUT:
       return ContextDomainType.TROUBLESHOOTING;
     case ContextEventType.USER_EDIT:
       return ContextDomainType.BEST_PRACTICE;
