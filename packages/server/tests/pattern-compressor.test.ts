@@ -99,4 +99,32 @@ describe('PatternCompressor', () => {
     expect(result.scannedSummaries).toBe(0);
     expect(result.patternNodesCreated).toBe(0);
   });
+
+  it('promotes highly adopted summaries without waiting for a similarity cluster', async () => {
+    const summary = graphStore.createNode({
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Adopted summary',
+      content: 'Repeatedly adopted guidance for hydration-safe SSR rendering.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    graphStore.updateNode(summary.id, { positiveFeedback: 4 });
+
+    const result = await compressor.compressProjectSummaries({
+      project: 'mindstrate',
+      minClusterSize: 2,
+      minPositiveFeedback: 3,
+    });
+
+    expect(result.patternNodesCreated).toBe(1);
+    const patterns = graphStore.listNodes({
+      project: 'mindstrate',
+      substrateType: SubstrateType.PATTERN,
+      limit: 10,
+    });
+    expect(patterns[0].metadata?.['promotionReason']).toBe('high_positive_feedback');
+    expect(patterns[0].metadata?.['sourceSummaryIds']).toEqual([summary.id]);
+    expect(graphStore.listIncomingEdges(patterns[0].id, ContextRelationType.GENERALIZES)).toHaveLength(1);
+  });
 });
