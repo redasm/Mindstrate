@@ -4,6 +4,7 @@ import {
   ContextDomainType,
   ContextEventType,
   ContextNodeStatus,
+  ContextRelationType,
   MetabolismStage,
   SubstrateType,
 } from '@mindstrate/protocol/models';
@@ -53,6 +54,78 @@ describe('metabolism stage modules', () => {
     expect(digest.scanned).toBe(1);
     expect(assimilate.stage).toBe(MetabolismStage.ASSIMILATE);
     expect(assimilate.created).toBe(1);
+  });
+
+  it('links overlapping episodes to existing snapshots instead of duplicating them', () => {
+    const existing = graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Existing graph query snapshot',
+      content: 'Observed failing graph query and fixed edge filtering.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    const episode = graphStore.createNode({
+      substrateType: SubstrateType.EPISODE,
+      domainType: ContextDomainType.CONTEXT_EVENT,
+      title: 'Repeated graph query observation',
+      content: 'Observed failing graph query while fixing edge filtering.',
+      project: 'mindstrate',
+      sourceRef: 'session-overlap',
+    });
+
+    const assimilate = new Assimilator(graphStore).run({ project: 'mindstrate' });
+
+    expect(assimilate.created).toBe(0);
+    expect(assimilate.updated).toBe(1);
+    expect(graphStore.listNodes({
+      project: 'mindstrate',
+      substrateType: SubstrateType.SNAPSHOT,
+      limit: 10,
+    })).toHaveLength(1);
+    expect(graphStore.listEdges({
+      sourceId: episode.id,
+      targetId: existing.id,
+      relationType: ContextRelationType.SUPPORTS,
+    })).toHaveLength(1);
+  });
+
+  it('marks contradictory assimilated snapshots as conflicted', () => {
+    const existing = graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Existing SSR rule',
+      content: 'Use client hydration for SSR state handoff.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    graphStore.createNode({
+      substrateType: SubstrateType.EPISODE,
+      domainType: ContextDomainType.CONTEXT_EVENT,
+      title: 'Contradictory SSR observation',
+      content: 'Do not use client hydration for SSR state handoff.',
+      project: 'mindstrate',
+      sourceRef: 'session-conflict',
+    });
+
+    const assimilate = new Assimilator(graphStore).run({ project: 'mindstrate' });
+    const snapshots = graphStore.listNodes({
+      project: 'mindstrate',
+      substrateType: SubstrateType.SNAPSHOT,
+      limit: 10,
+    });
+    const created = snapshots.find((node) => node.id !== existing.id)!;
+
+    expect(assimilate.created).toBe(1);
+    expect(assimilate.updated).toBeGreaterThanOrEqual(1);
+    expect(graphStore.getNodeById(existing.id)?.status).toBe(ContextNodeStatus.CONFLICTED);
+    expect(graphStore.getNodeById(created.id)?.status).toBe(ContextNodeStatus.CONFLICTED);
+    expect(graphStore.listEdges({
+      sourceId: created.id,
+      targetId: existing.id,
+      relationType: ContextRelationType.CONTRADICTS,
+    })).toHaveLength(1);
+    expect(graphStore.listConflictRecords({ project: 'mindstrate' })).toHaveLength(1);
   });
 
   it('runs compression and reflection as independent stage classes', async () => {

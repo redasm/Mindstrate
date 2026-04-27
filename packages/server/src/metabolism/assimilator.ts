@@ -22,6 +22,10 @@ const groupEpisodesBySource = (episodes: ContextNode[]): Map<string, ContextNode
   return groups;
 };
 
+const NEGATION_MARKERS = ['avoid', 'never', 'must not', 'do not', 'deprecated', 'forbidden'];
+
+const AFFIRMATION_MARKERS = ['use', 'should', 'must', 'recommended', 'allow', 'supported'];
+
 export class Assimilator {
   constructor(private readonly graphStore: ContextGraphStore) {}
 
@@ -32,7 +36,13 @@ export class Assimilator {
       limit: 1000,
     });
     const groups = groupEpisodesBySource(episodes);
+    const snapshots = this.graphStore.listNodes({
+      project: options.project,
+      substrateType: SubstrateType.SNAPSHOT,
+      limit: 1000,
+    });
     let created = 0;
+    let updated = 0;
     let skipped = 0;
 
     for (const [sourceRef, sourceEpisodes] of groups) {
@@ -47,11 +57,28 @@ export class Assimilator {
         continue;
       }
 
+      const content = sourceEpisodes.map((episode) => episode.content).join('\n\n');
+      const overlap = findBestOverlap(content, snapshots);
+      if (overlap && overlap.score >= 0.65 && !looksContradictory(content, overlap.node.content)) {
+        for (const episode of sourceEpisodes) {
+          this.graphStore.createEdge({
+            sourceId: episode.id,
+            targetId: overlap.node.id,
+            relationType: ContextRelationType.SUPPORTS,
+            strength: overlap.score,
+            evidence: { sourceRef, lexicalOverlap: overlap.score },
+          });
+        }
+        updated++;
+        skipped += sourceEpisodes.length;
+        continue;
+      }
+
       const snapshot = this.graphStore.createNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: `Assimilated snapshot: ${sourceRef}`,
-        content: sourceEpisodes.map((episode) => episode.content).join('\n\n'),
+        content,
         tags: ['assimilated-snapshot'],
         project: options.project ?? sourceEpisodes[0]?.project,
         compressionLevel: 0.2,
@@ -73,6 +100,32 @@ export class Assimilator {
           evidence: { sourceRef },
         });
       }
+
+      const contradiction = findBestOverlap(content, snapshots);
+      if (contradiction && contradiction.score >= 0.5 && looksContradictory(content, contradiction.node.content)) {
+        this.graphStore.createEdge({
+          sourceId: snapshot.id,
+          targetId: contradiction.node.id,
+          relationType: ContextRelationType.CONTRADICTS,
+          strength: contradiction.score,
+          evidence: { sourceRef, lexicalOverlap: contradiction.score },
+        });
+        this.graphStore.createEdge({
+          sourceId: contradiction.node.id,
+          targetId: snapshot.id,
+          relationType: ContextRelationType.CONTRADICTS,
+          strength: contradiction.score,
+          evidence: { sourceRef, lexicalOverlap: contradiction.score },
+        });
+        this.graphStore.updateNode(snapshot.id, { status: ContextNodeStatus.CONFLICTED });
+        this.graphStore.updateNode(contradiction.node.id, { status: ContextNodeStatus.CONFLICTED });
+        this.graphStore.createConflictRecord({
+          project: snapshot.project ?? contradiction.node.project,
+          nodeIds: [snapshot.id, contradiction.node.id],
+          reason: `Assimilation found contradictory snapshots (${contradiction.score.toFixed(2)})`,
+        });
+        updated += 2;
+      }
       created++;
     }
 
@@ -80,8 +133,52 @@ export class Assimilator {
       stage: MetabolismStage.ASSIMILATE,
       scanned: episodes.length,
       created,
-      updated: 0,
+      updated,
       skipped,
     };
   }
+}
+
+function findBestOverlap(
+  content: string,
+  candidates: ContextNode[],
+): { node: ContextNode; score: number } | null {
+  let best: { node: ContextNode; score: number } | null = null;
+  for (const node of candidates) {
+    if (node.status === ContextNodeStatus.DEPRECATED || node.status === ContextNodeStatus.ARCHIVED) continue;
+    const score = lexicalOverlap(content, node.content);
+    if (!best || score > best.score) {
+      best = { node, score };
+    }
+  }
+  return best;
+}
+
+function lexicalOverlap(a: string, b: string): number {
+  const aTokens = new Set(tokenize(a));
+  const bTokens = new Set(tokenize(b));
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+
+  let matches = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) matches++;
+  }
+  return matches / Math.min(aTokens.size, bTokens.size);
+}
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9\u4e00-\u9fff]+/)
+    .filter((token) => token.length > 2);
+}
+
+function looksContradictory(a: string, b: string): boolean {
+  const aContent = a.toLowerCase();
+  const bContent = b.toLowerCase();
+  const aNegates = NEGATION_MARKERS.some((marker) => aContent.includes(marker));
+  const bNegates = NEGATION_MARKERS.some((marker) => bContent.includes(marker));
+  const aAffirms = AFFIRMATION_MARKERS.some((marker) => aContent.includes(marker));
+  const bAffirms = AFFIRMATION_MARKERS.some((marker) => bContent.includes(marker));
+  return (aNegates && bAffirms && !bNegates) || (bNegates && aAffirms && !aNegates);
 }
