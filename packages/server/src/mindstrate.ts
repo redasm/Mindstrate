@@ -19,6 +19,7 @@ import type {
   RetrievalContext,
   AssembledContext,
   FeedbackEvent,
+  GraphKnowledgeSearchResult,
   GraphKnowledgeView,
 } from '@mindstrate/protocol';
 import { CaptureSource, KnowledgeType } from '@mindstrate/protocol';
@@ -440,7 +441,7 @@ export class Mindstrate {
   async curateContext(
     taskDescription: string,
     context?: RetrievalContext,
-    sessionId?: string,
+    _sessionId?: string,
   ): Promise<CuratedContext> {
     await this.ensureInit();
     const project = context?.project;
@@ -449,7 +450,14 @@ export class Mindstrate {
       perLayerLimit: 5,
     });
     const conflicts = this.listConflictRecords(project, 5);
-    const base = await this.retriever.curateContext(taskDescription, context, sessionId);
+    const knowledge = this.queryGraphKnowledge(taskDescription, { project, limit: 5 });
+    const workflows = this.queryGraphKnowledge(taskDescription, { project, limit: 10 })
+      .filter((result) => result.view.domainType === ContextDomainType.WORKFLOW)
+      .slice(0, 3);
+    const warnings = this.queryGraphKnowledge(`common mistakes pitfalls when ${taskDescription}`, {
+      project,
+      limit: 3,
+    });
 
     const sections: string[] = [`## Context for: ${taskDescription}`];
     if (graphSelection.rules.length > 0) {
@@ -469,10 +477,13 @@ export class Mindstrate {
       sections.push(...conflicts.map((record) => `- ${record.reason}`));
     }
     sections.push('\n### Task Curation');
-    sections.push(base.summary);
+    sections.push(generateGraphCurationSummary(taskDescription, knowledge, workflows, warnings));
 
     return {
-      ...base,
+      taskDescription,
+      knowledge,
+      workflows,
+      warnings,
       graphRules: graphSelection.rules.map((node) => node.title),
       graphPatterns: graphSelection.patterns.map((node) => node.title),
       graphSummaries: graphSelection.summaries.map((node) => node.title),
@@ -1176,6 +1187,28 @@ function computeGraphNodeMatchScore(tokens: string[], node: ContextNode): number
   const qualityScore = Math.min(node.qualityScore / 100, 1);
   const confidenceScore = Math.min(node.confidence, 1);
   return lexicalScore * 0.6 + qualityScore * 0.25 + confidenceScore * 0.15;
+}
+
+function generateGraphCurationSummary(
+  task: string,
+  knowledge: GraphKnowledgeSearchResult[],
+  workflows: GraphKnowledgeSearchResult[],
+  warnings: GraphKnowledgeSearchResult[],
+): string {
+  const parts: string[] = [`Curated graph context for: ${task}`];
+  if (knowledge.length > 0) {
+    parts.push(`Relevant graph knowledge: ${knowledge.map((result) => result.view.title).join(', ')}`);
+  }
+  if (workflows.length > 0) {
+    parts.push(`Applicable workflows: ${workflows.map((result) => result.view.title).join(', ')}`);
+  }
+  if (warnings.length > 0) {
+    parts.push(`Potential pitfalls: ${warnings.map((result) => result.view.title).join(', ')}`);
+  }
+  if (parts.length === 1) {
+    parts.push('No directly matching graph knowledge found. Use project/session substrate and proceed carefully.');
+  }
+  return parts.join('\n');
 }
 
 function getGraphStats(nodes: ContextNode[]): {

@@ -269,7 +269,7 @@ export async function runContextAssemblyDag(
             .map((node) => node.title),
           activeRules: graphRules.map((node) => node.title),
           knownConflicts: graphConflicts.map((record) => record.reason),
-          warnings: curated.warnings.map((warning) => warning.knowledge.title),
+          warnings: curated.warnings.map((warning) => warning.view.title),
           evidenceTrail: buildEvidenceTrail(project, sessionContext, projectSnapshot, graphRules, graphPatterns, graphSummaries, graphConflicts),
           curated,
           summary: await ctx.get<string>('summary'),

@@ -130,7 +130,13 @@ export class Retriever {
     taskDescription: string,
     context?: RetrievalContext,
     sessionId?: string,
-  ): Promise<CuratedContext> {
+  ): Promise<{
+    taskDescription: string;
+    knowledge: RetrievalResult[];
+    workflows: RetrievalResult[];
+    warnings: RetrievalResult[];
+    summary: string;
+  }> {
     // 1. 搜索直接相关的解决方案知识
     const mainResults = await this.search(
       taskDescription,

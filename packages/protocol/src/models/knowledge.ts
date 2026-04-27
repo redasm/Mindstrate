@@ -260,12 +260,12 @@ export interface CuratedContext {
   graphSummaries?: string[];
   /** 当前活跃冲突 */
   graphConflicts?: string[];
-  /** 最相关的知识列表 */
-  knowledge: RetrievalResult[];
-  /** 相关的工作流/步骤 */
-  workflows: RetrievalResult[];
-  /** 相关的反模式/踩坑记录 */
-  warnings: RetrievalResult[];
+  /** 最相关的图知识列表 */
+  knowledge: import('./projection.js').GraphKnowledgeSearchResult[];
+  /** 相关的工作流/步骤图知识 */
+  workflows: import('./projection.js').GraphKnowledgeSearchResult[];
+  /** 相关的反模式/踩坑图知识 */
+  warnings: import('./projection.js').GraphKnowledgeSearchResult[];
   /** 策划摘要 */
   summary: string;
 }

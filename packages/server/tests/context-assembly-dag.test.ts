@@ -1,34 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import type { CuratedContext, KnowledgeUnit, RetrievalContext } from '@mindstrate/protocol';
+import type { CuratedContext, RetrievalContext } from '@mindstrate/protocol';
 import type { ConflictRecord, ContextNode } from '@mindstrate/protocol/models';
-import { KnowledgeStatus, KnowledgeType, CaptureSource } from '@mindstrate/protocol';
 import { runContextAssemblyDag } from '../src/context-graph/context-assembly-dag.js';
 
-function makeProjectSnapshot(project: string): KnowledgeUnit {
+function makeProjectSnapshot(project: string): ContextNode {
   const now = '2026-04-23T00:00:00.000Z';
   return {
     id: 'snapshot-1',
-    version: 1,
-    type: KnowledgeType.ARCHITECTURE,
+    substrateType: 'snapshot',
+    domainType: 'project_snapshot',
     title: 'Project Snapshot',
-    solution: 'Stable project substrate',
+    content: 'Stable project substrate',
     tags: ['project-snapshot'],
-    context: { project },
+    project,
+    compressionLevel: 0.01,
+    confidence: 1,
+    qualityScore: 90,
+    status: 'verified',
     metadata: {
       author: 'tester',
-      source: CaptureSource.CLI,
-      createdAt: now,
-      updatedAt: now,
-      confidence: 1,
     },
-    quality: {
-      score: 90,
-      upvotes: 0,
-      downvotes: 0,
-      useCount: 0,
-      verified: true,
-      status: KnowledgeStatus.VERIFIED,
-    },
+    createdAt: now,
+    updatedAt: now,
+    accessCount: 0,
+    positiveFeedback: 0,
+    negativeFeedback: 0,
   };
 }
 
