@@ -465,6 +465,7 @@ CREATE TABLE metabolism_runs (...);
 - 提取实体、文件、模块、依赖、错误类型
 - 建立关系边
 - 标记与已有节点的重叠、支持或冲突
+- 当前实现补充：会从 episode 内容和 normalized event 元数据中抽取文件、依赖、错误码等实体，并写入 snapshot 元数据和关系证据
 
 输出：
 
@@ -482,6 +483,7 @@ CREATE TABLE metabolism_runs (...);
 - 高频检索且高采纳
 - 多次跨会话重复出现
 - 多项目中重复验证
+- 当前实现补充：相似 cluster 和高正反馈都可以触发升级，`Summary -> Pattern`、`Pattern -> Rule` 会记录 `promotionReason`
 
 升级路径建议：
 
@@ -560,6 +562,7 @@ ECS 之后，建议改成：
 
 1. 图内候选召回
    - 先根据项目、会话、文件、错误实体定位子图
+   - 当前实现：context priority selection 会用当前文件、语言、框架、错误信息、依赖作为信号，提高匹配图节点优先级
 
 2. 向量影子召回
    - 用 embedding 找近邻候选节点
@@ -710,6 +713,7 @@ Web UI 后续应该新增 ECS 可视化：
 - 代谢运行历史
 - 项目上下文图
 - bundle 管理
+- 当前实现补充：`/ecs` 已包含项目上下文图概览、层级计数、关系 mix、冲突和代谢运行面板；`/lineage` 提供按 substrate layer 的谱系钻取
 
 当前知识列表页不应删除，而应变成一个投影视图页面。
 
