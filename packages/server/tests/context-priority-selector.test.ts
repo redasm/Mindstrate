@@ -104,4 +104,43 @@ describe('ContextPrioritySelector', () => {
     expect(selection.patterns).toEqual([]);
     expect(selection.summaries).toEqual([]);
   });
+
+  it('prioritizes nodes that match file, dependency, and error context', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'General testing rule',
+      content: 'Run focused tests before changing any runtime code.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 90,
+    });
+    const matched = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.TROUBLESHOOTING,
+      title: 'Fix hydration failures in app router',
+      content: 'Hydration mismatch in app/page.tsx usually means server and client markup diverged.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 70,
+      metadata: {
+        framework: 'next',
+        files: ['src/app/page.tsx'],
+        dependencies: ['react'],
+      },
+    });
+
+    const selection = selector.select({
+      project: 'mindstrate',
+      perLayerLimit: 1,
+      context: {
+        currentFile: 'src/app/page.tsx',
+        currentFramework: 'next',
+        projectDependencies: ['react'],
+        errorMessage: 'Hydration mismatch while rendering app router page',
+      },
+    });
+
+    expect(selection.rules.map((node) => node.id)).toEqual([matched.id]);
+  });
 });

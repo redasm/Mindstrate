@@ -487,6 +487,7 @@ export class Mindstrate {
     await this.ensureInit();
     const graphSelection = this.contextPrioritySelector.select({
       project: options?.project ?? options?.context?.project,
+      context: options?.context,
       perLayerLimit: 5,
     });
     const result = await runContextAssemblyDag(
