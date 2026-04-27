@@ -70,36 +70,40 @@
   - 已经把知识映射到 Markdown
   - 这是上下文文件化的重要基础
 
-## 3.2 当前系统距离 ECS 的核心差距
+## 3.2 历史核心差距与当前对齐状态
 
-迁移前系统的核心对象是旧结构化知识条目；当前目标运行时已经切到图节点，其本质是“结构化知识条目”。这使系统更像一个高质量的知识库，而不是一个持续代谢的上下文基底。
-
-主要差距有 6 个：
+迁移前系统的核心对象是旧结构化知识条目；当前目标运行时已经切到图节点。以下 6 个原始差距已经作为本轮 ECS 对齐的验收清单处理：
 
 1. 没有统一谱系
    - 当前 `KnowledgeType` 是领域类型，如 `bug_fix / convention / workflow`
    - ECS 需要另一条正交维度：`Episode / Snapshot / Summary / Pattern / Skill / Rule / Heuristic / Axiom`
+   - 当前状态：已通过 `SubstrateType` 与 `ContextDomainType` 分离建模，并在写入、检索、代谢和 bundle 中使用
 
 2. 没有图原生存储
    - 当前 `DatabaseStore` / `ContextGraphStore` 是单表 旧知识表
    - `VectorStore` 是 JSON 向量索引
    - 缺失节点关系、因果链、冲突关系、实例化关系、时序链
+   - 当前状态：已落到 `ContextGraphStore` 的节点、边、事件、冲突、投影、代谢运行表
 
 3. 没有持续摄取流
    - 当前 `session_save` 仍偏事件点式记录
    - 环境信号并未成为一等记忆输入，如终端输出、测试失败、LSP 诊断、Git 状态
+   - 当前状态：已接入 session、git、test、LSP、terminal、feedback 等事件 ingestor，`DigestEngine` 会把 raw events 规范化并回填为 canonical episode
 
 4. 没有真正的压缩升级机制
    - 当前进化引擎仍围绕 旧结构化知识条目 做 merge / improve / deprecate
    - 还没有“低压缩经验自动升级为高压缩规则”的通道
+   - 当前状态：已拆出 `Digest / Assimilate / Compress / Prune / Reflect`，压缩结果保留谱系边和投影记录
 
 5. 没有冲突治理闭环
    - 目前最多是低分、过期、拒绝率高
    - 还没有“新旧知识冲突 -> 标记 -> 反思 -> 修正 -> 保留谱系”的机制
+   - 当前状态：已通过 `CONTRADICTS`、`ConflictRecord`、conflicted 状态和 reflection 输出形成闭环
 
 6. 没有内外记忆协同层
    - 现在的上下文仍主要是注入型外部记忆
    - 缺少对“哪些稳定知识应该固化进 agent 行为”的路径设计
+   - 当前状态：已增加 internalization suggestion / acceptance 路径，并对 `agents_md`、`project_snapshot`、`system_prompt` 等投影记录审计
 
 ## 4. 重构原则
 
@@ -117,6 +121,7 @@
 
 4. Markdown 先做可读视图与协作副本，不立刻做唯一事实源
    - 这是高风险迁移，应放到后期
+   - 当前实现：Obsidian projection 和 editable bundle folder 都支持受控回写，SQLite 图仍是事实源
 
 5. 演化必须可审计、可回滚、可验证
    - ECS 不是让系统随意自改，而是让它在治理框架下自我代谢
@@ -447,6 +452,7 @@ CREATE TABLE metabolism_runs (...);
 - `ContextEvent`
 - 初始 `Episode` 节点
 - 关联 `observed_in / follows` 边
+- 当前实现补充：直接写入的 raw events 会在 digest 阶段规范化为带 `normalizedEvent` 元数据的 canonical episode，避免事件流与图节点脱节
 
 ## 8.2 Assimilate
 
@@ -516,6 +522,12 @@ CREATE TABLE metabolism_runs (...);
 - 被高层规则完全覆盖
 - 与项目当前版本环境不匹配
 
+当前实现补充：
+
+- 默认 `mode: suggest`，只有显式 `mode: apply` 或 `apply: true` 才修改节点状态
+- 每条 prune suggestion 都包含 `reason` 和 `evidence`
+- 实际归档或废弃时会写入 `metadata.pruneAudit`
+
 ## 8.5 Reflect
 
 `Reflect` 负责把“冲突”和“失败”变成新知识，而不是噪声。
@@ -560,6 +572,7 @@ ECS 之后，建议改成：
 
 5. 上下文预算管理
    - 根据 token 预算输出不同压缩层级内容
+   - 当前实现：`context_assemble` 支持 summary 字符预算，并按 `conflict > rule > pattern > summary > curation/base` 优先级裁剪
 
 ## 9.2 新的 context_assemble
 
@@ -637,6 +650,7 @@ ECS 之后，建议改成：
 - `mindstrate bundle install`
 - `mindstrate bundle validate`
 - `mindstrate bundle publish`
+- editable bundle folder round-trip：`bundle create --output-dir` 可导出 Markdown 可编辑目录，`bundle install <directory>` 可按目标格式回导图节点
 
 这会成为未来社区化的基础，也能把 ECS 和 Skill 生态连接起来。
 
@@ -820,10 +834,12 @@ Web UI 后续应该新增 ECS 可视化：
 2. CLI 支持导入导出 bundle
 3. Obsidian / 文件系统支持 bundle 编辑
 4. 团队模式支持 bundle 发布和安装
+5. Web UI 支持 bundle 创建、安装、发布
 
 验收：
 
 - 一个项目里抽取的高价值规则和技能可安装到另一个项目
+- editable bundle 目录可以在文件系统中编辑并回导安装
 
 ## 14. 风险与对策
 
@@ -831,8 +847,8 @@ Web UI 后续应该新增 ECS 可视化：
 
 对策：
 
-- 先兼容、后替换
-- 所有新模型先作为新增层，而不是先拆旧层
+- 开发阶段外部契约直接切到 graph-first，不再保留旧结构化知识条目兼容层
+- 所有新增能力必须围绕图模型实现，避免再次产生双轨事实源
 
 ## 14.2 风险：图存储做成大而无当
 
