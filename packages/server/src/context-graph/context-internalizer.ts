@@ -1,6 +1,8 @@
 import {
   ContextNodeStatus,
+  ProjectionTarget,
   SubstrateType,
+  type ProjectionRecord,
   type ContextNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from './context-graph-store.js';
@@ -15,6 +17,19 @@ export interface InternalizationSuggestions {
   projectSnapshotFragment: string;
   systemPromptFragment: string;
   sourceNodeIds: string[];
+}
+
+export type InternalizationTarget =
+  | ProjectionTarget.AGENTS_MD
+  | ProjectionTarget.PROJECT_SNAPSHOT
+  | ProjectionTarget.SYSTEM_PROMPT;
+
+export interface AcceptInternalizationSuggestionsOptions extends InternalizationSuggestionOptions {
+  targets?: InternalizationTarget[];
+}
+
+export interface AcceptInternalizationSuggestionsResult extends InternalizationSuggestions {
+  records: ProjectionRecord[];
 }
 
 export class ContextInternalizer {
@@ -39,6 +54,36 @@ export class ContextInternalizer {
       ].join('\n'),
       systemPromptFragment: bulletLines.join('\n'),
       sourceNodeIds: nodes.map((node) => node.id),
+    };
+  }
+
+  acceptSuggestions(
+    options: AcceptInternalizationSuggestionsOptions = {},
+  ): AcceptInternalizationSuggestionsResult {
+    const suggestions = this.generateSuggestions(options);
+    const targets = options.targets ?? [
+      ProjectionTarget.AGENTS_MD,
+      ProjectionTarget.PROJECT_SNAPSHOT,
+      ProjectionTarget.SYSTEM_PROMPT,
+    ];
+    const records: ProjectionRecord[] = [];
+    const version = Date.now();
+
+    for (const nodeId of suggestions.sourceNodeIds) {
+      for (const target of targets) {
+        records.push(this.graphStore.upsertProjectionRecord({
+          id: `internalization:${target}:${nodeId}`,
+          nodeId,
+          target,
+          targetRef: buildTargetRef(target, options.project),
+          version,
+        }));
+      }
+    }
+
+    return {
+      ...suggestions,
+      records,
     };
   }
 
@@ -70,5 +115,17 @@ export class ContextInternalizer {
       )
       .sort((a, b) => b.qualityScore - a.qualityScore || b.confidence - a.confidence)
       .slice(0, limit);
+  }
+}
+
+function buildTargetRef(target: InternalizationTarget, project?: string): string {
+  const scope = project ?? 'global';
+  switch (target) {
+    case ProjectionTarget.AGENTS_MD:
+      return `${scope}:AGENTS.md`;
+    case ProjectionTarget.PROJECT_SNAPSHOT:
+      return `${scope}:project-snapshot`;
+    case ProjectionTarget.SYSTEM_PROMPT:
+      return `${scope}:system-prompt`;
   }
 }

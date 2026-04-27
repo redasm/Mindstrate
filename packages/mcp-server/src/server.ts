@@ -350,6 +350,11 @@ const api: McpApi = {
     return memory!.generateInternalizationSuggestions(options);
   },
 
+  async acceptInternalizationSuggestions(options) {
+    if (teamClient) return teamClient.acceptInternalizationSuggestions(options);
+    return memory!.acceptInternalizationSuggestions(options);
+  },
+
   async writeObsidianProjectionFiles(options) {
     if (teamClient) return teamClient.writeObsidianProjectionFiles(options);
     return { files: memory!.writeObsidianProjectionFiles(options) };

@@ -164,6 +164,15 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     }));
   }));
 
+  app.post('/api/context/internalize/accept', withInitializedMemory(memory, async (req, res) => {
+    const { project, limit, targets } = req.body;
+    res.json(memory.acceptInternalizationSuggestions({
+      project,
+      limit,
+      targets,
+    }));
+  }));
+
   app.post('/api/context/obsidian-projection/write', withInitializedMemory(memory, async (req, res) => {
     const { project, limit, rootDir } = req.body;
     if (!rootDir) {

@@ -80,6 +80,19 @@ export interface PublishBundleResult {
   manifest: BundlePublicationManifest;
 }
 
+export type InternalizationTarget = 'agents_md' | 'project_snapshot' | 'system_prompt';
+
+export interface InternalizationSuggestions {
+  agentsMd: string;
+  projectSnapshotFragment: string;
+  systemPromptFragment: string;
+  sourceNodeIds: string[];
+}
+
+export interface AcceptInternalizationSuggestionsResult extends InternalizationSuggestions {
+  records: ProjectionRecord[];
+}
+
 export interface InternalizationSuggestions {
   agentsMd: string;
   projectSnapshotFragment: string;
@@ -460,6 +473,14 @@ export class TeamClient {
     limit?: number;
   }): Promise<InternalizationSuggestions> {
     return this.post('/api/context/internalize', options ?? {});
+  }
+
+  async acceptInternalizationSuggestions(options?: {
+    project?: string;
+    limit?: number;
+    targets?: InternalizationTarget[];
+  }): Promise<AcceptInternalizationSuggestionsResult> {
+    return this.post('/api/context/internalize/accept', options ?? {});
   }
 
   async writeObsidianProjectionFiles(options: {

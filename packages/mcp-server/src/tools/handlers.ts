@@ -658,8 +658,14 @@ export async function handleContextInternalize(
   api: McpApi,
   input: z.infer<typeof ContextInternalizeSchema>,
 ): Promise<McpToolResponse> {
-  const suggestions = await api.generateInternalizationSuggestions(input);
+  const accepted = input.accept
+    ? await api.acceptInternalizationSuggestions(input)
+    : undefined;
+  const suggestions = accepted ?? await api.generateInternalizationSuggestions(input);
+  const projectionRecordCount = accepted?.records.length;
   const text = [
+    input.accept ? '### Accepted Internalization' : '### Internalization Suggestions',
+    '',
     '### AGENTS.md Suggestion',
     suggestions.agentsMd,
     '',
@@ -670,6 +676,7 @@ export async function handleContextInternalize(
     suggestions.systemPromptFragment,
     '',
     `Source Node IDs: ${suggestions.sourceNodeIds.join(', ') || '(none)'}`,
+    projectionRecordCount !== undefined ? `Projection Records: ${projectionRecordCount}` : '',
   ].join('\n');
 
   return { content: [{ type: 'text', text }] };

@@ -50,6 +50,8 @@ export enum ProjectionTarget {
   SESSION_SUMMARY = 'session_summary',
   PROJECT_SNAPSHOT = 'project_snapshot',
   OBSIDIAN_DOCUMENT = 'obsidian_document',
+  AGENTS_MD = 'agents_md',
+  SYSTEM_PROMPT = 'system_prompt',
 }
 
 export interface ProjectionRecord {

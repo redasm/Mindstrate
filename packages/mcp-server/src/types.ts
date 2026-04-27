@@ -21,6 +21,7 @@ import type {
   EvolutionRunResult,
   PipelineResult,
   PortableContextBundle,
+  ProjectionRecord,
 } from '@mindstrate/protocol';
 
 export interface PublishBundleOptions {
@@ -60,6 +61,12 @@ export interface InternalizationSuggestions {
   projectSnapshotFragment: string;
   systemPromptFragment: string;
   sourceNodeIds: string[];
+}
+
+export type InternalizationTarget = 'agents_md' | 'project_snapshot' | 'system_prompt';
+
+export interface AcceptInternalizationSuggestionsResult extends InternalizationSuggestions {
+  records: ProjectionRecord[];
 }
 
 /**
@@ -133,6 +140,7 @@ export interface LocalMemory {
   installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult>;
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult;
   generateInternalizationSuggestions(options?: { project?: string; limit?: number }): InternalizationSuggestions;
+  acceptInternalizationSuggestions(options?: { project?: string; limit?: number; targets?: InternalizationTarget[] }): AcceptInternalizationSuggestionsResult;
   writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): string[];
   importObsidianProjectionFile(filePath: string): { sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean };
   close(): void;
@@ -200,6 +208,7 @@ export interface McpApi {
   installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult>;
   publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): Promise<PublishBundleResult>;
   generateInternalizationSuggestions(options?: { project?: string; limit?: number }): Promise<InternalizationSuggestions>;
+  acceptInternalizationSuggestions(options?: { project?: string; limit?: number; targets?: InternalizationTarget[] }): Promise<AcceptInternalizationSuggestionsResult>;
   writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): Promise<{ files: string[] }>;
   importObsidianProjectionFile(filePath: string): Promise<{ sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean }>;
   close(): void;

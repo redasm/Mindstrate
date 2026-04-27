@@ -406,6 +406,35 @@ describe('Mindstrate', () => {
       expect(suggestions.projectSnapshotFragment).toContain('Test-first ECS changes');
       expect(suggestions.sourceNodeIds).toHaveLength(1);
     });
+
+    it('should accept internalization suggestions into auditable projection records', () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      const rule = internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Keep ECS internalization auditable',
+        content: 'Accepting internalized guidance must leave projection records.',
+        project: 'proj',
+        status: ContextNodeStatus.VERIFIED,
+        qualityScore: 92,
+        confidence: 0.95,
+      });
+
+      const accepted = memory.acceptInternalizationSuggestions({
+        project: 'proj',
+        targets: ['agents_md', 'system_prompt'],
+      });
+
+      expect(accepted.sourceNodeIds).toEqual([rule.id]);
+      expect(accepted.records).toHaveLength(2);
+      expect(accepted.records.map((record) => record.target).sort()).toEqual(['agents_md', 'system_prompt']);
+      expect(memory.listProjectionRecords({ nodeId: rule.id, limit: 10 })).toHaveLength(2);
+    });
   });
 
   describe('curateContext', () => {

@@ -47,7 +47,7 @@ import {
   type DetectedProject,
 } from './project/index.js';
 import { runContextAssemblyDag } from './context-graph/context-assembly-dag.js';
-import { ContextInternalizer, type InternalizationSuggestionOptions, type InternalizationSuggestions } from './context-graph/context-internalizer.js';
+import { ContextInternalizer, type AcceptInternalizationSuggestionsOptions, type AcceptInternalizationSuggestionsResult, type InternalizationSuggestionOptions, type InternalizationSuggestions } from './context-graph/context-internalizer.js';
 import { ContextPrioritySelector } from './context-graph/context-priority-selector.js';
 import { ContextGraphStore } from './context-graph/context-graph-store.js';
 import { GraphKnowledgeProjector, toGraphKnowledgeView, type GraphKnowledgeProjectionOptions } from './context-graph/knowledge-projector.js';
@@ -957,6 +957,10 @@ export class Mindstrate {
 
   generateInternalizationSuggestions(options?: InternalizationSuggestionOptions): InternalizationSuggestions {
     return this.contextInternalizer.generateSuggestions(options);
+  }
+
+  acceptInternalizationSuggestions(options?: AcceptInternalizationSuggestionsOptions): AcceptInternalizationSuggestionsResult {
+    return this.contextInternalizer.acceptSuggestions(options);
   }
 
   listContextNodes(options?: {

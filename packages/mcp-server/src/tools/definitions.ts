@@ -488,7 +488,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'context_internalize',
     description:
-      'Generate AGENTS.md, project snapshot, and system prompt suggestions from stable ECS rules, heuristics, and axioms.',
+      'Generate or accept AGENTS.md, project snapshot, and system prompt suggestions from stable ECS rules, heuristics, and axioms.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -499,6 +499,15 @@ export const TOOL_DEFINITIONS = [
         limit: {
           type: 'number',
           description: 'Maximum number of stable nodes to include (default: 10)',
+        },
+        accept: {
+          type: 'boolean',
+          description: 'When true, record accepted internalization projection records for audit.',
+        },
+        targets: {
+          type: 'array',
+          items: { type: 'string', enum: ['agents_md', 'project_snapshot', 'system_prompt'] },
+          description: 'Optional accepted targets to record.',
         },
       },
     },

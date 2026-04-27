@@ -74,6 +74,8 @@ export {
 } from './projected-knowledge-search.js';
 export {
   ContextInternalizer,
+  type AcceptInternalizationSuggestionsOptions,
+  type AcceptInternalizationSuggestionsResult,
   type InternalizationSuggestionOptions,
   type InternalizationSuggestions,
 } from './context-internalizer.js';

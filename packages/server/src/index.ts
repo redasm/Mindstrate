@@ -66,6 +66,8 @@ export {
   type ContextAssemblyDagInput,
   type ContextAssemblyDagResult,
   type GraphNeighborhood,
+  type AcceptInternalizationSuggestionsOptions,
+  type AcceptInternalizationSuggestionsResult,
   type CreateContextEdgeInput,
   type CreateContextEventInput,
   type CreateContextNodeInput,
