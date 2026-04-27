@@ -7,6 +7,7 @@
 import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   ContextEdge,
@@ -260,7 +261,10 @@ export class ContextGraphStore {
       input.qualityScore ?? 50,
       input.status ?? ContextNodeStatus.CANDIDATE,
       input.sourceRef ?? null,
-      input.metadata ? JSON.stringify(input.metadata) : null,
+      JSON.stringify({
+        ...(input.metadata ?? {}),
+        graphVersion: typeof input.metadata?.['graphVersion'] === 'number' ? input.metadata['graphVersion'] : 1,
+      }),
       now,
       now,
     );
@@ -356,10 +360,8 @@ export class ContextGraphStore {
       sets.push('source_ref = ?');
       params.push(input.sourceRef);
     }
-    if (input.metadata !== undefined) {
-      sets.push('metadata = ?');
-      params.push(JSON.stringify(input.metadata));
-    }
+    sets.push('metadata = ?');
+    params.push(JSON.stringify(nextVersionMetadata(existing, input.metadata)));
     if (input.lastAccessedAt !== undefined) {
       sets.push('last_accessed_at = ?');
       params.push(input.lastAccessedAt);
@@ -864,6 +866,40 @@ export class ContextGraphStore {
       notes: JSON.parse(row.notes),
     };
   }
+}
+
+function nextVersionMetadata(
+  existing: ContextNode,
+  updates?: Record<string, unknown>,
+): Record<string, unknown> {
+  const current = existing.metadata ?? {};
+  const currentVersion = typeof current['graphVersion'] === 'number' ? current['graphVersion'] : 1;
+  return {
+    ...current,
+    ...(updates ?? {}),
+    graphVersion: currentVersion + 1,
+    previousGraphHash: hashGraphNode(existing),
+  };
+}
+
+function hashGraphNode(node: ContextNode): string {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      id: node.id,
+      substrateType: node.substrateType,
+      domainType: node.domainType,
+      title: node.title,
+      content: node.content,
+      tags: node.tags,
+      project: node.project,
+      compressionLevel: node.compressionLevel,
+      confidence: node.confidence,
+      qualityScore: node.qualityScore,
+      status: node.status,
+      sourceRef: node.sourceRef,
+      metadata: node.metadata,
+    }))
+    .digest('hex');
 }
 
 interface NodeRow {

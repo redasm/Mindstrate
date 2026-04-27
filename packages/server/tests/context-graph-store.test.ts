@@ -65,6 +65,24 @@ describe('ContextGraphStore', () => {
     expect(filtered[0].qualityScore).toBe(72);
   });
 
+  it('tracks graph node versions across controlled updates', () => {
+    const node = store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Versioned rule',
+      content: 'Initial content.',
+      project: 'mindstrate',
+    });
+
+    const updated = store.updateNode(node.id, {
+      content: 'Updated content.',
+    });
+
+    expect(node.metadata?.['graphVersion']).toBe(1);
+    expect(updated?.metadata?.['graphVersion']).toBe(2);
+    expect(updated?.metadata?.['previousGraphHash']).toBeTruthy();
+  });
+
   it('records access counts', () => {
     const node = store.createNode({
       substrateType: SubstrateType.RULE,
