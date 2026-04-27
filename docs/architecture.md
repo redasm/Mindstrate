@@ -43,9 +43,9 @@ mode. This is enforced at lint time — see `.eslintrc.cjs`.
 
 | Package | Owns | Forbidden from |
 |---------|------|---------------|
-| `protocol` | TypeScript types/enums for KnowledgeUnit, Session, RetrievalResult, PipelineResult, EvolutionRunResult, errors | Any runtime dependency, any `@mindstrate/*` import |
+| `protocol` | TypeScript types/enums for ECS context graph, graph knowledge views, sessions, pipeline/evolution results, errors | Any runtime dependency, any `@mindstrate/*` import |
 | `client` | `TeamClient` HTTP wrapper around the Team Server REST API | `server`, `obsidian-sync`, native modules |
-| `server` | SQLite metadata store, vector index, embedder, quality engine, retrieval, injection interfaces, project detection, the `Mindstrate` facade class | Any platform-specific concern (HTTP framing, MCP, Next.js) |
+| `server` | ECS context graph store, vector index, embedder, metabolism engine, graph retrieval/injection interfaces, project detection, the `Mindstrate` facade class | Any platform-specific concern (HTTP framing, MCP, Next.js) |
 | `mcp-server` | MCP protocol handlers, `bin/mindstrate-mcp` esbuild bundle | Static import of `server` or `obsidian-sync` |
 | `team-server` | Express HTTP API in front of `Mindstrate`, API-key auth | Direct DB access; goes through `server` facade |
 | `cli` | Commander.js commands wrapping `Mindstrate` for terminal use | — |

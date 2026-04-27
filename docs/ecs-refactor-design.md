@@ -375,28 +375,20 @@ interface ContextEdge {
 6. `ProjectionRecord`
 7. `PortableContextBundle`
 
-## 7.2 保留 KnowledgeUnit，但降为投影模型
+## 7.2 移除 KnowledgeUnit 兼容层，统一返回图视图
 
-这是本次重构中最关键的兼容策略：
+开发阶段不再保留外部 `KnowledgeUnit` 兼容层。
 
-- `KnowledgeUnit` 不应立刻删除
-- 它应该变成图中高成熟度节点的一种投影视图
+- 新写入统一落到 `ContextNode`
+- 对外查询统一返回 `GraphKnowledgeView` / `GraphKnowledgeSearchResult`
+- `projection_records` 记录图视图、会话摘要、项目快照、Obsidian 文档等派生目标
+- `KnowledgeUnit` 仅允许存在于尚未迁移的内部测试/历史模块中，不再作为新增数据或接口契约
 
-也就是说：
+目标接口：
 
-- 旧接口仍然可以返回 `KnowledgeUnit`
-- 但内部真实来源不再必须是单行表记录
-- 它可能是：
-  - 一个 `Summary` 节点的投影
-  - 一个 `Skill` 节点的投影
-  - 一个 `Rule` 节点的投影
-  - 多个节点聚合后生成的派生视图
-
-这样可以最大化兼容：
-
-- CLI `mindstrate list / search / add`
-- Web UI 的知识页
-- MCP 里的 `memory_search / memory_add`
+- CLI `list / search / add` 返回 graph view
+- Web UI 知识页读取 graph view
+- MCP `memory_search / memory_add / memory_curate` 使用 graph-first payload
 
 ## 7.3 数据库存储建议
 
@@ -414,11 +406,11 @@ CREATE TABLE conflict_records (...);
 CREATE TABLE metabolism_runs (...);
 ```
 
-兼容阶段：
+开发阶段：
 
-- 旧表 `knowledge_units` 和 `sessions` 先保留
-- 新写入优先进入图
-- 再通过 projection 同步回旧表或旧接口
+- `sessions` 继续作为会话运行态存储，同时把观察和结束摘要摄入图
+- `knowledge_units` 不再接收新增知识、项目快照或 pipeline 写入
+- 不再通过 projection 同步回旧接口
 
 ## 8. ECS 运行循环设计
 
@@ -657,12 +649,12 @@ ECS 之后，建议改成：
 建议顺序：
 
 1. 先增量增加 `context-graph.ts`
-2. 再给现有 MCP / client / server 加兼容类型
-3. 最后才逐步让旧接口返回 projection
+2. 再让 MCP / client / server 统一使用 graph view 类型
+3. 最后移除旧接口和兼容 projection
 
 ## 12.2 `server`
 
-`Mindstrate` facade 应逐步转向 `MindstrateECS` 风格，但为了兼容可以保留现名。
+`Mindstrate` facade 保留现名，但语义转为 ECS graph-first。
 
 建议新增 facade 方法：
 
@@ -674,13 +666,14 @@ ECS 之后，建议改成：
 - `runReflection`
 - `queryContextGraph`
 - `assembleWorkingContext`
-- `projectKnowledgeUnit`
+- `readGraphKnowledge`
+- `queryGraphKnowledge`
 
 ## 12.3 `mcp-server`
 
 MCP 是最适合暴露 ECS 能力的入口。
 
-建议保留现有工具，同时新增：
+建议保留工具名时也切换 payload 为 graph-first，同时新增：
 
 - `context_ingest_event`
 - `context_query_graph`
@@ -738,7 +731,7 @@ Web UI 后续应该新增 ECS 可视化：
 1. 新增 `ContextNode / ContextEdge / ContextEvent`
 2. 新增 `ContextGraphStore`
 3. 新增最小图查询接口
-4. 保留旧 `KnowledgeUnit` 存储和接口
+4. 不再保留旧 `KnowledgeUnit` 写入和外部接口
 
 验收：
 
@@ -762,22 +755,22 @@ Web UI 后续应该新增 ECS 可视化：
 
 - 一次真实会话能在图中形成事件链
 
-## 阶段 3：把 KnowledgeUnit 降级为投影
+## 阶段 3：移除 KnowledgeUnit 外部兼容层
 
 目标：
 
-- 让新增知识写入图，再投影成 `KnowledgeUnit`
+- 让新增知识写入图，并通过 graph view 对外呈现
 
 任务：
 
-1. `memory_add` 改为优先写入图
-2. `knowledge_units` 作为 projection materialization
-3. `Retriever` 支持混合图检索
+1. `memory_add` 写入 `ContextNode`
+2. `ProjectionTarget.GRAPH_KNOWLEDGE` 记录 graph view 派生
+3. curation/search 使用图检索结果
 
 验收：
 
-- 现有 `mindstrate add / mindstrate search / memory_search` 不变
-- 但底层新增数据已经进入图
+- `mindstrate add / mindstrate search / memory_search` 返回 graph view
+- 新增数据不再写入 `knowledge_units`
 
 ## 阶段 4：实现第一版代谢引擎
 
