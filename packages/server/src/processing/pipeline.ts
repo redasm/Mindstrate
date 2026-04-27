@@ -1,12 +1,8 @@
 /**
  * Mindstrate - Processing Pipeline
  *
- * 知识处理流水线：
- * 1. 质量门禁检查（结构完整性 + 一致性检测）
- * 2. 去重检测
- * 3. 内容标准化
- * 4. Embedding 生成
- * 5. 写入存储
+ * ECS 写入流程已经迁移到 Mindstrate facade + context graph。
+ * Pipeline 仅保留写入前的质量门禁检查。
  */
 
 import type { CreateKnowledgeInput } from '@mindstrate/protocol';
@@ -14,7 +10,6 @@ import { KnowledgeType } from '@mindstrate/protocol';
 import { MetadataStore } from '../storage/metadata-store.js';
 import type { IVectorStore } from '../storage/vector-store-interface.js';
 import { Embedder } from './embedder.js';
-import { ValidationError, DuplicateError, StorageError } from '@mindstrate/protocol';
 
 /**
  * @deprecated These types now live in `@mindstrate/protocol`.
@@ -25,108 +20,15 @@ export type {
   QualityGateResult,
 } from '@mindstrate/protocol';
 
-import type { PipelineResult, QualityGateResult } from '@mindstrate/protocol';
+import type { QualityGateResult } from '@mindstrate/protocol';
 
 export class Pipeline {
-  private metadataStore: MetadataStore;
-  private vectorStore: IVectorStore;
-  private embedder: Embedder;
-  private deduplicationThreshold: number;
-
   constructor(
-    metadataStore: MetadataStore,
-    vectorStore: IVectorStore,
-    embedder: Embedder,
-    deduplicationThreshold: number = 0.92,
-  ) {
-    this.metadataStore = metadataStore;
-    this.vectorStore = vectorStore;
-    this.embedder = embedder;
-    this.deduplicationThreshold = deduplicationThreshold;
-  }
-
-  /** 处理一条新知识 */
-  async process(input: CreateKnowledgeInput): Promise<PipelineResult> {
-    try {
-      // Step 0: 质量门禁检查（约束门禁）
-      const gateResult = this.qualityGate(input);
-      if (!gateResult.passed) {
-        return {
-          success: false,
-          message: `Quality gate failed: ${gateResult.errors.join('; ')}`,
-          qualityWarnings: gateResult.warnings,
-        };
-      }
-
-      // Step 1: 标准化输入
-      const normalized = this.normalize(input);
-
-      // Step 2: 生成 Embedding
-      const text = this.embedder.knowledgeToText(normalized);
-      const embedding = await this.embedder.embed(text);
-
-      // Step 3: 去重检测
-      const duplicates = await this.vectorStore.findDuplicates(
-        embedding,
-        this.deduplicationThreshold,
-      );
-
-      if (duplicates.length > 0) {
-        const dup = duplicates[0];
-        // 找到重复项，记录使用而非新增
-        this.metadataStore.recordUsage(dup.id);
-        return {
-          success: false,
-          message: `Duplicate detected (similarity: ${(dup.score * 100).toFixed(1)}%). Existing knowledge ID: ${dup.id}`,
-          duplicateOf: dup.id,
-        };
-      }
-
-      // Step 4: 一致性检测（检查是否与已有知识矛盾）
-      const contradictions = await this.checkContradictions(embedding, normalized);
-
-      // Step 5: 写入元数据库
-      const knowledge = this.metadataStore.create(normalized);
-
-      // Step 6: 写入向量库
-      await this.vectorStore.add({
-        id: knowledge.id,
-        embedding,
-        text,
-        metadata: {
-          type: knowledge.type,
-          language: knowledge.context.language ?? '',
-          framework: knowledge.context.framework ?? '',
-          project: knowledge.context.project ?? '',
-        },
-      });
-
-      // 收集所有警告
-      const warnings = [
-        ...gateResult.warnings,
-        ...contradictions,
-      ];
-
-      return {
-        success: true,
-        message: `Knowledge added successfully: ${knowledge.title}`,
-        qualityWarnings: warnings.length > 0 ? warnings : undefined,
-      };
-    } catch (error) {
-      if (error instanceof ValidationError || error instanceof DuplicateError || error instanceof StorageError) {
-        return {
-          success: false,
-          message: error.message,
-          duplicateOf: error instanceof DuplicateError ? error.duplicateOf : undefined,
-        };
-      }
-      const errMsg = error instanceof Error ? error.message : String(error);
-      return {
-        success: false,
-        message: `Failed to process knowledge: ${errMsg}`,
-      };
-    }
-  }
+    _metadataStore?: MetadataStore,
+    _vectorStore?: IVectorStore,
+    _embedder?: Embedder,
+    _deduplicationThreshold: number = 0.92,
+  ) {}
 
   /**
    * 质量门禁：结构完整性检查
@@ -236,68 +138,4 @@ export class Pipeline {
     };
   }
 
-  /**
-   * 一致性检测：检查新知识是否与已有知识存在潜在矛盾
-   *
-   * 语义保持约束：确保新知识不会与已验证的知识产生冲突。
-   */
-  private async checkContradictions(
-    embedding: number[],
-    input: CreateKnowledgeInput,
-  ): Promise<string[]> {
-    const warnings: string[] = [];
-
-    // 查找相似但不重复的知识（0.75 - deduplicationThreshold）
-    const similar = await this.vectorStore.search(embedding, 5);
-    const nearMatches = similar.filter(
-      s => s.score >= 0.75 && s.score < this.deduplicationThreshold
-    );
-
-    if (nearMatches.length > 0) {
-      const ids = nearMatches.map(m => m.id);
-      const existingEntries = this.metadataStore.getByIds(ids);
-
-      for (const existing of existingEntries) {
-        // 同类型、同语言的高相似度知识
-        if (
-          existing.type === input.type &&
-          existing.context.language === input.context?.language &&
-          existing.quality.status === 'verified'
-        ) {
-          warnings.push(
-            `Potentially contradicts verified knowledge "${existing.title}" (ID: ${existing.id}). ` +
-            `Review for consistency.`
-          );
-        }
-
-        // 相似度较高的知识提示可能需要合并
-        const matchScore = nearMatches.find(m => m.id === existing.id)?.score ?? 0;
-        if (matchScore >= 0.85) {
-          warnings.push(
-            `Very similar to existing knowledge "${existing.title}" (${(matchScore * 100).toFixed(1)}% similar). ` +
-            `Consider merging instead of adding new.`
-          );
-        }
-      }
-    }
-
-    return warnings;
-  }
-
-  /** 标准化输入 */
-  private normalize(input: CreateKnowledgeInput): CreateKnowledgeInput {
-    return {
-      ...input,
-      title: input.title.trim(),
-      problem: input.problem?.trim(),
-      solution: input.solution.trim(),
-      tags: (input.tags ?? []).map(t => t.toLowerCase().trim()).filter(Boolean),
-      context: {
-        ...input.context,
-        language: input.context?.language?.toLowerCase(),
-        framework: input.context?.framework?.toLowerCase(),
-        project: input.context?.project?.trim(),
-      },
-    };
-  }
 }

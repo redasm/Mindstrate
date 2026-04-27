@@ -1,7 +1,7 @@
 /**
  * Tests for the Processing Pipeline
  *
- * Covers: quality gate, normalization, dedup detection, contradiction check, full process flow
+ * Covers: quality gate checks used before ECS graph writes
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -101,64 +101,4 @@ describe('Pipeline', () => {
     });
   });
 
-  // ==============================================================
-  // Full Process
-  // ==============================================================
-
-  describe('process', () => {
-    it('should successfully add a new knowledge entry', async () => {
-      const input = makeKnowledgeInput();
-      const result = await pipeline.process(input);
-      expect(result.success).toBe(true);
-      expect(result.knowledge).toBeDefined();
-      expect(result.knowledge!.id).toBeTruthy();
-      expect(result.knowledge!.title).toBe('Test knowledge entry');
-    });
-
-    it('should detect duplicates', async () => {
-      const input = makeKnowledgeInput();
-      const first = await pipeline.process(input);
-      expect(first.success).toBe(true);
-
-      // Same content should be detected as duplicate
-      const second = await pipeline.process(input);
-      expect(second.success).toBe(false);
-      expect(second.duplicateOf).toBe(first.knowledge!.id);
-    });
-
-    it('should normalize tags to lowercase', async () => {
-      const input = makeKnowledgeInput({ tags: ['TypeScript', 'REACT', '  spaced  '] });
-      const result = await pipeline.process(input);
-      expect(result.success).toBe(true);
-      expect(result.knowledge!.tags).toEqual(['typescript', 'react', 'spaced']);
-    });
-
-    it('should normalize language to lowercase', async () => {
-      const input = makeKnowledgeInput({
-        context: { language: 'TypeScript', framework: 'Express' },
-      });
-      const result = await pipeline.process(input);
-      expect(result.success).toBe(true);
-      expect(result.knowledge!.context.language).toBe('typescript');
-      expect(result.knowledge!.context.framework).toBe('express');
-    });
-
-    it('should reject entries that fail quality gate', async () => {
-      const input = makeKnowledgeInput({ title: '', solution: '' });
-      const result = await pipeline.process(input);
-      expect(result.success).toBe(false);
-      expect(result.message).toContain('Quality gate failed');
-    });
-
-    it('should add different knowledge entries without conflict', async () => {
-      const input1 = makeKnowledgeInput({ title: 'First entry', solution: 'Solution A for problem alpha' });
-      const input2 = makeKnowledgeInput({ title: 'Second entry', solution: 'Solution B for problem beta completely different topic' });
-
-      const r1 = await pipeline.process(input1);
-      const r2 = await pipeline.process(input2);
-      expect(r1.success).toBe(true);
-      expect(r2.success).toBe(true);
-      expect(r1.knowledge!.id).not.toBe(r2.knowledge!.id);
-    });
-  });
 });
