@@ -488,7 +488,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: 'context_internalize',
     description:
-      'Generate or accept AGENTS.md, project snapshot, and system prompt suggestions from stable ECS rules, heuristics, and axioms.',
+      'Generate or accept AGENTS.md, project snapshot, system prompt, and fine-tune dataset suggestions from stable ECS rules, heuristics, and axioms.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -506,7 +506,7 @@ export const TOOL_DEFINITIONS = [
         },
         targets: {
           type: 'array',
-          items: { type: 'string', enum: ['agents_md', 'project_snapshot', 'system_prompt'] },
+          items: { type: 'string', enum: ['agents_md', 'project_snapshot', 'system_prompt', 'fine_tune_dataset'] },
           description: 'Optional accepted targets to record.',
         },
       },

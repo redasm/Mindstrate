@@ -435,6 +435,53 @@ describe('Mindstrate', () => {
       expect(accepted.records.map((record) => record.target).sort()).toEqual(['agents_md', 'system_prompt']);
       expect(memory.listProjectionRecords({ nodeId: rule.id, limit: 10 })).toHaveLength(2);
     });
+
+    it('should export stable rules as a governed fine-tune dataset projection', () => {
+      const internal = memory as unknown as {
+        contextGraphStore: {
+          createNode(input: Record<string, unknown>): { id: string };
+        };
+      };
+
+      const rule = internal.contextGraphStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: 'Keep migrations graph-first',
+        content: 'New knowledge should be written as ECS graph nodes before projection.',
+        project: 'proj',
+        status: ContextNodeStatus.VERIFIED,
+        qualityScore: 94,
+        confidence: 0.96,
+      });
+
+      const suggestions = memory.generateInternalizationSuggestions({
+        project: 'proj',
+      });
+
+      const [example] = suggestions.fineTuneDatasetJsonl
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+
+      expect(example).toMatchObject({
+        sourceNodeId: rule.id,
+        project: 'proj',
+        messages: [
+          { role: 'system', content: expect.stringContaining('Mindstrate ECS guidance') },
+          { role: 'user', content: expect.stringContaining('Keep migrations graph-first') },
+          { role: 'assistant', content: 'New knowledge should be written as ECS graph nodes before projection.' },
+        ],
+      });
+
+      const accepted = memory.acceptInternalizationSuggestions({
+        project: 'proj',
+        targets: [ProjectionTarget.FINE_TUNE_DATASET],
+      });
+
+      expect(accepted.records).toHaveLength(1);
+      expect(accepted.records[0].target).toBe(ProjectionTarget.FINE_TUNE_DATASET);
+      expect(accepted.records[0].targetRef).toBe('proj:fine-tune-dataset.jsonl');
+    });
   });
 
   describe('curateContext', () => {

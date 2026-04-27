@@ -80,12 +80,13 @@ export interface PublishBundleResult {
   manifest: BundlePublicationManifest;
 }
 
-export type InternalizationTarget = 'agents_md' | 'project_snapshot' | 'system_prompt';
+export type InternalizationTarget = 'agents_md' | 'project_snapshot' | 'system_prompt' | 'fine_tune_dataset';
 
 export interface InternalizationSuggestions {
   agentsMd: string;
   projectSnapshotFragment: string;
   systemPromptFragment: string;
+  fineTuneDatasetJsonl: string;
   sourceNodeIds: string[];
 }
 
@@ -97,6 +98,7 @@ export interface InternalizationSuggestions {
   agentsMd: string;
   projectSnapshotFragment: string;
   systemPromptFragment: string;
+  fineTuneDatasetJsonl: string;
   sourceNodeIds: string[];
 }
 

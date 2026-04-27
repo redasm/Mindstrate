@@ -194,7 +194,7 @@ export const ContextInternalizeSchema = z.object({
   project: z.string().optional(),
   limit: z.number().int().min(1).max(50).optional(),
   accept: z.boolean().optional(),
-  targets: z.array(z.enum(['agents_md', 'project_snapshot', 'system_prompt'])).optional(),
+  targets: z.array(z.enum(['agents_md', 'project_snapshot', 'system_prompt', 'fine_tune_dataset'])).optional(),
 });
 
 export const MemoryEvolveSchema = z.object({

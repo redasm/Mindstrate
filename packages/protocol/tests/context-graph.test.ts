@@ -84,6 +84,7 @@ describe('ECS enum stability', () => {
       'test_result',
       'git_activity',
       'lsp_diagnostic',
+      'terminal_output',
       'user_edit',
       'metabolic_output',
     ]);
@@ -108,6 +109,9 @@ describe('ECS enum stability', () => {
       'session_summary',
       'project_snapshot',
       'obsidian_document',
+      'agents_md',
+      'system_prompt',
+      'fine_tune_dataset',
     ]);
   });
 });

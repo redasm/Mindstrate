@@ -16,13 +16,15 @@ export interface InternalizationSuggestions {
   agentsMd: string;
   projectSnapshotFragment: string;
   systemPromptFragment: string;
+  fineTuneDatasetJsonl: string;
   sourceNodeIds: string[];
 }
 
 export type InternalizationTarget =
   | ProjectionTarget.AGENTS_MD
   | ProjectionTarget.PROJECT_SNAPSHOT
-  | ProjectionTarget.SYSTEM_PROMPT;
+  | ProjectionTarget.SYSTEM_PROMPT
+  | ProjectionTarget.FINE_TUNE_DATASET;
 
 export interface AcceptInternalizationSuggestionsOptions extends InternalizationSuggestionOptions {
   targets?: InternalizationTarget[];
@@ -53,6 +55,7 @@ export class ContextInternalizer {
         ...bulletLines,
       ].join('\n'),
       systemPromptFragment: bulletLines.join('\n'),
+      fineTuneDatasetJsonl: nodes.map(toFineTuneExample).join('\n'),
       sourceNodeIds: nodes.map((node) => node.id),
     };
   }
@@ -65,6 +68,7 @@ export class ContextInternalizer {
       ProjectionTarget.AGENTS_MD,
       ProjectionTarget.PROJECT_SNAPSHOT,
       ProjectionTarget.SYSTEM_PROMPT,
+      ProjectionTarget.FINE_TUNE_DATASET,
     ];
     const records: ProjectionRecord[] = [];
     const version = Date.now();
@@ -127,5 +131,33 @@ function buildTargetRef(target: InternalizationTarget, project?: string): string
       return `${scope}:project-snapshot`;
     case ProjectionTarget.SYSTEM_PROMPT:
       return `${scope}:system-prompt`;
+    case ProjectionTarget.FINE_TUNE_DATASET:
+      return `${scope}:fine-tune-dataset.jsonl`;
   }
+}
+
+function toFineTuneExample(node: ContextNode): string {
+  return JSON.stringify({
+    sourceNodeId: node.id,
+    project: node.project,
+    substrateType: node.substrateType,
+    domainType: node.domainType,
+    status: node.status,
+    confidence: node.confidence,
+    qualityScore: node.qualityScore,
+    messages: [
+      {
+        role: 'system',
+        content: 'Mindstrate ECS guidance: answer with stable, graph-verified project knowledge only.',
+      },
+      {
+        role: 'user',
+        content: `What guidance should be internalized for "${node.title}"?`,
+      },
+      {
+        role: 'assistant',
+        content: node.content,
+      },
+    ],
+  });
 }

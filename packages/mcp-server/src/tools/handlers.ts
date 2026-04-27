@@ -675,6 +675,9 @@ export async function handleContextInternalize(
     '### System Prompt Fragment',
     suggestions.systemPromptFragment,
     '',
+    '### Fine-Tune Dataset JSONL',
+    suggestions.fineTuneDatasetJsonl,
+    '',
     `Source Node IDs: ${suggestions.sourceNodeIds.join(', ') || '(none)'}`,
     projectionRecordCount !== undefined ? `Projection Records: ${projectionRecordCount}` : '',
   ].join('\n');

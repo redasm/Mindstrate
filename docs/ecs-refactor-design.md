@@ -103,7 +103,7 @@
 6. 没有内外记忆协同层
    - 现在的上下文仍主要是注入型外部记忆
    - 缺少对“哪些稳定知识应该固化进 agent 行为”的路径设计
-   - 当前状态：已增加 internalization suggestion / acceptance 路径，并对 `agents_md`、`project_snapshot`、`system_prompt` 等投影记录审计
+   - 当前状态：已增加 internalization suggestion / acceptance 路径，并对 `agents_md`、`project_snapshot`、`system_prompt`、`fine_tune_dataset` 等投影记录审计
 
 ## 4. 重构原则
 
@@ -265,7 +265,12 @@ interface ContextEdge {
   - `AGENTS.md` 建议
   - 项目 snapshot
   - 生成的 system prompt 片段
-  - 未来可能的 LoRA / 微调接口
+  - 受控 JSONL 微调数据集投影
+
+当前实现补充：
+
+- `context_internalize` 会从稳定高质量节点生成 `AGENTS.md`、项目 snapshot、system prompt 与 fine-tune dataset JSONL 片段
+- `ProjectionTarget.FINE_TUNE_DATASET` 只记录受治理的数据集投影，不直接触发真实训练服务
 
 ## 6. 当前模块到 ECS 的映射
 
@@ -416,6 +421,7 @@ CREATE TABLE metabolism_runs (...);
 - `sessions` 继续作为会话运行态存储，同时把观察和结束摘要摄入图
 - 旧知识表 不再接收新增知识、项目快照或 pipeline 写入
 - 不再通过 projection 同步回旧接口
+- 节点创建和更新通过 `metadata.graphVersion` 与 `metadata.previousGraphHash` 留下图版本治理线索
 
 ## 8. ECS 运行循环设计
 
@@ -483,7 +489,7 @@ CREATE TABLE metabolism_runs (...);
 - 高频检索且高采纳
 - 多次跨会话重复出现
 - 多项目中重复验证
-- 当前实现补充：相似 cluster 和高正反馈都可以触发升级，`Summary -> Pattern`、`Pattern -> Rule` 会记录 `promotionReason`
+- 当前实现补充：相似 cluster、高正反馈和跨项目验证都可以触发升级，`Summary -> Pattern`、`Pattern -> Rule` 会记录 `promotionReason`
 
 升级路径建议：
 
@@ -566,6 +572,7 @@ ECS 之后，建议改成：
 
 2. 向量影子召回
    - 用 embedding 找近邻候选节点
+   - 当前实现：`node_embeddings` 会以查询 embedding 和模型名参与 context priority selection 的分数融合
 
 3. 谱系裁剪
    - 同一事实若已有 `Rule`，默认不再展开全部底层 `Episode`

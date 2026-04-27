@@ -52,6 +52,7 @@ export enum ProjectionTarget {
   OBSIDIAN_DOCUMENT = 'obsidian_document',
   AGENTS_MD = 'agents_md',
   SYSTEM_PROMPT = 'system_prompt',
+  FINE_TUNE_DATASET = 'fine_tune_dataset',
 }
 
 export interface ProjectionRecord {

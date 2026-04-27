@@ -60,10 +60,11 @@ export interface InternalizationSuggestions {
   agentsMd: string;
   projectSnapshotFragment: string;
   systemPromptFragment: string;
+  fineTuneDatasetJsonl: string;
   sourceNodeIds: string[];
 }
 
-export type InternalizationTarget = 'agents_md' | 'project_snapshot' | 'system_prompt';
+export type InternalizationTarget = 'agents_md' | 'project_snapshot' | 'system_prompt' | 'fine_tune_dataset';
 
 export interface AcceptInternalizationSuggestionsResult extends InternalizationSuggestions {
   records: ProjectionRecord[];
