@@ -7,6 +7,7 @@ import { createTempDir, removeTempDir } from './helpers.js';
 import {
   ContextDomainType,
   ContextNodeStatus,
+  ContextRelationType,
   SubstrateType,
 } from '@mindstrate/protocol/models';
 
@@ -19,7 +20,7 @@ describe('ProjectedKnowledgeSearch', () => {
     tempDir = createTempDir();
     graphStore = new ContextGraphStore(path.join(tempDir, 'context-graph.db'));
     const projector = new GraphKnowledgeProjector(graphStore);
-    search = new ProjectedKnowledgeSearch(projector);
+    search = new ProjectedKnowledgeSearch(projector, graphStore);
   });
 
   afterEach(() => {
@@ -57,5 +58,60 @@ describe('ProjectedKnowledgeSearch', () => {
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].view.title).toBe('Hydration Safety Rule');
     expect(results[0].matchReason).toContain('Projected rule');
+  });
+
+  it('excludes conflicted nodes unless explicitly requested', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Conflicted Hydration Rule',
+      content: 'Use hydration-safe SSR.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.CONFLICTED,
+    });
+
+    expect(search.search('hydration SSR', { project: 'mindstrate' })).toHaveLength(0);
+    expect(search.search('hydration SSR', {
+      project: 'mindstrate',
+      includeStatuses: [ContextNodeStatus.CONFLICTED],
+    })).toHaveLength(1);
+  });
+
+  it('promotes high-level nodes supported by relevant lower-level evidence', () => {
+    const rule = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'SSR Browser API Rule',
+      content: 'Do not branch on browser APIs during render.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 90,
+      confidence: 0.9,
+    });
+    const summary = graphStore.createNode({
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Hydration mismatch evidence',
+      content: 'Hydration mismatch came from a browser API branch.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 70,
+      confidence: 0.8,
+    });
+    graphStore.createEdge({
+      sourceId: summary.id,
+      targetId: rule.id,
+      relationType: ContextRelationType.SUPPORTS,
+      strength: 1,
+    });
+
+    const results = search.search('hydration mismatch', {
+      project: 'mindstrate',
+      topK: 1,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].view.id).toBe(rule.id);
+    expect(results[0].matchReason).toContain('supported by related summary');
   });
 });

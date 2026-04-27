@@ -35,7 +35,6 @@ export class GraphKnowledgeProjector {
     const includeStatuses = options.includeStatuses ?? [
       ContextNodeStatus.ACTIVE,
       ContextNodeStatus.VERIFIED,
-      ContextNodeStatus.CONFLICTED,
       ContextNodeStatus.CANDIDATE,
     ];
 

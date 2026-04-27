@@ -157,7 +157,7 @@ export class Mindstrate {
     this.contextInternalizer = new ContextInternalizer(this.contextGraphStore);
     this.contextPrioritySelector = new ContextPrioritySelector(this.contextGraphStore);
     this.graphKnowledgeProjector = new GraphKnowledgeProjector(this.contextGraphStore);
-    this.projectedKnowledgeSearch = new ProjectedKnowledgeSearch(this.graphKnowledgeProjector);
+    this.projectedKnowledgeSearch = new ProjectedKnowledgeSearch(this.graphKnowledgeProjector, this.contextGraphStore);
     this.projectionMaterializer = new KnowledgeProjectionMaterializer(this.contextGraphStore, this.graphKnowledgeProjector);
     this.sessionProjectionMaterializer = new SessionProjectionMaterializer(this.contextGraphStore);
     this.projectSnapshotProjectionMaterializer = new ProjectSnapshotProjectionMaterializer(this.contextGraphStore);
