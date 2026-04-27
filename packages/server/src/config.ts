@@ -17,6 +17,15 @@ export interface MindstrateConfig {
   /** 向量存储目录 */
   vectorStorePath: string;
 
+  /** Vector backend: local JSON or Qdrant */
+  vectorBackend: 'local' | 'qdrant';
+
+  /** Qdrant REST endpoint when vectorBackend=qdrant */
+  qdrantUrl?: string;
+
+  /** Optional Qdrant API key */
+  qdrantApiKey?: string;
+
   /** OpenAI API Key (or any provider that speaks the OpenAI API) */
   openaiApiKey: string;
 
@@ -82,6 +91,14 @@ export function loadConfig(overrides?: Partial<MindstrateConfig>): MindstrateCon
     vectorStorePath: overrides?.vectorStorePath
       ?? process.env['MINDSTRATE_VECTOR_PATH']
       ?? path.join(dataDir, 'vectors'),
+    vectorBackend: overrides?.vectorBackend
+      ?? (process.env['MINDSTRATE_VECTOR_BACKEND'] === 'qdrant' ? 'qdrant' : 'local'),
+    qdrantUrl: overrides?.qdrantUrl
+      ?? process.env['MINDSTRATE_QDRANT_URL']
+      ?? undefined,
+    qdrantApiKey: overrides?.qdrantApiKey
+      ?? process.env['MINDSTRATE_QDRANT_API_KEY']
+      ?? undefined,
     openaiApiKey: overrides?.openaiApiKey
       ?? process.env['OPENAI_API_KEY']
       ?? '',

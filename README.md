@@ -559,7 +559,7 @@ Mindstrate/
 | 语言 | TypeScript (Node.js) |
 | Monorepo | npm workspaces + Turborepo |
 | 元数据库 | SQLite (better-sqlite3, WAL mode) |
-| 向量存储 | 本地 JSON 向量索引（余弦相似度 + 维度校验） |
+| 向量存储 | 本地 JSON 向量索引（默认）/ Qdrant（`MINDSTRATE_VECTOR_BACKEND=qdrant`） |
 | Embedding | OpenAI text-embedding-3-small / 离线 hash-based |
 | MCP | @modelcontextprotocol/sdk |
 | Team Server | Express.js + CORS + timing-safe API Key 认证 |
@@ -578,6 +578,9 @@ Mindstrate/
 | `MINDSTRATE_EMBEDDING_MODEL` | Embedding 模型名 | `text-embedding-3-small` |
 | `MINDSTRATE_LLM_MODEL` | Chat / 抽取 / 进化用的模型名 | `gpt-4o-mini` |
 | `MINDSTRATE_DATA_DIR` | 数据存储目录 | `~/.mindstrate` |
+| `MINDSTRATE_VECTOR_BACKEND` | 向量后端：`local` / `qdrant` | `local` |
+| `MINDSTRATE_QDRANT_URL` | Qdrant REST 地址（qdrant 后端必填） | 无 |
+| `MINDSTRATE_QDRANT_API_KEY` | Qdrant API Key（可选） | 无 |
 | `MINDSTRATE_LOCALE` | Web UI 语言（`zh` / `en`） | 自动检测系统语言 |
 | `TEAM_SERVER_URL` | Team Server 地址（设置后启用团队模式） | 无（本地模式） |
 | `TEAM_API_KEY` | Team Server API Key | 无 |

@@ -34,6 +34,7 @@ import type {
 } from '@mindstrate/protocol';
 import { DatabaseStore } from './storage/database-store.js';
 import { VectorStore } from './storage/vector-store.js';
+import { QdrantVectorStore } from './storage/qdrant-vector-store.js';
 import type { IVectorStore } from './storage/vector-store-interface.js';
 import { SessionStore } from './storage/session-store.js';
 import { Embedder } from './processing/embedder.js';
@@ -184,7 +185,7 @@ export class Mindstrate {
       pruner: this.pruner,
     });
     this.vectorStore = configOverrides?.vectorStore
-      ?? new VectorStore(this.config.vectorStorePath, this.config.collectionName);
+      ?? this.createVectorStore();
     this.sessionStore = new SessionStore(this.databaseStore.getDb());
     this.bundleManager = new PortableContextBundleManager(this.contextGraphStore);
     this.sessionCompressor = new SessionCompressor(this.config.openaiApiKey, this.config.llmModel, llmBaseUrl);
@@ -1124,6 +1125,19 @@ export class Mindstrate {
       domainType: ContextDomainType.PROJECT_SNAPSHOT,
       limit: 1,
     })[0] ?? null;
+  }
+
+  private createVectorStore(): IVectorStore {
+    if (this.config.vectorBackend === 'qdrant') {
+      return new QdrantVectorStore({
+        url: this.config.qdrantUrl ?? '',
+        apiKey: this.config.qdrantApiKey,
+        collectionName: this.config.collectionName,
+        dimension: this.embedder.getEmbeddingDimension(),
+      });
+    }
+
+    return new VectorStore(this.config.vectorStorePath, this.config.collectionName);
   }
 
   private findExactGraphDuplicate(input: CreateKnowledgeInput): ContextNode | null {
