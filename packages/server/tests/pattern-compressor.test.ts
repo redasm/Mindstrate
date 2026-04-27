@@ -127,4 +127,38 @@ describe('PatternCompressor', () => {
     expect(patterns[0].metadata?.['sourceSummaryIds']).toEqual([summary.id]);
     expect(graphStore.listIncomingEdges(patterns[0].id, ContextRelationType.GENERALIZES)).toHaveLength(1);
   });
+
+  it('promotes summaries repeated across projects as a cross-project pattern', async () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Web summary',
+      content: 'Hydration-safe SSR requires deterministic server and client markup.',
+      project: 'web-app',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    graphStore.createNode({
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Admin summary',
+      content: 'Hydration-safe SSR needs deterministic client and server markup.',
+      project: 'admin-app',
+      status: ContextNodeStatus.ACTIVE,
+    });
+
+    const result = await compressor.compressProjectSummaries({
+      minClusterSize: 2,
+      minDistinctProjects: 2,
+      similarityThreshold: 0.6,
+    });
+
+    expect(result.patternNodesCreated).toBe(1);
+    const [pattern] = graphStore.listNodes({
+      substrateType: SubstrateType.PATTERN,
+      limit: 10,
+    });
+    expect(pattern.project).toBeUndefined();
+    expect(pattern.metadata?.['promotionReason']).toBe('cross_project_validation');
+    expect(pattern.metadata?.['sourceProjects']).toEqual(expect.arrayContaining(['web-app', 'admin-app']));
+  });
 });

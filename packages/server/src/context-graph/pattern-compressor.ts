@@ -13,6 +13,7 @@ export interface PatternCompressionOptions {
   project?: string;
   minClusterSize?: number;
   minPositiveFeedback?: number;
+  minDistinctProjects?: number;
   similarityThreshold?: number;
   limit?: number;
 }
@@ -40,6 +41,7 @@ export class PatternCompressor {
   ): Promise<PatternCompressionResult> {
     const minClusterSize = options.minClusterSize ?? 2;
     const minPositiveFeedback = options.minPositiveFeedback ?? 3;
+    const minDistinctProjects = options.minDistinctProjects ?? 1;
     const similarityThreshold = options.similarityThreshold ?? 0.8;
     const limit = options.limit ?? 200;
 
@@ -72,7 +74,10 @@ export class PatternCompressor {
         const candidateEmbedding = embeddings.get(candidate.id);
         if (!candidateEmbedding) continue;
 
-        const similarity = cosineSimilarity(currentEmbedding, candidateEmbedding);
+        const similarity = Math.max(
+          cosineSimilarity(currentEmbedding, candidateEmbedding),
+          lexicalOverlap(summary.content, candidate.content),
+        );
         if (similarity >= similarityThreshold) {
           visited.add(candidate.id);
           cluster.push(candidate);
@@ -94,15 +99,16 @@ export class PatternCompressor {
         title: buildPatternTitle(cluster),
         content: buildPatternContent(cluster),
         tags: ['pattern-compression', 'session-pattern'],
-        project: cluster[0].project,
+        project: isCrossProjectCluster(cluster, minDistinctProjects) ? undefined : cluster[0].project,
         compressionLevel: 0.03,
         confidence: 0.8,
         qualityScore: 80,
         status: ContextNodeStatus.ACTIVE,
         metadata: {
           sourceSummaryIds: cluster.map((item) => item.id),
+          sourceProjects: [...new Set(cluster.map((item) => item.project).filter(Boolean))],
           clusterSize: cluster.length,
-          promotionReason: cluster.length === 1 ? 'high_positive_feedback' : 'similarity_cluster',
+          promotionReason: getPromotionReason(cluster, minDistinctProjects),
         },
       });
 
@@ -154,4 +160,34 @@ function buildPatternContent(cluster: ContextNode[]): string {
     '',
     ...bullets,
   ].join('\n');
+}
+
+function isCrossProjectCluster(cluster: ContextNode[], minDistinctProjects: number): boolean {
+  const projects = new Set(cluster.map((node) => node.project).filter(Boolean));
+  return projects.size >= Math.max(minDistinctProjects, 2);
+}
+
+function getPromotionReason(cluster: ContextNode[], minDistinctProjects: number): string {
+  if (cluster.length === 1) return 'high_positive_feedback';
+  if (isCrossProjectCluster(cluster, minDistinctProjects)) return 'cross_project_validation';
+  return 'similarity_cluster';
+}
+
+function lexicalOverlap(a: string, b: string): number {
+  const aTokens = new Set(tokenize(a));
+  const bTokens = new Set(tokenize(b));
+  if (aTokens.size === 0 || bTokens.size === 0) return 0;
+
+  let matches = 0;
+  for (const token of aTokens) {
+    if (bTokens.has(token)) matches++;
+  }
+  return matches / Math.min(aTokens.size, bTokens.size);
+}
+
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9\u4e00-\u9fff]+/)
+    .filter((token) => token.length > 2);
 }
