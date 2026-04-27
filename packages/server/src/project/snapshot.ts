@@ -41,8 +41,7 @@ export function projectSnapshotId(project: DetectedProject): string {
   const norm = path.resolve(project.root).replace(/\\/g, '/').toLowerCase();
   const sig = `mindstrate:project-snapshot:${norm}:${project.name}`;
   const hash = crypto.createHash('sha1').update(sig).digest('hex');
-  // Format like a UUID for compatibility with downstream code that expects
-  // dashed identifiers, while remaining deterministic.
+  // Format like a UUID while remaining deterministic.
   return [
     hash.slice(0, 8),
     hash.slice(8, 12),

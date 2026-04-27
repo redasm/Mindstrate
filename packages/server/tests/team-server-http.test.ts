@@ -278,13 +278,8 @@ describe('team-server HTTP integration', () => {
 
   it('generates internalization suggestions through the team HTTP API', async () => {
     const { client, memory } = await startTeamServer();
-    const internal = memory as unknown as {
-      contextGraphStore: {
-        createNode(input: Record<string, unknown>): { id: string };
-      };
-    };
 
-    internal.contextGraphStore.createNode({
+    memory.createContextNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
       title: 'Review ECS changes with tests',
@@ -306,13 +301,8 @@ describe('team-server HTTP integration', () => {
 
   it('exports obsidian projection files through the team HTTP API', async () => {
     const { client, memory, tempDir } = await startTeamServer();
-    const internal = memory as unknown as {
-      contextGraphStore: {
-        createNode(input: Record<string, unknown>): { id: string };
-      };
-    };
 
-    internal.contextGraphStore.createNode({
+    memory.createContextNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
       title: 'Export ECS rule',
@@ -331,3 +321,5 @@ describe('team-server HTTP integration', () => {
     expect(fs.readFileSync(result.files[0], 'utf8')).toContain('Team API should write verified ECS rules');
   });
 });
+
+

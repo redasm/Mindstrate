@@ -12,8 +12,7 @@
  * - 质量门禁（KnowledgeQualityGate）
  */
 
-import * as fs from 'node:fs';
-import { loadConfig, type MindstrateConfig } from './config.js';
+import type { MindstrateConfig } from './config.js';
 import type {
   CreateKnowledgeInput,
   RetrievalContext,
@@ -33,25 +32,16 @@ import type {
   CompressSessionInput,
   SessionContext,
 } from '@mindstrate/protocol';
-import { DatabaseStore } from './storage/database-store.js';
-import { VectorStore } from './storage/vector-store.js';
-import { QdrantVectorStore } from './storage/qdrant-vector-store.js';
 import type { IVectorStore } from './storage/vector-store-interface.js';
-import { SessionStore } from './storage/session-store.js';
-import { Embedder } from './processing/embedder.js';
-import { KnowledgeQualityGate } from './processing/knowledge-quality-gate.js';
 import type { QualityGateResult } from '@mindstrate/protocol';
-import { SessionCompressor } from './processing/session-compressor.js';
-import { FeedbackLoop } from './quality/feedback-loop.js';
 import { RetrievalEvaluator, type EvalRunResult } from './quality/eval.js';
 import {
   buildProjectSnapshot,
   type DetectedProject,
 } from './project/index.js';
 import { runContextAssemblyDag } from './context-graph/context-assembly-dag.js';
-import { ContextInternalizer, type AcceptInternalizationSuggestionsOptions, type AcceptInternalizationSuggestionsResult, type InternalizationSuggestionOptions, type InternalizationSuggestions } from './context-graph/context-internalizer.js';
-import { ContextPrioritySelector } from './context-graph/context-priority-selector.js';
-import { ContextGraphStore } from './context-graph/context-graph-store.js';
+import { type AcceptInternalizationSuggestionsOptions, type AcceptInternalizationSuggestionsResult, type InternalizationSuggestionOptions, type InternalizationSuggestions } from './context-graph/context-internalizer.js';
+import { ContextGraphStore, type CreateContextNodeInput, type UpdateContextNodeInput } from './context-graph/context-graph-store.js';
 import { GraphKnowledgeProjector, toGraphKnowledgeView, type GraphKnowledgeProjectionOptions } from './context-graph/knowledge-projector.js';
 import { ProjectedKnowledgeSearch, type ProjectedKnowledgeSearchOptions } from './context-graph/projected-knowledge-search.js';
 import { ConflictDetector, type ConflictDetectionOptions, type ConflictDetectionResult } from './context-graph/conflict-detector.js';
@@ -63,25 +53,16 @@ import {
   type RejectReflectionCandidateResult,
 } from './context-graph/conflict-reflector.js';
 import { digestCompletedSession, digestSessionObservation } from './context-graph/session-digest.js';
-import { PatternCompressor, type PatternCompressionOptions, type PatternCompressionResult } from './context-graph/pattern-compressor.js';
-import { RuleCompressor, type RuleCompressionOptions, type RuleCompressionResult } from './context-graph/rule-compressor.js';
-import { SummaryCompressor, type SummaryCompressionOptions, type SummaryCompressionResult } from './context-graph/summary-compressor.js';
-import { HighOrderCompressor } from './context-graph/high-order-compressor.js';
+import { type PatternCompressionOptions, type PatternCompressionResult } from './context-graph/pattern-compressor.js';
+import { type RuleCompressionOptions, type RuleCompressionResult } from './context-graph/rule-compressor.js';
+import { type SummaryCompressionOptions, type SummaryCompressionResult } from './context-graph/summary-compressor.js';
 import {
-  MetabolismEngine,
   MetabolismScheduler,
-  Pruner,
   type MetabolismSchedulerOptions,
   type RunMetabolismOptions,
   type PruneOptions,
   type PruneResult,
 } from './metabolism/index.js';
-import {
-  KnowledgeProjectionMaterializer,
-  ObsidianProjectionMaterializer,
-  ProjectSnapshotProjectionMaterializer,
-  SessionProjectionMaterializer,
-} from './projections/index.js';
 import { ContextDomainType, ContextEventType, SubstrateType } from '@mindstrate/protocol/models';
 import type {
   ConflictRecord,
@@ -93,7 +74,6 @@ import type {
   MetabolismRun,
   ProjectionRecord,
 } from '@mindstrate/protocol/models';
-import type { CreateContextNodeInput, UpdateContextNodeInput } from './context-graph/context-graph-store.js';
 import { digestKnowledgeInput } from './context-graph/knowledge-digest.js';
 import {
   ingestContextEvent,
@@ -105,35 +85,10 @@ import {
   type IngestContextEventInput,
 } from './events/index.js';
 import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleFromRegistryOptions, type InstallBundleResult, type InstallEditableBundleFilesResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
+import { createMindstrateRuntime, type MindstrateRuntime } from './runtime/mindstrate-runtime.js';
 
 export class Mindstrate {
-  private config: MindstrateConfig;
-  private databaseStore: DatabaseStore;
-  private contextGraphStore: ContextGraphStore;
-  private contextInternalizer: ContextInternalizer;
-  private contextPrioritySelector: ContextPrioritySelector;
-  private graphKnowledgeProjector: GraphKnowledgeProjector;
-  private projectedKnowledgeSearch: ProjectedKnowledgeSearch;
-  private projectionMaterializer: KnowledgeProjectionMaterializer;
-  private sessionProjectionMaterializer: SessionProjectionMaterializer;
-  private projectSnapshotProjectionMaterializer: ProjectSnapshotProjectionMaterializer;
-  private obsidianProjectionMaterializer: ObsidianProjectionMaterializer;
-  private metabolismEngine: MetabolismEngine;
-  private pruner: Pruner;
-  private conflictDetector: ConflictDetector;
-  private conflictReflector: ConflictReflector;
-  private patternCompressor: PatternCompressor;
-  private ruleCompressor: RuleCompressor;
-  private summaryCompressor: SummaryCompressor;
-  private highOrderCompressor: HighOrderCompressor;
-  private vectorStore: IVectorStore;
-  private sessionStore: SessionStore;
-  private embedder: Embedder;
-  private qualityGate: KnowledgeQualityGate;
-  private sessionCompressor: SessionCompressor;
-  private bundleManager: PortableContextBundleManager;
-  private feedbackLoop: FeedbackLoop;
-  private evaluator: RetrievalEvaluator;
+  private readonly services: MindstrateRuntime;
   private metabolismScheduler: MetabolismScheduler | null = null;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
@@ -142,63 +97,7 @@ export class Mindstrate {
     /** Custom vector store implementation (default: local JSON-based VectorStore) */
     vectorStore?: IVectorStore;
   }) {
-    this.config = loadConfig(configOverrides);
-
-    // 确保数据目录存在
-    if (!fs.existsSync(this.config.dataDir)) {
-      fs.mkdirSync(this.config.dataDir, { recursive: true });
-    }
-
-    // OpenAI-compatible client config (defaults to official OpenAI; set
-    // openaiBaseUrl in env/config to use Aliyun, DeepSeek, Moonshot, etc.)
-    const llmBaseUrl = this.config.openaiBaseUrl;
-    const embeddingBaseUrl = this.config.openaiEmbeddingBaseUrl ?? llmBaseUrl;
-
-    // 初始化各模块
-    this.databaseStore = new DatabaseStore(this.config.dbPath);
-    this.contextGraphStore = new ContextGraphStore(this.databaseStore.getDb());
-    this.contextInternalizer = new ContextInternalizer(this.contextGraphStore);
-    this.contextPrioritySelector = new ContextPrioritySelector(this.contextGraphStore);
-    this.graphKnowledgeProjector = new GraphKnowledgeProjector(this.contextGraphStore);
-    this.projectedKnowledgeSearch = new ProjectedKnowledgeSearch(this.graphKnowledgeProjector, this.contextGraphStore);
-    this.projectionMaterializer = new KnowledgeProjectionMaterializer(this.contextGraphStore, this.graphKnowledgeProjector);
-    this.sessionProjectionMaterializer = new SessionProjectionMaterializer(this.contextGraphStore);
-    this.projectSnapshotProjectionMaterializer = new ProjectSnapshotProjectionMaterializer(this.contextGraphStore);
-    this.obsidianProjectionMaterializer = new ObsidianProjectionMaterializer(this.contextGraphStore);
-    this.embedder = new Embedder(this.config.openaiApiKey, this.config.embeddingModel, embeddingBaseUrl);
-    this.conflictDetector = new ConflictDetector(this.contextGraphStore, this.embedder);
-    this.conflictReflector = new ConflictReflector(this.contextGraphStore);
-    this.patternCompressor = new PatternCompressor(this.contextGraphStore, this.embedder);
-    this.ruleCompressor = new RuleCompressor(this.contextGraphStore, this.embedder);
-    this.summaryCompressor = new SummaryCompressor(this.contextGraphStore, this.embedder);
-    this.highOrderCompressor = new HighOrderCompressor(this.contextGraphStore, this.embedder);
-    this.pruner = new Pruner(this.contextGraphStore);
-    this.metabolismEngine = new MetabolismEngine({
-      graphStore: this.contextGraphStore,
-      summaryCompressor: this.summaryCompressor,
-      patternCompressor: this.patternCompressor,
-      ruleCompressor: this.ruleCompressor,
-      highOrderCompressor: this.highOrderCompressor,
-      conflictDetector: this.conflictDetector,
-      conflictReflector: this.conflictReflector,
-      projectionMaterializer: this.projectionMaterializer,
-      sessionProjectionMaterializer: this.sessionProjectionMaterializer,
-      projectSnapshotProjectionMaterializer: this.projectSnapshotProjectionMaterializer,
-      obsidianProjectionMaterializer: this.obsidianProjectionMaterializer,
-      pruner: this.pruner,
-    });
-    this.vectorStore = configOverrides?.vectorStore
-      ?? this.createVectorStore();
-    this.sessionStore = new SessionStore(this.databaseStore.getDb());
-    this.bundleManager = new PortableContextBundleManager(this.contextGraphStore);
-    this.sessionCompressor = new SessionCompressor(this.config.openaiApiKey, this.config.llmModel, llmBaseUrl);
-
-    // 图节点反馈闭环
-    this.feedbackLoop = new FeedbackLoop(this.databaseStore.getDb());
-
-    this.qualityGate = new KnowledgeQualityGate();
-    // 检索评估
-    this.evaluator = new RetrievalEvaluator(this.databaseStore.getDb(), (query, options) =>
+    this.services = createMindstrateRuntime(configOverrides, (query, options) =>
       this.queryGraphKnowledge(query, { topK: options.topK, trackFeedback: false })
         .map((result) => result.view.id),
     );
@@ -208,7 +107,7 @@ export class Mindstrate {
   async init(): Promise<void> {
     if (this.initialized) return;
     if (!this.initPromise) {
-      this.initPromise = this.vectorStore.initialize().then(() => {
+      this.initPromise = this.services.vectorStore.initialize().then(() => {
         this.initialized = true;
       }).catch((err) => {
         // 重置以允许重试
@@ -226,7 +125,7 @@ export class Mindstrate {
   /** 添加一条新知识 */
   async add(input: CreateKnowledgeInput): Promise<AddKnowledgeResult> {
     await this.ensureInit();
-    const gateResult = this.qualityGate.check(input);
+    const gateResult = this.services.qualityGate.check(input);
     if (!gateResult.passed) {
       return {
         success: false,
@@ -248,8 +147,8 @@ export class Mindstrate {
       completenessScore: gateResult.completenessScore,
     });
     const text = `${digested.nodeInput.title}\n${digested.nodeInput.content}`;
-    const embedding = await this.embedder.embed(text);
-    const duplicates = await this.vectorStore.findDuplicates(
+    const embedding = await this.services.embedder.embed(text);
+    const duplicates = await this.services.vectorStore.findDuplicates(
       embedding,
       this.getConfig().deduplicationThreshold,
     );
@@ -263,8 +162,8 @@ export class Mindstrate {
       };
     }
 
-    const node = this.contextGraphStore.createNode(digested.nodeInput);
-    this.contextGraphStore.createEvent({
+    const node = this.services.contextGraphStore.createNode(digested.nodeInput);
+    this.services.contextGraphStore.createEvent({
       type: ContextEventType.KNOWLEDGE_WRITE,
       project: node.project,
       actor: input.author,
@@ -275,7 +174,7 @@ export class Mindstrate {
         substrateType: node.substrateType,
       },
     });
-    await this.vectorStore.add({
+    await this.services.vectorStore.add({
       id: node.id,
       embedding,
       text,
@@ -286,7 +185,7 @@ export class Mindstrate {
         project: node.project ?? '',
       },
     });
-    this.projectionMaterializer.materialize({ project: node.project, limit: 50 });
+    this.services.projectionMaterializer.materialize({ project: node.project, limit: 50 });
 
     return {
       success: true,
@@ -314,7 +213,7 @@ export class Mindstrate {
     await this.ensureInit();
 
     const { id } = buildProjectSnapshot(project, options);
-    const existingNode = this.contextGraphStore.getNodeById(id);
+    const existingNode = this.services.contextGraphStore.getNodeById(id);
     const previousSolution = existingNode?.content;
     const built = buildProjectSnapshot(project, { ...options, previousSolution });
 
@@ -342,7 +241,7 @@ export class Mindstrate {
 
     const created = !existingNode;
     const node = existingNode
-      ? this.contextGraphStore.updateNode(id, {
+      ? this.services.contextGraphStore.updateNode(id, {
         title: nodeInput.title,
         content: nodeInput.content,
         tags: nodeInput.tags,
@@ -354,13 +253,13 @@ export class Mindstrate {
         sourceRef: nodeInput.sourceRef,
         metadata: nodeInput.metadata,
       })!
-      : this.contextGraphStore.createNode(nodeInput);
+      : this.services.contextGraphStore.createNode(nodeInput);
 
     try {
       const text = `${node.title}\n${node.content}`;
-      const embedding = await this.embedder.embed(text);
-      await this.vectorStore.delete(id);
-      await this.vectorStore.add({
+      const embedding = await this.services.embedder.embed(text);
+      await this.services.vectorStore.delete(id);
+      await this.services.vectorStore.add({
         id,
         embedding,
         text,
@@ -379,14 +278,14 @@ export class Mindstrate {
     }
 
     if (created || built.changed) {
-      this.contextGraphStore.createEvent({
+      this.services.contextGraphStore.createEvent({
         type: ContextEventType.PROJECT_SNAPSHOT,
         project: node.project,
         actor: typeof node.metadata?.['author'] === 'string' ? node.metadata['author'] : undefined,
         content: node.content,
         metadata: { nodeId: node.id },
       });
-      this.projectSnapshotProjectionMaterializer.materialize({ project: node.project, limit: 10 });
+      this.services.projectSnapshotProjectionMaterializer.materialize({ project: node.project, limit: 10 });
     }
 
     const view = this.readGraphKnowledge({ project: node.project, limit: 100 })
@@ -402,12 +301,12 @@ export class Mindstrate {
 
   getProjectSnapshot(project: DetectedProject): ContextNode | null {
     const { id } = buildProjectSnapshot(project);
-    return this.contextGraphStore.getNodeById(id);
+    return this.services.contextGraphStore.getNodeById(id);
   }
 
   /** 质量门禁预检查（不写入，仅检查质量） */
   checkQuality(input: CreateKnowledgeInput): QualityGateResult {
-    return this.qualityGate.check(input);
+    return this.services.qualityGate.check(input);
   }
 
   // ============================================================
@@ -424,7 +323,7 @@ export class Mindstrate {
   ): Promise<CuratedContext> {
     await this.ensureInit();
     const project = context?.project;
-    const graphSelection = this.contextPrioritySelector.select({
+    const graphSelection = this.services.contextPrioritySelector.select({
       project,
       perLayerLimit: 5,
     });
@@ -481,12 +380,12 @@ export class Mindstrate {
     },
   ): Promise<AssembledContext> {
     await this.ensureInit();
-    const queryEmbedding = await this.embedder.embed(taskDescription);
-    const graphSelection = this.contextPrioritySelector.select({
+    const queryEmbedding = await this.services.embedder.embed(taskDescription);
+    const graphSelection = this.services.contextPrioritySelector.select({
       project: options?.project ?? options?.context?.project,
       context: options?.context,
       queryEmbedding,
-      embeddingModel: this.config.embeddingModel,
+      embeddingModel: this.services.config.embeddingModel,
       perLayerLimit: 5,
     });
     const result = await runContextAssemblyDag(
@@ -537,15 +436,15 @@ export class Mindstrate {
   }
 
   updateContextNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
-    return this.contextGraphStore.updateNode(id, input);
+    return this.services.contextGraphStore.updateNode(id, input);
   }
 
   createContextNode(input: CreateContextNodeInput): ContextNode {
-    return this.contextGraphStore.createNode(input);
+    return this.services.contextGraphStore.createNode(input);
   }
 
   deleteContextNode(id: string): boolean {
-    return this.contextGraphStore.deleteNode(id);
+    return this.services.contextGraphStore.deleteNode(id);
   }
 
   // ============================================================
@@ -553,17 +452,17 @@ export class Mindstrate {
   // ============================================================
 
   upvote(id: string): void {
-    const node = this.contextGraphStore.getNodeById(id);
+    const node = this.services.contextGraphStore.getNodeById(id);
     if (!node) return;
-    this.contextGraphStore.updateNode(id, {
+    this.services.contextGraphStore.updateNode(id, {
       positiveFeedback: node.positiveFeedback + 1,
     });
   }
 
   downvote(id: string): void {
-    const node = this.contextGraphStore.getNodeById(id);
+    const node = this.services.contextGraphStore.getNodeById(id);
     if (!node) return;
-    this.contextGraphStore.updateNode(id, {
+    this.services.contextGraphStore.updateNode(id, {
       negativeFeedback: node.negativeFeedback + 1,
     });
   }
@@ -576,8 +475,8 @@ export class Mindstrate {
     signal: FeedbackEvent['signal'],
     context?: string,
   ): void {
-    this.feedbackLoop.recordFeedback(retrievalId, signal, context);
-    this.tryIngestDerivedEvent(() => ingestUserFeedback(this.contextGraphStore, {
+    this.services.feedbackLoop.recordFeedback(retrievalId, signal, context);
+    this.tryIngestDerivedEvent(() => ingestUserFeedback(this.services.contextGraphStore, {
       retrievalId,
       signal,
       context,
@@ -588,7 +487,7 @@ export class Mindstrate {
    * 获取图节点的反馈统计
    */
   getFeedbackStats(nodeId: string) {
-    return this.feedbackLoop.getFeedbackStats(nodeId);
+    return this.services.feedbackLoop.getFeedbackStats(nodeId);
   }
 
   // ============================================================
@@ -622,7 +521,7 @@ export class Mindstrate {
    * 应用图演化建议
    */
   applyEvolutionSuggestion(suggestion: EvolutionSuggestion): boolean {
-    return this.contextGraphStore.getNodeById(suggestion.nodeId) !== null;
+    return this.services.contextGraphStore.getNodeById(suggestion.nodeId) !== null;
   }
 
   // ============================================================
@@ -634,7 +533,7 @@ export class Mindstrate {
    */
   async runEvaluation(topK?: number): Promise<EvalRunResult> {
     await this.ensureInit();
-    return this.evaluator.runEvaluation(topK);
+    return this.services.evaluator.runEvaluation(topK);
   }
 
   /** 添加评估用例 */
@@ -642,12 +541,12 @@ export class Mindstrate {
     language?: string;
     framework?: string;
   }) {
-    return this.evaluator.addCase(query, expectedIds, options);
+    return this.services.evaluator.addCase(query, expectedIds, options);
   }
 
   /** 获取评估趋势 */
   getEvalTrend(limit?: number) {
-    return this.evaluator.getTrend(limit);
+    return this.services.evaluator.getTrend(limit);
   }
 
   // ============================================================
@@ -657,10 +556,10 @@ export class Mindstrate {
   /** 开始新会话（自动压缩并结束同项目的旧活跃会话） */
   async startSession(input: CreateSessionInput = {}): Promise<Session> {
     // 自动结束同项目的旧活跃会话
-    const active = this.sessionStore.getActiveSession(input.project);
+    const active = this.services.sessionStore.getActiveSession(input.project);
     if (active) {
       // 自动解决该会话中未响应的反馈
-      this.feedbackLoop.resolveTimeouts(active.id);
+      this.services.feedbackLoop.resolveTimeouts(active.id);
       // 自动压缩后再结束，避免丢失观察数据
       if (!active.summary && (active.observations?.length ?? 0) > 0) {
         try {
@@ -672,20 +571,20 @@ export class Mindstrate {
           );
         }
       }
-      this.sessionStore.endSession(active.id, 'abandoned');
+      this.services.sessionStore.endSession(active.id, 'abandoned');
     }
-    return this.sessionStore.create(input);
+    return this.services.sessionStore.create(input);
   }
 
   /** 保存会话观察（AI 工作过程中的关键事件） */
   saveObservation(input: SaveObservationInput): void {
-    this.sessionStore.addObservation(input);
+    this.services.sessionStore.addObservation(input);
 
-    const session = this.sessionStore.getById(input.sessionId);
+    const session = this.services.sessionStore.getById(input.sessionId);
     if (!session) return;
 
     digestSessionObservation({
-      graphStore: this.contextGraphStore,
+      graphStore: this.services.contextGraphStore,
       sessionId: input.sessionId,
       project: session.project || undefined,
       observation: {
@@ -698,7 +597,7 @@ export class Mindstrate {
   }
 
   ingestEvent(input: IngestContextEventInput): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestContextEvent(this.contextGraphStore, input);
+    return ingestContextEvent(this.services.contextGraphStore, input);
   }
 
   ingestGitActivity(input: {
@@ -708,7 +607,7 @@ export class Mindstrate {
     sourceRef?: string;
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestGitActivity(this.contextGraphStore, input);
+    return ingestGitActivity(this.services.contextGraphStore, input);
   }
 
   ingestTestRun(input: {
@@ -719,7 +618,7 @@ export class Mindstrate {
     sourceRef?: string;
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestTestRun(this.contextGraphStore, input);
+    return ingestTestRun(this.services.contextGraphStore, input);
   }
 
   ingestLspDiagnostic(input: {
@@ -729,7 +628,7 @@ export class Mindstrate {
     sourceRef?: string;
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestLspDiagnostic(this.contextGraphStore, input);
+    return ingestLspDiagnostic(this.services.contextGraphStore, input);
   }
 
   ingestTerminalOutput(input: {
@@ -742,64 +641,64 @@ export class Mindstrate {
     sourceRef?: string;
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestTerminalOutput(this.contextGraphStore, input);
+    return ingestTerminalOutput(this.services.contextGraphStore, input);
   }
 
   /** 压缩当前会话（由 AI 调用，传入摘要） */
   compressSession(input: CompressSessionInput): void {
-    this.sessionStore.compress(input);
+    this.services.sessionStore.compress(input);
   }
 
   /** 自动压缩会话（用 LLM 或规则从观察中生成摘要） */
   async autoCompressSession(sessionId: string): Promise<CompressSessionInput | null> {
-    const session = this.sessionStore.getById(sessionId);
+    const session = this.services.sessionStore.getById(sessionId);
     if (!session) return null;
 
-    const result = await this.sessionCompressor.compress(session);
-    this.sessionStore.compress(result);
+    const result = await this.services.sessionCompressor.compress(session);
+    this.services.sessionStore.compress(result);
     return result;
   }
 
   /** 结束会话 */
   async endSession(sessionId: string): Promise<void> {
-    let session = this.sessionStore.getById(sessionId);
+    let session = this.services.sessionStore.getById(sessionId);
     if (!session) return;
 
     // 自动解决未响应的反馈追踪
-    this.feedbackLoop.resolveTimeouts(sessionId);
+    this.services.feedbackLoop.resolveTimeouts(sessionId);
 
     // 如果没有摘要，自动压缩
     if (!session.summary && (session.observations?.length ?? 0) > 0) {
       await this.autoCompressSession(sessionId);
-      session = this.sessionStore.getById(sessionId);
+      session = this.services.sessionStore.getById(sessionId);
       if (!session) return;
     }
 
-    this.sessionStore.endSession(sessionId, 'completed');
-    const completedSession = this.sessionStore.getById(sessionId);
+    this.services.sessionStore.endSession(sessionId, 'completed');
+    const completedSession = this.services.sessionStore.getById(sessionId);
     if (completedSession) {
       digestCompletedSession({
-        graphStore: this.contextGraphStore,
+        graphStore: this.services.contextGraphStore,
         session: completedSession,
       });
-      const summaryResult = await this.summaryCompressor.compressProjectSnapshots({
+      const summaryResult = await this.services.summaryCompressor.compressProjectSnapshots({
         project: completedSession.project || undefined,
       });
       if (summaryResult.summaryNodesCreated > 0) {
-        const patternResult = await this.patternCompressor.compressProjectSummaries({
+        const patternResult = await this.services.patternCompressor.compressProjectSummaries({
           project: completedSession.project || undefined,
         });
         if (patternResult.patternNodesCreated > 0) {
-          const ruleResult = await this.ruleCompressor.compressProjectPatterns({
+          const ruleResult = await this.services.ruleCompressor.compressProjectPatterns({
             project: completedSession.project || undefined,
           });
           if (ruleResult.ruleNodesCreated > 0) {
-            const conflictResult = await this.conflictDetector.detectConflicts({
+            const conflictResult = await this.services.conflictDetector.detectConflicts({
               project: completedSession.project || undefined,
               substrateType: 'rule' as SubstrateType,
             });
             if (conflictResult.conflictsDetected > 0) {
-              this.conflictReflector.reflectConflicts({
+              this.services.conflictReflector.reflectConflicts({
                 project: completedSession.project || undefined,
               });
             }
@@ -811,8 +710,8 @@ export class Mindstrate {
 
   /** 恢复会话上下文（新会话开始时调用） */
   restoreSessionContext(project: string = ''): SessionContext {
-    const context = this.sessionStore.restoreContext(project);
-    const graphSnapshots = this.contextGraphStore.listNodes({
+    const context = this.services.sessionStore.restoreContext(project);
+    const graphSnapshots = this.services.contextGraphStore.listNodes({
       project,
       substrateType: SubstrateType.SNAPSHOT,
       domainType: ContextDomainType.SESSION_SUMMARY,
@@ -836,22 +735,22 @@ export class Mindstrate {
   /** 格式化会话上下文为可注入的文本 */
   formatSessionContext(project: string = ''): string {
     const ctx = this.restoreSessionContext(project);
-    return this.sessionStore.formatContextForInjection(ctx);
+    return this.services.sessionStore.formatContextForInjection(ctx);
   }
 
   /** 获取当前活跃会话 */
   getActiveSession(project: string = ''): Session | null {
-    return this.sessionStore.getActiveSession(project);
+    return this.services.sessionStore.getActiveSession(project);
   }
 
   /** 获取会话 */
   getSession(id: string): Session | null {
-    return this.sessionStore.getById(id);
+    return this.services.sessionStore.getById(id);
   }
 
   /** 获取最近会话列表 */
   getRecentSessions(project: string = '', limit: number = 10): Session[] {
-    return this.sessionStore.getRecentSessions(project, limit);
+    return this.services.sessionStore.getRecentSessions(project, limit);
   }
 
   // ============================================================
@@ -860,31 +759,31 @@ export class Mindstrate {
 
   async runSummaryCompression(options?: SummaryCompressionOptions): Promise<SummaryCompressionResult> {
     await this.ensureInit();
-    return this.summaryCompressor.compressProjectSnapshots(options);
+    return this.services.summaryCompressor.compressProjectSnapshots(options);
   }
 
   async runPatternCompression(options?: PatternCompressionOptions): Promise<PatternCompressionResult> {
     await this.ensureInit();
-    return this.patternCompressor.compressProjectSummaries(options);
+    return this.services.patternCompressor.compressProjectSummaries(options);
   }
 
   async runRuleCompression(options?: RuleCompressionOptions): Promise<RuleCompressionResult> {
     await this.ensureInit();
-    return this.ruleCompressor.compressProjectPatterns(options);
+    return this.services.ruleCompressor.compressProjectPatterns(options);
   }
 
   async runConflictDetection(options?: ConflictDetectionOptions): Promise<ConflictDetectionResult> {
     await this.ensureInit();
-    return this.conflictDetector.detectConflicts(options);
+    return this.services.conflictDetector.detectConflicts(options);
   }
 
   runConflictReflection(options?: ConflictReflectionOptions): ConflictReflectionResult {
-    return this.conflictReflector.reflectConflicts(options);
+    return this.services.conflictReflector.reflectConflicts(options);
   }
 
   async runMetabolism(options?: RunMetabolismOptions): Promise<MetabolismRun> {
     await this.ensureInit();
-    return this.metabolismEngine.run(options);
+    return this.services.metabolismEngine.run(options);
   }
 
   startMetabolismScheduler(options: Omit<MetabolismSchedulerOptions, 'runMetabolism'>): void {
@@ -902,20 +801,20 @@ export class Mindstrate {
   }
 
   runDigest(options?: { project?: string }) {
-    return this.metabolismEngine.runDigest(options);
+    return this.services.metabolismEngine.runDigest(options);
   }
 
   runAssimilation(options?: { project?: string }) {
-    return this.metabolismEngine.runAssimilation(options);
+    return this.services.metabolismEngine.runAssimilation(options);
   }
 
   async runCompression(options?: { project?: string }) {
     await this.ensureInit();
-    return this.metabolismEngine.runCompression(options);
+    return this.services.metabolismEngine.runCompression(options);
   }
 
   runPruning(options?: PruneOptions): PruneResult {
-    return this.pruner.prune(options);
+    return this.services.pruner.prune(options);
   }
 
   runReflection(options?: ConflictReflectionOptions): ConflictReflectionResult {
@@ -927,7 +826,7 @@ export class Mindstrate {
     candidateNodeId: string;
     resolution: string;
   }): AcceptReflectionCandidateResult {
-    return this.conflictReflector.acceptCandidate(input);
+    return this.services.conflictReflector.acceptCandidate(input);
   }
 
   rejectConflictCandidate(input: {
@@ -935,35 +834,35 @@ export class Mindstrate {
     candidateNodeId: string;
     reason: string;
   }): RejectReflectionCandidateResult {
-    return this.conflictReflector.rejectCandidate(input);
+    return this.services.conflictReflector.rejectCandidate(input);
   }
 
   projectSessionSummaries(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.sessionProjectionMaterializer.materialize(options);
+    return this.services.sessionProjectionMaterializer.materialize(options);
   }
 
   projectProjectSnapshots(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.projectSnapshotProjectionMaterializer.materialize(options);
+    return this.services.projectSnapshotProjectionMaterializer.materialize(options);
   }
 
   projectObsidianDocuments(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.obsidianProjectionMaterializer.materialize(options);
+    return this.services.obsidianProjectionMaterializer.materialize(options);
   }
 
   writeObsidianProjectionFiles(options: { project?: string; limit?: number; rootDir: string }): string[] {
-    return this.obsidianProjectionMaterializer.writeFiles(options);
+    return this.services.obsidianProjectionMaterializer.writeFiles(options);
   }
 
   importObsidianProjectionFile(filePath: string) {
-    return this.obsidianProjectionMaterializer.importFile(filePath);
+    return this.services.obsidianProjectionMaterializer.importFile(filePath);
   }
 
   generateInternalizationSuggestions(options?: InternalizationSuggestionOptions): InternalizationSuggestions {
-    return this.contextInternalizer.generateSuggestions(options);
+    return this.services.contextInternalizer.generateSuggestions(options);
   }
 
   acceptInternalizationSuggestions(options?: AcceptInternalizationSuggestionsOptions): AcceptInternalizationSuggestionsResult {
-    return this.contextInternalizer.acceptSuggestions(options);
+    return this.services.contextInternalizer.acceptSuggestions(options);
   }
 
   listContextNodes(options?: {
@@ -974,11 +873,11 @@ export class Mindstrate {
     sourceRef?: string;
     limit?: number;
   }): ContextNode[] {
-    return this.contextGraphStore.listNodes(options);
+    return this.services.contextGraphStore.listNodes(options);
   }
 
   listConflictRecords(project?: string, limit?: number): ConflictRecord[] {
-    return this.contextGraphStore.listConflictRecords({ project, limit });
+    return this.services.contextGraphStore.listConflictRecords({ project, limit });
   }
 
   listContextEdges(options?: {
@@ -987,7 +886,7 @@ export class Mindstrate {
     relationType?: import('@mindstrate/protocol/models').ContextRelationType;
     limit?: number;
   }): ContextEdge[] {
-    return this.contextGraphStore.listEdges(options);
+    return this.services.contextGraphStore.listEdges(options);
   }
 
   queryContextGraph(options?: {
@@ -998,7 +897,7 @@ export class Mindstrate {
     status?: ContextNodeStatus;
     limit?: number;
   }): ContextNode[] {
-    const nodes = this.contextGraphStore.listNodes({
+    const nodes = this.services.contextGraphStore.listNodes({
       project: options?.project,
       substrateType: options?.substrateType,
       domainType: options?.domainType,
@@ -1023,56 +922,56 @@ export class Mindstrate {
   }
 
   listProjectionRecords(options?: { nodeId?: string; target?: string; limit?: number }): ProjectionRecord[] {
-    return this.contextGraphStore.listProjectionRecords(options);
+    return this.services.contextGraphStore.listProjectionRecords(options);
   }
 
   listMetabolismRuns(project?: string, limit?: number): MetabolismRun[] {
-    return this.contextGraphStore.listMetabolismRuns({ project, limit });
+    return this.services.contextGraphStore.listMetabolismRuns({ project, limit });
   }
 
   createBundle(options: CreateBundleOptions) {
-    return this.bundleManager.createBundle(options);
+    return this.services.bundleManager.createBundle(options);
   }
 
   validateBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): ValidateBundleResult {
-    return this.bundleManager.validateBundle(bundle);
+    return this.services.bundleManager.validateBundle(bundle);
   }
 
   installBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): InstallBundleResult {
-    return this.bundleManager.installBundle(bundle);
+    return this.services.bundleManager.installBundle(bundle);
   }
 
   installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult> {
-    return this.bundleManager.installBundleFromRegistry(options);
+    return this.services.bundleManager.installBundleFromRegistry(options);
   }
 
   publishBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult {
-    return this.bundleManager.publishBundle(bundle, options);
+    return this.services.bundleManager.publishBundle(bundle, options);
   }
 
   createEditableBundleFiles(bundle: import('@mindstrate/protocol/models').PortableContextBundle): EditableBundleFiles {
-    return this.bundleManager.createEditableBundleFiles(bundle);
+    return this.services.bundleManager.createEditableBundleFiles(bundle);
   }
 
   installEditableBundleFiles(files: EditableBundleFiles): InstallEditableBundleFilesResult {
-    return this.bundleManager.installEditableBundleFiles(files);
+    return this.services.bundleManager.installEditableBundleFiles(files);
   }
 
   installEditableBundleDirectory(directory: string): InstallEditableBundleFilesResult {
-    return this.bundleManager.installEditableBundleDirectory(directory);
+    return this.services.bundleManager.installEditableBundleDirectory(directory);
   }
 
   readGraphKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {
-    return this.graphKnowledgeProjector.project(options);
+    return this.services.graphKnowledgeProjector.project(options);
   }
 
   queryGraphKnowledge(query: string, options?: ProjectedKnowledgeSearchOptions) {
-    const results = this.projectedKnowledgeSearch.search(query, options);
+    const results = this.services.projectedKnowledgeSearch.search(query, options);
     if (options?.trackFeedback === false) return results;
 
     return results.map((result) => ({
       ...result,
-      retrievalId: this.feedbackLoop.trackRetrieval(
+      retrievalId: this.services.feedbackLoop.trackRetrieval(
         result.view.id,
         query,
         options?.sessionId,
@@ -1091,7 +990,7 @@ export class Mindstrate {
     outdated: number;
   } {
     return {
-      total: this.contextGraphStore.listNodes({ limit: 100000 }).length,
+      total: this.services.contextGraphStore.listNodes({ limit: 100000 }).length,
       updated: 0,
       deprecated: 0,
       outdated: 0,
@@ -1110,10 +1009,10 @@ export class Mindstrate {
       avgAdoptionRate: number;
     };
   }> {
-    const nodes = this.contextGraphStore.listNodes({ limit: 100000 });
+    const nodes = this.services.contextGraphStore.listNodes({ limit: 100000 });
     const dbStats = getGraphStats(nodes);
-    const vectorCount = await this.vectorStore.count();
-    const feedbackStats = this.feedbackLoop.getGlobalStats();
+    const vectorCount = await this.services.vectorStore.count();
+    const feedbackStats = this.services.feedbackLoop.getGlobalStats();
 
     return {
       ...dbStats,
@@ -1133,12 +1032,12 @@ export class Mindstrate {
   /** 关闭所有连接，确保数据持久化 */
   close(): void {
     this.stopMetabolismScheduler();
-    this.vectorStore.flush();
-    this.databaseStore.close();
+    this.services.vectorStore.flush();
+    this.services.databaseStore.close();
   }
 
   getConfig(): Readonly<MindstrateConfig> {
-    return this.config;
+    return this.services.config;
   }
 
   private async ensureInit(): Promise<void> {
@@ -1148,7 +1047,7 @@ export class Mindstrate {
   }
 
   private findProjectSnapshot(project: string): ContextNode | null {
-    return this.contextGraphStore.listNodes({
+    return this.services.contextGraphStore.listNodes({
       project,
       substrateType: SubstrateType.SNAPSHOT,
       domainType: ContextDomainType.PROJECT_SNAPSHOT,
@@ -1156,23 +1055,10 @@ export class Mindstrate {
     })[0] ?? null;
   }
 
-  private createVectorStore(): IVectorStore {
-    if (this.config.vectorBackend === 'qdrant') {
-      return new QdrantVectorStore({
-        url: this.config.qdrantUrl ?? '',
-        apiKey: this.config.qdrantApiKey,
-        collectionName: this.config.collectionName,
-        dimension: this.embedder.getEmbeddingDimension(),
-      });
-    }
-
-    return new VectorStore(this.config.vectorStorePath, this.config.collectionName);
-  }
-
   private findExactGraphDuplicate(input: CreateKnowledgeInput): ContextNode | null {
     const title = input.title.trim();
     const content = input.solution.trim();
-    const candidates = this.contextGraphStore.listNodes({
+    const candidates = this.services.contextGraphStore.listNodes({
       project: input.context?.project,
       domainType: knowledgeTypeToContextDomain(input.type),
       limit: 500,
@@ -1322,5 +1208,6 @@ function knowledgeTypeToContextDomain(type: string): ContextDomainType {
       return ContextDomainType.BEST_PRACTICE;
   }
 }
+
 
 

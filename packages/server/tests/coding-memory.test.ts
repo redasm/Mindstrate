@@ -102,13 +102,8 @@ describe('Mindstrate', () => {
     });
 
     it('should prioritize graph-projected high-level nodes when they match the query', async () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Hydration Safety Rule',
@@ -336,13 +331,8 @@ describe('Mindstrate', () => {
 
   describe('ECS runtime API', () => {
     it('should expose the design-document ECS runtime methods', async () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: 'Session snapshot A',
@@ -350,7 +340,7 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.ACTIVE,
       });
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: 'Session snapshot B',
@@ -379,13 +369,8 @@ describe('Mindstrate', () => {
 
   describe('memory internalization', () => {
     it('should generate AGENTS and system prompt suggestions from stable rules', () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Test-first ECS changes',
@@ -408,13 +393,8 @@ describe('Mindstrate', () => {
     });
 
     it('should accept internalization suggestions into auditable projection records', () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      const rule = internal.contextGraphStore.createNode({
+      const rule = memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Keep ECS internalization auditable',
@@ -437,13 +417,8 @@ describe('Mindstrate', () => {
     });
 
     it('should export stable rules as a governed fine-tune dataset projection', () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      const rule = internal.contextGraphStore.createNode({
+      const rule = memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Keep migrations graph-first',
@@ -486,13 +461,8 @@ describe('Mindstrate', () => {
 
   describe('curateContext', () => {
     it('should produce graph-first curated context', async () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Hydration Safety Rule',
@@ -515,13 +485,8 @@ describe('Mindstrate', () => {
 
   describe('graph knowledge interfaces', () => {
     it('should expose graph-projected knowledge views through the facade', () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Hydration Safety Rule',
@@ -543,13 +508,8 @@ describe('Mindstrate', () => {
     });
 
     it('should expose ECS-native projected search through the facade', () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Hydration Safety Rule',
@@ -573,13 +533,8 @@ describe('Mindstrate', () => {
 
   describe('metabolism framework', () => {
     it('should expose metabolism runs and projection records through the facade', async () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
 
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: 'Session snapshot A',
@@ -587,7 +542,7 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.ACTIVE,
       });
-      internal.contextGraphStore.createNode({
+      memory.createContextNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: 'Session snapshot B',
@@ -756,13 +711,7 @@ describe('Mindstrate', () => {
       });
       expect(nodeA).toEqual([]);
 
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-        };
-      };
-
-      const ruleA = internal.contextGraphStore.createNode({
+      const ruleA = memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Rule A',
@@ -770,7 +719,7 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.ACTIVE,
       });
-      const ruleB = internal.contextGraphStore.createNode({
+      const ruleB = memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Rule B',
@@ -793,14 +742,7 @@ describe('Mindstrate', () => {
     });
 
     it('should expose conflict reflection candidates through the facade', async () => {
-      const internal = memory as unknown as {
-        contextGraphStore: {
-          createNode(input: Record<string, unknown>): { id: string };
-          createConflictRecord(input: Record<string, unknown>): { id: string };
-        };
-      };
-
-      const ruleA = internal.contextGraphStore.createNode({
+      const ruleA = memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Rule A',
@@ -808,7 +750,7 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.CONFLICTED,
       });
-      const ruleB = internal.contextGraphStore.createNode({
+      const ruleB = memory.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Rule B',
@@ -816,11 +758,13 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.CONFLICTED,
       });
-      const conflict = internal.contextGraphStore.createConflictRecord({
+
+      await memory.runConflictDetection({
         project: 'proj',
-        nodeIds: [ruleA.id, ruleB.id],
-        reason: 'High-similarity contradictory nodes detected (0.91)',
+        substrateType: SubstrateType.RULE,
+        similarityThreshold: 0.55,
       });
+      const conflict = memory.listConflictRecords('proj')[0];
 
       const result = memory.runConflictReflection({ project: 'proj' });
       expect(result.candidateNodesCreated).toBe(1);
@@ -836,3 +780,5 @@ describe('Mindstrate', () => {
     });
   });
 });
+
+

@@ -31,7 +31,7 @@ describe('Pruner', () => {
       substrateType: SubstrateType.EPISODE,
       domainType: ContextDomainType.CONTEXT_EVENT,
       title: 'Stale episode',
-      content: 'Old event',
+      content: 'Stale event',
       project: 'mindstrate',
       status: ContextNodeStatus.ACTIVE,
     });
@@ -65,7 +65,7 @@ describe('Pruner', () => {
       substrateType: SubstrateType.EPISODE,
       domainType: ContextDomainType.CONTEXT_EVENT,
       title: 'Stale episode',
-      content: 'Old event',
+      content: 'Stale event',
       project: 'mindstrate',
       status: ContextNodeStatus.ACTIVE,
     });
@@ -131,8 +131,8 @@ describe('Pruner', () => {
     const staleRule = graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
-      title: 'Use old framework API',
-      content: 'Use the legacy framework API for routing.',
+      title: 'Use previous framework API',
+      content: 'Use the previous framework API for routing.',
       project: 'mindstrate',
       status: ContextNodeStatus.ACTIVE,
       qualityScore: 80,
