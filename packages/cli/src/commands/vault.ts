@@ -105,9 +105,6 @@ const watchCmd = new Command('watch')
       debounceMs: Number(options.debounce) || 500,
     });
 
-    // Register as a mutation sink so future Mindstrate/MCP writes propagate to vault.
-    memory.addMutationSink(sync);
-
     console.log(`Vault: ${root}`);
     console.log('Performing initial export...');
     const r = await sync.exportAll();

@@ -6,7 +6,7 @@
 
 import { Command } from 'commander';
 import * as fs from 'node:fs';
-import { createMemory } from '../helpers.js';
+import { createMemory, errorMessage } from '../helpers.js';
 
 export const terminalOutputCommand = new Command('terminal')
   .description('Ingest terminal or command output into the ECS event stream')
@@ -61,7 +61,7 @@ export const terminalOutputCommand = new Command('terminal')
         console.log(`  Project:  ${project}`);
       }
     } catch (error) {
-      console.error('Terminal output ingestion failed:', error instanceof Error ? error.message : error);
+      console.error('Terminal output ingestion failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

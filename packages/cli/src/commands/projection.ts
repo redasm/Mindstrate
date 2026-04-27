@@ -6,7 +6,7 @@
 
 import * as path from 'node:path';
 import { Command } from 'commander';
-import { createMemory } from '../helpers.js';
+import { createMemory, errorMessage } from '../helpers.js';
 import type { ProjectionRecord } from '@mindstrate/protocol/models';
 
 export const projectionCommand = new Command('projection')
@@ -39,7 +39,7 @@ projectionCommand
       });
       printProjectionRecords('Session projection', records);
     } catch (error) {
-      console.error('Session projection failed:', error instanceof Error ? error.message : error);
+      console.error('Session projection failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -62,7 +62,7 @@ projectionCommand
       });
       printProjectionRecords('Project snapshot projection', records);
     } catch (error) {
-      console.error('Project snapshot projection failed:', error instanceof Error ? error.message : error);
+      console.error('Project snapshot projection failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -100,7 +100,7 @@ projectionCommand
         console.log(`  ... ${files.length - 20} more`);
       }
     } catch (error) {
-      console.error('Projection export failed:', error instanceof Error ? error.message : error);
+      console.error('Projection export failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -125,7 +125,7 @@ projectionCommand
       console.log(`  Candidate:   ${result.candidateNode?.id}`);
       console.log(`  Event:       ${result.event?.id}`);
     } catch (error) {
-      console.error('Projection import failed:', error instanceof Error ? error.message : error);
+      console.error('Projection import failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

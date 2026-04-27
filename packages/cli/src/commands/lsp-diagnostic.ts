@@ -6,7 +6,7 @@
 
 import { Command } from 'commander';
 import * as fs from 'node:fs';
-import { createMemory } from '../helpers.js';
+import { createMemory, errorMessage } from '../helpers.js';
 
 export const lspDiagnosticCommand = new Command('diag')
   .description('Ingest a diagnostic summary into the ECS event stream')
@@ -49,7 +49,7 @@ export const lspDiagnosticCommand = new Command('diag')
         console.log(`  Project:  ${project}`);
       }
     } catch (error) {
-      console.error('LSP diagnostic ingestion failed:', error instanceof Error ? error.message : error);
+      console.error('LSP diagnostic ingestion failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

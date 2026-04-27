@@ -85,8 +85,7 @@ export class SessionStore {
       metadata: input.metadata,
     });
 
-    // 使用 json_insert + json_array_length 原子追加，避免 read-modify-write 竞态
-    const result = this.db.prepare(`
+    this.db.prepare(`
       UPDATE sessions
       SET observations = json_insert(
         COALESCE(observations, '[]'),
@@ -95,20 +94,6 @@ export class SessionStore {
       )
       WHERE id = ?
     `).run(observation, input.sessionId);
-
-    // Fallback: if json_insert updated 0 rows (session not found, or old SQLite without json_insert),
-    // try a read-modify-write approach
-    if (result.changes === 0) {
-      const session = this.getById(input.sessionId);
-      if (!session) return; // Session does not exist
-
-      const observations = session.observations ?? [];
-      observations.push(JSON.parse(observation));
-
-      this.db.prepare(
-        'UPDATE sessions SET observations = ? WHERE id = ?'
-      ).run(JSON.stringify(observations), input.sessionId);
-    }
   }
 
   /** 压缩会话（写入 AI 生成的摘要） */

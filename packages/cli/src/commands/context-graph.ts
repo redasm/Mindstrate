@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, truncate } from '../helpers.js';
+import { createMemory, errorMessage, truncate } from '../helpers.js';
 
 export const contextGraphCommand = new Command('graph')
   .description('Query ECS context graph nodes')
@@ -51,7 +51,7 @@ export const contextGraphCommand = new Command('graph')
         console.log('');
       }
     } catch (error) {
-      console.error('Context graph query failed:', error instanceof Error ? error.message : error);
+      console.error('Context graph query failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

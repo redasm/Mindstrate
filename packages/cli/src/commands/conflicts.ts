@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, formatDate } from '../helpers.js';
+import { createMemory, errorMessage, formatDate } from '../helpers.js';
 
 const listConflicts = async (options: { project?: string; limit: string }): Promise<void> => {
   const memory = createMemory();
@@ -41,7 +41,7 @@ const listConflicts = async (options: { project?: string; limit: string }): Prom
       console.log('');
     }
   } catch (error) {
-    console.error('Conflict query failed:', error instanceof Error ? error.message : error);
+    console.error('Conflict query failed:', errorMessage(error));
     process.exit(1);
   } finally {
     memory.close();
@@ -83,7 +83,7 @@ conflictsCommand
       console.log(`  ID: ${result.resolved.id}`);
       console.log(`  Resolution: ${result.resolved.resolution}`);
     } catch (error) {
-      console.error('Conflict accept failed:', error instanceof Error ? error.message : error);
+      console.error('Conflict accept failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -112,7 +112,7 @@ conflictsCommand
       console.log(`  Conflict: ${conflictId}`);
       console.log(`  Candidate: ${candidateNodeId}`);
     } catch (error) {
-      console.error('Conflict reject failed:', error instanceof Error ? error.message : error);
+      console.error('Conflict reject failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

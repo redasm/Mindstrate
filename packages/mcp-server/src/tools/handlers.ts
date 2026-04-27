@@ -32,6 +32,7 @@ import type {
   ContextInternalizeSchema,
   MemoryEvolveSchema,
 } from './schemas.js';
+import { formatGraphKnowledgeResults } from './graph-knowledge-format.js';
 
 export async function handleMemorySearch(
   api: McpApi,
@@ -44,30 +45,10 @@ export async function handleMemorySearch(
     limit: Math.max(topK ?? 5, 10),
   });
 
-  if (results.length === 0) {
-    return {
-      content: [{ type: 'text', text: 'No relevant ECS graph knowledge found.' }],
-    };
-  }
-
-  const formatted = results.map((r, i) => {
-    const view = r.view;
-    return [
-      `### ${i + 1}. [${view.substrateType}] ${view.title}`,
-      `Relevance: ${(r.relevanceScore * 100).toFixed(1)}% | Priority: ${view.priorityScore.toFixed(2)}`,
-      `Domain: ${view.domainType}`,
-      `Summary: ${view.summary}`,
-      view.tags.length > 0 ? `Tags: ${view.tags.join(', ')}` : null,
-      `ID: ${view.id}`,
-    ].filter(Boolean).join('\n');
-  }).join('\n---\n\n');
-
-  return {
-    content: [{
-      type: 'text',
-      text: `Found ${results.length} relevant ECS graph knowledge views:\n\n${formatted}`,
-    }],
-  };
+  return formatGraphKnowledgeResults(results, {
+    empty: 'No relevant ECS graph knowledge found.',
+    found: (count) => `Found ${count} relevant ECS graph knowledge views`,
+  });
 }
 
 export async function handleGraphKnowledgeSearch(
@@ -81,31 +62,10 @@ export async function handleGraphKnowledgeSearch(
     limit: Math.max(topK ?? 5, 10),
   });
 
-  if (results.length === 0) {
-    return {
-      content: [{ type: 'text', text: 'No relevant ECS graph knowledge views found.' }],
-    };
-  }
-
-  const formatted = results.map((result, index) => {
-    const view = result.view;
-    const lines = [
-      `### ${index + 1}. [${view.substrateType}] ${view.title}`,
-      `Relevance: ${(result.relevanceScore * 100).toFixed(1)}% | Priority: ${view.priorityScore.toFixed(2)}`,
-      `Domain: ${view.domainType}`,
-      `Summary: ${view.summary}`,
-      view.tags.length > 0 ? `Tags: ${view.tags.join(', ')}` : null,
-      `ID: ${view.id}`,
-    ].filter(Boolean);
-    return lines.join('\n');
-  }).join('\n---\n\n');
-
-  return {
-    content: [{
-      type: 'text',
-      text: `Found ${results.length} ECS graph knowledge views:\n\n${formatted}`,
-    }],
-  };
+  return formatGraphKnowledgeResults(results, {
+    empty: 'No relevant ECS graph knowledge views found.',
+    found: (count) => `Found ${count} ECS graph knowledge views`,
+  });
 }
 
 export async function handleContextIngestEvent(

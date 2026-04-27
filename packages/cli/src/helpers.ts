@@ -26,6 +26,11 @@ export function truncate(str: string, maxLen: number): string {
   return str.substring(0, maxLen - 3) + '...';
 }
 
+/** 统一 CLI 错误输出，避免每个命令重复判断 Error 类型 */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** 知识类型的中文映射 */
 export const TYPE_LABELS: Record<string, string> = {
   bug_fix: '错误修复',

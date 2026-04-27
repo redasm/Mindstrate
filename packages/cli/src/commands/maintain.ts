@@ -3,7 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory } from '../helpers.js';
+import { createMemory, errorMessage } from '../helpers.js';
 
 export const maintainCommand = new Command('doctor')
   .description('Run maintenance and health checks')
@@ -28,7 +28,7 @@ export const maintainCommand = new Command('doctor')
       console.log(`  Improve:               ${evolution.summary.improve}`);
       console.log(`  Deprecate:             ${evolution.summary.deprecate}`);
     } catch (error) {
-      console.error('Maintenance failed:', error instanceof Error ? error.message : error);
+      console.error('Maintenance failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

@@ -8,7 +8,7 @@
 
 import { Command } from 'commander';
 import { KnowledgeType, CaptureSource } from '@mindstrate/server';
-import { createMemory, TYPE_LABELS } from '../helpers.js';
+import { createMemory, errorMessage, TYPE_LABELS } from '../helpers.js';
 
 export const addCommand = new Command('add')
   .description('Add a new knowledge entry')
@@ -86,7 +86,7 @@ export const addCommand = new Command('add')
         }
       }
     } catch (error) {
-      console.error('Failed to add knowledge:', error instanceof Error ? error.message : error);
+      console.error('Failed to add knowledge:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

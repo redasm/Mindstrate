@@ -3,7 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
+import { createMemory, errorMessage, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
 
 export const searchCommand = new Command('search')
   .description('Search the knowledge base')
@@ -66,7 +66,7 @@ export const searchCommand = new Command('search')
         console.log('');
       }
     } catch (error) {
-      console.error('Search failed:', error instanceof Error ? error.message : error);
+      console.error('Search failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

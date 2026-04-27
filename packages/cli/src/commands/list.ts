@@ -3,7 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
+import { createMemory, errorMessage, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
 
 export const listCommand = new Command('list')
   .description('List knowledge entries')
@@ -37,7 +37,7 @@ export const listCommand = new Command('list')
         console.log('');
       }
     } catch (error) {
-      console.error('Failed to list:', error instanceof Error ? error.message : error);
+      console.error('Failed to list:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

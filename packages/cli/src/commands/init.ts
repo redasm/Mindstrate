@@ -23,6 +23,7 @@ import {
   type DetectedProject,
   type ProjectMeta,
 } from '@mindstrate/server';
+import { errorMessage } from '../helpers.js';
 import { writeMcpConfig } from './setup-mcp.js';
 
 interface InitOptions {
@@ -155,7 +156,7 @@ export const initCommand = new Command('init')
       memory.close();
       console.log('\nDone.');
     } catch (error) {
-      console.error('Failed to initialize:', error instanceof Error ? error.message : error);
+      console.error('Failed to initialize:', errorMessage(error));
       process.exit(1);
     }
   });
@@ -186,7 +187,7 @@ async function initVault(memory: Mindstrate, vaultPath: string, project: Detecte
   try {
     ({ SyncManager, VaultLayout } = await import('@mindstrate/obsidian-sync'));
   } catch (err) {
-    console.warn(`\nVault sync skipped (@mindstrate/obsidian-sync not available): ${err instanceof Error ? err.message : err}`);
+    console.warn(`\nVault sync skipped (@mindstrate/obsidian-sync not available): ${errorMessage(err)}`);
     return;
   }
 
@@ -198,7 +199,6 @@ async function initVault(memory: Mindstrate, vaultPath: string, project: Detecte
   layout.ensureRoot();
 
   const sync = new SyncManager(memory, { vaultRoot: root, silent: true });
-  memory.addMutationSink(sync);
   const r = await sync.exportAll();
 
   console.log('\nObsidian vault:');

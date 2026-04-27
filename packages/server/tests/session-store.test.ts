@@ -67,6 +67,16 @@ describe('SessionStore', () => {
       expect(updated!.observations![0].type).toBe('task_start');
       expect(updated!.observations![1].type).toBe('decision');
     });
+
+    it('should ignore observations for missing sessions', () => {
+      store.addObservation({
+        sessionId: 'missing-session',
+        type: 'decision',
+        content: 'This should not create a session',
+      });
+
+      expect(store.getById('missing-session')).toBeNull();
+    });
   });
 
   describe('compress', () => {

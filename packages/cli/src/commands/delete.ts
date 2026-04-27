@@ -3,7 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, findGraphKnowledge } from '../helpers.js';
+import { createMemory, errorMessage, findGraphKnowledge } from '../helpers.js';
 
 export const deleteCommand = new Command('delete')
   .description('Delete a knowledge entry')
@@ -50,7 +50,7 @@ export const deleteCommand = new Command('delete')
         console.error('Failed to delete.');
       }
     } catch (error) {
-      console.error('Delete failed:', error instanceof Error ? error.message : error);
+      console.error('Delete failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

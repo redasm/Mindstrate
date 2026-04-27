@@ -6,7 +6,7 @@
 
 import { Command } from 'commander';
 import * as fs from 'node:fs';
-import { createMemory } from '../helpers.js';
+import { createMemory, errorMessage } from '../helpers.js';
 
 export const exportCommand = new Command('export')
   .description('Export ECS graph knowledge views to a JSON file')
@@ -39,7 +39,7 @@ export const exportCommand = new Command('export')
       fs.writeFileSync(file, json, 'utf-8');
       console.log(`Exported ${entries.length} entries to ${file}`);
     } catch (error) {
-      console.error('Export failed:', error instanceof Error ? error.message : error);
+      console.error('Export failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -104,7 +104,7 @@ export const importCommand = new Command('import')
       console.log(`  Imported: ${imported}`);
       if (failed > 0) console.log(`  Failed:   ${failed}`);
     } catch (error) {
-      console.error('Import failed:', error instanceof Error ? error.message : error);
+      console.error('Import failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

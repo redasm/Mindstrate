@@ -8,7 +8,7 @@ import { Command } from 'commander';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { PortableContextBundle } from '@mindstrate/protocol/models';
-import { createMemory } from '../helpers.js';
+import { createMemory, errorMessage } from '../helpers.js';
 
 export const bundleCommand = new Command('bundle')
   .description('Create, install, validate, and publish portable ECS context bundles');
@@ -46,7 +46,7 @@ bundleCommand
       console.log(`  Nodes: ${bundle.nodeIds.length}`);
       console.log(`  Edges: ${bundle.edgeIds.length}`);
     } catch (error) {
-      console.error('Bundle create failed:', error instanceof Error ? error.message : error);
+      console.error('Bundle create failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -77,7 +77,7 @@ bundleCommand
       }
       console.log('Bundle is valid.');
     } catch (error) {
-      console.error('Bundle validation failed:', error instanceof Error ? error.message : error);
+      console.error('Bundle validation failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -106,7 +106,7 @@ bundleCommand
       console.log(`  Installed edges: ${result.installedEdges}`);
       console.log(`  Skipped edges:   ${result.skippedEdges}`);
     } catch (error) {
-      console.error('Bundle install failed:', error instanceof Error ? error.message : error);
+      console.error('Bundle install failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -132,7 +132,7 @@ bundleCommand
       console.log(`  Installed edges: ${result.installedEdges}`);
       console.log(`  Skipped edges:   ${result.skippedEdges}`);
     } catch (error) {
-      console.error('Bundle registry install failed:', error instanceof Error ? error.message : error);
+      console.error('Bundle registry install failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
@@ -162,7 +162,7 @@ bundleCommand
       console.log('Bundle publication manifest:');
       console.log(JSON.stringify(result.manifest, null, 2));
     } catch (error) {
-      console.error('Bundle publish failed:', error instanceof Error ? error.message : error);
+      console.error('Bundle publish failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

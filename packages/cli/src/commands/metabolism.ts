@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory } from '../helpers.js';
+import { createMemory, errorMessage } from '../helpers.js';
 
 export const metabolismCommand = new Command('gc')
   .description('Run ECS garbage collection and compaction')
@@ -52,7 +52,7 @@ export const metabolismCommand = new Command('gc')
         }
       }
     } catch (error) {
-      console.error('Metabolism run failed:', error instanceof Error ? error.message : error);
+      console.error('Metabolism run failed:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();

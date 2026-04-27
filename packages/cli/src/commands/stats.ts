@@ -3,7 +3,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
+import { createMemory, errorMessage, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
 
 export const statsCommand = new Command('stats')
   .description('Show knowledge base statistics')
@@ -42,7 +42,7 @@ export const statsCommand = new Command('stats')
 
       console.log(`\n  Config: ${memory.getConfig().dataDir}`);
     } catch (error) {
-      console.error('Failed to get stats:', error instanceof Error ? error.message : error);
+      console.error('Failed to get stats:', errorMessage(error));
       process.exit(1);
     } finally {
       memory.close();
