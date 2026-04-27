@@ -481,6 +481,7 @@ export class Mindstrate {
       project?: string;
       context?: RetrievalContext;
       sessionId?: string;
+      maxSummaryCharacters?: number;
     },
   ): Promise<AssembledContext> {
     await this.ensureInit();
@@ -494,6 +495,7 @@ export class Mindstrate {
         project: options?.project,
         context: options?.context,
         sessionId: options?.sessionId,
+        maxSummaryCharacters: options?.maxSummaryCharacters,
       },
       {
         loadSessionContext: (project) => project ? this.formatSessionContext(project) || undefined : undefined,
@@ -528,6 +530,7 @@ export class Mindstrate {
       project?: string;
       context?: RetrievalContext;
       sessionId?: string;
+      maxSummaryCharacters?: number;
     },
   ): Promise<AssembledContext> {
     return this.assembleContext(taskDescription, options);

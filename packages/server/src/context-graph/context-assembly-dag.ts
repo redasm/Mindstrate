@@ -14,6 +14,11 @@ interface DagExecutionContext {
   get<T>(nodeId: string): Promise<T>;
 }
 
+interface SummarySection {
+  priority: number;
+  content: string;
+}
+
 class DagExecutor {
   private readonly nodes: Record<string, DagNode<unknown>>;
   private readonly cache = new Map<string, Promise<unknown>>();
@@ -69,6 +74,7 @@ export interface ContextAssemblyDagInput {
   project?: string;
   context?: RetrievalContext;
   sessionId?: string;
+  maxSummaryCharacters?: number;
 }
 
 export interface ContextAssemblyDagDeps {
@@ -198,26 +204,41 @@ export async function runContextAssemblyDag(
 
         const sections: string[] = [base];
 
+        const prioritizedSections: SummarySection[] = [];
+        if (graphConflicts.length > 0) {
+          prioritizedSections.push({
+            priority: 100,
+            content: formatSummarySection('Active Conflicts', graphConflicts.slice(0, 5).map((record) => record.reason)),
+          });
+        }
         if (graphRules.length > 0) {
-          sections.push('\n### Operational Rules');
-          sections.push(...graphRules.slice(0, 5).map((node) => `- ${node.title}`));
+          prioritizedSections.push({
+            priority: 90,
+            content: formatSummarySection('Operational Rules', graphRules.slice(0, 5).map((node) => node.title)),
+          });
         }
         if (graphPatterns.length > 0) {
-          sections.push('\n### Repeated Patterns');
-          sections.push(...graphPatterns.slice(0, 5).map((node) => `- ${node.title}`));
+          prioritizedSections.push({
+            priority: 60,
+            content: formatSummarySection('Repeated Patterns', graphPatterns.slice(0, 5).map((node) => node.title)),
+          });
         }
         if (graphSummaries.length > 0) {
-          sections.push('\n### Recent Summary Clusters');
-          sections.push(...graphSummaries.slice(0, 5).map((node) => `- ${node.title}`));
+          prioritizedSections.push({
+            priority: 50,
+            content: formatSummarySection('Recent Summary Clusters', graphSummaries.slice(0, 5).map((node) => node.title)),
+          });
         }
-        if (graphConflicts.length > 0) {
-          sections.push('\n### Active Conflicts');
-          sections.push(...graphConflicts.slice(0, 5).map((record) => `- ${record.reason}`));
-        }
-        sections.push('\n### Task Curation');
-        sections.push((await ctx.get<CuratedContext>('curated')).summary);
+        prioritizedSections.push({
+          priority: 40,
+          content: `\n### Task Curation\n${(await ctx.get<CuratedContext>('curated')).summary}`,
+        });
 
-        return sections.join('\n');
+        sections.push(...prioritizedSections.map((section) => section.content));
+        const summary = sections.join('\n');
+        return input.maxSummaryCharacters
+          ? clipSummaryByBudget(base, prioritizedSections, input.maxSummaryCharacters)
+          : summary;
       },
     },
     assembled: {
@@ -284,6 +305,42 @@ export async function runContextAssemblyDag(
     assembled: value,
     executionOrder,
   };
+}
+
+function formatSummarySection(title: string, items: string[]): string {
+  return [`\n### ${title}`, ...items.map((item) => `- ${item}`)].join('\n');
+}
+
+function clipSummaryByBudget(
+  base: string,
+  sections: SummarySection[],
+  maxCharacters: number,
+): string {
+  if (maxCharacters <= 0) return '';
+
+  const candidates = [
+    ...sections,
+    { priority: 30, content: base },
+  ];
+  const selected = candidates
+    .slice()
+    .sort((a, b) => b.priority - a.priority)
+    .reduce<string[]>((acc, section) => {
+      const candidate = [...acc, section.content].join('\n');
+      if (candidate.length <= maxCharacters) {
+        return [...acc, section.content];
+      }
+      return acc;
+    }, []);
+
+  const summary = [
+    ...selected.filter((section) => section === base),
+    ...selected.filter((section) => section !== base),
+  ].join('\n');
+  if (summary.length <= maxCharacters) {
+    return summary;
+  }
+  return `${summary.slice(0, Math.max(maxCharacters - 1, 0))}…`;
 }
 
 function buildEvidenceTrail(

@@ -227,4 +227,51 @@ describe('runContextAssemblyDag', () => {
     expect(result.assembled.projectSnapshot).toBeUndefined();
     expect(result.assembled.summary).toContain('Working Context for: brand new task');
   });
+
+  it('clips assembled summary by budget while preserving conflicts and rules', async () => {
+    const result = await runContextAssemblyDag(
+      {
+        taskDescription: 'ship within context budget',
+        project: 'mindstrate',
+        maxSummaryCharacters: 180,
+      },
+      {
+        loadSessionContext() {
+          return 'Long session context that should be compressed away first.';
+        },
+        loadProjectSnapshot() {
+          return makeProjectSnapshot('mindstrate');
+        },
+        loadGraphSummaries() {
+          return [makeGraphNode('summary-1', 'Low priority summary '.repeat(10))];
+        },
+        loadGraphPatterns() {
+          return [makeGraphNode('pattern-1', 'Lower priority pattern '.repeat(10))];
+        },
+        loadGraphRules() {
+          return [makeGraphNode('rule-1', 'Must run focused tests')];
+        },
+        loadGraphConflicts() {
+          return [makeConflict('Active conflict must stay visible')];
+        },
+        async curateContext(taskDescription) {
+          return {
+            taskDescription,
+            knowledge: [],
+            workflows: [],
+            warnings: [],
+            summary: 'Curated details '.repeat(20),
+          };
+        },
+        formatSummary() {
+          return 'Base summary '.repeat(20);
+        },
+      },
+    );
+
+    expect(result.assembled.summary.length).toBeLessThanOrEqual(180);
+    expect(result.assembled.summary).toContain('Active conflict must stay visible');
+    expect(result.assembled.summary).toContain('Must run focused tests');
+    expect(result.assembled.summary).not.toContain('Low priority summary');
+  });
 });
