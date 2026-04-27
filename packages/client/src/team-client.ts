@@ -21,7 +21,7 @@ import type {
   AssembledContext,
   SessionContext,
   Session,
-  PipelineResult,
+  AddKnowledgeResult,
   EvolutionRunResult,
   PortableContextBundle,
   ProjectionRecord,
@@ -137,7 +137,7 @@ export class TeamClient {
   // Knowledge
   // ============================================================
 
-  async add(input: CreateKnowledgeInput): Promise<PipelineResult> {
+  async add(input: CreateKnowledgeInput): Promise<AddKnowledgeResult> {
     const data = await this.post<{
       success?: boolean;
       view?: GraphKnowledgeView;

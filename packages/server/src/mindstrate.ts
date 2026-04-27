@@ -9,7 +9,7 @@
  * - ECS 代谢演化（MetabolismEngine）
  * - 图优先上下文策划
  * - 图检索质量评估（RetrievalEvaluator）
- * - 质量门禁（Pipeline.qualityGate）
+ * - 质量门禁（KnowledgeQualityGate）
  */
 
 import * as fs from 'node:fs';
@@ -18,6 +18,7 @@ import type {
   CreateKnowledgeInput,
   RetrievalContext,
   AssembledContext,
+  AddKnowledgeResult,
   FeedbackEvent,
   EvolutionRunResult,
   EvolutionSuggestion,
@@ -38,7 +39,8 @@ import { QdrantVectorStore } from './storage/qdrant-vector-store.js';
 import type { IVectorStore } from './storage/vector-store-interface.js';
 import { SessionStore } from './storage/session-store.js';
 import { Embedder } from './processing/embedder.js';
-import { Pipeline, type PipelineResult, type QualityGateResult } from './processing/pipeline.js';
+import { KnowledgeQualityGate } from './processing/knowledge-quality-gate.js';
+import type { QualityGateResult } from '@mindstrate/protocol';
 import { SessionCompressor } from './processing/session-compressor.js';
 import { FeedbackLoop } from './quality/feedback-loop.js';
 import { RetrievalEvaluator, type EvalRunResult } from './quality/eval.js';
@@ -127,7 +129,7 @@ export class Mindstrate {
   private vectorStore: IVectorStore;
   private sessionStore: SessionStore;
   private embedder: Embedder;
-  private pipeline: Pipeline;
+  private qualityGate: KnowledgeQualityGate;
   private sessionCompressor: SessionCompressor;
   private bundleManager: PortableContextBundleManager;
   private feedbackLoop: FeedbackLoop;
@@ -194,13 +196,7 @@ export class Mindstrate {
     // 图节点反馈闭环
     this.feedbackLoop = new FeedbackLoop(this.databaseStore.getDb());
 
-    // Pipeline performs the quality gate for graph writes.
-    this.pipeline = new Pipeline(
-      this.databaseStore,
-      this.vectorStore,
-      this.embedder,
-      this.config.deduplicationThreshold,
-    );
+    this.qualityGate = new KnowledgeQualityGate();
     // 检索评估
     this.evaluator = new RetrievalEvaluator(this.databaseStore.getDb(), (query, options) =>
       this.queryGraphKnowledge(query, { topK: options.topK, trackFeedback: false })
@@ -228,9 +224,9 @@ export class Mindstrate {
   // ============================================================
 
   /** 添加一条新知识 */
-  async add(input: CreateKnowledgeInput): Promise<PipelineResult> {
+  async add(input: CreateKnowledgeInput): Promise<AddKnowledgeResult> {
     await this.ensureInit();
-    const gateResult = this.pipeline.qualityGate(input);
+    const gateResult = this.qualityGate.check(input);
     if (!gateResult.passed) {
       return {
         success: false,
@@ -411,7 +407,7 @@ export class Mindstrate {
 
   /** 质量门禁预检查（不写入，仅检查质量） */
   checkQuality(input: CreateKnowledgeInput): QualityGateResult {
-    return this.pipeline.qualityGate(input);
+    return this.qualityGate.check(input);
   }
 
   // ============================================================

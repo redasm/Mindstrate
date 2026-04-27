@@ -9,10 +9,9 @@
 import type { GraphKnowledgeView } from './models/projection.js';
 
 /**
- * Outcome of writing a single graph knowledge view through the server pipeline
- * (quality gate -> dedup -> embed -> persist).
+ * Outcome of writing a single graph knowledge view.
  */
-export interface PipelineResult {
+export interface AddKnowledgeResult {
   success: boolean;
   view?: GraphKnowledgeView;
   message: string;

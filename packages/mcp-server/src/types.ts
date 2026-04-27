@@ -19,7 +19,7 @@ import type {
   AssembledContext,
   Session,
   EvolutionRunResult,
-  PipelineResult,
+  AddKnowledgeResult,
   PortableContextBundle,
   ProjectionRecord,
 } from '@mindstrate/protocol';
@@ -77,7 +77,7 @@ export interface AcceptInternalizationSuggestionsResult extends InternalizationS
  */
 export interface LocalMemory {
   init(): Promise<void>;
-  add(input: CreateKnowledgeInput): Promise<PipelineResult>;
+  add(input: CreateKnowledgeInput): Promise<AddKnowledgeResult>;
   readGraphKnowledge(options?: { project?: string; limit?: number }): GraphKnowledgeView[];
   startSession(input: { project?: string; techContext?: string }): Promise<Session>;
   saveObservation(input: { sessionId: string; type: string; content: string; metadata?: Record<string, string> }): void;
@@ -150,7 +150,7 @@ export interface LocalMemory {
 /** Unified API interface that abstracts local/team mode differences */
 export interface McpApi {
   init(): Promise<void>;
-  add(input: CreateKnowledgeInput): Promise<PipelineResult>;
+  add(input: CreateKnowledgeInput): Promise<AddKnowledgeResult>;
   get(id: string): Promise<GraphKnowledgeView | null>;
   startSession(project: string, techContext?: string): Promise<{ session: Session; context: string | null }>;
   saveObservation(sessionId: string, type: string, content: string, metadata?: Record<string, string>): Promise<void>;

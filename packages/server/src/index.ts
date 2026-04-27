@@ -144,7 +144,7 @@ export {
 
 // Processing
 export { Embedder } from './processing/embedder.js';
-export { Pipeline, type PipelineResult, type QualityGateResult } from './processing/pipeline.js';
+export { KnowledgeQualityGate } from './processing/knowledge-quality-gate.js';
 export { SessionCompressor } from './processing/session-compressor.js';
 
 // Capture
