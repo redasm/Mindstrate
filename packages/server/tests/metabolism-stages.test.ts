@@ -56,6 +56,45 @@ describe('metabolism stage modules', () => {
     expect(assimilate.created).toBe(1);
   });
 
+  it('normalizes raw context events into canonical episode nodes', () => {
+    const event = graphStore.createEvent({
+      type: ContextEventType.TERMINAL_OUTPUT,
+      project: 'mindstrate',
+      actor: 'terminal',
+      content: 'npm test failed with assertion output',
+      metadata: {
+        command: 'npm test',
+        exitCode: 1,
+      },
+    });
+
+    const digest = new DigestEngine(graphStore).run({ project: 'mindstrate' });
+    const episodes = graphStore.listNodes({
+      project: 'mindstrate',
+      substrateType: SubstrateType.EPISODE,
+      limit: 10,
+    });
+
+    expect(digest.created).toBe(1);
+    expect(episodes).toHaveLength(1);
+    expect(episodes[0].sourceRef).toBe(`event:${event.id}`);
+    expect(episodes[0].metadata?.['eventId']).toBe(event.id);
+    expect(episodes[0].metadata?.['normalizedEvent']).toEqual(expect.objectContaining({
+      type: ContextEventType.TERMINAL_OUTPUT,
+      source: 'terminal',
+      command: 'npm test',
+      exitCode: 1,
+    }));
+
+    const secondDigest = new DigestEngine(graphStore).run({ project: 'mindstrate' });
+    expect(secondDigest.created).toBe(0);
+    expect(graphStore.listNodes({
+      project: 'mindstrate',
+      substrateType: SubstrateType.EPISODE,
+      limit: 10,
+    })).toHaveLength(1);
+  });
+
   it('links overlapping episodes to existing snapshots instead of duplicating them', () => {
     const existing = graphStore.createNode({
       substrateType: SubstrateType.SNAPSHOT,
