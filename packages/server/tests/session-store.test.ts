@@ -7,22 +7,22 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { SessionStore } from '../src/storage/session-store.js';
-import { MetadataStore } from '../src/storage/metadata-store.js';
+import { DatabaseStore } from '../src/storage/database-store.js';
 import { createTempDir, removeTempDir } from './helpers.js';
 
 describe('SessionStore', () => {
   let tempDir: string;
-  let metadataStore: MetadataStore;
+  let databaseStore: DatabaseStore;
   let store: SessionStore;
 
   beforeEach(() => {
     tempDir = createTempDir();
-    metadataStore = new MetadataStore(path.join(tempDir, 'test.db'));
-    store = new SessionStore(metadataStore.getDb());
+    databaseStore = new DatabaseStore(path.join(tempDir, 'test.db'));
+    store = new SessionStore(databaseStore.getDb());
   });
 
   afterEach(() => {
-    metadataStore.close();
+    databaseStore.close();
     removeTempDir(tempDir);
   });
 
@@ -164,3 +164,6 @@ describe('SessionStore', () => {
     });
   });
 });
+
+
+

@@ -21,7 +21,7 @@
 
 - `Mindstrate` 当前是一个带有明显 `Camp 2` 雏形的 `Camp 1.5` 系统。
 - 现有强项不是负担，而是 ECS 的良好起点：
-  - `KnowledgeUnit` 的结构化知识模型
+  - 旧结构化知识条目的输入经验
   - `Session Memory`
   - `Project Snapshot`
   - `Curated / Assembled Context`
@@ -54,7 +54,7 @@
   - 已经把项目心智模型固定为长期上下文
   - 这是 `Rule / Axiom` 级上下文种子
 
-- `packages/server/src/retrieval/retriever.ts`
+- `packages/server/src/retrieval/旧检索器.ts`
   - 已经不只是检索，还会组装 `knowledge / workflows / warnings`
   - 这是工作上下文装配，而不只是召回
 
@@ -62,7 +62,7 @@
   - 已经记录采纳、拒绝、忽略等反馈
   - 这是代谢循环的评分信号
 
-- `packages/server/src/quality/evolution.ts`
+- `packages/server/src/metabolism`
   - 已经有轻量的合并、改进、废弃逻辑
   - 这是 `Compress / Prune` 的弱版本
 
@@ -72,7 +72,7 @@
 
 ## 3.2 当前系统距离 ECS 的核心差距
 
-当前系统的核心对象仍是 `KnowledgeUnit`，其本质是“结构化知识条目”。这使系统更像一个高质量的知识库，而不是一个持续代谢的上下文基底。
+迁移前系统的核心对象是旧结构化知识条目；当前目标运行时已经切到图节点，其本质是“结构化知识条目”。这使系统更像一个高质量的知识库，而不是一个持续代谢的上下文基底。
 
 主要差距有 6 个：
 
@@ -81,7 +81,7 @@
    - ECS 需要另一条正交维度：`Episode / Snapshot / Summary / Pattern / Skill / Rule / Heuristic / Axiom`
 
 2. 没有图原生存储
-   - 当前 `MetadataStore` 是单表 `knowledge_units`
+   - 当前 `DatabaseStore` / `ContextGraphStore` 是单表 旧知识表
    - `VectorStore` 是 JSON 向量索引
    - 缺失节点关系、因果链、冲突关系、实例化关系、时序链
 
@@ -90,7 +90,7 @@
    - 环境信号并未成为一等记忆输入，如终端输出、测试失败、LSP 诊断、Git 状态
 
 4. 没有真正的压缩升级机制
-   - 当前进化引擎仍围绕 `KnowledgeUnit` 做 merge / improve / deprecate
+   - 当前进化引擎仍围绕 旧结构化知识条目 做 merge / improve / deprecate
    - 还没有“低压缩经验自动升级为高压缩规则”的通道
 
 5. 没有冲突治理闭环
@@ -268,9 +268,9 @@ interface ContextEdge {
 
 下面这些模块不需要删除，但需要重新定位：
 
-### `MetadataStore`
+### `DatabaseStore` / `ContextGraphStore`
 
-- 当前职责：`KnowledgeUnit` 单表存储
+- 当前职责：旧结构化知识条目 单表存储
 - ECS 后职责：
   - 迁移为 `ContextGraphStore`
   - 负责 `nodes / edges / materializations / projections`
@@ -295,19 +295,19 @@ interface ContextEdge {
 - ECS 后职责：
   - 成为 `Episode -> Snapshot` 与 `Snapshot -> Summary` 的压缩器之一
 
-### `Retriever`
+### 旧检索器
 
 - 当前职责：语义检索 + curateContext
 - ECS 后职责：
   - 升级为 `ContextAssembler`
   - 支持图遍历、谱系优先级、冲突屏蔽、时间窗口裁剪
 
-### `KnowledgeEvolution`
+### 旧演化引擎
 
 - 当前职责：merge / improve / deprecate
 - ECS 后职责：
   - 拆分进 `Compress / Prune / Reflect`
-  - 不再围绕 `KnowledgeUnit` 单体优化，而围绕谱系演化
+  - 不再围绕 旧结构化知识条目 单体优化，而围绕谱系演化
 
 ## 6.2 需要新增的核心模块
 
@@ -357,7 +357,7 @@ interface ContextEdge {
 
 ## 7.1 协议层新增类型
 
-当前 `packages/protocol/src/models/knowledge.ts` 只定义了 `KnowledgeUnit` 体系。
+协议层已经新增图模型，并且不再对外暴露旧结果形状。
 
 建议新增：
 
@@ -375,14 +375,14 @@ interface ContextEdge {
 6. `ProjectionRecord`
 7. `PortableContextBundle`
 
-## 7.2 移除 KnowledgeUnit 兼容层，统一返回图视图
+## 7.2 移除 旧结构化知识条目 兼容层，统一返回图视图
 
-开发阶段不再保留外部 `KnowledgeUnit` 兼容层。
+开发阶段不再保留外部 旧结构化知识条目 兼容层。
 
 - 新写入统一落到 `ContextNode`
 - 对外查询统一返回 `GraphKnowledgeView` / `GraphKnowledgeSearchResult`
 - `projection_records` 记录图视图、会话摘要、项目快照、Obsidian 文档等派生目标
-- `KnowledgeUnit` 仅允许存在于尚未迁移的内部测试/历史模块中，不再作为新增数据或接口契约
+- 旧结构化知识条目 仅允许存在于尚未迁移的内部测试/历史模块中，不再作为新增数据或接口契约
 
 目标接口：
 
@@ -409,7 +409,7 @@ CREATE TABLE metabolism_runs (...);
 开发阶段：
 
 - `sessions` 继续作为会话运行态存储，同时把观察和结束摘要摄入图
-- `knowledge_units` 不再接收新增知识、项目快照或 pipeline 写入
+- 旧知识表 不再接收新增知识、项目快照或 pipeline 写入
 - 不再通过 projection 同步回旧接口
 
 ## 8. ECS 运行循环设计
@@ -487,7 +487,7 @@ CREATE TABLE metabolism_runs (...);
 - `Rule -> Heuristic`
 - `Heuristic -> Axiom`
 
-当前的 `KnowledgeEvolution.mergeKnowledge` 可以作为这里的参考起点，但必须从“文本拼接式合并”升级为“谱系化合并”：
+当前的 `旧演化引擎.mergeKnowledge` 可以作为这里的参考起点，但必须从“文本拼接式合并”升级为“谱系化合并”：
 
 - 保留来源节点
 - 建 `derived_from / generalizes / instantiates` 边
@@ -535,9 +535,9 @@ CREATE TABLE metabolism_runs (...);
 
 ## 9. 检索与上下文装配重构
 
-## 9.1 从 Retriever 变成 Context Assembler
+## 9.1 从 旧检索器 变成 Context Assembler
 
-当前 `Retriever.search` 的主逻辑仍是：
+旧检索器的主逻辑曾是：
 
 - embed query
 - vector search
@@ -731,7 +731,7 @@ Web UI 后续应该新增 ECS 可视化：
 1. 新增 `ContextNode / ContextEdge / ContextEvent`
 2. 新增 `ContextGraphStore`
 3. 新增最小图查询接口
-4. 不再保留旧 `KnowledgeUnit` 写入和外部接口
+4. 不再保留旧 旧结构化知识条目 写入和外部接口
 
 验收：
 
@@ -755,7 +755,7 @@ Web UI 后续应该新增 ECS 可视化：
 
 - 一次真实会话能在图中形成事件链
 
-## 阶段 3：移除 KnowledgeUnit 外部兼容层
+## 阶段 3：移除 旧结构化知识条目 外部兼容层
 
 目标：
 
@@ -770,7 +770,7 @@ Web UI 后续应该新增 ECS 可视化：
 验收：
 
 - `mindstrate add / mindstrate search / memory_search` 返回 graph view
-- 新增数据不再写入 `knowledge_units`
+- 新增数据不再写入 旧知识表
 
 ## 阶段 4：实现第一版代谢引擎
 
@@ -877,3 +877,4 @@ Web UI 后续应该新增 ECS 可视化：
 以 `Mindstrate` 为基座重构 ECS，正确方向不是“把当前知识库推倒重做”，而是：
 
 把当前已经很强的 `Knowledge + Session + Snapshot + Feedback + Evolution + Obsidian` 体系，重新组织成一个以 `经验压缩谱系 + 声明式上下文图 + 记忆代谢引擎 + 上下文装配层` 为核心的新架构，让系统从“会检索的知识库”演进成“会持续代谢的上下文基底”。
+

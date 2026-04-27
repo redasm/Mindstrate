@@ -32,7 +32,7 @@ import type {
   CompressSessionInput,
   SessionContext,
 } from '@mindstrate/protocol';
-import { MetadataStore } from './storage/metadata-store.js';
+import { DatabaseStore } from './storage/database-store.js';
 import { VectorStore } from './storage/vector-store.js';
 import type { IVectorStore } from './storage/vector-store-interface.js';
 import { SessionStore } from './storage/session-store.js';
@@ -104,7 +104,7 @@ import { PortableContextBundleManager, type CreateBundleOptions, type EditableBu
 
 export class Mindstrate {
   private config: MindstrateConfig;
-  private metadataStore: MetadataStore;
+  private databaseStore: DatabaseStore;
   private contextGraphStore: ContextGraphStore;
   private contextInternalizer: ContextInternalizer;
   private contextPrioritySelector: ContextPrioritySelector;
@@ -151,8 +151,8 @@ export class Mindstrate {
     const embeddingBaseUrl = this.config.openaiEmbeddingBaseUrl ?? llmBaseUrl;
 
     // 初始化各模块
-    this.metadataStore = new MetadataStore(this.config.dbPath);
-    this.contextGraphStore = new ContextGraphStore(this.metadataStore.getDb());
+    this.databaseStore = new DatabaseStore(this.config.dbPath);
+    this.contextGraphStore = new ContextGraphStore(this.databaseStore.getDb());
     this.contextInternalizer = new ContextInternalizer(this.contextGraphStore);
     this.contextPrioritySelector = new ContextPrioritySelector(this.contextGraphStore);
     this.graphKnowledgeProjector = new GraphKnowledgeProjector(this.contextGraphStore);
@@ -185,22 +185,22 @@ export class Mindstrate {
     });
     this.vectorStore = configOverrides?.vectorStore
       ?? new VectorStore(this.config.vectorStorePath, this.config.collectionName);
-    this.sessionStore = new SessionStore(this.metadataStore.getDb());
+    this.sessionStore = new SessionStore(this.databaseStore.getDb());
     this.bundleManager = new PortableContextBundleManager(this.contextGraphStore);
     this.sessionCompressor = new SessionCompressor(this.config.openaiApiKey, this.config.llmModel, llmBaseUrl);
 
     // 图节点反馈闭环
-    this.feedbackLoop = new FeedbackLoop(this.metadataStore.getDb());
+    this.feedbackLoop = new FeedbackLoop(this.databaseStore.getDb());
 
     // Pipeline performs the quality gate for graph writes.
     this.pipeline = new Pipeline(
-      this.metadataStore,
+      this.databaseStore,
       this.vectorStore,
       this.embedder,
       this.config.deduplicationThreshold,
     );
     // 检索评估
-    this.evaluator = new RetrievalEvaluator(this.metadataStore.getDb(), (query, options) =>
+    this.evaluator = new RetrievalEvaluator(this.databaseStore.getDb(), (query, options) =>
       this.queryGraphKnowledge(query, { topK: options.topK, trackFeedback: false })
         .map((result) => result.view.id),
     );
@@ -1104,7 +1104,7 @@ export class Mindstrate {
   close(): void {
     this.stopMetabolismScheduler();
     this.vectorStore.flush();
-    this.metadataStore.close();
+    this.databaseStore.close();
   }
 
   getConfig(): Readonly<MindstrateConfig> {
@@ -1279,3 +1279,5 @@ function knowledgeTypeToContextDomain(type: CreateKnowledgeInput['type']): Conte
       return ContextDomainType.BEST_PRACTICE;
   }
 }
+
+

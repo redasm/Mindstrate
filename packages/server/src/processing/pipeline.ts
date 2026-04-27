@@ -7,7 +7,6 @@
 
 import type { CreateKnowledgeInput } from '@mindstrate/protocol';
 import { KnowledgeType } from '@mindstrate/protocol';
-import { MetadataStore } from '../storage/metadata-store.js';
 import type { IVectorStore } from '../storage/vector-store-interface.js';
 import { Embedder } from './embedder.js';
 
@@ -24,7 +23,7 @@ import type { QualityGateResult } from '@mindstrate/protocol';
 
 export class Pipeline {
   constructor(
-    _metadataStore?: MetadataStore,
+    _databaseStore?: unknown,
     _vectorStore?: IVectorStore,
     _embedder?: Embedder,
     _deduplicationThreshold: number = 0.92,

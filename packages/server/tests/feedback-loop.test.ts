@@ -7,23 +7,23 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { FeedbackLoop } from '../src/quality/feedback-loop.js';
-import { MetadataStore } from '../src/storage/metadata-store.js';
+import { DatabaseStore } from '../src/storage/database-store.js';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { ContextDomainType, SubstrateType } from '@mindstrate/protocol/models';
 import { createTempDir, removeTempDir } from './helpers.js';
 
 describe('FeedbackLoop', () => {
   let tempDir: string;
-  let metadataStore: MetadataStore;
+  let databaseStore: DatabaseStore;
   let graphStore: ContextGraphStore;
   let feedbackLoop: FeedbackLoop;
   let nodeId: string;
 
   beforeEach(() => {
     tempDir = createTempDir();
-    metadataStore = new MetadataStore(path.join(tempDir, 'test.db'));
-    graphStore = new ContextGraphStore(metadataStore.getDb());
-    feedbackLoop = new FeedbackLoop(metadataStore.getDb());
+    databaseStore = new DatabaseStore(path.join(tempDir, 'test.db'));
+    graphStore = new ContextGraphStore(databaseStore.getDb());
+    feedbackLoop = new FeedbackLoop(databaseStore.getDb());
 
     const node = graphStore.createNode({
       substrateType: SubstrateType.RULE,
@@ -35,7 +35,7 @@ describe('FeedbackLoop', () => {
   });
 
   afterEach(() => {
-    metadataStore.close();
+    databaseStore.close();
     removeTempDir(tempDir);
   });
 
@@ -159,3 +159,6 @@ describe('FeedbackLoop', () => {
     });
   });
 });
+
+
+

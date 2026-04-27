@@ -44,8 +44,8 @@ describe('protocol errors', () => {
   });
 
   it('errors accept optional structured context', () => {
-    const e = new StorageError('write failed', { table: 'knowledge_units', id: 'k-1' });
-    expect(e.context).toEqual({ table: 'knowledge_units', id: 'k-1' });
+    const e = new StorageError('write failed', { table: 'context_nodes', id: 'n-1' });
+    expect(e.context).toEqual({ table: 'context_nodes', id: 'n-1' });
   });
 
   it('DuplicateError carries duplicateOf', () => {

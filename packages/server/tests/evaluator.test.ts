@@ -7,20 +7,20 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { RetrievalEvaluator } from '../src/quality/eval.js';
-import { MetadataStore } from '../src/storage/metadata-store.js';
+import { DatabaseStore } from '../src/storage/database-store.js';
 import { createTempDir, removeTempDir } from './helpers.js';
 
 describe('RetrievalEvaluator', () => {
   let tempDir: string;
-  let metadataStore: MetadataStore;
+  let databaseStore: DatabaseStore;
   let evaluator: RetrievalEvaluator;
   let seededIds: string[];
 
   beforeEach(() => {
     tempDir = createTempDir();
-    metadataStore = new MetadataStore(path.join(tempDir, 'test.db'));
+    databaseStore = new DatabaseStore(path.join(tempDir, 'test.db'));
     seededIds = ['node-typescript-null', 'node-react-hooks'];
-    evaluator = new RetrievalEvaluator(metadataStore.getDb(), (query, options) => {
+    evaluator = new RetrievalEvaluator(databaseStore.getDb(), (query, options) => {
       const matches: string[] = [];
       if (query.includes('typescript') || options.language === 'typescript') {
         matches.push(seededIds[0]);
@@ -33,7 +33,7 @@ describe('RetrievalEvaluator', () => {
   });
 
   afterEach(() => {
-    metadataStore.close();
+    databaseStore.close();
     removeTempDir(tempDir);
   });
 
@@ -133,3 +133,6 @@ describe('RetrievalEvaluator', () => {
     });
   });
 });
+
+
+

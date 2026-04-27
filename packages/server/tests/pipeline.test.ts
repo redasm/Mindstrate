@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { Pipeline } from '../src/processing/pipeline.js';
-import { MetadataStore } from '../src/storage/metadata-store.js';
+import { DatabaseStore } from '../src/storage/database-store.js';
 import { VectorStore } from '../src/storage/vector-store.js';
 import { Embedder } from '../src/processing/embedder.js';
 import { KnowledgeType } from '@mindstrate/protocol';
@@ -15,21 +15,21 @@ import { createTempDir, removeTempDir, makeKnowledgeInput } from './helpers.js';
 
 describe('Pipeline', () => {
   let tempDir: string;
-  let metadataStore: MetadataStore;
+  let databaseStore: DatabaseStore;
   let vectorStore: VectorStore;
   let embedder: Embedder;
   let pipeline: Pipeline;
 
   beforeEach(() => {
     tempDir = createTempDir();
-    metadataStore = new MetadataStore(path.join(tempDir, 'test.db'));
+    databaseStore = new DatabaseStore(path.join(tempDir, 'test.db'));
     vectorStore = new VectorStore(path.join(tempDir, 'vectors'), 'test');
     embedder = new Embedder(''); // offline mode
-    pipeline = new Pipeline(metadataStore, vectorStore, embedder, 0.92);
+    pipeline = new Pipeline(databaseStore, vectorStore, embedder, 0.92);
   });
 
   afterEach(() => {
-    metadataStore.close();
+    databaseStore.close();
     removeTempDir(tempDir);
   });
 
@@ -102,3 +102,6 @@ describe('Pipeline', () => {
   });
 
 });
+
+
+
