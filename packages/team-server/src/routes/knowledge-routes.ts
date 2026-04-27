@@ -1,7 +1,6 @@
 import type { Express } from 'express';
 import {
   CaptureSource,
-  isValidKnowledgeType,
   KnowledgeType,
   toGraphKnowledgeView,
   type CreateKnowledgeInput,
@@ -57,11 +56,6 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
 
     if (!body.title || !body.solution) {
       res.status(400).json({ error: 'title and solution are required' });
-      return;
-    }
-
-    if (body.type && !isValidKnowledgeType(body.type)) {
-      res.status(400).json({ error: `Invalid type: ${body.type}` });
       return;
     }
 

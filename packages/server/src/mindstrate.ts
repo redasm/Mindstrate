@@ -1255,7 +1255,7 @@ function getStringMetadata(node: ContextNode, objectKey: string, valueKey: strin
   return typeof nested === 'string' ? nested : '';
 }
 
-function knowledgeTypeToContextDomain(type: CreateKnowledgeInput['type']): ContextDomainType {
+function knowledgeTypeToContextDomain(type: string): ContextDomainType {
   switch (type) {
     case KnowledgeType.BUG_FIX:
       return ContextDomainType.BUG_FIX;

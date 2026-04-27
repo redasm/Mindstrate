@@ -6,7 +6,6 @@
  */
 
 import type { CreateKnowledgeInput } from '@mindstrate/protocol';
-import { KnowledgeType } from '@mindstrate/protocol';
 import type { IVectorStore } from '../storage/vector-store-interface.js';
 import { Embedder } from './embedder.js';
 
@@ -39,6 +38,8 @@ export class Pipeline {
     const warnings: string[] = [];
     let score = 0;
     const maxScore = 100;
+    const typesNeedingProblem = ['bug_fix', 'troubleshooting', 'gotcha'];
+    const typesNeedingCode = ['bug_fix', 'pattern', 'how_to'];
 
     // === 必要字段检查 ===
     if (!input.title?.trim()) {
@@ -71,11 +72,6 @@ export class Pipeline {
     if (input.problem?.trim()) {
       score += 15;
     } else if (input.type) {
-      const typesNeedingProblem = [
-        KnowledgeType.BUG_FIX,
-        KnowledgeType.TROUBLESHOOTING,
-        KnowledgeType.GOTCHA,
-      ];
       if (typesNeedingProblem.includes(input.type)) {
         warnings.push(`Knowledge type "${input.type}" should include a problem description`);
       }
@@ -103,18 +99,13 @@ export class Pipeline {
     if (input.codeSnippets && input.codeSnippets.length > 0) {
       score += 10;
     } else {
-      const typesNeedingCode = [
-        KnowledgeType.BUG_FIX,
-        KnowledgeType.PATTERN,
-        KnowledgeType.HOW_TO,
-      ];
       if (typesNeedingCode.includes(input.type)) {
         warnings.push(`Knowledge type "${input.type}" would benefit from code snippets`);
       }
     }
 
     // Workflow 类型特有检查
-    if (input.type === KnowledgeType.WORKFLOW) {
+    if (input.type === 'workflow') {
       if (!input.actionable?.steps || input.actionable.steps.length === 0) {
         warnings.push('Workflow knowledge should include actionable steps');
       } else {

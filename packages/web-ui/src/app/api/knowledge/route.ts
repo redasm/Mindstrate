@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory, getMemoryReady } from '@/lib/memory';
-import { CaptureSource, isValidKnowledgeType } from '@mindstrate/server';
+import { CaptureSource } from '@mindstrate/server';
 
 /** GET /api/knowledge - 列出知识 */
 export async function GET(request: NextRequest) {
@@ -34,10 +34,6 @@ export async function POST(request: NextRequest) {
     if (!body.title || !body.solution) {
       return NextResponse.json({ error: 'title and solution are required' }, { status: 400 });
     }
-    if (body.type && !isValidKnowledgeType(body.type)) {
-      return NextResponse.json({ error: `Invalid type: ${body.type}` }, { status: 400 });
-    }
-
     const result = await memory.add({
       type: body.type || 'how_to',
       title: body.title,

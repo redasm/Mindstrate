@@ -98,6 +98,22 @@ describe('team-server HTTP integration', () => {
     expect(result.view?.summary).toBe('Follow the rotation workflow.');
   });
 
+  it('accepts emergent custom knowledge types in team mode', async () => {
+    const { client, memory } = await startTeamServer();
+
+    const result = await client.add(makeKnowledgeInput({
+      type: 'incident_review' as KnowledgeType,
+      title: 'Capture incident review learnings',
+      solution: 'Record the timeline, contributing factors, and prevention follow-ups.',
+      tags: ['incident'],
+    }));
+
+    expect(result.success).toBe(true);
+    const stored = memory.listContextNodes({ limit: 50 })
+      .find((node) => node.id === result.view!.id);
+    expect(stored?.metadata?.['knowledgeType']).toBe('incident_review');
+  });
+
   it('restores active sessions and supports richer filters in team mode', async () => {
     const { client, memory } = await startTeamServer();
 

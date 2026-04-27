@@ -130,7 +130,7 @@ export interface EvolutionRecord {
 
 /** 创建知识的输入 */
 export interface CreateKnowledgeInput {
-  type: KnowledgeType;
+  type: string;
   title: string;
   problem?: string;
   solution: string;
@@ -163,7 +163,7 @@ export interface RetrievalFilter {
   language?: string;
   framework?: string;
   project?: string;
-  types?: KnowledgeType[];
+  types?: string[];
   tags?: string[];
   minScore?: number;
   status?: KnowledgeStatus[];

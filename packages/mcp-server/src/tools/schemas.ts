@@ -2,14 +2,13 @@
  * MCP Tool Input Validation Schemas (Zod)
  */
 
-import { KnowledgeType } from '@mindstrate/protocol';
 import { z } from 'zod';
 
 export const MemorySearchSchema = z.object({
   query: z.string().min(1, 'query is required'),
   language: z.string().optional(),
   framework: z.string().optional(),
-  type: z.nativeEnum(KnowledgeType).optional(),
+  type: z.string().min(1).optional(),
   topK: z.number().int().min(1).max(50).optional(),
 });
 
@@ -142,7 +141,7 @@ export const BundlePublishSchema = z.object({
 
 export const MemoryAddSchema = z.object({
   title: z.string().min(1, 'title is required'),
-  type: z.nativeEnum(KnowledgeType),
+  type: z.string().min(1, 'type is required'),
   problem: z.string().optional(),
   solution: z.string().min(1, 'solution is required'),
   tags: z.array(z.string()).optional(),
