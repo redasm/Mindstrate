@@ -485,9 +485,12 @@ export class Mindstrate {
     },
   ): Promise<AssembledContext> {
     await this.ensureInit();
+    const queryEmbedding = await this.embedder.embed(taskDescription);
     const graphSelection = this.contextPrioritySelector.select({
       project: options?.project ?? options?.context?.project,
       context: options?.context,
+      queryEmbedding,
+      embeddingModel: this.config.embeddingModel,
       perLayerLimit: 5,
     });
     const result = await runContextAssemblyDag(

@@ -143,4 +143,41 @@ describe('ContextPrioritySelector', () => {
 
     expect(selection.rules.map((node) => node.id)).toEqual([matched.id]);
   });
+
+  it('fuses shadow vector matches into context priority selection', async () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Lexical fallback rule',
+      content: 'Generic hydration test guidance.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 90,
+    });
+    const semantic = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Semantic SSR rule',
+      content: 'Markup must be deterministic between server and client render.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 60,
+    });
+    graphStore.upsertNodeEmbedding({
+      nodeId: semantic.id,
+      model: 'test-model',
+      dimensions: 2,
+      embedding: [1, 0],
+      text: semantic.content,
+    });
+
+    const selection = selector.select({
+      project: 'mindstrate',
+      perLayerLimit: 1,
+      queryEmbedding: [1, 0],
+      embeddingModel: 'test-model',
+    });
+
+    expect(selection.rules.map((node) => node.id)).toEqual([semantic.id]);
+  });
 });

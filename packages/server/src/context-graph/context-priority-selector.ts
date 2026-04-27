@@ -1,6 +1,7 @@
 import type { ContextGraphStore } from './context-graph-store.js';
 import { ContextNodeStatus, SubstrateType, type ContextNode } from '@mindstrate/protocol/models';
 import type { RetrievalContext } from '@mindstrate/protocol';
+import { cosineSimilarity } from '../math.js';
 
 export interface ContextPrioritySelection {
   rules: ContextNode[];
@@ -11,6 +12,8 @@ export interface ContextPrioritySelection {
 export interface ContextPrioritySelectorOptions {
   project?: string;
   context?: RetrievalContext;
+  queryEmbedding?: number[];
+  embeddingModel?: string;
   perLayerLimit?: number;
 }
 
@@ -39,7 +42,7 @@ export class ContextPrioritySelector {
       limit: Math.max(limit * 10, 50),
     })
       .filter((node) => SELECTABLE_STATUSES.has(node.status))
-      .sort((a, b) => scoreNode(b, signals) - scoreNode(a, signals))
+      .sort((a, b) => scoreNode(b, signals, options, this.graphStore) - scoreNode(a, signals, options, this.graphStore))
       .slice(0, limit);
   }
 }
@@ -65,7 +68,12 @@ function buildContextSignals(context?: RetrievalContext): string[] {
     .filter((value, index, array) => value.length > 1 && array.indexOf(value) === index);
 }
 
-function scoreNode(node: ContextNode, signals: string[]): number {
+function scoreNode(
+  node: ContextNode,
+  signals: string[],
+  options: ContextPrioritySelectorOptions,
+  graphStore: ContextGraphStore,
+): number {
   const haystack = [
     node.title,
     node.content,
@@ -76,7 +84,18 @@ function scoreNode(node: ContextNode, signals: string[]): number {
   ].join('\n').toLowerCase();
 
   const contextScore = signals.reduce((score, signal) => haystack.includes(signal) ? score + 1 : score, 0);
-  return contextScore * 100 + node.qualityScore + node.confidence * 10 + node.positiveFeedback - node.negativeFeedback;
+  const vectorScore = computeVectorScore(node, options, graphStore);
+  return vectorScore * 200 + contextScore * 100 + node.qualityScore + node.confidence * 10 + node.positiveFeedback - node.negativeFeedback;
+}
+
+function computeVectorScore(
+  node: ContextNode,
+  options: ContextPrioritySelectorOptions,
+  graphStore: ContextGraphStore,
+): number {
+  if (!options.queryEmbedding || !options.embeddingModel) return 0;
+  const record = graphStore.getNodeEmbedding(node.id, options.embeddingModel);
+  return record ? cosineSimilarity(options.queryEmbedding, record.embedding) : 0;
 }
 
 function tokenize(value: string): string[] {
