@@ -105,7 +105,7 @@ describe('RepoScannerService', () => {
         if (shouldFail) throw new Error('extract failed');
         return {
           extracted: true,
-          knowledge: {
+          input: {
             type: 'bug_fix',
             title: 'Recovered knowledge',
             solution: 'Recovered after retry',

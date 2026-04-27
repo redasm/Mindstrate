@@ -28,7 +28,7 @@ export interface CommitInfo {
 
 export interface ExtractionResult {
   extracted: boolean;
-  knowledge?: CreateKnowledgeInput;
+  input?: CreateKnowledgeInput;
   reason: string;
 }
 
@@ -139,7 +139,7 @@ export class KnowledgeExtractor {
 
       return {
         extracted: true,
-        knowledge: {
+        input: {
           type: parsed.type as KnowledgeType,
           title: parsed.title,
           problem: parsed.problem || undefined,
@@ -201,7 +201,7 @@ export class KnowledgeExtractor {
 
     return {
       extracted: true,
-      knowledge: {
+      input: {
         type,
         title,
         solution,

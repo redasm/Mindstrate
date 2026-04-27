@@ -34,9 +34,9 @@ describe('KnowledgeExtractor', () => {
     it('should extract from a fix commit', async () => {
       const result = await extractor.extractFromCommit(makeCommit());
       expect(result.extracted).toBe(true);
-      expect(result.knowledge).toBeDefined();
-      expect(result.knowledge!.type).toBe(KnowledgeType.BUG_FIX);
-      expect(result.knowledge!.source).toBe(CaptureSource.GIT_HOOK);
+      expect(result.input).toBeDefined();
+      expect(result.input!.type).toBe(KnowledgeType.BUG_FIX);
+      expect(result.input!.source).toBe(CaptureSource.GIT_HOOK);
     });
 
     it('should extract from a feat commit', async () => {
@@ -44,7 +44,7 @@ describe('KnowledgeExtractor', () => {
         makeCommit({ message: 'feat: add user authentication flow' })
       );
       expect(result.extracted).toBe(true);
-      expect(result.knowledge!.type).toBe(KnowledgeType.PATTERN);
+      expect(result.input!.type).toBe(KnowledgeType.PATTERN);
     });
 
     it('should extract from a refactor commit', async () => {
@@ -52,7 +52,7 @@ describe('KnowledgeExtractor', () => {
         makeCommit({ message: 'refactor: simplify database queries' })
       );
       expect(result.extracted).toBe(true);
-      expect(result.knowledge!.type).toBe(KnowledgeType.BEST_PRACTICE);
+      expect(result.input!.type).toBe(KnowledgeType.BEST_PRACTICE);
     });
 
     it('should skip merge commits', async () => {
@@ -80,14 +80,14 @@ describe('KnowledgeExtractor', () => {
       const result = await extractor.extractFromCommit(
         makeCommit({ files: ['src/app.ts', 'src/utils.ts'] })
       );
-      expect(result.knowledge?.context?.language).toBe('typescript');
+      expect(result.input?.context?.language).toBe('typescript');
     });
 
     it('should detect python from file extensions', async () => {
       const result = await extractor.extractFromCommit(
         makeCommit({ files: ['main.py', 'utils.py', 'test.py'] })
       );
-      expect(result.knowledge?.context?.language).toBe('python');
+      expect(result.input?.context?.language).toBe('python');
     });
 
     it('should detect react framework', async () => {
@@ -97,20 +97,20 @@ describe('KnowledgeExtractor', () => {
           diff: `+import React from 'react';\n+const App = () => <div>Hello</div>;\n+export default App;\n+// test`,
         })
       );
-      expect(result.knowledge?.context?.framework).toBe('react');
+      expect(result.input?.context?.framework).toBe('react');
     });
 
     it('should extract tags from conventional commit prefix', async () => {
       const result = await extractor.extractFromCommit(
         makeCommit({ message: 'fix(auth): handle expired tokens' })
       );
-      expect(result.knowledge!.tags).toContain('fix');
-      expect(result.knowledge!.tags).toContain('auth');
+      expect(result.input!.tags).toContain('fix');
+      expect(result.input!.tags).toContain('auth');
     });
 
     it('should set low confidence for rule-based extraction', async () => {
       const result = await extractor.extractFromCommit(makeCommit());
-      expect(result.knowledge!.confidence).toBe(0.4);
+      expect(result.input!.confidence).toBe(0.4);
     });
   });
 });

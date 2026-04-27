@@ -204,18 +204,18 @@ export class RepoScannerService {
     }
 
     const extraction = await this.extractor.extractFromCommit(commit);
-    if (!extraction.extracted || !extraction.knowledge) {
+    if (!extraction.extracted || !extraction.input) {
       return {
         status: 'skipped',
         reason: extraction.reason,
       };
     }
 
-    const knowledge = {
-      ...extraction.knowledge,
-      source: options.captureSource ?? extraction.knowledge.source ?? CaptureSource.CLI,
+    const input = {
+      ...extraction.input,
+      source: options.captureSource ?? extraction.input.source ?? CaptureSource.CLI,
       context: {
-        ...(extraction.knowledge.context ?? {}),
+        ...(extraction.input.context ?? {}),
         project,
         filePaths: commit.files,
       },
@@ -225,11 +225,11 @@ export class RepoScannerService {
       return {
         status: 'imported',
         reason: 'Preview only',
-        preview: knowledge,
+        preview: input,
       };
     }
 
-    const result = await this.sink.addKnowledge(knowledge);
+    const result = await this.sink.addKnowledge(input);
     return {
       status: result.success ? 'imported' : 'skipped',
       reason: result.message ?? 'Commit processed',
