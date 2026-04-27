@@ -33987,7 +33987,7 @@ async function handleMemoryEvolve(api2, input) {
     for (const s of evolveResult.suggestions.slice(0, 10)) {
       response += `- [${s.type}] ${s.description} (confidence: ${(s.confidence * 100).toFixed(0)}%)
 `;
-      response += `  Knowledge ID: ${s.knowledgeId}
+      response += `  Node ID: ${s.nodeId}
 `;
     }
     if (evolveResult.suggestions.length > 10) {

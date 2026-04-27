@@ -587,11 +587,11 @@ export class Mindstrate {
   }
 
   // ============================================================
-  // 知识进化
+  // 图代谢演化
   // ============================================================
 
   /**
-   * 运行知识进化循环
+   * 运行图代谢演化循环
    */
   async runEvolution(options?: {
     autoApply?: boolean;
@@ -614,10 +614,10 @@ export class Mindstrate {
   }
 
   /**
-   * 应用进化建议
+   * 应用图演化建议
    */
   applyEvolutionSuggestion(suggestion: EvolutionSuggestion): boolean {
-    return this.contextGraphStore.getNodeById(suggestion.knowledgeId) !== null;
+    return this.contextGraphStore.getNodeById(suggestion.nodeId) !== null;
   }
 
   // ============================================================

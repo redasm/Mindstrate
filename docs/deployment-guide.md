@@ -563,7 +563,7 @@ DELETE /api/knowledge/:id                  删除
 POST   /api/search                         语义搜索 (body: {query, topK, ...})
 POST   /api/sync                           批量同步 (body: {entries: [...]})
 POST   /api/feedback                       记录自动反馈 (body: {retrievalId, signal, context?})
-GET    /api/feedback/:knowledgeId          获取知识反馈统计
+GET    /api/feedback/:nodeId               获取图节点反馈统计
 POST   /api/curate                         上下文策划 (body: {task, language?, framework?})
 POST   /api/evolve                         运行知识进化 (body: {autoApply?, maxItems?})
 ```

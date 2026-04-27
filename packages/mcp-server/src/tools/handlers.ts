@@ -701,7 +701,7 @@ export async function handleMemoryEvolve(
     response += `\n### Suggestions:\n`;
     for (const s of evolveResult.suggestions.slice(0, 10)) {
       response += `- [${s.type}] ${s.description} (confidence: ${(s.confidence * 100).toFixed(0)}%)\n`;
-      response += `  Knowledge ID: ${s.knowledgeId}\n`;
+      response += `  Node ID: ${s.nodeId}\n`;
     }
     if (evolveResult.suggestions.length > 10) {
       response += `... and ${evolveResult.suggestions.length - 10} more suggestions\n`;

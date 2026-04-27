@@ -41,7 +41,7 @@ export function registerEvolveCommand(program: Command): void {
           console.log('\n--- Suggestions ---\n');
           for (const s of result.suggestions) {
             console.log(`[${s.type}] ${s.description}`);
-            console.log(`   Knowledge: ${s.knowledgeId.substring(0, 8)}...`);
+            console.log(`   Node: ${s.nodeId.substring(0, 8)}...`);
             console.log(`   Confidence: ${(s.confidence * 100).toFixed(0)}%`);
             console.log();
           }

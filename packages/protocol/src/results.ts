@@ -6,18 +6,17 @@
  * implementation-agnostic — no SQLite, no embedder, no LLM types here.
  */
 
-import type { UpdateKnowledgeInput } from './models/knowledge.js';
 import type { GraphKnowledgeView } from './models/projection.js';
 
 /**
- * Outcome of writing a single knowledge unit through the server pipeline
+ * Outcome of writing a single graph knowledge view through the server pipeline
  * (quality gate -> dedup -> embed -> persist).
  */
 export interface PipelineResult {
   success: boolean;
   view?: GraphKnowledgeView;
   message: string;
-  /** When success=false because of dedup, the existing knowledge id. */
+  /** When success=false because of dedup, the existing graph node id. */
   duplicateOf?: string;
   /** Non-blocking warnings produced by the quality gate. */
   qualityWarnings?: string[];
@@ -32,16 +31,21 @@ export interface QualityGateResult {
   completenessScore: number;
 }
 
-/** A single recommendation produced by the knowledge-evolution engine. */
+/** A single recommendation produced by the graph metabolism facade. */
 export interface EvolutionSuggestion {
-  knowledgeId: string;
+  nodeId: string;
   type: 'merge' | 'improve' | 'validate' | 'deprecate' | 'split';
   description: string;
   /** Confidence 0-1 */
   confidence: number;
-  /** When applicable, the proposed edit. */
-  suggestedUpdate?: UpdateKnowledgeInput;
-  /** Related knowledge ids (e.g. merge sources). */
+  /** When applicable, the proposed graph node edit. */
+  suggestedUpdate?: {
+    title?: string;
+    content?: string;
+    tags?: string[];
+    confidence?: number;
+  };
+  /** Related graph node ids (e.g. merge sources). */
   relatedIds?: string[];
 }
 
@@ -59,7 +63,7 @@ export interface EvolutionSuggestionSummary {
 export interface EvolutionRunResult {
   /** Execution mode for the run. */
   mode: EvolutionRunMode;
-  /** How many knowledge entries were scanned. */
+  /** How many graph nodes were scanned. */
   scanned: number;
   /** Suggestions generated. */
   suggestions: EvolutionSuggestion[];

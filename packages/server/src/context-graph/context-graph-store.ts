@@ -1,9 +1,7 @@
 /**
  * Mindstrate - ECS Context Graph Store
  *
- * Minimal graph storage skeleton for the first ECS migration stage.
- * The existing KnowledgeUnit store remains in place; this store provides a
- * stable landing zone for graph-native nodes, edges and events.
+ * Graph-native storage for ECS nodes, edges, events and projections.
  */
 
 import Database from 'better-sqlite3';
