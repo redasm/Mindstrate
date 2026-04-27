@@ -225,12 +225,12 @@ describe('Mindstrate', () => {
       expect(formatted).toContain('Keep restored context graph-aware');
     });
 
-    it('should auto-end old active session when starting new one', async () => {
+    it('should auto-end previous active session when starting new one', async () => {
       const s1 = await memory.startSession({ project: 'proj' });
       const s2 = await memory.startSession({ project: 'proj' });
 
-      const old = memory.getSession(s1.id);
-      expect(old!.status).toBe('abandoned');
+      const previous = memory.getSession(s1.id);
+      expect(previous!.status).toBe('abandoned');
       expect(s2.status).toBe('active');
     });
 

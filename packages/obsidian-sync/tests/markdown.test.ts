@@ -99,7 +99,7 @@ describe('markdown serializer', () => {
 
   it('falls back to type-based sync mode for markdown without syncMode', () => {
     const md = serializeGraphKnowledge(
-      makeView({ domainType: ContextDomainType.GOTCHA, title: 'Legacy gotcha' }),
+      makeView({ domainType: ContextDomainType.GOTCHA, title: 'Known gotcha' }),
     ).replace(/^syncMode:.*\r?\n/m, '');
     const parsed = parseMarkdown(md)!;
 

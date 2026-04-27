@@ -24,6 +24,14 @@ import {
   ContextRelationType,
   SubstrateType,
 } from '@mindstrate/protocol/models';
+import {
+  ConflictRecordRepository,
+  ProjectionRecordRepository,
+  type CreateConflictRecordInput,
+  type ListConflictRecordsOptions,
+  type ListProjectionRecordsOptions,
+  type UpsertProjectionRecordInput,
+} from './context-record-repositories.js';
 
 type DbHandle = Database.Database | string;
 
@@ -101,6 +109,8 @@ export interface UpsertNodeEmbeddingInput {
 export class ContextGraphStore {
   private readonly db: Database.Database;
   private readonly ownsDb: boolean;
+  private readonly conflictRecords: ConflictRecordRepository;
+  private readonly projectionRecords: ProjectionRecordRepository;
 
   constructor(dbOrPath: DbHandle) {
     if (typeof dbOrPath === 'string') {
@@ -118,6 +128,8 @@ export class ContextGraphStore {
     }
 
     this.initialize();
+    this.conflictRecords = new ConflictRecordRepository(this.db);
+    this.projectionRecords = new ProjectionRecordRepository(this.db);
   }
 
   private initialize(): void {
@@ -564,115 +576,32 @@ export class ContextGraphStore {
     return row ? this.rowToNodeEmbedding(row) : null;
   }
 
-  createConflictRecord(input: {
-    id?: string;
-    project?: string;
-    nodeIds: string[];
-    reason: string;
-    detectedAt?: string;
-  }): ConflictRecord {
-    const id = input.id ?? uuidv4();
-    const detectedAt = input.detectedAt ?? new Date().toISOString();
-
-    this.db.prepare(`
-      INSERT INTO conflict_records (
-        id, project, node_ids, reason, detected_at, resolved_at, resolution
-      ) VALUES (?, ?, ?, ?, ?, NULL, NULL)
-    `).run(
-      id,
-      input.project ?? null,
-      JSON.stringify(input.nodeIds),
-      input.reason,
-      detectedAt,
-    );
-
-    return this.getConflictRecordById(id)!;
+  createConflictRecord(input: CreateConflictRecordInput): ConflictRecord {
+    return this.conflictRecords.create(input);
   }
 
   getConflictRecordById(id: string): ConflictRecord | null {
-    const row = this.db.prepare('SELECT * FROM conflict_records WHERE id = ?').get(id) as ConflictRow | undefined;
-    return row ? this.rowToConflict(row) : null;
+    return this.conflictRecords.getById(id);
   }
 
   resolveConflictRecord(id: string, resolution: string, resolvedAt: string = new Date().toISOString()): ConflictRecord | null {
-    const existing = this.getConflictRecordById(id);
-    if (!existing) return null;
-
-    this.db.prepare(`
-      UPDATE conflict_records
-      SET resolved_at = ?, resolution = ?
-      WHERE id = ?
-    `).run(resolvedAt, resolution, id);
-
-    return this.getConflictRecordById(id);
+    return this.conflictRecords.resolve(id, resolution, resolvedAt);
   }
 
-  listConflictRecords(options: { project?: string; limit?: number } = {}): ConflictRecord[] {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-
-    if (options.project) {
-      conditions.push('project = ?');
-      params.push(options.project);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM conflict_records ${where} ORDER BY detected_at DESC LIMIT ?`;
-    params.push(options.limit ?? 200);
-
-    const rows = this.db.prepare(sql).all(...params) as ConflictRow[];
-    return rows.map((row) => this.rowToConflict(row));
+  listConflictRecords(options: ListConflictRecordsOptions = {}): ConflictRecord[] {
+    return this.conflictRecords.list(options);
   }
 
-  upsertProjectionRecord(input: {
-    id?: string;
-    nodeId: string;
-    target: string;
-    targetRef: string;
-    version: number;
-    projectedAt?: string;
-  }): ProjectionRecord {
-    const id = input.id ?? uuidv4();
-    const projectedAt = input.projectedAt ?? new Date().toISOString();
-
-    this.db.prepare(`
-      INSERT INTO projection_records (id, node_id, target, target_ref, version, projected_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        node_id = excluded.node_id,
-        target = excluded.target,
-        target_ref = excluded.target_ref,
-        version = excluded.version,
-        projected_at = excluded.projected_at
-    `).run(id, input.nodeId, input.target, input.targetRef, input.version, projectedAt);
-
-    return this.getProjectionRecordById(id)!;
+  upsertProjectionRecord(input: UpsertProjectionRecordInput): ProjectionRecord {
+    return this.projectionRecords.upsert(input);
   }
 
   getProjectionRecordById(id: string): ProjectionRecord | null {
-    const row = this.db.prepare('SELECT * FROM projection_records WHERE id = ?').get(id) as ProjectionRow | undefined;
-    return row ? this.rowToProjection(row) : null;
+    return this.projectionRecords.getById(id);
   }
 
-  listProjectionRecords(options: { nodeId?: string; target?: string; limit?: number } = {}): ProjectionRecord[] {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-
-    if (options.nodeId) {
-      conditions.push('node_id = ?');
-      params.push(options.nodeId);
-    }
-    if (options.target) {
-      conditions.push('target = ?');
-      params.push(options.target);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM projection_records ${where} ORDER BY projected_at DESC LIMIT ?`;
-    params.push(options.limit ?? 200);
-
-    const rows = this.db.prepare(sql).all(...params) as ProjectionRow[];
-    return rows.map((row) => this.rowToProjection(row));
+  listProjectionRecords(options: ListProjectionRecordsOptions = {}): ProjectionRecord[] {
+    return this.projectionRecords.list(options);
   }
 
   createMetabolismRun(input: {
@@ -831,29 +760,6 @@ export class ContextGraphStore {
     };
   }
 
-  private rowToConflict(row: ConflictRow): ConflictRecord {
-    return {
-      id: row.id,
-      project: row.project ?? undefined,
-      nodeIds: JSON.parse(row.node_ids),
-      reason: row.reason,
-      detectedAt: row.detected_at,
-      resolvedAt: row.resolved_at ?? undefined,
-      resolution: row.resolution ?? undefined,
-    };
-  }
-
-  private rowToProjection(row: ProjectionRow): ProjectionRecord {
-    return {
-      id: row.id,
-      nodeId: row.node_id,
-      target: row.target as ProjectionRecord['target'],
-      targetRef: row.target_ref,
-      version: row.version,
-      projectedAt: row.projected_at,
-    };
-  }
-
   private rowToMetabolismRun(row: MetabolismRow): MetabolismRun {
     return {
       id: row.id,
@@ -955,25 +861,6 @@ interface NodeEmbeddingRow {
   text: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface ConflictRow {
-  id: string;
-  project: string | null;
-  node_ids: string;
-  reason: string;
-  detected_at: string;
-  resolved_at: string | null;
-  resolution: string | null;
-}
-
-interface ProjectionRow {
-  id: string;
-  node_id: string;
-  target: string;
-  target_ref: string;
-  version: number;
-  projected_at: string;
 }
 
 interface MetabolismRow {

@@ -514,31 +514,7 @@ export async function handleMemoryCurate(
     currentFramework: framework,
   });
 
-  let text = curated.summary;
-  if ((curated.graphRules?.length ?? 0) > 0) {
-    text += '\n\n### ECS Graph Rules\n';
-    for (const rule of curated.graphRules ?? []) {
-      text += `- ${rule}\n`;
-    }
-  }
-  if ((curated.graphPatterns?.length ?? 0) > 0) {
-    text += '\n### ECS Graph Patterns\n';
-    for (const pattern of curated.graphPatterns ?? []) {
-      text += `- ${pattern}\n`;
-    }
-  }
-  if ((curated.graphSummaries?.length ?? 0) > 0) {
-    text += '\n### ECS Graph Summaries\n';
-    for (const summary of curated.graphSummaries ?? []) {
-      text += `- ${summary}\n`;
-    }
-  }
-  if ((curated.graphConflicts?.length ?? 0) > 0) {
-    text += '\n### ECS Graph Conflicts\n';
-    for (const conflict of curated.graphConflicts ?? []) {
-      text += `- ${conflict}\n`;
-    }
-  }
+  const text = appendGraphContextSections(curated.summary, curated);
 
   return { content: [{ type: 'text', text }] };
 }
@@ -562,30 +538,7 @@ export async function handleContextAssemble(
   if (assembled.projectSnapshot) {
     text += `\n\n### Project Snapshot ID\n- ${assembled.projectSnapshot.id}\n`;
   }
-  if ((assembled.graphRules?.length ?? 0) > 0) {
-    text += '\n### ECS Graph Rules\n';
-    for (const rule of assembled.graphRules ?? []) {
-      text += `- ${rule}\n`;
-    }
-  }
-  if ((assembled.graphPatterns?.length ?? 0) > 0) {
-    text += '\n### ECS Graph Patterns\n';
-    for (const pattern of assembled.graphPatterns ?? []) {
-      text += `- ${pattern}\n`;
-    }
-  }
-  if ((assembled.graphSummaries?.length ?? 0) > 0) {
-    text += '\n### ECS Graph Summaries\n';
-    for (const summary of assembled.graphSummaries ?? []) {
-      text += `- ${summary}\n`;
-    }
-  }
-  if ((assembled.graphConflicts?.length ?? 0) > 0) {
-    text += '\n### ECS Graph Conflicts\n';
-    for (const conflict of assembled.graphConflicts ?? []) {
-      text += `- ${conflict}\n`;
-    }
-  }
+  text = appendGraphContextSections(text, assembled);
 
   return { content: [{ type: 'text', text }] };
 }
@@ -655,4 +608,25 @@ export async function handleMemoryEvolve(
   }
 
   return { content: [{ type: 'text', text: response }] };
+}
+
+function appendGraphContextSections(
+  initialText: string,
+  context: {
+    graphRules?: string[];
+    graphPatterns?: string[];
+    graphSummaries?: string[];
+    graphConflicts?: string[];
+  },
+): string {
+  let text = initialText;
+  text = appendMarkdownList(text, 'ECS Graph Rules', context.graphRules);
+  text = appendMarkdownList(text, 'ECS Graph Patterns', context.graphPatterns);
+  text = appendMarkdownList(text, 'ECS Graph Summaries', context.graphSummaries);
+  return appendMarkdownList(text, 'ECS Graph Conflicts', context.graphConflicts);
+}
+
+function appendMarkdownList(text: string, title: string, items?: string[]): string {
+  if (!items?.length) return text;
+  return `${text}\n\n### ${title}\n${items.map((item) => `- ${item}`).join('\n')}\n`;
 }
