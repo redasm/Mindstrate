@@ -162,8 +162,10 @@ describe('metabolism stage modules', () => {
     expect(assimilate.created).toBe(1);
     expect(snapshot.metadata?.['entities']).toEqual(expect.objectContaining({
       files: ['src/app/page.tsx'],
+      modules: ['app/page'],
       dependencies: expect.arrayContaining(['react', 'next']),
       errorCodes: ['TS2322'],
+      errorTypes: expect.arrayContaining(['type_error', 'hydration_error']),
     }));
     expect(edge.evidence?.['entities']).toEqual(snapshot.metadata?.['entities']);
   });

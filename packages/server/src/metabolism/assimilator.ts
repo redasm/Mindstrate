@@ -188,13 +188,16 @@ function looksContradictory(a: string, b: string): boolean {
 function extractAssimilationEntities(
   episodes: ContextNode[],
   content: string,
-): { files: string[]; dependencies: string[]; errorCodes: string[] } {
+): { files: string[]; modules: string[]; dependencies: string[]; errorCodes: string[]; errorTypes: string[] } {
   const metadataText = episodes.map((episode) => JSON.stringify(episode.metadata ?? {})).join('\n');
   const combined = `${content}\n${metadataText}`;
+  const files = unique(combined.match(/\b[\w.-]+(?:\/[\w.@-]+)+\.[a-zA-Z0-9]+\b/g) ?? []);
   return {
-    files: unique(combined.match(/\b[\w.-]+(?:\/[\w.@-]+)+\.[a-zA-Z0-9]+\b/g) ?? []),
+    files,
+    modules: unique(files.map(filePathToModuleName)),
     dependencies: unique(extractDependencies(combined)),
     errorCodes: unique(combined.match(/\b(?:TS|ERR|E)[0-9]{3,6}\b/g) ?? []),
+    errorTypes: extractErrorTypes(combined),
   };
 }
 
@@ -206,4 +209,31 @@ function extractDependencies(value: string): string[] {
 
 function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function filePathToModuleName(filePath: string): string {
+  return filePath
+    .replace(/^src[\\/]/, '')
+    .replace(/\.[^.]+$/, '');
+}
+
+function extractErrorTypes(value: string): string[] {
+  const normalized = value.toLowerCase();
+  const types: string[] = [];
+  if (/\bts[0-9]{3,6}\b/.test(normalized) || normalized.includes('type error')) {
+    types.push('type_error');
+  }
+  if (normalized.includes('hydration')) {
+    types.push('hydration_error');
+  }
+  if (normalized.includes('timeout')) {
+    types.push('timeout_error');
+  }
+  if (normalized.includes('connection') || normalized.includes('network')) {
+    types.push('network_error');
+  }
+  if (normalized.includes('assertion') || normalized.includes('test failed')) {
+    types.push('test_failure');
+  }
+  return unique(types);
 }
