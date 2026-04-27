@@ -129,6 +129,45 @@ describe('metabolism stage modules', () => {
     })).toHaveLength(1);
   });
 
+  it('extracts files, dependencies, and error codes during assimilation', () => {
+    const episode = graphStore.createNode({
+      substrateType: SubstrateType.EPISODE,
+      domainType: ContextDomainType.TROUBLESHOOTING,
+      title: 'Hydration failure episode',
+      content: 'TS2322 hydration mismatch in src/app/page.tsx after upgrading react and next.',
+      project: 'mindstrate',
+      sourceRef: 'session-entities',
+      metadata: {
+        normalizedEvent: {
+          file: 'src/app/page.tsx',
+          command: 'npm test',
+        },
+      },
+    });
+
+    const assimilate = new Assimilator(graphStore).run({ project: 'mindstrate' });
+    const snapshot = graphStore.listNodes({
+      project: 'mindstrate',
+      substrateType: SubstrateType.SNAPSHOT,
+      sourceRef: 'session-entities',
+      limit: 1,
+    })[0];
+    const edge = graphStore.listEdges({
+      sourceId: episode.id,
+      targetId: snapshot.id,
+      relationType: ContextRelationType.DERIVED_FROM,
+      limit: 1,
+    })[0];
+
+    expect(assimilate.created).toBe(1);
+    expect(snapshot.metadata?.['entities']).toEqual(expect.objectContaining({
+      files: ['src/app/page.tsx'],
+      dependencies: expect.arrayContaining(['react', 'next']),
+      errorCodes: ['TS2322'],
+    }));
+    expect(edge.evidence?.['entities']).toEqual(snapshot.metadata?.['entities']);
+  });
+
   it('marks contradictory assimilated snapshots as conflicted', () => {
     const existing = graphStore.createNode({
       substrateType: SubstrateType.SNAPSHOT,

@@ -58,6 +58,7 @@ export class Assimilator {
       }
 
       const content = sourceEpisodes.map((episode) => episode.content).join('\n\n');
+      const entities = extractAssimilationEntities(sourceEpisodes, content);
       const overlap = findBestOverlap(content, snapshots);
       if (overlap && overlap.score >= 0.65 && !looksContradictory(content, overlap.node.content)) {
         for (const episode of sourceEpisodes) {
@@ -66,7 +67,7 @@ export class Assimilator {
             targetId: overlap.node.id,
             relationType: ContextRelationType.SUPPORTS,
             strength: overlap.score,
-            evidence: { sourceRef, lexicalOverlap: overlap.score },
+            evidence: { sourceRef, lexicalOverlap: overlap.score, entities },
           });
         }
         updated++;
@@ -88,6 +89,7 @@ export class Assimilator {
         sourceRef,
         metadata: {
           episodeIds: sourceEpisodes.map((episode) => episode.id),
+          entities,
         },
       });
 
@@ -97,7 +99,7 @@ export class Assimilator {
           targetId: snapshot.id,
           relationType: ContextRelationType.DERIVED_FROM,
           strength: 1,
-          evidence: { sourceRef },
+          evidence: { sourceRef, entities },
         });
       }
 
@@ -108,14 +110,14 @@ export class Assimilator {
           targetId: contradiction.node.id,
           relationType: ContextRelationType.CONTRADICTS,
           strength: contradiction.score,
-          evidence: { sourceRef, lexicalOverlap: contradiction.score },
+          evidence: { sourceRef, lexicalOverlap: contradiction.score, entities },
         });
         this.graphStore.createEdge({
           sourceId: contradiction.node.id,
           targetId: snapshot.id,
           relationType: ContextRelationType.CONTRADICTS,
           strength: contradiction.score,
-          evidence: { sourceRef, lexicalOverlap: contradiction.score },
+          evidence: { sourceRef, lexicalOverlap: contradiction.score, entities },
         });
         this.graphStore.updateNode(snapshot.id, { status: ContextNodeStatus.CONFLICTED });
         this.graphStore.updateNode(contradiction.node.id, { status: ContextNodeStatus.CONFLICTED });
@@ -181,4 +183,27 @@ function looksContradictory(a: string, b: string): boolean {
   const aAffirms = AFFIRMATION_MARKERS.some((marker) => aContent.includes(marker));
   const bAffirms = AFFIRMATION_MARKERS.some((marker) => bContent.includes(marker));
   return (aNegates && bAffirms && !bNegates) || (bNegates && aAffirms && !aNegates);
+}
+
+function extractAssimilationEntities(
+  episodes: ContextNode[],
+  content: string,
+): { files: string[]; dependencies: string[]; errorCodes: string[] } {
+  const metadataText = episodes.map((episode) => JSON.stringify(episode.metadata ?? {})).join('\n');
+  const combined = `${content}\n${metadataText}`;
+  return {
+    files: unique(combined.match(/\b[\w.-]+(?:\/[\w.@-]+)+\.[a-zA-Z0-9]+\b/g) ?? []),
+    dependencies: unique(extractDependencies(combined)),
+    errorCodes: unique(combined.match(/\b(?:TS|ERR|E)[0-9]{3,6}\b/g) ?? []),
+  };
+}
+
+function extractDependencies(value: string): string[] {
+  const common = ['react', 'next', 'typescript', 'vite', 'vitest', 'jest', 'express', 'fastify', 'sqlite', 'better-sqlite3'];
+  const normalized = value.toLowerCase();
+  return common.filter((dependency) => normalized.includes(dependency));
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
