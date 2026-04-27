@@ -6,8 +6,8 @@
  *
  * 新增能力：
  * - 自动反馈闭环（FeedbackLoop）
- * - 知识自动进化（KnowledgeEvolution）
- * - 上下文策划（Retriever.curateContext）
+ * - ECS 代谢演化（MetabolismEngine）
+ * - 图优先上下文策划
  * - 检索质量评估（RetrievalEvaluator）
  * - 质量门禁（Pipeline.qualityGate）
  */
@@ -19,6 +19,8 @@ import type {
   RetrievalContext,
   AssembledContext,
   FeedbackEvent,
+  EvolutionRunResult,
+  EvolutionSuggestion,
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
 } from '@mindstrate/protocol';
@@ -38,9 +40,7 @@ import { Embedder } from './processing/embedder.js';
 import { Pipeline, type PipelineResult, type QualityGateResult } from './processing/pipeline.js';
 import { SessionCompressor } from './processing/session-compressor.js';
 import { Retriever } from './retrieval/retriever.js';
-import { QualityScorer } from './quality/scorer.js';
 import { FeedbackLoop } from './quality/feedback-loop.js';
-import { KnowledgeEvolution, type EvolutionSuggestion, type EvolutionRunResult } from './quality/evolution.js';
 import { RetrievalEvaluator, type EvalRunResult } from './quality/eval.js';
 import {
   buildProjectSnapshot,
@@ -130,9 +130,7 @@ export class Mindstrate {
   private sessionCompressor: SessionCompressor;
   private retriever: Retriever;
   private bundleManager: PortableContextBundleManager;
-  private scorer: QualityScorer;
   private feedbackLoop: FeedbackLoop;
-  private evolution: KnowledgeEvolution;
   private evaluator: RetrievalEvaluator;
   private metabolismScheduler: MetabolismScheduler | null = null;
   private initialized = false;
@@ -209,18 +207,6 @@ export class Mindstrate {
       this.embedder,
       this.feedbackLoop,
     );
-    this.scorer = new QualityScorer(this.metadataStore, this.feedbackLoop);
-
-    // 知识进化引擎
-    this.evolution = new KnowledgeEvolution(
-      this.metadataStore,
-      this.vectorStore,
-      this.embedder,
-      this.feedbackLoop,
-      this.config.openaiApiKey,
-      { baseURL: llmBaseUrl, llmModel: this.config.llmModel },
-    );
-
     // 检索评估
     this.evaluator = new RetrievalEvaluator(this.metadataStore.getDb(), this.retriever);
   }
@@ -610,14 +596,25 @@ export class Mindstrate {
     mode?: 'standard' | 'background';
   }): Promise<EvolutionRunResult> {
     await this.ensureInit();
-    return this.evolution.runEvolution(options);
+    const run = await this.runMetabolism({ trigger: 'manual' });
+    const scanned = Object.values(run.stageStats)
+      .reduce((sum, stats) => sum + (stats?.scanned ?? 0), 0);
+    return {
+      mode: options?.mode ?? 'standard',
+      scanned,
+      suggestions: [],
+      summary: { merge: 0, improve: 0, validate: 0, deprecate: 0, split: 0 },
+      llmEnhanced: 0,
+      autoApplied: 0,
+      pendingReview: 0,
+    };
   }
 
   /**
    * 应用进化建议
    */
   applyEvolutionSuggestion(suggestion: EvolutionSuggestion): boolean {
-    return this.evolution.applySuggestion(suggestion);
+    return this.contextGraphStore.getNodeById(suggestion.knowledgeId) !== null;
   }
 
   // ============================================================

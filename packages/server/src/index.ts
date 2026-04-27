@@ -144,13 +144,8 @@ export { Embedder } from './processing/embedder.js';
 export { Pipeline, type PipelineResult, type QualityGateResult } from './processing/pipeline.js';
 export { SessionCompressor } from './processing/session-compressor.js';
 
-// Retrieval
-export { Retriever } from './retrieval/retriever.js';
-
-// Quality
-export { QualityScorer } from './quality/scorer.js';
+// Quality feedback
 export { FeedbackLoop } from './quality/feedback-loop.js';
-export { KnowledgeEvolution, type EvolutionSuggestion, type EvolutionRunResult } from './quality/evolution.js';
 export { RetrievalEvaluator, type EvalCase, type EvalRunResult, type EvalCaseResult } from './quality/eval.js';
 
 // Capture
