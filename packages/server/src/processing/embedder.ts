@@ -19,17 +19,42 @@ const LOCAL_EMBEDDING_DIM = 256;
 /** Embedding 维度（OpenAI text-embedding-3-small） */
 const OPENAI_EMBEDDING_DIM = 1536;
 
+export interface EmbedderMetrics {
+  apiCalls: number;
+  cacheHits: number;
+  cacheMisses: number;
+}
+
+export interface EmbedderOptions {
+  client?: OpenAIClient;
+  maxConcurrentRequests?: number;
+}
+
 export class Embedder {
   private apiKey: string;
   private baseURL?: string;
   private model: string;
   private useLocal: boolean;
+  private client?: OpenAIClient;
+  private cache = new Map<string, number[]>();
+  private pending = new Map<string, Promise<number[]>>();
+  private metrics: EmbedderMetrics = { apiCalls: 0, cacheHits: 0, cacheMisses: 0 };
+  private activeRequests = 0;
+  private waiters: Array<() => void> = [];
+  private maxConcurrentRequests: number;
 
-  constructor(apiKey: string, model: string = 'text-embedding-3-small', baseURL?: string) {
+  constructor(
+    apiKey: string,
+    model: string = 'text-embedding-3-small',
+    baseURL?: string,
+    options: EmbedderOptions = {},
+  ) {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
     this.model = model;
     this.useLocal = !apiKey;
+    this.client = options.client;
+    this.maxConcurrentRequests = Math.max(options.maxConcurrentRequests ?? 2, 1);
   }
 
   /** 获取当前模式的 embedding 维度 */
@@ -96,11 +121,16 @@ export class Embedder {
     return this.useLocal;
   }
 
+  getMetrics(): EmbedderMetrics {
+    return { ...this.metrics };
+  }
+
   // ========================================
   // OpenAI API
   // ========================================
 
   private async getClient(): Promise<OpenAIClient> {
+    if (this.client) return this.client;
     const client = await getOpenAIClient(this.apiKey, this.baseURL);
     if (!client) {
       throw new EmbeddingError('OpenAI client unavailable. Ensure openai package is installed and API key is valid.', {});
@@ -109,13 +139,37 @@ export class Embedder {
   }
 
   private async openaiEmbed(text: string): Promise<number[]> {
-    try {
+    const key = this.cacheKey(text);
+    const cached = this.cache.get(key);
+    if (cached) {
+      this.metrics.cacheHits++;
+      return cached;
+    }
+
+    const pending = this.pending.get(key);
+    if (pending) {
+      this.metrics.cacheHits++;
+      return pending;
+    }
+
+    this.metrics.cacheMisses++;
+    const request = this.withApiSlot(async () => {
       const client = await this.getClient();
+      this.metrics.apiCalls++;
       const response = await client.embeddings.create({
         model: this.model,
         input: text,
       });
-      return response.data[0].embedding;
+      const embedding = response.data[0].embedding;
+      this.cache.set(key, embedding);
+      return embedding;
+    }).finally(() => {
+      this.pending.delete(key);
+    });
+    this.pending.set(key, request);
+
+    try {
+      return await request;
     } catch (err) {
       if (err instanceof EmbeddingError) throw err;
       throw new EmbeddingError(
@@ -126,21 +180,71 @@ export class Embedder {
   }
 
   private async openaiEmbedBatch(texts: string[]): Promise<number[][]> {
+    const results = new Map<string, number[]>();
+    const missing: string[] = [];
+    const seenMissing = new Set<string>();
+
+    for (const text of texts) {
+      const key = this.cacheKey(text);
+      const cached = this.cache.get(key);
+      if (cached) {
+        this.metrics.cacheHits++;
+        results.set(text, cached);
+      } else if (!seenMissing.has(text)) {
+        this.metrics.cacheMisses++;
+        seenMissing.add(text);
+        missing.push(text);
+      }
+    }
+
+    if (missing.length === 0) {
+      return texts.map((text) => results.get(text)!);
+    }
+
     try {
-      const client = await this.getClient();
-      const response = await client.embeddings.create({
-        model: this.model,
-        input: texts,
+      const response = await this.withApiSlot(async () => {
+        const client = await this.getClient();
+        this.metrics.apiCalls++;
+        return client.embeddings.create({
+          model: this.model,
+          input: missing,
+        });
       });
-      return response.data
+
+      const embeddings = response.data
         .sort((a, b) => a.index - b.index)
         .map(d => d.embedding);
+      for (let i = 0; i < missing.length; i++) {
+        const text = missing[i];
+        const embedding = embeddings[i];
+        this.cache.set(this.cacheKey(text), embedding);
+        results.set(text, embedding);
+      }
+      return texts.map((text) => results.get(text)!);
     } catch (err) {
       if (err instanceof EmbeddingError) throw err;
       throw new EmbeddingError(
         `OpenAI batch embedding failed: ${err instanceof Error ? err.message : String(err)}`,
         { model: this.model, batchSize: texts.length },
       );
+    }
+  }
+
+  private cacheKey(text: string): string {
+    return `${this.baseURL ?? '<default>'}::${this.model}::${text}`;
+  }
+
+  private async withApiSlot<T>(work: () => Promise<T>): Promise<T> {
+    if (this.activeRequests >= this.maxConcurrentRequests) {
+      await new Promise<void>((resolve) => this.waiters.push(resolve));
+    }
+
+    this.activeRequests++;
+    try {
+      return await work();
+    } finally {
+      this.activeRequests--;
+      this.waiters.shift()?.();
     }
   }
 }

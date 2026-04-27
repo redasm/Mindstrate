@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { Embedder } from '../src/processing/embedder.js';
 import { KnowledgeType } from '@mindstrate/protocol';
+import type { OpenAIClient } from '../src/openai-client.js';
 
 describe('Embedder', () => {
   const embedder = new Embedder(''); // offline mode
@@ -98,7 +99,62 @@ describe('Embedder', () => {
       expect(results).toEqual([]);
     });
   });
+
+  describe('online cache and limits', () => {
+    it('reuses cached embeddings for repeated online text', async () => {
+      let calls = 0;
+      const client = makeEmbeddingClient(async (input) => {
+        calls++;
+        return Array.isArray(input)
+          ? input.map((_, index) => [index + 1])
+          : [[42]];
+      });
+      const online = new Embedder('fake-key', 'test-model', undefined, { client });
+
+      await expect(online.embed('same text')).resolves.toEqual([42]);
+      await expect(online.embed('same text')).resolves.toEqual([42]);
+
+      expect(calls).toBe(1);
+      expect(online.getMetrics().cacheHits).toBe(1);
+      expect(online.getMetrics().apiCalls).toBe(1);
+    });
+
+    it('deduplicates cached entries during online batches', async () => {
+      let calls = 0;
+      const client = makeEmbeddingClient(async (input) => {
+        calls++;
+        const values = Array.isArray(input) ? input : [input];
+        return values.map((text) => [text.length]);
+      });
+      const online = new Embedder('fake-key', 'test-model', undefined, { client });
+
+      const first = await online.embedBatch(['alpha', 'beta']);
+      const second = await online.embedBatch(['alpha', 'gamma']);
+
+      expect(first).toEqual([[5], [4]]);
+      expect(second).toEqual([[5], [5]]);
+      expect(calls).toBe(2);
+      expect(online.getMetrics().cacheHits).toBe(1);
+    });
+  });
 });
+
+function makeEmbeddingClient(
+  createEmbeddings: (input: string | string[]) => Promise<number[][]>,
+): OpenAIClient {
+  return {
+    embeddings: {
+      create: async ({ input }) => ({
+        data: (await createEmbeddings(input)).map((embedding, index) => ({ embedding, index })),
+      }),
+    },
+    chat: {
+      completions: {
+        create: async () => ({ choices: [] }),
+      },
+    },
+  };
+}
 
 function cosine(a: number[], b: number[]): number {
   let dot = 0, na = 0, nb = 0;
