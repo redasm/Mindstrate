@@ -27,6 +27,11 @@ export interface InstallBundleResult {
   skippedEdges: number;
 }
 
+export interface InstallEditableBundleFilesResult extends InstallBundleResult {
+  bundle: PortableContextBundle;
+  updatedBundleNodes: number;
+}
+
 export interface ValidateBundleResult {
   valid: boolean;
   errors: string[];
@@ -258,6 +263,56 @@ export class PortableContextBundleManager {
       ),
     };
   }
+
+  installEditableBundleFiles(files: EditableBundleFiles): InstallEditableBundleFilesResult {
+    const bundle = readEditableBundle(files);
+    const edits = new Map<string, EditableBundleNodeEdit>();
+    for (const fileName of ['rules.md', 'skills.md', 'invariants.md']) {
+      for (const edit of parseEditableBundleMarkdown(files[fileName] ?? '')) {
+        edits.set(edit.id, edit);
+      }
+    }
+
+    let updatedBundleNodes = 0;
+    const nodes = (bundle.nodes ?? []).map((node) => {
+      const edit = edits.get(node.id);
+      if (!edit) return node;
+      updatedBundleNodes++;
+      return {
+        ...node,
+        title: edit.title,
+        content: edit.content,
+      };
+    });
+
+    const editedBundle = {
+      ...bundle,
+      nodes,
+    };
+    const install = this.installBundle(editedBundle);
+    return {
+      ...install,
+      bundle: editedBundle,
+      updatedBundleNodes,
+    };
+  }
+
+  installEditableBundleDirectory(directory: string): InstallEditableBundleFilesResult {
+    const files: EditableBundleFiles = {};
+    for (const fileName of ['bundle.json', 'rules.md', 'skills.md', 'invariants.md']) {
+      const filePath = path.join(directory, fileName);
+      if (fs.existsSync(filePath)) {
+        files[fileName] = fs.readFileSync(filePath, 'utf-8');
+      }
+    }
+    return this.installEditableBundleFiles(files);
+  }
+}
+
+interface EditableBundleNodeEdit {
+  id: string;
+  title: string;
+  content: string;
 }
 
 function serializeNode(node: ContextNode): PortableContextBundleNode {
@@ -322,6 +377,58 @@ function formatBundleMarkdown(
   }
 
   return lines.join('\n').trimEnd() + '\n';
+}
+
+function readEditableBundle(files: EditableBundleFiles): PortableContextBundle {
+  const rawBundle = files['bundle.json'];
+  if (!rawBundle) {
+    throw new Error('Editable bundle files must include bundle.json');
+  }
+  return JSON.parse(rawBundle) as PortableContextBundle;
+}
+
+function parseEditableBundleMarkdown(markdown: string): EditableBundleNodeEdit[] {
+  const edits: EditableBundleNodeEdit[] = [];
+  const lines = markdown.split(/\r?\n/);
+  let index = 0;
+
+  while (index < lines.length) {
+    const heading = lines[index].match(/^##\s+(.+?)\s*$/);
+    if (!heading) {
+      index++;
+      continue;
+    }
+
+    const title = heading[1].trim();
+    index++;
+    const contentLines: string[] = [];
+    let id: string | undefined;
+
+    while (index < lines.length && !lines[index].startsWith('## ')) {
+      const idMatch = lines[index].match(/^-\s+ID:\s*(.+?)\s*$/);
+      if (idMatch) {
+        id = idMatch[1].trim();
+        index++;
+        continue;
+      }
+      if (id) {
+        index++;
+        continue;
+      }
+      contentLines.push(lines[index]);
+      index++;
+    }
+
+    if (id) {
+      edits.push({
+        id,
+        title,
+        content: contentLines.join('\n').trim(),
+      });
+    }
+  }
+
+  return edits;
 }
 
 function isLocalRegistry(registry: string): boolean {

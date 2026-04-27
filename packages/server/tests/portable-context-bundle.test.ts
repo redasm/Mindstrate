@@ -208,4 +208,41 @@ describe('PortableContextBundleManager', () => {
     expect(files['skills.md']).toContain('# Skills');
     expect(files['invariants.md']).toContain('# Invariants');
   });
+
+  it('installs edited bundle files back into the graph', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Filesystem Rule',
+      content: 'Editable bundle folders should include rule markdown.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      tags: ['filesystem'],
+    });
+
+    const bundle = bundles.createBundle({
+      name: 'filesystem-bundle',
+      project: 'mindstrate',
+    });
+    const files = bundles.createEditableBundleFiles(bundle);
+    files['rules.md'] = files['rules.md']
+      .replace('## Filesystem Rule', '## Edited Filesystem Rule')
+      .replace(
+        'Editable bundle folders should include rule markdown.',
+        'Edited bundle folders round-trip through markdown before install.',
+      );
+
+    const freshStore = new ContextGraphStore(path.join(tempDir, 'edited-bundle.db'));
+    const freshBundles = new PortableContextBundleManager(freshStore);
+    const result = freshBundles.installEditableBundleFiles(files);
+
+    expect(result.updatedBundleNodes).toBe(1);
+    expect(result.installedNodes).toBe(1);
+    const [installed] = freshStore.listNodes({ project: 'mindstrate', limit: 10 });
+    expect(installed.title).toBe('Edited Filesystem Rule');
+    expect(installed.content).toBe('Edited bundle folders round-trip through markdown before install.');
+    expect(installed.tags).toEqual(['filesystem']);
+
+    freshStore.close();
+  });
 });

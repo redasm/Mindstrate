@@ -85,11 +85,11 @@ bundleCommand
   });
 
 bundleCommand
-  .command('install <file>')
-  .description('Install a portable ECS context bundle JSON file')
-  .action(async (file) => {
-    if (!fs.existsSync(file)) {
-      console.error(`File not found: ${file}`);
+  .command('install <path>')
+  .description('Install a portable ECS context bundle JSON file or editable bundle directory')
+  .action(async (inputPath) => {
+    if (!fs.existsSync(inputPath)) {
+      console.error(`Path not found: ${inputPath}`);
       process.exit(1);
     }
 
@@ -97,8 +97,9 @@ bundleCommand
 
     try {
       await memory.init();
-      const bundle = JSON.parse(fs.readFileSync(file, 'utf-8')) as PortableContextBundle;
-      const result = memory.installBundle(bundle);
+      const result = fs.statSync(inputPath).isDirectory()
+        ? memory.installEditableBundleDirectory(inputPath)
+        : memory.installBundle(JSON.parse(fs.readFileSync(inputPath, 'utf-8')) as PortableContextBundle);
       console.log('Bundle installed.');
       console.log(`  Installed nodes: ${result.installedNodes}`);
       console.log(`  Updated nodes:   ${result.updatedNodes}`);

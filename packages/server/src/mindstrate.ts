@@ -102,7 +102,7 @@ import {
   ingestUserFeedback,
   type IngestContextEventInput,
 } from './events/index.js';
-import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleFromRegistryOptions, type InstallBundleResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
+import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleFromRegistryOptions, type InstallBundleResult, type InstallEditableBundleFilesResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
 
 export class Mindstrate {
   private config: MindstrateConfig;
@@ -1049,6 +1049,14 @@ export class Mindstrate {
 
   createEditableBundleFiles(bundle: import('@mindstrate/protocol/models').PortableContextBundle): EditableBundleFiles {
     return this.bundleManager.createEditableBundleFiles(bundle);
+  }
+
+  installEditableBundleFiles(files: EditableBundleFiles): InstallEditableBundleFilesResult {
+    return this.bundleManager.installEditableBundleFiles(files);
+  }
+
+  installEditableBundleDirectory(directory: string): InstallEditableBundleFilesResult {
+    return this.bundleManager.installEditableBundleDirectory(directory);
   }
 
   readGraphKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {
