@@ -1,5 +1,5 @@
-import { cosineSimilarity } from '../math.js';
 import { Embedder } from '../processing/embedder.js';
+import { clusterContextNodes, hasGeneralizationParent } from './context-clustering.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import {
   ContextDomainType,
@@ -89,8 +89,13 @@ export class HighOrderCompressor {
       substrateType: spec.sourceType,
       limit,
     });
-    const eligible = nodes.filter((node) => !this.hasParent(node.id, spec.targetType));
-    const clusters = await this.cluster(eligible, minClusterSize, similarityThreshold);
+    const eligible = nodes.filter((node) => !hasGeneralizationParent(this.graphStore, node.id, spec.targetType));
+    const clusters = await clusterContextNodes({
+      nodes: eligible,
+      embedder: this.embedder,
+      minClusterSize,
+      similarityThreshold,
+    });
     const resultClusters: HighOrderCompressionResult['clusters'] = [];
 
     for (const cluster of clusters) {
@@ -137,49 +142,6 @@ export class HighOrderCompressor {
       nodesCreated: resultClusters.length,
       clusters: resultClusters,
     };
-  }
-
-  private async cluster(
-    nodes: ContextNode[],
-    minClusterSize: number,
-    similarityThreshold: number,
-  ): Promise<ContextNode[][]> {
-    const embeddings = new Map<string, number[]>();
-    for (const node of nodes) {
-      embeddings.set(node.id, await this.embedder.embed(node.content));
-    }
-
-    const visited = new Set<string>();
-    const clusters: ContextNode[][] = [];
-    for (const node of nodes) {
-      if (visited.has(node.id)) continue;
-      visited.add(node.id);
-      const cluster = [node];
-      const currentEmbedding = embeddings.get(node.id);
-      if (!currentEmbedding) continue;
-
-      for (const candidate of nodes) {
-        if (candidate.id === node.id || visited.has(candidate.id)) continue;
-        const candidateEmbedding = embeddings.get(candidate.id);
-        if (!candidateEmbedding) continue;
-        if (cosineSimilarity(currentEmbedding, candidateEmbedding) >= similarityThreshold) {
-          visited.add(candidate.id);
-          cluster.push(candidate);
-        }
-      }
-
-      if (cluster.length >= minClusterSize) {
-        clusters.push(cluster);
-      }
-    }
-    return clusters;
-  }
-
-  private hasParent(nodeId: string, targetType: SubstrateType): boolean {
-    return this.graphStore.listOutgoingEdges(nodeId).some((edge) => {
-      if (edge.relationType !== ContextRelationType.GENERALIZES) return false;
-      return this.graphStore.getNodeById(edge.targetId)?.substrateType === targetType;
-    });
   }
 }
 

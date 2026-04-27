@@ -1,5 +1,5 @@
-import { cosineSimilarity } from '../math.js';
 import { Embedder } from '../processing/embedder.js';
+import { clusterContextNodes, hasGeneralizationParent } from './context-clustering.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import {
   ContextDomainType,
@@ -50,41 +50,18 @@ export class RuleCompressor {
       limit,
     });
 
-    const eligible = patterns.filter((pattern) => !this.hasRuleParent(pattern.id));
-    const embeddings = new Map<string, number[]>();
-    for (const pattern of eligible) {
-      embeddings.set(pattern.id, await this.embedder.embed(pattern.content));
-    }
-
-    const visited = new Set<string>();
-    const clusters: ContextNode[][] = [];
-
-    for (const pattern of eligible) {
-      if (visited.has(pattern.id)) continue;
-      visited.add(pattern.id);
-
-      const cluster = [pattern];
-      const currentEmbedding = embeddings.get(pattern.id);
-      if (!currentEmbedding) continue;
-
-      for (const candidate of eligible) {
-        if (candidate.id === pattern.id || visited.has(candidate.id)) continue;
-        const candidateEmbedding = embeddings.get(candidate.id);
-        if (!candidateEmbedding) continue;
-
-        const similarity = cosineSimilarity(currentEmbedding, candidateEmbedding);
-        if (similarity >= similarityThreshold) {
-          visited.add(candidate.id);
-          cluster.push(candidate);
-        }
-      }
-
-      if (cluster.length >= minClusterSize) {
-        clusters.push(cluster);
-      } else if (pattern.positiveFeedback >= minPositiveFeedback && pattern.positiveFeedback > pattern.negativeFeedback) {
-        clusters.push([pattern]);
-      }
-    }
+    const eligible = patterns.filter((pattern) => (
+      !hasGeneralizationParent(this.graphStore, pattern.id, SubstrateType.RULE)
+    ));
+    const clusters = await clusterContextNodes({
+      nodes: eligible,
+      embedder: this.embedder,
+      minClusterSize,
+      similarityThreshold,
+      promoteSingleton: (pattern) => (
+        pattern.positiveFeedback >= minPositiveFeedback && pattern.positiveFeedback > pattern.negativeFeedback
+      ),
+    });
 
     const resultClusters: RuleCompressionResult['clusters'] = [];
     for (const cluster of clusters) {
@@ -127,14 +104,6 @@ export class RuleCompressor {
       ruleNodesCreated: resultClusters.length,
       clusters: resultClusters,
     };
-  }
-
-  private hasRuleParent(patternId: string): boolean {
-    return this.graphStore.listOutgoingEdges(patternId).some((edge) => {
-      if (edge.relationType !== ContextRelationType.GENERALIZES) return false;
-      const target = this.graphStore.getNodeById(edge.targetId);
-      return target?.substrateType === SubstrateType.RULE;
-    });
   }
 }
 

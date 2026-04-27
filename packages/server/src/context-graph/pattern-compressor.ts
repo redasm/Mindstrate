@@ -1,5 +1,6 @@
 import { cosineSimilarity } from '../math.js';
 import { Embedder } from '../processing/embedder.js';
+import { clusterContextNodes, hasGeneralizationParent, lexicalOverlap } from './context-clustering.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import {
   ContextDomainType,
@@ -52,44 +53,22 @@ export class PatternCompressor {
       limit,
     });
 
-    const eligible = summaries.filter((summary) => !this.hasPatternParent(summary.id));
-    const embeddings = new Map<string, number[]>();
-    for (const summary of eligible) {
-      embeddings.set(summary.id, await this.embedder.embed(summary.content));
-    }
-
-    const visited = new Set<string>();
-    const clusters: ContextNode[][] = [];
-
-    for (const summary of eligible) {
-      if (visited.has(summary.id)) continue;
-      visited.add(summary.id);
-
-      const cluster = [summary];
-      const currentEmbedding = embeddings.get(summary.id);
-      if (!currentEmbedding) continue;
-
-      for (const candidate of eligible) {
-        if (candidate.id === summary.id || visited.has(candidate.id)) continue;
-        const candidateEmbedding = embeddings.get(candidate.id);
-        if (!candidateEmbedding) continue;
-
-        const similarity = Math.max(
-          cosineSimilarity(currentEmbedding, candidateEmbedding),
-          lexicalOverlap(summary.content, candidate.content),
-        );
-        if (similarity >= similarityThreshold) {
-          visited.add(candidate.id);
-          cluster.push(candidate);
-        }
-      }
-
-      if (cluster.length >= minClusterSize) {
-        clusters.push(cluster);
-      } else if (summary.positiveFeedback >= minPositiveFeedback && summary.positiveFeedback > summary.negativeFeedback) {
-        clusters.push([summary]);
-      }
-    }
+    const eligible = summaries.filter((summary) => (
+      !hasGeneralizationParent(this.graphStore, summary.id, SubstrateType.PATTERN)
+    ));
+    const clusters = await clusterContextNodes({
+      nodes: eligible,
+      embedder: this.embedder,
+      minClusterSize,
+      similarityThreshold,
+      promoteSingleton: (summary) => (
+        summary.positiveFeedback >= minPositiveFeedback && summary.positiveFeedback > summary.negativeFeedback
+      ),
+      similarity: ({ node, candidate, nodeEmbedding, candidateEmbedding }) => Math.max(
+        lexicalOverlap(node.content, candidate.content),
+        cosineSimilarity(nodeEmbedding, candidateEmbedding),
+      ),
+    });
 
     const resultClusters: PatternCompressionResult['clusters'] = [];
     for (const cluster of clusters) {
@@ -134,14 +113,6 @@ export class PatternCompressor {
       clusters: resultClusters,
     };
   }
-
-  private hasPatternParent(summaryId: string): boolean {
-    return this.graphStore.listOutgoingEdges(summaryId).some((edge) => {
-      if (edge.relationType !== ContextRelationType.GENERALIZES) return false;
-      const target = this.graphStore.getNodeById(edge.targetId);
-      return target?.substrateType === SubstrateType.PATTERN;
-    });
-  }
 }
 
 function buildPatternTitle(cluster: ContextNode[]): string {
@@ -171,23 +142,4 @@ function getPromotionReason(cluster: ContextNode[], minDistinctProjects: number)
   if (cluster.length === 1) return 'high_positive_feedback';
   if (isCrossProjectCluster(cluster, minDistinctProjects)) return 'cross_project_validation';
   return 'similarity_cluster';
-}
-
-function lexicalOverlap(a: string, b: string): number {
-  const aTokens = new Set(tokenize(a));
-  const bTokens = new Set(tokenize(b));
-  if (aTokens.size === 0 || bTokens.size === 0) return 0;
-
-  let matches = 0;
-  for (const token of aTokens) {
-    if (bTokens.has(token)) matches++;
-  }
-  return matches / Math.min(aTokens.size, bTokens.size);
-}
-
-function tokenize(value: string): string[] {
-  return value
-    .toLowerCase()
-    .split(/[^a-z0-9\u4e00-\u9fff]+/)
-    .filter((token) => token.length > 2);
 }

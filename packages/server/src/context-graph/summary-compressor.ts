@@ -1,5 +1,5 @@
-import { cosineSimilarity } from '../math.js';
 import { Embedder } from '../processing/embedder.js';
+import { clusterContextNodes, hasGeneralizationParent } from './context-clustering.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import {
   ContextDomainType,
@@ -48,39 +48,15 @@ export class SummaryCompressor {
       limit,
     });
 
-    const eligible = snapshots.filter((snapshot) => !this.hasSummaryParent(snapshot.id));
-    const embeddings = new Map<string, number[]>();
-    for (const snapshot of eligible) {
-      embeddings.set(snapshot.id, await this.embedder.embed(snapshot.content));
-    }
-
-    const visited = new Set<string>();
-    const clusters: ContextNode[][] = [];
-
-    for (const snapshot of eligible) {
-      if (visited.has(snapshot.id)) continue;
-      visited.add(snapshot.id);
-
-      const cluster = [snapshot];
-      const currentEmbedding = embeddings.get(snapshot.id);
-      if (!currentEmbedding) continue;
-
-      for (const candidate of eligible) {
-        if (candidate.id === snapshot.id || visited.has(candidate.id)) continue;
-        const candidateEmbedding = embeddings.get(candidate.id);
-        if (!candidateEmbedding) continue;
-
-        const similarity = cosineSimilarity(currentEmbedding, candidateEmbedding);
-        if (similarity >= similarityThreshold) {
-          visited.add(candidate.id);
-          cluster.push(candidate);
-        }
-      }
-
-      if (cluster.length >= minClusterSize) {
-        clusters.push(cluster);
-      }
-    }
+    const eligible = snapshots.filter((snapshot) => (
+      !hasGeneralizationParent(this.graphStore, snapshot.id, SubstrateType.SUMMARY)
+    ));
+    const clusters = await clusterContextNodes({
+      nodes: eligible,
+      embedder: this.embedder,
+      minClusterSize,
+      similarityThreshold,
+    });
 
     const resultClusters: SummaryCompressionResult['clusters'] = [];
     for (const cluster of clusters) {
@@ -122,14 +98,6 @@ export class SummaryCompressor {
       summaryNodesCreated: resultClusters.length,
       clusters: resultClusters,
     };
-  }
-
-  private hasSummaryParent(snapshotId: string): boolean {
-    return this.graphStore.listOutgoingEdges(snapshotId).some((edge) => {
-      if (edge.relationType !== ContextRelationType.GENERALIZES) return false;
-      const target = this.graphStore.getNodeById(edge.targetId);
-      return target?.substrateType === SubstrateType.SUMMARY;
-    });
   }
 }
 
