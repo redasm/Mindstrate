@@ -37,7 +37,6 @@ export * from '@mindstrate/protocol';
 
 // Storage
 export type { IVectorStore, VectorDocument, VectorSearchResult } from './storage/vector-store-interface.js';
-export { MetadataStore } from './storage/metadata-store.js';
 export { VectorStore } from './storage/vector-store.js';
 export { SessionStore } from './storage/session-store.js';
 export {
@@ -143,10 +142,6 @@ export {
 export { Embedder } from './processing/embedder.js';
 export { Pipeline, type PipelineResult, type QualityGateResult } from './processing/pipeline.js';
 export { SessionCompressor } from './processing/session-compressor.js';
-
-// Quality feedback
-export { FeedbackLoop } from './quality/feedback-loop.js';
-export { RetrievalEvaluator, type EvalCase, type EvalRunResult, type EvalCaseResult } from './quality/eval.js';
 
 // Capture
 export {
