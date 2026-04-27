@@ -67,11 +67,11 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
 
     const result = await memory.add(input);
     if (!result.success) {
-      res.json({ success: false, message: result.message, duplicateOf: result.duplicateOf });
+      res.json(result);
       return;
     }
 
-    res.status(201).json({ success: true, view: result.view });
+    res.status(201).json(result);
   }));
 
   app.get('/api/knowledge', asyncRoute((req, res) => {

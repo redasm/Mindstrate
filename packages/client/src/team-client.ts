@@ -94,14 +94,6 @@ export interface AcceptInternalizationSuggestionsResult extends InternalizationS
   records: ProjectionRecord[];
 }
 
-export interface InternalizationSuggestions {
-  agentsMd: string;
-  projectSnapshotFragment: string;
-  systemPromptFragment: string;
-  fineTuneDatasetJsonl: string;
-  sourceNodeIds: string[];
-}
-
 export interface ObsidianProjectionWriteResult {
   files: string[];
 }
@@ -138,18 +130,7 @@ export class TeamClient {
   // ============================================================
 
   async add(input: CreateKnowledgeInput): Promise<AddKnowledgeResult> {
-    const data = await this.post<{
-      success?: boolean;
-      view?: GraphKnowledgeView;
-      message?: string;
-      duplicateOf?: string;
-    }>('/api/knowledge', input);
-    return {
-      success: data.success ?? false,
-      view: data.view,
-      message: data.message ?? (data.success ? 'Added' : 'Failed'),
-      duplicateOf: data.duplicateOf,
-    };
+    return this.post<AddKnowledgeResult>('/api/knowledge', input);
   }
 
   /** Search graph knowledge on the team server. */

@@ -141,6 +141,21 @@ describe('team-server HTTP integration', () => {
     expect(result.view?.summary).toBe('Follow the rotation workflow.');
   });
 
+  it('preserves quality warnings through the HTTP create path', async () => {
+    const { client } = await startTeamServer();
+
+    const result = await client.add(makeKnowledgeInput({
+      title: 'Needs language warning',
+      solution: 'This entry intentionally omits the programming language metadata.',
+      context: {
+        project: 'quality-warning-project',
+      },
+    }));
+
+    expect(result.success).toBe(true);
+    expect(result.qualityWarnings).toContain('No programming language specified');
+  });
+
   it('accepts emergent custom knowledge types in team mode', async () => {
     const { client, memory } = await startTeamServer();
 
