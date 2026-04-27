@@ -22,8 +22,13 @@ import type {
   SessionContext,
   Session,
   AddKnowledgeResult,
+  AcceptInternalizationSuggestionsResult,
   EvolutionRunResult,
+  InstallBundleResult,
+  InternalizationSuggestions,
   PortableContextBundle,
+  PublishBundleOptions,
+  PublishBundleResult,
   ProjectionRecord,
 } from '@mindstrate/protocol';
 
@@ -58,41 +63,7 @@ export interface SyncResult {
   failed: number;
 }
 
-export interface PublishBundleOptions {
-  registry?: string;
-  visibility?: 'public' | 'private' | 'unlisted';
-}
-
-export interface BundlePublicationManifest {
-  id: string;
-  name: string;
-  version: string;
-  registry: string;
-  visibility: 'public' | 'private' | 'unlisted';
-  nodeCount: number;
-  edgeCount: number;
-  digest: string;
-  publishedAt: string;
-}
-
-export interface PublishBundleResult {
-  bundle: PortableContextBundle;
-  manifest: BundlePublicationManifest;
-}
-
 export type InternalizationTarget = 'agents_md' | 'project_snapshot' | 'system_prompt' | 'fine_tune_dataset';
-
-export interface InternalizationSuggestions {
-  agentsMd: string;
-  projectSnapshotFragment: string;
-  systemPromptFragment: string;
-  fineTuneDatasetJsonl: string;
-  sourceNodeIds: string[];
-}
-
-export interface AcceptInternalizationSuggestionsResult extends InternalizationSuggestions {
-  records: ProjectionRecord[];
-}
 
 export interface ObsidianProjectionWriteResult {
   files: string[];
@@ -419,24 +390,14 @@ export class TeamClient {
     return this.post('/api/bundles/validate', { bundle });
   }
 
-  async installBundle(bundle: PortableContextBundle): Promise<{
-    installedNodes: number;
-    updatedNodes: number;
-    installedEdges: number;
-    skippedEdges: number;
-  }> {
+  async installBundle(bundle: PortableContextBundle): Promise<InstallBundleResult> {
     return this.post('/api/bundles/install', { bundle });
   }
 
   async installBundleFromRegistry(options: {
     registry: string;
     reference: string;
-  }): Promise<{
-    installedNodes: number;
-    updatedNodes: number;
-    installedEdges: number;
-    skippedEdges: number;
-  }> {
+  }): Promise<InstallBundleResult> {
     return this.post('/api/bundles/install-ref', options);
   }
 

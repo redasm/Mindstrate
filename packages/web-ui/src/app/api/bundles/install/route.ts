@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemoryReady } from '@/lib/memory';
+import { errorResponse } from '@/app/api/error-response';
 
 /** POST /api/bundles/install - install a portable ECS context bundle */
 export async function POST(request: NextRequest) {
@@ -19,9 +20,6 @@ export async function POST(request: NextRequest) {
         });
     return NextResponse.json(result);
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }

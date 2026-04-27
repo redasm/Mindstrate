@@ -75,11 +75,6 @@ esac
 # ----- 3. install -----
 say "Installing into $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
-# Clean up legacy v0.1 layout (packages/, node_modules/, package-lock.json)
-# but preserve the user's .env if they wrote one.
-find "$INSTALL_DIR" -mindepth 1 -maxdepth 1 \
-  ! -name '.env' \
-  -exec rm -rf {} +
 cp "$TMP/$BUNDLE" "$INSTALL_DIR/mindstrate-mcp.js"
 chmod +x "$INSTALL_DIR/mindstrate-mcp.js" 2>/dev/null || true
 ENTRY="$INSTALL_DIR/mindstrate-mcp.js"

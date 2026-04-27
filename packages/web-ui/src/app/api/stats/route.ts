@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getMemoryReady } from '@/lib/memory';
+import { errorResponse } from '@/app/api/error-response';
 
 /** GET /api/stats */
 export async function GET() {
@@ -15,9 +16,6 @@ export async function GET() {
       byLanguage: stats.byLanguage,
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }

@@ -62,9 +62,6 @@ try {
   # ---- 3. install ----
   Say "Installing into $InstallDir"
   if (-not (Test-Path $InstallDir)) { New-Item -ItemType Directory -Path $InstallDir | Out-Null }
-  # Clean up legacy v0.1 layout (packages/, node_modules/, package-lock.json)
-  # but preserve the user's .env if they wrote one.
-  Get-ChildItem $InstallDir -Force | Where-Object { $_.Name -ne ".env" } | Remove-Item -Recurse -Force
   $entry = Join-Path $InstallDir "mindstrate-mcp.js"
   Copy-Item -Force $bundlePath $entry
 

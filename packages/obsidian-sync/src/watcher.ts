@@ -22,6 +22,7 @@ import {
   type ContextNode,
   type Mindstrate,
 } from '@mindstrate/server';
+import { errorMessage, readTextIfExists } from './file-io.js';
 import {
   parseMarkdown,
   parsedToCreate,
@@ -79,7 +80,7 @@ export class VaultWatcher {
     const files = this.layout.walkMarkdownFiles();
     for (const rel of files) {
       const abs = this.layout.absolutePath(rel);
-      const text = safeRead(abs);
+      const text = readTextIfExists(abs);
       if (!text) continue;
       this.knownHashes.set(rel, computeBodyHash(text));
     }
@@ -145,7 +146,7 @@ export class VaultWatcher {
     const t = setTimeout(() => {
       this.pending.delete(rel);
       this.handleAddOrChange(rel).catch((err) => {
-        this.emit({ type: 'error', relPath: rel, message: errMsg(err) });
+        this.emit({ type: 'error', relPath: rel, message: errorMessage(err) });
       });
     }, this.debounceMs);
     this.pending.set(rel, t);
@@ -153,7 +154,7 @@ export class VaultWatcher {
 
   private async handleAddOrChange(rel: string): Promise<void> {
     const abs = this.layout.absolutePath(rel);
-    const text = safeRead(abs);
+    const text = readTextIfExists(abs);
     if (text === null) return;
     const hash = computeBodyHash(text);
     const known = this.knownHashes.get(rel);
@@ -291,7 +292,7 @@ export class VaultWatcher {
         message: deleted ? undefined : 'no such node in Mindstrate',
       });
     }).catch((err) => {
-      this.emit({ type: 'error', relPath: rel, nodeId, message: errMsg(err) });
+      this.emit({ type: 'error', relPath: rel, nodeId, message: errorMessage(err) });
     });
   }
 
@@ -324,18 +325,6 @@ export class VaultWatcher {
     }
     this.onSync?.(ev);
   }
-}
-
-function safeRead(p: string): string | null {
-  try {
-    return fs.readFileSync(p, 'utf8');
-  } catch {
-    return null;
-  }
-}
-
-function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
 
 function graphNodeToKnowledgeType(node: ContextNode): KnowledgeType {

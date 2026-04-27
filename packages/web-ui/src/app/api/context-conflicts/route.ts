@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory } from '@/lib/memory';
+import { errorResponse } from '@/app/api/error-response';
 
 /** GET /api/context-conflicts - list ECS conflict records */
 export async function GET(request: NextRequest) {
@@ -12,9 +13,6 @@ export async function GET(request: NextRequest) {
     const conflicts = memory.listConflictRecords(project, limit);
     return NextResponse.json({ conflicts, total: conflicts.length });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }

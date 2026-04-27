@@ -2,22 +2,23 @@ import {
   ContextNodeStatus,
   ProjectionTarget,
   SubstrateType,
-  type ProjectionRecord,
   type ContextNode,
 } from '@mindstrate/protocol/models';
+import type {
+  AcceptInternalizationSuggestionsResult,
+  InternalizationSuggestions,
+  ProjectionRecord,
+} from '@mindstrate/protocol';
 import type { ContextGraphStore } from './context-graph-store.js';
+
+export type {
+  AcceptInternalizationSuggestionsResult,
+  InternalizationSuggestions,
+} from '@mindstrate/protocol';
 
 export interface InternalizationSuggestionOptions {
   project?: string;
   limit?: number;
-}
-
-export interface InternalizationSuggestions {
-  agentsMd: string;
-  projectSnapshotFragment: string;
-  systemPromptFragment: string;
-  fineTuneDatasetJsonl: string;
-  sourceNodeIds: string[];
 }
 
 export type InternalizationTarget =
@@ -28,10 +29,6 @@ export type InternalizationTarget =
 
 export interface AcceptInternalizationSuggestionsOptions extends InternalizationSuggestionOptions {
   targets?: InternalizationTarget[];
-}
-
-export interface AcceptInternalizationSuggestionsResult extends InternalizationSuggestions {
-  records: ProjectionRecord[];
 }
 
 export class ContextInternalizer {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory } from '@/lib/memory';
+import { errorResponse } from '@/app/api/error-response';
 
 /** GET /api/metabolism-runs - list recent ECS metabolism runs */
 export async function GET(request: NextRequest) {
@@ -12,10 +13,7 @@ export async function GET(request: NextRequest) {
     const runs = memory.listMetabolismRuns(project, limit);
     return NextResponse.json({ runs, total: runs.length });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }
 
@@ -50,9 +48,6 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json(run, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }

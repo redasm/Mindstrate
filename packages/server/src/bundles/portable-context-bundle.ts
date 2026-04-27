@@ -5,10 +5,24 @@ import {
   type PortableContextBundleEdge,
   type PortableContextBundleNode,
 } from '@mindstrate/protocol/models';
+import type {
+  BundlePublicationManifest,
+  InstallBundleResult,
+  PublishBundleOptions,
+  PublishBundleResult,
+} from '@mindstrate/protocol';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
+import { slugifyAscii } from '../text-format.js';
+
+export type {
+  BundlePublicationManifest,
+  InstallBundleResult,
+  PublishBundleOptions,
+  PublishBundleResult,
+} from '@mindstrate/protocol';
 
 export interface CreateBundleOptions {
   bundleId?: string;
@@ -20,13 +34,6 @@ export interface CreateBundleOptions {
   includeRelatedEdges?: boolean;
 }
 
-export interface InstallBundleResult {
-  installedNodes: number;
-  updatedNodes: number;
-  installedEdges: number;
-  skippedEdges: number;
-}
-
 export interface InstallEditableBundleFilesResult extends InstallBundleResult {
   bundle: PortableContextBundle;
   updatedBundleNodes: number;
@@ -35,28 +42,6 @@ export interface InstallEditableBundleFilesResult extends InstallBundleResult {
 export interface ValidateBundleResult {
   valid: boolean;
   errors: string[];
-}
-
-export interface PublishBundleOptions {
-  registry?: string;
-  visibility?: 'public' | 'private' | 'unlisted';
-}
-
-export interface BundlePublicationManifest {
-  id: string;
-  name: string;
-  version: string;
-  registry: string;
-  visibility: 'public' | 'private' | 'unlisted';
-  nodeCount: number;
-  edgeCount: number;
-  digest: string;
-  publishedAt: string;
-}
-
-export interface PublishBundleResult {
-  bundle: PortableContextBundle;
-  manifest: BundlePublicationManifest;
 }
 
 export interface InstallBundleFromRegistryOptions {
@@ -99,7 +84,7 @@ export class PortableContextBundleManager {
         );
 
     return {
-      id: options.bundleId ?? slugify(options.name),
+      id: options.bundleId ?? slugifyAscii(options.name, ''),
       name: options.name,
       version: options.version ?? '0.1.0',
       description: options.description,
@@ -342,14 +327,6 @@ function serializeEdge(edge: ContextEdge): PortableContextBundleEdge {
     strength: edge.strength,
     evidence: edge.evidence,
   };
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 function formatBundleMarkdown(

@@ -22,6 +22,7 @@ import {
   parseMarkdown,
   computeBodyHash,
 } from './markdown.js';
+import { errorMessage, readTextIfExists } from './file-io.js';
 import { VaultLayout, type VaultIndex } from './vault-layout.js';
 
 export interface ExportResult {
@@ -73,7 +74,7 @@ export class VaultExporter {
         newIndex.files[k.id] = rel;
         desiredAbsPaths.add(this.layout.absolutePath(rel));
       } catch (err) {
-        result.errors.push({ id: k.id, error: errMsg(err) });
+        result.errors.push({ id: k.id, error: errorMessage(err) });
       }
     }
 
@@ -84,7 +85,7 @@ export class VaultExporter {
           const abs = this.layout.absolutePath(oldRel);
           if (fs.existsSync(abs)) {
             // Only delete if file still looks like one of ours (has frontmatter id matching)
-            const text = safeRead(abs);
+            const text = readTextIfExists(abs);
             const parsed = text ? parseMarkdown(text) : null;
             if (parsed && parsed.frontmatter.id === oldId) {
               fs.unlinkSync(abs);
@@ -92,7 +93,7 @@ export class VaultExporter {
             }
           }
         } catch (err) {
-          result.errors.push({ id: oldId, error: 'remove orphan: ' + errMsg(err) });
+          result.errors.push({ id: oldId, error: 'remove orphan: ' + errorMessage(err) });
         }
       }
     }
@@ -128,7 +129,7 @@ export class VaultExporter {
     if (fs.existsSync(abs)) {
       try {
         // Verify file is still ours before deleting
-        const text = safeRead(abs);
+        const text = readTextIfExists(abs);
         const parsed = text ? parseMarkdown(text) : null;
         if (parsed && parsed.frontmatter.id === id) {
           fs.unlinkSync(abs);
@@ -156,7 +157,7 @@ export class VaultExporter {
     if (oldRel && oldRel !== rel) {
       const absOld = this.layout.absolutePath(oldRel);
       if (fs.existsSync(absOld)) {
-        const text = safeRead(absOld);
+        const text = readTextIfExists(absOld);
         if (text) preservedUserNotes = parseMarkdown(text)?.userNotes;
         try {
           fs.unlinkSync(absOld);
@@ -167,7 +168,7 @@ export class VaultExporter {
 
     let existingBodyHash: string | undefined;
     if (fs.existsSync(absNew)) {
-      const text = safeRead(absNew);
+      const text = readTextIfExists(absNew);
       if (text) {
         const parsed = parseMarkdown(text);
         if (parsed) {
@@ -187,16 +188,4 @@ export class VaultExporter {
     fs.writeFileSync(absNew, out, 'utf8');
     return moved ?? 'written';
   }
-}
-
-function safeRead(p: string): string | null {
-  try {
-    return fs.readFileSync(p, 'utf8');
-  } catch {
-    return null;
-  }
-}
-
-function errMsg(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }

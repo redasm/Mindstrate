@@ -6,6 +6,10 @@
  * implementation-agnostic — no SQLite, no embedder, no LLM types here.
  */
 
+import type {
+  PortableContextBundle,
+  ProjectionRecord,
+} from './models/metabolism.js';
 import type { GraphKnowledgeView } from './models/projection.js';
 
 /**
@@ -46,6 +50,47 @@ export interface EvolutionSuggestion {
   };
   /** Related graph node ids (e.g. merge sources). */
   relatedIds?: string[];
+}
+
+export interface InstallBundleResult {
+  installedNodes: number;
+  updatedNodes: number;
+  installedEdges: number;
+  skippedEdges: number;
+}
+
+export interface PublishBundleOptions {
+  registry?: string;
+  visibility?: 'public' | 'private' | 'unlisted';
+}
+
+export interface BundlePublicationManifest {
+  id: string;
+  name: string;
+  version: string;
+  registry: string;
+  visibility: 'public' | 'private' | 'unlisted';
+  nodeCount: number;
+  edgeCount: number;
+  digest: string;
+  publishedAt: string;
+}
+
+export interface PublishBundleResult {
+  bundle: PortableContextBundle;
+  manifest: BundlePublicationManifest;
+}
+
+export interface InternalizationSuggestions {
+  agentsMd: string;
+  projectSnapshotFragment: string;
+  systemPromptFragment: string;
+  fineTuneDatasetJsonl: string;
+  sourceNodeIds: string[];
+}
+
+export interface AcceptInternalizationSuggestionsResult extends InternalizationSuggestions {
+  records: ProjectionRecord[];
 }
 
 export type EvolutionRunMode = 'standard' | 'background';

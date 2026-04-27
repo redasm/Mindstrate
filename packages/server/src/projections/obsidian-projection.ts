@@ -11,6 +11,7 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
+import { slugifyAscii } from '../text-format.js';
 
 export interface ObsidianProjectionOptions {
   project?: string;
@@ -45,7 +46,7 @@ export class ObsidianProjectionMaterializer {
       id: `projection:${ProjectionTarget.OBSIDIAN_DOCUMENT}:${node.id}`,
       nodeId: node.id,
       target: ProjectionTarget.OBSIDIAN_DOCUMENT,
-      targetRef: `${node.project ?? 'global'}/${OBSIDIAN_FOLDERS[node.substrateType] ?? 'nodes'}/${slugify(node.title)}.md`,
+      targetRef: `${node.project ?? 'global'}/${OBSIDIAN_FOLDERS[node.substrateType] ?? 'nodes'}/${slugifyAscii(node.title)}.md`,
       version: index + 1,
     }));
   }
@@ -180,8 +181,3 @@ const parseObsidianNodeMarkdown = (text: string): { id?: string; title: string; 
 
   return { id, title, content };
 };
-
-const slugify = (value: string): string => value
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, '-')
-  .replace(/^-+|-+$/g, '') || 'untitled';

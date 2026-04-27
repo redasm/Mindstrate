@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory } from '@/lib/memory';
+import { errorResponse } from '@/app/api/error-response';
 
 /** GET /api/context-edges - list ECS graph edges */
 export async function GET(request: NextRequest) {
@@ -19,9 +20,6 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ edges, total: edges.length });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }

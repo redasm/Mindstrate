@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory } from '@/lib/memory';
 import { toGraphKnowledgeView } from '@mindstrate/server';
+import { errorResponse } from '@/app/api/error-response';
 
 /** GET /api/knowledge/[id] */
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,7 +16,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
     return NextResponse.json(toGraphKnowledgeView(node));
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    return errorResponse(error);
   }
 }
 
@@ -39,7 +40,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     return NextResponse.json(toGraphKnowledgeView(updated));
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    return errorResponse(error);
   }
 }
 
@@ -56,7 +57,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    return errorResponse(error);
   }
 }
 
@@ -68,6 +69,6 @@ export async function PATCH(_: NextRequest, { params }: { params: Promise<{ id: 
     const node = memory.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
     return NextResponse.json(node ? toGraphKnowledgeView(node) : null);
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
+    return errorResponse(error);
   }
 }

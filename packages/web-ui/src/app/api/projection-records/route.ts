@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory } from '@/lib/memory';
+import { errorResponse } from '@/app/api/error-response';
 
 /** GET /api/projection-records - list ECS projection materialization records */
 export async function GET(request: NextRequest) {
@@ -13,9 +14,6 @@ export async function GET(request: NextRequest) {
     const records = memory.listProjectionRecords({ nodeId, target, limit });
     return NextResponse.json({ records, total: records.length });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }

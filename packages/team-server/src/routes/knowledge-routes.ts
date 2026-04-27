@@ -4,9 +4,9 @@ import {
   KnowledgeType,
   toGraphKnowledgeView,
   type CreateKnowledgeInput,
-  type GraphKnowledgeView,
 } from '@mindstrate/server';
 import { asyncRoute, authorizeProject, parseLimit, readParam, readStringArray, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
+import { filterGraphKnowledgeViews, includesAll } from './knowledge-filters.js';
 
 const createKnowledgeInput = (body: any): CreateKnowledgeInput => ({
   type: body.type || KnowledgeType.HOW_TO,
@@ -27,27 +27,6 @@ const createKnowledgeInput = (body: any): CreateKnowledgeInput => ({
   commitHash: body.commitHash,
   confidence: body.confidence,
   actionable: body.actionable,
-});
-
-const matchesAll = (actual: string[], expected: string[]): boolean => {
-  if (expected.length === 0) return true;
-  return expected.every((item) => actual.includes(item));
-};
-
-const filterGraphKnowledgeViews = (
-  entries: GraphKnowledgeView[],
-  filters: {
-    types: string[];
-    tags: string[];
-    status: string[];
-    minScore?: number;
-  },
-): GraphKnowledgeView[] => entries.filter((entry) => {
-  if (filters.types.length > 0 && !filters.types.includes(entry.domainType)) return false;
-  if (!matchesAll(entry.tags ?? [], filters.tags)) return false;
-  if (filters.status.length > 0 && !filters.status.includes(entry.status)) return false;
-  if (filters.minScore !== undefined && entry.priorityScore < filters.minScore) return false;
-  return true;
 });
 
 export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps): void => {
@@ -142,7 +121,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       limit: 100,
       sessionId,
     }).filter((result) => !types || types.includes(result.view.domainType))
-      .filter((result) => !tags || matchesAll(result.view.tags ?? [], tags))
+      .filter((result) => !tags || includesAll(result.view.tags ?? [], tags))
       .filter((result) => !status || status.includes(result.view.status))
       .filter((result) => !language || result.view.tags.includes(language))
       .filter((result) => !framework || result.view.tags.includes(framework))

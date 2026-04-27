@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemoryReady } from '@/lib/memory';
+import { errorResponse } from '@/app/api/error-response';
 
 /** POST /api/search */
 export async function POST(request: NextRequest) {
@@ -15,9 +16,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ results, total: results.length });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory, getMemoryReady } from '@/lib/memory';
 import { CaptureSource } from '@mindstrate/server';
+import { errorResponse } from '@/app/api/error-response';
 
 /** GET /api/knowledge - 列出知识 */
 export async function GET(request: NextRequest) {
@@ -18,10 +19,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ entries, total: entries.length });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }
 
@@ -53,15 +51,12 @@ export async function POST(request: NextRequest) {
       actionable: body.actionable,
     });
 
-    if (result.success) {
-      return NextResponse.json({ success: true, view: result.view }, { status: 201 });
-    } else {
-      return NextResponse.json({ success: false, message: result.message, duplicateOf: result.duplicateOf });
+    if (!result.success) {
+      return NextResponse.json(result);
     }
+
+    return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 },
-    );
+    return errorResponse(error);
   }
 }
