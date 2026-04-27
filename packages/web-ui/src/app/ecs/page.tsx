@@ -33,10 +33,32 @@ type ProjectionRecord = {
   projectedAt: string;
 };
 
+type ContextNode = {
+  id: string;
+  substrateType: string;
+  domainType: string;
+  title: string;
+  project?: string;
+  status: string;
+  qualityScore: number;
+};
+
+type ContextEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  relationType: string;
+  strength: number;
+};
+
+const SUBSTRATE_ORDER = ['axiom', 'heuristic', 'rule', 'skill', 'pattern', 'summary', 'snapshot', 'episode'];
+
 export default function EcsPage() {
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [runs, setRuns] = useState<MetabolismRun[]>([]);
   const [projections, setProjections] = useState<ProjectionRecord[]>([]);
+  const [nodes, setNodes] = useState<ContextNode[]>([]);
+  const [edges, setEdges] = useState<ContextEdge[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [stage, setStage] = useState('');
@@ -44,10 +66,12 @@ export default function EcsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [conflictsRes, runsRes, projectionsRes] = await Promise.all([
+    const [conflictsRes, runsRes, projectionsRes, nodesRes, edgesRes] = await Promise.all([
       fetch('/api/context-conflicts?limit=20'),
       fetch('/api/metabolism-runs?limit=10'),
       fetch('/api/projection-records?limit=10'),
+      fetch('/api/context-graph?limit=120'),
+      fetch('/api/context-edges?limit=400'),
     ]);
 
     if (conflictsRes.ok) {
@@ -61,6 +85,14 @@ export default function EcsPage() {
     if (projectionsRes.ok) {
       const data = await projectionsRes.json();
       setProjections(data.records || []);
+    }
+    if (nodesRes.ok) {
+      const data = await nodesRes.json();
+      setNodes(data.nodes || []);
+    }
+    if (edgesRes.ok) {
+      const data = await edgesRes.json();
+      setEdges(data.edges || []);
     }
     setLoading(false);
   }, []);
@@ -90,6 +122,24 @@ export default function EcsPage() {
       setTriggering(false);
     }
   };
+
+  const layerCounts = SUBSTRATE_ORDER.map((substrate) => ({
+    substrate,
+    count: nodes.filter((node) => node.substrateType === substrate).length,
+  }));
+  const maxLayerCount = Math.max(...layerCounts.map((layer) => layer.count), 1);
+  const relationCounts = edges.reduce<Record<string, number>>((acc, edge) => {
+    acc[edge.relationType] = (acc[edge.relationType] ?? 0) + 1;
+    return acc;
+  }, {});
+  const activeNodeCount = nodes.filter((node) => node.status === 'active' || node.status === 'verified').length;
+  const conflictedNodeCount = nodes.filter((node) => node.status === 'conflicted').length;
+  const averageQuality = nodes.length === 0
+    ? 0
+    : nodes.reduce((sum, node) => sum + node.qualityScore, 0) / nodes.length;
+  const lineageEdges = edges.filter((edge) =>
+    ['derived_from', 'generalizes', 'instantiates', 'supports'].includes(edge.relationType)
+  ).length;
 
   return (
     <div className="space-y-8">
@@ -137,6 +187,80 @@ export default function EcsPage() {
       ) : null}
 
       {loading ? <div className="py-12 text-center text-gray-400">Loading ECS panels...</div> : null}
+
+      <section className="grid gap-4 md:grid-cols-4">
+        <MetricCard label="Graph Nodes" value={nodes.length.toString()} tone="brand" />
+        <MetricCard label="Active Substrate" value={activeNodeCount.toString()} tone="emerald" />
+        <MetricCard label="Relations" value={edges.length.toString()} tone="sky" />
+        <MetricCard label="Avg Quality" value={averageQuality.toFixed(0)} tone="violet" />
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Project Context Graph</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                A compact substrate map from raw episodes up to stable rules and axioms.
+              </p>
+            </div>
+            <Link href="/lineage" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+              Inspect lineage
+            </Link>
+          </div>
+
+          <div className="space-y-3">
+            {layerCounts.map((layer) => (
+              <div key={layer.substrate} className="grid grid-cols-[92px_minmax(0,1fr)_44px] items-center gap-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-gray-500">{layer.substrate}</div>
+                <div className="h-3 overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full bg-brand-500"
+                    style={{ width: `${Math.max((layer.count / maxLayerCount) * 100, layer.count > 0 ? 8 : 0)}%` }}
+                  />
+                </div>
+                <div className="text-right text-sm font-semibold text-gray-900">{layer.count}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-lg bg-gray-50 p-4">
+              <div className="text-xs uppercase tracking-wide text-gray-400">Lineage Edges</div>
+              <div className="mt-1 text-2xl font-semibold text-gray-900">{lineageEdges}</div>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-4">
+              <div className="text-xs uppercase tracking-wide text-gray-400">Conflicted Nodes</div>
+              <div className="mt-1 text-2xl font-semibold text-amber-700">{conflictedNodeCount}</div>
+            </div>
+            <div className="rounded-lg bg-gray-50 p-4">
+              <div className="text-xs uppercase tracking-wide text-gray-400">Projects</div>
+              <div className="mt-1 text-2xl font-semibold text-gray-900">
+                {new Set(nodes.map((node) => node.project).filter(Boolean)).size}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">Relation Mix</h2>
+          <p className="mt-1 text-sm text-gray-500">How the graph explains support, compression, and conflict.</p>
+
+          {Object.keys(relationCounts).length === 0 ? (
+            <p className="py-8 text-sm text-gray-400">No ECS relationships recorded yet.</p>
+          ) : (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {Object.entries(relationCounts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([relation, count]) => (
+                  <span key={relation} className="rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-700">
+                    <span className="font-medium text-gray-950">{relation}</span> · {count}
+                  </span>
+                ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -255,6 +379,22 @@ export default function EcsPage() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, tone }: { label: string; value: string; tone: 'brand' | 'emerald' | 'sky' | 'violet' }) {
+  const tones = {
+    brand: 'text-brand-600 bg-brand-50',
+    emerald: 'text-emerald-700 bg-emerald-50',
+    sky: 'text-sky-700 bg-sky-50',
+    violet: 'text-violet-700 bg-violet-50',
+  };
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="text-sm text-gray-500">{label}</div>
+      <div className={`mt-3 inline-flex rounded-lg px-3 py-1 text-2xl font-bold ${tones[tone]}`}>{value}</div>
     </div>
   );
 }
