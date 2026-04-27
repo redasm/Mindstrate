@@ -9,7 +9,7 @@
  * 设置 OPENAI_API_KEY 后自动切换到 OpenAI 模式。
  */
 
-import type { KnowledgeUnit, CreateKnowledgeInput } from '@mindstrate/protocol';
+import type { CreateKnowledgeInput } from '@mindstrate/protocol';
 import { EmbeddingError } from '@mindstrate/protocol';
 import { getOpenAIClient, type OpenAIClient } from '../openai-client.js';
 
@@ -38,10 +38,10 @@ export class Embedder {
   }
 
   /**
-   * 将知识单元转换为用于 embedding 的文本。
+   * 将图写入输入转换为用于 embedding 的文本。
    * 拼接策略：title + problem + solution + tags
    */
-  knowledgeToText(knowledge: KnowledgeUnit | CreateKnowledgeInput): string {
+  knowledgeToText(knowledge: CreateKnowledgeInput): string {
     const parts: string[] = [];
 
     parts.push(`[${knowledge.type}] ${knowledge.title}`);
@@ -85,8 +85,8 @@ export class Embedder {
     return this.openaiEmbedBatch(texts);
   }
 
-  /** 为知识单元生成 embedding */
-  async embedKnowledge(knowledge: KnowledgeUnit | CreateKnowledgeInput): Promise<number[]> {
+  /** 为图写入输入生成 embedding */
+  async embedKnowledge(knowledge: CreateKnowledgeInput): Promise<number[]> {
     const text = this.knowledgeToText(knowledge);
     return this.embed(text);
   }

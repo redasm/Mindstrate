@@ -1,8 +1,8 @@
 /**
- * Mindstrate - Knowledge Unit Data Models
+ * Mindstrate - Graph knowledge input models
  *
- * 知识单元是整个系统的核心数据结构，
- * 每一条知识都是一个 KnowledgeUnit。
+ * These contracts describe graph write inputs and context assembly payloads.
+ * Runtime read results are graph projections, not legacy unit records.
  */
 
 // ============================================================
@@ -124,35 +124,6 @@ export interface EvolutionRecord {
   scoreAfter?: number;
 }
 
-/** 知识单元 - 系统核心数据结构 */
-export interface KnowledgeUnit {
-  id: string;
-  version: number;
-
-  // 内容
-  type: KnowledgeType;
-  title: string;
-  problem?: string;
-  solution: string;
-  codeSnippets?: CodeSnippet[];
-  tags: string[];
-
-  // 上下文
-  context: KnowledgeContext;
-
-  // 元数据
-  metadata: KnowledgeMetadata;
-
-  // 质量
-  quality: KnowledgeQuality;
-
-  // 可执行指导
-  actionable?: ActionableGuide;
-
-  // 进化历史
-  evolution?: EvolutionRecord[];
-}
-
 // ============================================================
 // Input types (用于创建/更新时的输入，不需要填所有字段)
 // ============================================================
@@ -209,15 +180,6 @@ export interface RetrievalContext {
   projectDependencies?: string[];
   userQuery?: string;
   conversationSummary?: string;
-}
-
-/** 检索结果 */
-export interface RetrievalResult {
-  knowledge: KnowledgeUnit;
-  relevanceScore: number;
-  matchReason?: string;
-  /** 检索追踪 ID（用于自动反馈闭环） */
-  retrievalId?: string;
 }
 
 /**

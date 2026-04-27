@@ -1,7 +1,7 @@
 /**
  * Mindstrate - SQLite Metadata Store
  *
- * 使用 better-sqlite3 存储知识单元的完整结构化数据。
+ * 使用 better-sqlite3 维护历史结构化表。
  * 支持按字段查询、统计、更新等操作。
  */
 
@@ -9,14 +9,49 @@ import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
-  type KnowledgeUnit,
+  type ActionableGuide,
+  type CodeSnippet,
   type CreateKnowledgeInput,
+  type EvolutionRecord,
+  type KnowledgeContext,
   type UpdateKnowledgeInput,
   type RetrievalFilter,
   KnowledgeStatus,
   CaptureSource,
 } from '@mindstrate/protocol';
 import { v4 as uuidv4 } from 'uuid';
+
+interface StoredKnowledgeRecord {
+  id: string;
+  version: number;
+  type: CreateKnowledgeInput['type'];
+  title: string;
+  problem?: string;
+  solution: string;
+  codeSnippets?: CodeSnippet[];
+  tags: string[];
+  context: KnowledgeContext;
+  metadata: {
+    author: string;
+    source: CaptureSource;
+    createdAt: string;
+    updatedAt: string;
+    expiresAt?: string;
+    commitHash?: string;
+    confidence: number;
+  };
+  quality: {
+    score: number;
+    upvotes: number;
+    downvotes: number;
+    useCount: number;
+    lastUsedAt?: string;
+    verified: boolean;
+    status: KnowledgeStatus;
+  };
+  actionable?: ActionableGuide;
+  evolution?: EvolutionRecord[];
+}
 
 export class MetadataStore {
   private db: Database.Database;
@@ -108,7 +143,7 @@ export class MetadataStore {
   }
 
   /** 创建知识单元 */
-  create(input: CreateKnowledgeInput, options?: { id?: string }): KnowledgeUnit {
+  create(input: CreateKnowledgeInput, options?: { id?: string }): StoredKnowledgeRecord {
     const now = new Date().toISOString();
     const id = options?.id ?? uuidv4();
 
@@ -159,14 +194,14 @@ export class MetadataStore {
   }
 
   /** 根据 ID 获取知识单元 */
-  getById(id: string): KnowledgeUnit | null {
+  getById(id: string): StoredKnowledgeRecord | null {
     const row = this.db.prepare('SELECT * FROM knowledge_units WHERE id = ?').get(id) as any;
     if (!row) return null;
     return this.rowToKnowledge(row);
   }
 
   /** 根据 ID 列表批量获取 */
-  getByIds(ids: string[]): KnowledgeUnit[] {
+  getByIds(ids: string[]): StoredKnowledgeRecord[] {
     if (ids.length === 0) return [];
     const placeholders = ids.map(() => '?').join(',');
     const rows = this.db.prepare(
@@ -176,7 +211,7 @@ export class MetadataStore {
   }
 
   /** 查找内容完全相同的知识（用于精确去重预检查） */
-  findExactDuplicate(input: CreateKnowledgeInput): KnowledgeUnit | null {
+  findExactDuplicate(input: CreateKnowledgeInput): StoredKnowledgeRecord | null {
     const row = this.db.prepare(`
       SELECT *
       FROM knowledge_units
@@ -199,7 +234,7 @@ export class MetadataStore {
   }
 
   /** 按条件过滤查询 */
-  query(filter: RetrievalFilter, limit: number = 50): KnowledgeUnit[] {
+  query(filter: RetrievalFilter, limit: number = 50): StoredKnowledgeRecord[] {
     const conditions: string[] = [];
     const params: any[] = [];
 
@@ -251,7 +286,7 @@ export class MetadataStore {
   }
 
   /** 更新知识单元 */
-  update(id: string, input: UpdateKnowledgeInput): KnowledgeUnit | null {
+  update(id: string, input: UpdateKnowledgeInput): StoredKnowledgeRecord | null {
     const existing = this.getById(id);
     if (!existing) return null;
 
@@ -337,7 +372,7 @@ export class MetadataStore {
   }
 
   /** 获取所有知识（用于维护任务），可选 limit */
-  getAll(limit?: number): KnowledgeUnit[] {
+  getAll(limit?: number): StoredKnowledgeRecord[] {
     const sql = limit
       ? 'SELECT * FROM knowledge_units ORDER BY created_at DESC LIMIT ?'
       : 'SELECT * FROM knowledge_units ORDER BY created_at DESC';
@@ -347,8 +382,8 @@ export class MetadataStore {
     return rows.map(r => this.rowToKnowledge(r));
   }
 
-  /** 更新进化历史（供 Evolution Engine 使用） */
-  updateEvolution(id: string, evolution: import('@mindstrate/protocol').EvolutionRecord[]): void {
+  /** 更新历史表中的演化记录。 */
+  updateEvolution(id: string, evolution: EvolutionRecord[]): void {
     this.db.prepare(
       'UPDATE knowledge_units SET evolution = ? WHERE id = ?'
     ).run(JSON.stringify(evolution), id);
@@ -360,7 +395,7 @@ export class MetadataStore {
   }
 
   /** 根据 ID 前缀查找知识（高效 SQL LIKE 查询） */
-  findByIdPrefix(prefix: string): KnowledgeUnit | null {
+  findByIdPrefix(prefix: string): StoredKnowledgeRecord | null {
     const row = this.db.prepare(
       "SELECT * FROM knowledge_units WHERE id LIKE ? ESCAPE '\\' LIMIT 1"
     ).get(`${prefix}%`) as any;
@@ -377,7 +412,7 @@ export class MetadataStore {
   // Private helpers
   // ========================================
 
-  private rowToKnowledge(row: any): KnowledgeUnit {
+  private rowToKnowledge(row: any): StoredKnowledgeRecord {
     return {
       id: row.id,
       version: row.version,
