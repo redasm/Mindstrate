@@ -8,48 +8,28 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { RetrievalEvaluator } from '../src/quality/eval.js';
 import { MetadataStore } from '../src/storage/metadata-store.js';
-import { VectorStore } from '../src/storage/vector-store.js';
-import { Embedder } from '../src/processing/embedder.js';
-import { Retriever } from '../src/retrieval/retriever.js';
-import { Pipeline } from '../src/processing/pipeline.js';
-import { KnowledgeType } from '@mindstrate/protocol';
-import { createTempDir, removeTempDir, makeKnowledgeInput } from './helpers.js';
+import { createTempDir, removeTempDir } from './helpers.js';
 
 describe('RetrievalEvaluator', () => {
   let tempDir: string;
   let metadataStore: MetadataStore;
-  let vectorStore: VectorStore;
-  let embedder: Embedder;
-  let retriever: Retriever;
-  let pipeline: Pipeline;
   let evaluator: RetrievalEvaluator;
   let seededIds: string[];
 
-  beforeEach(async () => {
+  beforeEach(() => {
     tempDir = createTempDir();
     metadataStore = new MetadataStore(path.join(tempDir, 'test.db'));
-    vectorStore = new VectorStore(path.join(tempDir, 'vectors'), 'test');
-    embedder = new Embedder('');
-    retriever = new Retriever(metadataStore, vectorStore, embedder);
-    pipeline = new Pipeline(metadataStore, vectorStore, embedder);
-    evaluator = new RetrievalEvaluator(metadataStore.getDb(), retriever);
-
-    // Seed knowledge
-    seededIds = [];
-    const r1 = await pipeline.process(makeKnowledgeInput({
-      title: 'Fix typescript null pointer',
-      solution: 'Add strict null checks and use optional chaining typescript',
-      tags: ['typescript', 'null'],
-    }));
-    if (r1.knowledge) seededIds.push(r1.knowledge.id);
-
-    const r2 = await pipeline.process(makeKnowledgeInput({
-      title: 'React useState best practices',
-      solution: 'Use functional updates for state that depends on previous state react hooks',
-      type: KnowledgeType.BEST_PRACTICE,
-      tags: ['react', 'hooks'],
-    }));
-    if (r2.knowledge) seededIds.push(r2.knowledge.id);
+    seededIds = ['node-typescript-null', 'node-react-hooks'];
+    evaluator = new RetrievalEvaluator(metadataStore.getDb(), (query, options) => {
+      const matches: string[] = [];
+      if (query.includes('typescript') || options.language === 'typescript') {
+        matches.push(seededIds[0]);
+      }
+      if (query.includes('react') || options.framework === 'react') {
+        matches.push(seededIds[1]);
+      }
+      return matches.slice(0, options.topK);
+    });
   });
 
   afterEach(() => {

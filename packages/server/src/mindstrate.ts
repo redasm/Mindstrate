@@ -8,7 +8,7 @@
  * - 自动反馈闭环（FeedbackLoop）
  * - ECS 代谢演化（MetabolismEngine）
  * - 图优先上下文策划
- * - 检索质量评估（RetrievalEvaluator）
+ * - 图检索质量评估（RetrievalEvaluator）
  * - 质量门禁（Pipeline.qualityGate）
  */
 
@@ -39,7 +39,6 @@ import { SessionStore } from './storage/session-store.js';
 import { Embedder } from './processing/embedder.js';
 import { Pipeline, type PipelineResult, type QualityGateResult } from './processing/pipeline.js';
 import { SessionCompressor } from './processing/session-compressor.js';
-import { Retriever } from './retrieval/retriever.js';
 import { FeedbackLoop } from './quality/feedback-loop.js';
 import { RetrievalEvaluator, type EvalRunResult } from './quality/eval.js';
 import {
@@ -128,7 +127,6 @@ export class Mindstrate {
   private embedder: Embedder;
   private pipeline: Pipeline;
   private sessionCompressor: SessionCompressor;
-  private retriever: Retriever;
   private bundleManager: PortableContextBundleManager;
   private feedbackLoop: FeedbackLoop;
   private evaluator: RetrievalEvaluator;
@@ -194,21 +192,18 @@ export class Mindstrate {
     // 自动反馈闭环
     this.feedbackLoop = new FeedbackLoop(this.metadataStore.getDb(), this.metadataStore);
 
-    // Pipeline 和 Retriever 使用 FeedbackLoop
+    // Pipeline performs the quality gate for graph writes.
     this.pipeline = new Pipeline(
       this.metadataStore,
       this.vectorStore,
       this.embedder,
       this.config.deduplicationThreshold,
     );
-    this.retriever = new Retriever(
-      this.metadataStore,
-      this.vectorStore,
-      this.embedder,
-      this.feedbackLoop,
-    );
     // 检索评估
-    this.evaluator = new RetrievalEvaluator(this.metadataStore.getDb(), this.retriever);
+    this.evaluator = new RetrievalEvaluator(this.metadataStore.getDb(), (query, options) =>
+      this.queryGraphKnowledge(query, { topK: options.topK })
+        .map((result) => result.view.id),
+    );
   }
 
   /** 异步初始化（必须在使用前调用，并发安全） */

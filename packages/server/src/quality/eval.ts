@@ -11,7 +11,11 @@
 
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
-import { Retriever } from '../retrieval/retriever.js';
+
+export type EvaluationSearch = (
+  query: string,
+  options: { language?: string; framework?: string; topK: number },
+) => Promise<string[]> | string[];
 
 /** 评估用例 */
 export interface EvalCase {
@@ -61,11 +65,11 @@ export interface EvalCaseResult {
 
 export class RetrievalEvaluator {
   private db: Database.Database;
-  private retriever: Retriever;
+  private search: EvaluationSearch;
 
-  constructor(db: Database.Database, retriever: Retriever) {
+  constructor(db: Database.Database, search: EvaluationSearch) {
     this.db = db;
-    this.retriever = retriever;
+    this.search = search;
     this.initialize();
   }
 
@@ -160,17 +164,15 @@ export class RetrievalEvaluator {
     let totalMRR = 0;
 
     for (const evalCase of cases) {
-      const results = await this.retriever.search(
+      const retrievedIds = await this.search(
         evalCase.query,
         {
-          currentLanguage: evalCase.language,
-          currentFramework: evalCase.framework,
+          language: evalCase.language,
+          framework: evalCase.framework,
+          topK,
         },
-        undefined,
-        topK,
       );
 
-      const retrievedIds = results.map(r => r.knowledge.id);
       const hits = evalCase.expectedIds.filter(id => retrievedIds.includes(id));
       const misses = evalCase.expectedIds.filter(id => !retrievedIds.includes(id));
 
