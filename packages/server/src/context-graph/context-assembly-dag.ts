@@ -1,7 +1,6 @@
 import type {
   AssembledContext,
   CuratedContext,
-  KnowledgeUnit,
   RetrievalContext,
 } from '@mindstrate/protocol';
 import { SubstrateType, type ContextNode, type ConflictRecord } from '@mindstrate/protocol/models';
@@ -74,7 +73,7 @@ export interface ContextAssemblyDagInput {
 
 export interface ContextAssemblyDagDeps {
   loadSessionContext(project?: string): string | undefined;
-  loadProjectSnapshot(project?: string): KnowledgeUnit | null;
+  loadProjectSnapshot(project?: string): ContextNode | null;
   loadGraphSummaries(project?: string): ContextNode[];
   loadGraphPatterns(project?: string): ContextNode[];
   loadGraphRules(project?: string): ContextNode[];
@@ -88,7 +87,7 @@ export interface ContextAssemblyDagDeps {
     taskDescription: string,
     project: string | undefined,
     sessionContext: string | undefined,
-    projectSnapshot: KnowledgeUnit | undefined,
+    projectSnapshot: ContextNode | undefined,
     curated: CuratedContext,
     options?: {
       includeTaskCuration?: boolean;
@@ -192,7 +191,7 @@ export async function runContextAssemblyDag(
           input.taskDescription,
           await ctx.get<string | undefined>('project'),
           await ctx.get<string | undefined>('sessionContext'),
-          await ctx.get<KnowledgeUnit | undefined>('projectSnapshot'),
+          await ctx.get<ContextNode | undefined>('projectSnapshot'),
           await ctx.get<CuratedContext>('curated'),
           { includeTaskCuration: false },
         );
@@ -236,7 +235,7 @@ export async function runContextAssemblyDag(
       run: async (ctx) => {
         const project = await ctx.get<string | undefined>('project');
         const sessionContext = await ctx.get<string | undefined>('sessionContext');
-        const projectSnapshot = await ctx.get<KnowledgeUnit | undefined>('projectSnapshot');
+        const projectSnapshot = await ctx.get<ContextNode | undefined>('projectSnapshot');
         const graphSummaries = await ctx.get<ContextNode[]>('graphSummaries');
         const graphPatterns = await ctx.get<ContextNode[]>('graphPatterns');
         const graphRules = await ctx.get<ContextNode[]>('graphRules');
@@ -290,7 +289,7 @@ export async function runContextAssemblyDag(
 function buildEvidenceTrail(
   project: string | undefined,
   sessionContext: string | undefined,
-  projectSnapshot: KnowledgeUnit | undefined,
+  projectSnapshot: ContextNode | undefined,
   graphRules: ContextNode[],
   graphPatterns: ContextNode[],
   graphSummaries: ContextNode[],

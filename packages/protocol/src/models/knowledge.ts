@@ -274,7 +274,7 @@ export interface AssembledContext {
   taskDescription: string;
   project?: string;
   sessionContext?: string;
-  projectSnapshot?: KnowledgeUnit;
+  projectSnapshot?: import('./context-graph.js').ContextNode;
   graphSummaries?: string[];
   graphPatterns?: string[];
   graphRules?: string[];
@@ -286,7 +286,7 @@ export interface AssembledContext {
   projectSubstrate?: {
     project?: string;
     snapshotTitle?: string;
-    snapshot?: KnowledgeUnit;
+    snapshot?: import('./context-graph.js').ContextNode;
   };
   taskRelevantPatterns?: string[];
   applicableSkills?: string[];

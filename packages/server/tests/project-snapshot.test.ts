@@ -117,13 +117,13 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
-  it('creates a project snapshot KU with a deterministic id', async () => {
+  it('creates a project snapshot graph node with a deterministic id', async () => {
     const p = detectProject(root)!;
     const r = await memory.upsertProjectSnapshot(p);
     expect(r.created).toBe(true);
     expect(r.changed).toBe(true);
-    expect(r.knowledge.id).toBe(projectSnapshotId(p));
-    expect(r.knowledge.title).toContain('svc');
+    expect(r.node.id).toBe(projectSnapshotId(p));
+    expect(r.node.title).toContain('svc');
   });
 
   it('materializes project snapshots from ECS graph nodes', async () => {
@@ -147,8 +147,8 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     });
 
     expect(nodes).toHaveLength(1);
-    expect(nodes[0].sourceRef).toBe(r.knowledge.id);
-    expect(projection.find((record) => record.nodeId === nodes[0].id)?.targetRef).toBe(r.knowledge.id);
+    expect(nodes[0].sourceRef).toBe(r.node.id);
+    expect(projection.find((record) => record.nodeId === nodes[0].id)?.targetRef).toBe(r.node.id);
   });
 
   it('is idempotent: repeated upserts converge to a single record', async () => {
@@ -156,15 +156,15 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     const a = await memory.upsertProjectSnapshot(p);
     const b = await memory.upsertProjectSnapshot(p);
     const c = await memory.upsertProjectSnapshot(p);
-    expect(a.knowledge.id).toBe(b.knowledge.id);
-    expect(b.knowledge.id).toBe(c.knowledge.id);
+    expect(a.node.id).toBe(b.node.id);
+    expect(b.node.id).toBe(c.node.id);
     expect(b.created).toBe(false);
     expect(c.created).toBe(false);
     // Body should be stable -> changed:false on subsequent runs
     expect(b.changed).toBe(false);
     expect(c.changed).toBe(false);
     // Only one record exists
-    expect(memory.listContextNodes({ sourceRef: a.view.sourceRef ?? a.view.id, limit: 100 })).toHaveLength(1);
+    expect(memory.listContextNodes({ sourceRef: a.node.id, limit: 100 })).toHaveLength(1);
   });
 
   it('detects stack changes and re-renders, but keeps preserve blocks', async () => {
@@ -173,7 +173,7 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
 
     // User edits the Critical Invariants section in the DB.
     const node = memory.listContextNodes({
-      sourceRef: r1.view.id,
+      sourceRef: r1.node.id,
       limit: 10,
     })[0];
     const edited = node.content.replace(
@@ -193,7 +193,7 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     const r2 = await memory.upsertProjectSnapshot(p2);
     expect(r2.created).toBe(false);
     expect(r2.changed).toBe(true);
-    const updatedNode = memory.listContextNodes({ sourceRef: r2.view.id, limit: 10 })[0];
+    const updatedNode = memory.listContextNodes({ sourceRef: r2.node.id, limit: 10 })[0];
     expect(updatedNode.content).toContain('DB writes go through the repository layer only.');
     expect(updatedNode.content).toContain('@nestjs/core');
     // Framework hint detection picked up nestjs (higher specificity)
@@ -208,9 +208,9 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
       const p2 = detectProject(root2)!;
       const r1 = await memory.upsertProjectSnapshot(p1);
       const r2 = await memory.upsertProjectSnapshot(p2);
-      expect(r1.knowledge.id).not.toBe(r2.knowledge.id);
-      expect(memory.listContextNodes({ sourceRef: r1.view.sourceRef ?? r1.view.id, limit: 100 })).toHaveLength(1);
-      expect(memory.listContextNodes({ sourceRef: r2.view.sourceRef ?? r2.view.id, limit: 100 })).toHaveLength(1);
+      expect(r1.node.id).not.toBe(r2.node.id);
+      expect(memory.listContextNodes({ sourceRef: r1.node.id, limit: 100 })).toHaveLength(1);
+      expect(memory.listContextNodes({ sourceRef: r2.node.id, limit: 100 })).toHaveLength(1);
     } finally {
       fs.rmSync(root2, { recursive: true, force: true });
     }

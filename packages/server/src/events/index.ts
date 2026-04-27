@@ -7,4 +7,3 @@ export { ingestGitActivity, type IngestGitActivityInput } from './event-ingestor
 export { ingestTestRun, type IngestTestRunInput } from './event-ingestors/test-run.js';
 export { ingestLspDiagnostic, type IngestLspDiagnosticInput } from './event-ingestors/lsp.js';
 export { ingestUserFeedback, type IngestUserFeedbackInput } from './event-ingestors/user-feedback.js';
-export { ingestProjectSnapshotEvent } from './event-ingestors/project-snapshot.js';

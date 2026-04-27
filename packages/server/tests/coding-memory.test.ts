@@ -313,7 +313,7 @@ describe('Mindstrate', () => {
       expect(assembled.project).toBe('proj');
       expect(assembled.sessionContext).toContain('Keep SSR output deterministic');
       expect(assembled.projectSnapshot?.tags).toContain('project-snapshot');
-      expect(assembled.curated.knowledge.length).toBeGreaterThan(0);
+      expect(assembled.graphSummaries?.length).toBeGreaterThan(0);
       expect(assembled.curated.graphRules).toBeDefined();
       expect(assembled.summary).toContain('Session Continuity');
       expect(assembled.summary).toContain('Project Snapshot');

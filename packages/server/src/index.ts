@@ -122,7 +122,6 @@ export {
   ingestTestRun,
   ingestLspDiagnostic,
   ingestUserFeedback,
-  ingestProjectSnapshotEvent,
   type IngestContextEventInput,
   type IngestContextEventResult,
   type IngestGitActivityInput,

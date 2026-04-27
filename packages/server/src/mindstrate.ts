@@ -17,7 +17,6 @@ import { loadConfig, type MindstrateConfig } from './config.js';
 import type {
   CreateKnowledgeInput,
   RetrievalContext,
-  KnowledgeUnit,
   AssembledContext,
   FeedbackEvent,
   GraphKnowledgeView,
@@ -97,7 +96,6 @@ import {
   ingestContextEvent,
   ingestGitActivity,
   ingestLspDiagnostic,
-  ingestProjectSnapshotEvent,
   ingestTestRun,
   ingestUserFeedback,
   type IngestContextEventInput,
@@ -332,54 +330,65 @@ export class Mindstrate {
   async upsertProjectSnapshot(
     project: DetectedProject,
     options: { author?: string; trusted?: boolean } = {},
-  ): Promise<{ knowledge: KnowledgeUnit; view: GraphKnowledgeView; changed: boolean; created: boolean }> {
+  ): Promise<{ node: ContextNode; view: GraphKnowledgeView; changed: boolean; created: boolean }> {
     await this.ensureInit();
 
-    // Build with knowledge of the existing solution (so preserve blocks survive).
     const { id } = buildProjectSnapshot(project, options);
-    const existing = this.metadataStore.getById(id);
-    const existingNode = this.contextGraphStore.listNodes({
-      project: project.name,
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.PROJECT_SNAPSHOT,
-      limit: 100,
-    }).find((node) => node.sourceRef === id);
-    const previousSolution = existingNode?.content ?? existing?.solution;
+    const existingNode = this.contextGraphStore.getNodeById(id);
+    const previousSolution = existingNode?.content;
     const built = buildProjectSnapshot(project, { ...options, previousSolution });
 
-    let knowledge: KnowledgeUnit;
-    let created = false;
-
-    if (existing) {
-      knowledge = this.metadataStore.update(id, {
-        title: built.input.title,
+    const nodeInput: CreateContextNodeInput = {
+      id,
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.PROJECT_SNAPSHOT,
+      title: built.input.title,
+      content: built.input.solution,
+      tags: built.input.tags,
+      project: built.input.context?.project,
+      compressionLevel: 0.02,
+      confidence: built.input.confidence,
+      qualityScore: options.trusted ? 90 : 70,
+      status: 'active' as ContextNodeStatus,
+      sourceRef: id,
+      metadata: {
         problem: built.input.problem,
-        solution: built.input.solution,
-        tags: built.input.tags,
-        confidence: built.input.confidence,
         actionable: built.input.actionable,
         context: built.input.context,
-      })!;
-    } else {
-      knowledge = this.metadataStore.create(built.input, { id });
-      created = true;
-    }
+        author: built.input.author,
+        source: built.input.source,
+      },
+    };
 
-    // Re-embed and write to vector store so semantic search picks up new content.
+    const created = !existingNode;
+    const node = existingNode
+      ? this.contextGraphStore.updateNode(id, {
+        title: nodeInput.title,
+        content: nodeInput.content,
+        tags: nodeInput.tags,
+        project: nodeInput.project,
+        compressionLevel: nodeInput.compressionLevel,
+        confidence: nodeInput.confidence,
+        qualityScore: nodeInput.qualityScore,
+        status: nodeInput.status,
+        sourceRef: nodeInput.sourceRef,
+        metadata: nodeInput.metadata,
+      })!
+      : this.contextGraphStore.createNode(nodeInput);
+
     try {
-      const text = this.embedder.knowledgeToText(knowledge);
+      const text = `${node.title}\n${node.content}`;
       const embedding = await this.embedder.embed(text);
-      // delete then add to handle both create and update paths uniformly
       await this.vectorStore.delete(id);
       await this.vectorStore.add({
         id,
         embedding,
         text,
         metadata: {
-          type: knowledge.type,
-          language: knowledge.context.language ?? '',
-          framework: knowledge.context.framework ?? '',
-          project: knowledge.context.project ?? '',
+          type: node.domainType,
+          language: getStringMetadata(node, 'context', 'language'),
+          framework: getStringMetadata(node, 'context', 'framework'),
+          project: node.project ?? '',
         },
       });
     } catch (err) {
@@ -389,32 +398,31 @@ export class Mindstrate {
       );
     }
 
-    if (created) {
-      this.tryIngestDerivedEvent(() => ingestProjectSnapshotEvent(this.contextGraphStore, knowledge));
-      this.projectSnapshotProjectionMaterializer.materialize({ project: knowledge.context.project, limit: 10 });
-    } else if (built.changed) {
-      this.tryIngestDerivedEvent(() => ingestProjectSnapshotEvent(this.contextGraphStore, knowledge));
-      this.projectSnapshotProjectionMaterializer.materialize({ project: knowledge.context.project, limit: 10 });
+    if (created || built.changed) {
+      this.contextGraphStore.createEvent({
+        type: ContextEventType.PROJECT_SNAPSHOT,
+        project: node.project,
+        actor: typeof node.metadata?.['author'] === 'string' ? node.metadata['author'] : undefined,
+        content: node.content,
+        metadata: { nodeId: node.id },
+      });
+      this.projectSnapshotProjectionMaterializer.materialize({ project: node.project, limit: 10 });
     }
 
-    const view = this.readGraphKnowledge({ project: knowledge.context.project, limit: 100 })
-      .find((entry) => entry.sourceRef === knowledge.id || entry.id === knowledge.id);
+    const view = this.readGraphKnowledge({ project: node.project, limit: 100 })
+      .find((entry) => entry.id === node.id);
 
     return {
-      knowledge,
-      view: view ?? projectSnapshotToGraphKnowledgeView(knowledge),
+      node,
+      view: view ?? toGraphKnowledgeView(node),
       changed: built.changed || created,
       created,
     };
   }
 
-  /**
-   * Returns the project snapshot KU previously created by `upsertProjectSnapshot`,
-   * or null if none exists.
-   */
-  getProjectSnapshot(project: DetectedProject): KnowledgeUnit | null {
+  getProjectSnapshot(project: DetectedProject): ContextNode | null {
     const { id } = buildProjectSnapshot(project);
-    return this.metadataStore.getById(id);
+    return this.contextGraphStore.getNodeById(id);
   }
 
   /** 质量门禁预检查（不写入，仅检查质量） */
@@ -1088,13 +1096,13 @@ export class Mindstrate {
     }
   }
 
-  private findProjectSnapshot(project: string): KnowledgeUnit | null {
-    const candidates = this.metadataStore.query({
+  private findProjectSnapshot(project: string): ContextNode | null {
+    return this.contextGraphStore.listNodes({
       project,
-      types: [KnowledgeType.ARCHITECTURE],
-    }, 20);
-
-    return candidates.find((knowledge) => knowledge.tags.includes('project-snapshot')) ?? null;
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.PROJECT_SNAPSHOT,
+      limit: 1,
+    })[0] ?? null;
   }
 
   private findExactGraphDuplicate(input: CreateKnowledgeInput): ContextNode | null {
@@ -1117,7 +1125,7 @@ export class Mindstrate {
     taskDescription: string,
     project: string | undefined,
     sessionContext: string | undefined,
-    projectSnapshot: KnowledgeUnit | undefined,
+    projectSnapshot: ContextNode | undefined,
     curated: CuratedContext,
     options?: {
       includeTaskCuration?: boolean;
@@ -1137,7 +1145,7 @@ export class Mindstrate {
     if (projectSnapshot) {
       sections.push('\n### Project Snapshot');
       sections.push(`Title: ${projectSnapshot.title}`);
-      sections.push(projectSnapshot.solution);
+      sections.push(projectSnapshot.content);
     }
 
     if (options?.includeTaskCuration !== false) {
@@ -1157,21 +1165,6 @@ export class Mindstrate {
       );
     }
   }
-}
-
-function projectSnapshotToGraphKnowledgeView(knowledge: KnowledgeUnit): GraphKnowledgeView {
-  return {
-    id: knowledge.id,
-    title: knowledge.title,
-    summary: knowledge.solution.split('\n\n')[0]?.trim() ?? knowledge.solution,
-    substrateType: SubstrateType.SNAPSHOT,
-    domainType: ContextDomainType.PROJECT_SNAPSHOT,
-    project: knowledge.context.project,
-    priorityScore: Math.min(1, knowledge.quality.score / 100),
-    status: 'active' as ContextNodeStatus,
-    sourceRef: knowledge.id,
-    tags: knowledge.tags,
-  };
 }
 
 function computeGraphNodeMatchScore(tokens: string[], node: ContextNode): number {
