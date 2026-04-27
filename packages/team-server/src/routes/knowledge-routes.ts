@@ -118,7 +118,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
   }));
 
   app.post('/api/search', withInitializedMemory(memory, async (req, res) => {
-    const { query, topK, language, framework, project, minScore } = req.body;
+    const { query, topK, language, framework, project, minScore, sessionId } = req.body;
     const types = readStringArray(req.body.types ?? req.body.type);
     const tags = readStringArray(req.body.tags);
     const status = readStringArray(req.body.status);
@@ -131,6 +131,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       topK: topK || 10,
       project,
       limit: 100,
+      sessionId,
     }).filter((result) => !types || types.includes(result.view.domainType))
       .filter((result) => !tags || matchesAll(result.view.tags ?? [], tags))
       .filter((result) => !status || status.includes(result.view.status))

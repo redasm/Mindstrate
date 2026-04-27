@@ -30,7 +30,7 @@ describe('KnowledgeEvolution', () => {
     metadataStore = new MetadataStore(path.join(tempDir, 'test.db'));
     vectorStore = new VectorStore(path.join(tempDir, 'vectors'), 'test');
     embedder = new Embedder(''); // offline
-    feedbackLoop = new FeedbackLoop(metadataStore.getDb(), metadataStore);
+    feedbackLoop = new FeedbackLoop(metadataStore.getDb());
     pipeline = new Pipeline(metadataStore, vectorStore, embedder);
     evolution = new KnowledgeEvolution(metadataStore, vectorStore, embedder, feedbackLoop, '');
   });

@@ -10,6 +10,6 @@ export {
   TeamClient,
   type TeamClientConfig,
   type TeamServerStats,
-  type KnowledgeFeedbackStats,
+  type NodeFeedbackStats,
   type SyncResult,
 } from './team-client.js';

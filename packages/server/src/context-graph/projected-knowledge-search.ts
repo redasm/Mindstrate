@@ -3,6 +3,8 @@ import type { GraphKnowledgeProjector, GraphKnowledgeProjectionOptions } from '.
 
 export interface ProjectedKnowledgeSearchOptions extends GraphKnowledgeProjectionOptions {
   topK?: number;
+  sessionId?: string;
+  trackFeedback?: boolean;
 }
 
 export class ProjectedKnowledgeSearch {

@@ -27,4 +27,6 @@ export interface GraphKnowledgeSearchResult {
   view: GraphKnowledgeView;
   relevanceScore: number;
   matchReason?: string;
+  /** 检索追踪 ID（用于自动反馈闭环） */
+  retrievalId?: string;
 }

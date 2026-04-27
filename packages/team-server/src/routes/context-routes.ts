@@ -21,7 +21,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.post('/api/graph/search', withInitializedMemory(memory, async (req, res) => {
-    const { query, project, topK, limit } = req.body;
+    const { query, project, topK, limit, sessionId } = req.body;
     if (!query) {
       res.status(400).json({ error: 'query is required' });
       return;
@@ -31,6 +31,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       project,
       topK: topK || 10,
       limit: limit || 50,
+      sessionId,
     }));
   }));
 

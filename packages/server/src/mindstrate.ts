@@ -5,7 +5,7 @@
  * 提供简洁的 API 供 CLI 和 MCP Server 使用。
  *
  * 新增能力：
- * - 自动反馈闭环（FeedbackLoop）
+ * - 图节点反馈闭环（FeedbackLoop）
  * - ECS 代谢演化（MetabolismEngine）
  * - 图优先上下文策划
  * - 图检索质量评估（RetrievalEvaluator）
@@ -189,8 +189,8 @@ export class Mindstrate {
     this.bundleManager = new PortableContextBundleManager(this.contextGraphStore);
     this.sessionCompressor = new SessionCompressor(this.config.openaiApiKey, this.config.llmModel, llmBaseUrl);
 
-    // 自动反馈闭环
-    this.feedbackLoop = new FeedbackLoop(this.metadataStore.getDb(), this.metadataStore);
+    // 图节点反馈闭环
+    this.feedbackLoop = new FeedbackLoop(this.metadataStore.getDb());
 
     // Pipeline performs the quality gate for graph writes.
     this.pipeline = new Pipeline(
@@ -201,7 +201,7 @@ export class Mindstrate {
     );
     // 检索评估
     this.evaluator = new RetrievalEvaluator(this.metadataStore.getDb(), (query, options) =>
-      this.queryGraphKnowledge(query, { topK: options.topK })
+      this.queryGraphKnowledge(query, { topK: options.topK, trackFeedback: false })
         .map((result) => result.view.id),
     );
   }
@@ -544,15 +544,23 @@ export class Mindstrate {
   }
 
   // ============================================================
-  // 知识反馈
+  // 图节点反馈
   // ============================================================
 
   upvote(id: string): void {
-    this.metadataStore.vote(id, 'up');
+    const node = this.contextGraphStore.getNodeById(id);
+    if (!node) return;
+    this.contextGraphStore.updateNode(id, {
+      positiveFeedback: node.positiveFeedback + 1,
+    });
   }
 
   downvote(id: string): void {
-    this.metadataStore.vote(id, 'down');
+    const node = this.contextGraphStore.getNodeById(id);
+    if (!node) return;
+    this.contextGraphStore.updateNode(id, {
+      negativeFeedback: node.negativeFeedback + 1,
+    });
   }
 
   /**
@@ -572,10 +580,10 @@ export class Mindstrate {
   }
 
   /**
-   * 获取知识的反馈统计
+   * 获取图节点的反馈统计
    */
-  getFeedbackStats(knowledgeId: string) {
-    return this.feedbackLoop.getFeedbackStats(knowledgeId);
+  getFeedbackStats(nodeId: string) {
+    return this.feedbackLoop.getFeedbackStats(nodeId);
   }
 
   // ============================================================
@@ -1029,7 +1037,17 @@ export class Mindstrate {
   }
 
   queryGraphKnowledge(query: string, options?: ProjectedKnowledgeSearchOptions) {
-    return this.projectedKnowledgeSearch.search(query, options);
+    const results = this.projectedKnowledgeSearch.search(query, options);
+    if (options?.trackFeedback === false) return results;
+
+    return results.map((result) => ({
+      ...result,
+      retrievalId: this.feedbackLoop.trackRetrieval(
+        result.view.id,
+        query,
+        options?.sessionId,
+      ),
+    }));
   }
 
   // ============================================================

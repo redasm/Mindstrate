@@ -223,13 +223,13 @@ export interface RetrievalResult {
 /**
  * 自动反馈事件（自动反馈闭环系统）
  *
- * 追踪：检索 → 使用 → 结果 → 自动调分
+ * 追踪：图检索 → 使用 → 结果 → 图节点反馈计数
  */
 export interface FeedbackEvent {
   /** 唯一 ID */
   id: string;
-  /** 被检索的知识 ID */
-  knowledgeId: string;
+  /** 被检索的图节点 ID */
+  nodeId: string;
   /** 检索时的查询 */
   query: string;
   /** 检索时间 */

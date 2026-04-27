@@ -83,14 +83,14 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json({ success: true });
   }));
 
-  app.get('/api/feedback/:knowledgeId', asyncRoute((req, res) => {
-    const knowledgeId = readParam(req.params.knowledgeId);
-    if (!knowledgeId) {
+  app.get('/api/feedback/:nodeId', asyncRoute((req, res) => {
+    const nodeId = readParam(req.params.nodeId);
+    if (!nodeId) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
 
-    res.json(memory.getFeedbackStats(knowledgeId));
+    res.json(memory.getFeedbackStats(nodeId));
   }));
 
   app.get('/api/stats', asyncRoute(async (_req, res) => {

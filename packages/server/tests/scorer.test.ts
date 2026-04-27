@@ -50,7 +50,7 @@ describe('QualityScorer', () => {
   beforeEach(() => {
     tempDir = createTempDir();
     metadataStore = new MetadataStore(path.join(tempDir, 'test.db'));
-    feedbackLoop = new FeedbackLoop(metadataStore.getDb(), metadataStore);
+    feedbackLoop = new FeedbackLoop(metadataStore.getDb());
     scorer = new QualityScorer(metadataStore, feedbackLoop);
   });
 

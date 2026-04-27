@@ -41,8 +41,8 @@ export interface TeamServerStats {
   };
 }
 
-/** Feedback stats for a single knowledge entry */
-export interface KnowledgeFeedbackStats {
+/** Feedback stats for a single graph node */
+export interface NodeFeedbackStats {
   total: number;
   adopted: number;
   rejected: number;
@@ -263,8 +263,8 @@ export class TeamClient {
     await this.post('/api/feedback', { retrievalId, signal, context });
   }
 
-  async getFeedbackStats(knowledgeId: string): Promise<KnowledgeFeedbackStats> {
-    return this.fetch(`/api/feedback/${knowledgeId}`);
+  async getFeedbackStats(nodeId: string): Promise<NodeFeedbackStats> {
+    return this.fetch(`/api/feedback/${nodeId}`);
   }
 
   // ============================================================
@@ -307,13 +307,14 @@ export class TeamClient {
 
   async queryGraphKnowledge(
     query: string,
-    options?: { project?: string; topK?: number; limit?: number },
+    options?: { project?: string; topK?: number; limit?: number; sessionId?: string },
   ): Promise<GraphKnowledgeSearchResult[]> {
     return this.post('/api/graph/search', {
       query,
       project: options?.project,
       topK: options?.topK,
       limit: options?.limit,
+      sessionId: options?.sessionId,
     });
   }
 

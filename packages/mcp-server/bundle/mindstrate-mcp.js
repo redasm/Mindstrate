@@ -6936,8 +6936,8 @@ var require_team_client = __commonJS({
       async recordFeedback(retrievalId, signal, context) {
         await this.post("/api/feedback", { retrievalId, signal, context });
       }
-      async getFeedbackStats(knowledgeId) {
-        return this.fetch(`/api/feedback/${knowledgeId}`);
+      async getFeedbackStats(nodeId) {
+        return this.fetch(`/api/feedback/${nodeId}`);
       }
       // ============================================================
       // Context Curation (上下文策划)
@@ -6972,7 +6972,8 @@ var require_team_client = __commonJS({
           query,
           project: options?.project,
           topK: options?.topK,
-          limit: options?.limit
+          limit: options?.limit,
+          sessionId: options?.sessionId
         });
       }
       async ingestContextEvent(input) {

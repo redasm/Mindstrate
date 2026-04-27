@@ -4,9 +4,9 @@
  * 自动反馈闭环系统
  *
  * 核心思想：
- * 1. 当 AI 检索到知识时，记录一个 "pending" 反馈事件
- * 2. 当 AI 使用/拒绝/忽略该知识时，记录反馈信号
- * 3. 根据反馈信号自动调整知识质量分
+ * 1. 当 AI 检索到图节点时，记录一个 "pending" 反馈事件
+ * 2. 当 AI 使用/拒绝/忽略该节点时，记录反馈信号
+ * 3. 根据反馈信号自动调整图节点反馈计数
  *
  * 这实现了从"被动人工投票"到"主动自动反馈"的升级。
  */
@@ -14,15 +14,12 @@
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
 import type { FeedbackEvent } from '@mindstrate/protocol';
-import { MetadataStore } from '../storage/metadata-store.js';
 
 export class FeedbackLoop {
   private db: Database.Database;
-  private metadataStore: MetadataStore;
 
-  constructor(db: Database.Database, metadataStore: MetadataStore) {
+  constructor(db: Database.Database) {
     this.db = db;
-    this.metadataStore = metadataStore;
     this.initialize();
   }
 
@@ -30,20 +27,17 @@ export class FeedbackLoop {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS feedback_events (
         id TEXT PRIMARY KEY,
-        knowledge_id TEXT NOT NULL,
+        node_id TEXT NOT NULL,
         query TEXT NOT NULL,
         retrieved_at TEXT NOT NULL,
         signal TEXT NOT NULL DEFAULT 'pending',
         responded_at TEXT,
         context TEXT,
-        session_id TEXT,
-
-        FOREIGN KEY (knowledge_id) REFERENCES knowledge_units(id)
-          ON DELETE CASCADE
+        session_id TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_feedback_knowledge
-        ON feedback_events(knowledge_id);
+        ON feedback_events(node_id);
       CREATE INDEX IF NOT EXISTS idx_feedback_signal
         ON feedback_events(signal);
       CREATE INDEX IF NOT EXISTS idx_feedback_session
@@ -54,11 +48,11 @@ export class FeedbackLoop {
   }
 
   /**
-   * 记录一次检索事件（AI 检索到了某条知识）
+   * 记录一次检索事件（AI 检索到了某个图节点）
    * 返回 retrievalId 用于后续跟踪反馈
    */
   trackRetrieval(
-    knowledgeId: string,
+    nodeId: string,
     query: string,
     sessionId?: string,
   ): string {
@@ -66,9 +60,9 @@ export class FeedbackLoop {
     const now = new Date().toISOString();
 
     this.db.prepare(`
-      INSERT INTO feedback_events (id, knowledge_id, query, retrieved_at, signal, session_id)
+      INSERT INTO feedback_events (id, node_id, query, retrieved_at, signal, session_id)
       VALUES (?, ?, ?, ?, 'pending', ?)
-    `).run(id, knowledgeId, query, now, sessionId ?? null);
+    `).run(id, nodeId, query, now, sessionId ?? null);
 
     return id;
   }
@@ -89,8 +83,8 @@ export class FeedbackLoop {
     const now = new Date().toISOString();
 
     const row = this.db.prepare(
-      'SELECT knowledge_id FROM feedback_events WHERE id = ?'
-    ).get(retrievalId) as { knowledge_id: string } | undefined;
+      'SELECT node_id FROM feedback_events WHERE id = ?'
+    ).get(retrievalId) as { node_id: string } | undefined;
 
     if (!row) return;
 
@@ -100,8 +94,7 @@ export class FeedbackLoop {
       WHERE id = ?
     `).run(signal, now, context ?? null, retrievalId);
 
-    // 根据反馈信号自动调整知识质量
-    this.applyFeedbackToScore(row.knowledge_id, signal);
+    this.applyFeedbackToNode(row.node_id, signal);
   }
 
   /**
@@ -120,54 +113,43 @@ export class FeedbackLoop {
   }
 
   /**
-   * 根据反馈信号调整知识质量分
-   *
-   * 不只是记录成功失败，而是理解"为什么"来做针对性改进。
+   * 根据反馈信号调整图节点反馈计数。
    */
-  private applyFeedbackToScore(
-    knowledgeId: string,
+  private applyFeedbackToNode(
+    nodeId: string,
     signal: FeedbackEvent['signal'],
   ): void {
-    const knowledge = this.metadataStore.getById(knowledgeId);
-    if (!knowledge) return;
-
     switch (signal) {
       case 'adopted':
-        // 被采纳 → 记录使用，相当于隐式 upvote
-        this.metadataStore.recordUsage(knowledgeId);
+        this.incrementNodeFeedback(nodeId, 'positive_feedback');
         break;
       case 'rejected':
-        // 被拒绝 → 累计拒绝次数作为负面信号
-        // 但不直接 downvote（可能是场景不匹配，不一定是知识质量差）
-        this.incrementRejectCount(knowledgeId);
+        this.incrementNodeFeedback(nodeId, 'negative_feedback');
         break;
       case 'ignored':
-        // 被忽略 → 轻微负面信号（可能不够相关）
-        // 不做直接操作，但在 scorer 中会考虑
         break;
       case 'partial':
-        // 部分采纳 → 正面信号但不如完全采纳
-        this.metadataStore.recordUsage(knowledgeId);
+        this.incrementNodeFeedback(nodeId, 'positive_feedback');
         break;
     }
   }
 
-  /**
-   * 增加拒绝计数 — 通过维护任务统一处理自动投票
-   *
-   * 修复：不再在每次反馈事件中触发自动投票，
-   * 而是只在 runMaintenance 时统一评估，避免雪崩效应。
-   */
-  private incrementRejectCount(_knowledgeId: string): void {
-    // 不在单次反馈中触发投票，由 scorer.runMaintenance() 统一处理
-    // 反馈数据已记录在 feedback_events 表中，scorer 会通过
-    // feedbackLoop.getFeedbackStats() 读取并纳入评分
+  private incrementNodeFeedback(
+    nodeId: string,
+    column: 'positive_feedback' | 'negative_feedback',
+  ): void {
+    this.db.prepare(`
+      UPDATE context_nodes
+      SET ${column} = ${column} + 1,
+          updated_at = ?
+      WHERE id = ?
+    `).run(new Date().toISOString(), nodeId);
   }
 
   /**
-   * 获取某条知识的反馈统计
+   * 获取某个图节点的反馈统计
    */
-  getFeedbackStats(knowledgeId: string): {
+  getFeedbackStats(nodeId: string): {
     total: number;
     adopted: number;
     rejected: number;
@@ -178,9 +160,9 @@ export class FeedbackLoop {
     const rows = this.db.prepare(`
       SELECT signal, COUNT(*) as cnt
       FROM feedback_events
-      WHERE knowledge_id = ? AND signal != 'pending'
+      WHERE node_id = ? AND signal != 'pending'
       GROUP BY signal
-    `).all(knowledgeId) as { signal: string; cnt: number }[];
+    `).all(nodeId) as { signal: string; cnt: number }[];
 
     const adopted = rows.find(r => r.signal === 'adopted')?.cnt ?? 0;
     const rejected = rows.find(r => r.signal === 'rejected')?.cnt ?? 0;
@@ -209,7 +191,7 @@ export class FeedbackLoop {
 
     return rows.map(r => ({
       id: r.id,
-      knowledgeId: r.knowledge_id,
+      nodeId: r.node_id,
       query: r.query,
       retrievedAt: r.retrieved_at,
       signal: r.signal,
@@ -226,7 +208,7 @@ export class FeedbackLoop {
     totalEvents: number;
     last30Days: number;
     avgAdoptionRate: number;
-    lowAdoptionKnowledge: string[];
+    lowAdoptionNodes: string[];
   } {
     const totalEvents = (this.db.prepare(
       'SELECT COUNT(*) as cnt FROM feedback_events'
@@ -238,18 +220,18 @@ export class FeedbackLoop {
       'SELECT COUNT(*) as cnt FROM feedback_events WHERE retrieved_at > ?'
     ).get(last30DaysThreshold) as any).cnt;
 
-    // 找出采纳率低的知识（至少被检索 5 次，采纳率 < 30%）
+    // 找出采纳率低的节点（至少被检索 5 次，采纳率 < 30%）
     const lowAdoption = this.db.prepare(`
-      SELECT knowledge_id,
+      SELECT node_id,
         SUM(CASE WHEN signal = 'adopted' THEN 1 ELSE 0 END) as adopted,
         SUM(CASE WHEN signal = 'partial' THEN 1 ELSE 0 END) as partial_cnt,
         COUNT(*) as total
       FROM feedback_events
       WHERE signal != 'pending'
-      GROUP BY knowledge_id
+      GROUP BY node_id
       HAVING total >= 5
         AND (CAST(adopted AS REAL) + CAST(partial_cnt AS REAL) * 0.5) / total < 0.3
-    `).all() as { knowledge_id: string }[];
+    `).all() as { node_id: string }[];
 
     // 全局平均采纳率
     const globalAdoption = this.db.prepare(`
@@ -266,7 +248,7 @@ export class FeedbackLoop {
       avgAdoptionRate: globalAdoption.total > 0
         ? globalAdoption.positive / globalAdoption.total
         : 0,
-      lowAdoptionKnowledge: lowAdoption.map(r => r.knowledge_id),
+      lowAdoptionNodes: lowAdoption.map(r => r.node_id),
     };
   }
 }

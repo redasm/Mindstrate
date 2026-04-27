@@ -29,7 +29,7 @@ describe('Retriever', () => {
     metadataStore = new MetadataStore(path.join(tempDir, 'test.db'));
     vectorStore = new VectorStore(path.join(tempDir, 'vectors'), 'test');
     embedder = new Embedder(''); // offline mode
-    feedbackLoop = new FeedbackLoop(metadataStore.getDb(), metadataStore);
+    feedbackLoop = new FeedbackLoop(metadataStore.getDb());
     pipeline = new Pipeline(metadataStore, vectorStore, embedder);
     retriever = new Retriever(metadataStore, vectorStore, embedder, feedbackLoop);
 
