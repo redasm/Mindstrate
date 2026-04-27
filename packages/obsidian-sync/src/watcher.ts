@@ -2,10 +2,10 @@
  * VaultWatcher: watches the Obsidian vault for changes and applies them back into Mindstrate.
  *
  * Behavior:
- *  - On change/add: parse the markdown, look up the KU by frontmatter id.
- *      - If KU exists and body changed -> Mindstrate.update(...) (re-embedding handled by re-add path optionally).
- *      - If KU does not exist          -> create a new KU with the parsed content (id from frontmatter is informational; Mindstrate mints its own).
- *  - On unlink: delete the KU from Mindstrate (only when filename had a known id from index).
+ *  - On change/add: parse the markdown, look up the graph node by frontmatter id.
+ *      - If the node exists and body changed -> Mindstrate.update(...) (re-embedding handled by re-add path optionally).
+ *      - If the node does not exist          -> create a new graph node with the parsed content (id from frontmatter is informational; Mindstrate mints its own).
+ *  - On unlink: delete the node from Mindstrate (only when filename had a known id from index).
  *
  * Loop prevention:
  *  - We track the last bodyHash we wrote per file path; if a change matches a bodyHash
@@ -45,7 +45,7 @@ export interface VaultWatcherOptions {
 export interface SyncEvent {
   type: 'updated' | 'created' | 'deleted' | 'ignored' | 'error';
   relPath: string;
-  knowledgeId?: string;
+  nodeId?: string;
   message?: string;
 }
 
@@ -194,7 +194,7 @@ export class VaultWatcher {
         && parsed.frontmatter.updatedAt
         && new Date(existing.updatedAt).getTime() > new Date(parsed.frontmatter.updatedAt).getTime()
       ) {
-        this.emit({ type: 'ignored', relPath: rel, knowledgeId: existing.id, message: 'Stale vault edit conflicts with newer Mindstrate content' });
+        this.emit({ type: 'ignored', relPath: rel, nodeId: existing.id, message: 'Stale vault edit conflicts with newer Mindstrate content' });
         return;
       }
       // Update path
@@ -219,16 +219,16 @@ export class VaultWatcher {
         },
       });
       this.knownHashes.set(rel, hash);
-      this.emit({ type: 'updated', relPath: rel, knowledgeId: existing.id });
+      this.emit({ type: 'updated', relPath: rel, nodeId: existing.id });
       return;
     }
 
-    // No existing KU -> create
+    // No existing node -> create
     const create = parsedToCreate(parsed);
     const result = await this.memory.add(create);
     if (result.success && result.view) {
       this.knownHashes.set(rel, hash);
-      this.emit({ type: 'created', relPath: rel, knowledgeId: result.view.id });
+      this.emit({ type: 'created', relPath: rel, nodeId: result.view.id });
     } else {
       this.emit({
         type: 'ignored',
@@ -241,57 +241,57 @@ export class VaultWatcher {
   private handleUnlink(absPath: string): void {
     const rel = this.toRel(absPath);
     if (!rel) return;
-    // Need to discover which KU this file represented.
+    // Need to discover which graph node this file represented.
     // 1) Look up vault index, 2) Fall back to id-suffix in filename.
     const idx = this.layout.loadIndex();
-    let knowledgeId: string | undefined;
+    let nodeId: string | undefined;
     for (const [kid, krel] of Object.entries(idx.files)) {
       if (krel === rel) {
-        knowledgeId = kid;
+        nodeId = kid;
         break;
       }
     }
-    if (!knowledgeId) {
+    if (!nodeId) {
       const base = path.basename(rel);
       const suffix = extractIdSuffixFromFilename(base);
       if (suffix) {
         const all = this.memory.readGraphKnowledge({ limit: 100000 });
         const match = all.find((k) => idMatchesSuffix(k.id, suffix));
-        knowledgeId = match?.id;
+        nodeId = match?.id;
       }
     }
 
-    if (!knowledgeId) {
-      this.emit({ type: 'ignored', relPath: rel, message: 'unlink: no knowledge id resolvable' });
+    if (!nodeId) {
+      this.emit({ type: 'ignored', relPath: rel, message: 'unlink: no node id resolvable' });
       return;
     }
 
-    const existing = this.findByIdOrSuffix(knowledgeId, rel);
+    const existing = this.findByIdOrSuffix(nodeId, rel);
     if (existing && getVaultSyncMode(graphNodeToKnowledgeType(existing)) === 'mirror') {
       this.knownHashes.delete(rel);
       this.emit({
         type: 'ignored',
         relPath: rel,
-        knowledgeId,
+        nodeId,
         message: 'Vault deletes disabled for mirror-only knowledge',
       });
       return;
     }
 
-    Promise.resolve(this.memory.deleteContextNode(knowledgeId)).then((deleted) => {
+    Promise.resolve(this.memory.deleteContextNode(nodeId)).then((deleted) => {
       this.knownHashes.delete(rel);
       // Also drop from index
       const idx2 = this.layout.loadIndex();
-      delete idx2.files[knowledgeId!];
+      delete idx2.files[nodeId!];
       this.layout.saveIndex(idx2);
       this.emit({
         type: deleted ? 'deleted' : 'ignored',
         relPath: rel,
-        knowledgeId,
-        message: deleted ? undefined : 'no such knowledge in Mindstrate',
+        nodeId,
+        message: deleted ? undefined : 'no such node in Mindstrate',
       });
     }).catch((err) => {
-      this.emit({ type: 'error', relPath: rel, knowledgeId, message: errMsg(err) });
+      this.emit({ type: 'error', relPath: rel, nodeId, message: errMsg(err) });
     });
   }
 
@@ -318,7 +318,7 @@ export class VaultWatcher {
   private emit(ev: SyncEvent): void {
     if (!this.silent) {
       const tag = ev.type.toUpperCase();
-      const idPart = ev.knowledgeId ? ` (${ev.knowledgeId.slice(0, 8)})` : '';
+      const idPart = ev.nodeId ? ` (${ev.nodeId.slice(0, 8)})` : '';
       const msgPart = ev.message ? ` -- ${ev.message}` : '';
       console.error(`[obsidian-sync] ${tag} ${ev.relPath}${idPart}${msgPart}`);
     }
@@ -348,3 +348,4 @@ function graphNodeToKnowledgeType(node: ContextNode): KnowledgeType {
     ? domainType as KnowledgeType
     : KnowledgeType.BEST_PRACTICE;
 }
+
