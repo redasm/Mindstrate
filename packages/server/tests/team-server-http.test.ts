@@ -22,13 +22,27 @@ interface RunningTeamServer {
 }
 
 const runningServers: RunningTeamServer[] = [];
+const TEST_API_KEY = 'test-team-key';
 
-const startTeamServer = async (): Promise<RunningTeamServer> => {
+const startTeamServer = async (options?: {
+  apiKey?: string;
+  clientApiKey?: string;
+  projects?: string[];
+}): Promise<RunningTeamServer> => {
   const tempDir = createTempDir('mindstrate-team-server-test-');
   const memory = new Mindstrate({ dataDir: tempDir, openaiApiKey: '' });
   await memory.init();
 
-  const app = createApp({ apiKey: '', memory });
+  const apiKey = options?.apiKey ?? TEST_API_KEY;
+  const app = createApp({
+    apiKey,
+    memory,
+    authKeys: [{
+      key: apiKey,
+      scopes: ['read', 'write', 'admin'],
+      projects: options?.projects,
+    }],
+  });
   const server = await new Promise<Server>((resolve) => {
     const instance = createServer(app);
     instance.listen(0, '127.0.0.1', () => resolve(instance));
@@ -37,6 +51,7 @@ const startTeamServer = async (): Promise<RunningTeamServer> => {
   const address = server.address() as AddressInfo;
   const client = new TeamClient({
     serverUrl: `http://127.0.0.1:${address.port}`,
+    apiKey: options?.clientApiKey ?? apiKey,
     timeout: 5000,
   });
 
@@ -69,6 +84,34 @@ afterEach(async () => {
 });
 
 describe('team-server HTTP integration', () => {
+  it('rejects unauthenticated team API requests', async () => {
+    const { client } = await startTeamServer({ clientApiKey: '' });
+
+    await expect(client.list()).rejects.toThrow(/401/);
+  });
+
+  it('prevents scoped API keys from reading outside their project', async () => {
+    const { client, memory } = await startTeamServer({ projects: ['proj-a'] });
+
+    await memory.add(makeKnowledgeInput({
+      title: 'Project A workflow',
+      type: KnowledgeType.WORKFLOW,
+      solution: 'Only project A members should read this workflow.',
+      context: { project: 'proj-a' },
+    }));
+    await memory.add(makeKnowledgeInput({
+      title: 'Project B workflow',
+      type: KnowledgeType.WORKFLOW,
+      solution: 'Project B guidance must stay isolated from project A keys.',
+      context: { project: 'proj-b' },
+    }));
+
+    const visible = await client.list({ project: 'proj-a' });
+    expect(visible.map((entry) => entry.title)).toContain('Project A workflow');
+
+    await expect(client.list({ project: 'proj-b' })).rejects.toThrow(/403/);
+  });
+
   it('preserves actionable guidance through the HTTP create path', async () => {
     const { client, memory } = await startTeamServer();
 

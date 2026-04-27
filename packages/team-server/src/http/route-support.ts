@@ -1,5 +1,6 @@
 import type { Request, RequestHandler, Response } from 'express';
 import type { Mindstrate } from '@mindstrate/server';
+import type { TeamScope } from './auth-middleware.js';
 
 export interface TeamRouteDeps {
   memory: Mindstrate;
@@ -48,3 +49,36 @@ export const readStringArray = (value: unknown): string[] | undefined => {
 
 export const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : 'Unknown error';
+
+export const authorizeProject = (
+  req: Request,
+  res: Response,
+  project: string | undefined,
+  scope: TeamScope,
+): string | undefined | null => {
+  const principal = req.teamPrincipal;
+  if (!principal) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return null;
+  }
+
+  if (!principal.scopes.includes(scope) && !principal.scopes.includes('admin')) {
+    res.status(403).json({ error: `Forbidden: ${scope} scope is required.` });
+    return null;
+  }
+
+  if (principal.projects.includes('*')) return project;
+
+  if (!project) {
+    if (principal.projects.length === 1) return principal.projects[0];
+    res.status(403).json({ error: 'Forbidden: project is required for scoped API keys.' });
+    return null;
+  }
+
+  if (!principal.projects.includes(project)) {
+    res.status(403).json({ error: `Forbidden: API key is not authorized for project "${project}".` });
+    return null;
+  }
+
+  return project;
+};

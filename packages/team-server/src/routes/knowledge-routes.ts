@@ -6,7 +6,7 @@ import {
   type CreateKnowledgeInput,
   type GraphKnowledgeView,
 } from '@mindstrate/server';
-import { asyncRoute, parseLimit, readParam, readStringArray, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
+import { asyncRoute, authorizeProject, parseLimit, readParam, readStringArray, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
 
 const createKnowledgeInput = (body: any): CreateKnowledgeInput => ({
   type: body.type || KnowledgeType.HOW_TO,
@@ -59,7 +59,13 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       return;
     }
 
-    const result = await memory.add(createKnowledgeInput(body));
+    const project = authorizeProject(req, res, body.project || body.context?.project, 'write');
+    if (project === null) return;
+
+    const input = createKnowledgeInput(body);
+    input.context = { ...input.context, project };
+
+    const result = await memory.add(input);
     if (!result.success) {
       res.json({ success: false, message: result.message, duplicateOf: result.duplicateOf });
       return;
@@ -70,8 +76,15 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
 
   app.get('/api/knowledge', asyncRoute((req, res) => {
     const minScore = typeof req.query.minScore === 'string' ? Number(req.query.minScore) : undefined;
+    const project = authorizeProject(
+      req,
+      res,
+      typeof req.query.project === 'string' ? req.query.project : undefined,
+      'read',
+    );
+    if (project === null) return;
     const entries = filterGraphKnowledgeViews(memory.readGraphKnowledge({
-      project: typeof req.query.project === 'string' ? req.query.project : undefined,
+      project,
       limit: parseLimit(req.query.limit, 50),
     }), {
       types: readStringArray(req.query.type) ?? [],
@@ -112,7 +125,9 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
   }));
 
   app.post('/api/search', withInitializedMemory(memory, async (req, res) => {
-    const { query, topK, language, framework, project, minScore, sessionId } = req.body;
+    const { query, topK, language, framework, minScore, sessionId } = req.body;
+    const project = authorizeProject(req, res, req.body.project, 'read');
+    if (project === null) return;
     const types = readStringArray(req.body.types ?? req.body.type);
     const tags = readStringArray(req.body.tags);
     const status = readStringArray(req.body.status);

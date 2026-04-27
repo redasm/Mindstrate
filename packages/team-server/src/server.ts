@@ -8,6 +8,7 @@
 import pino from 'pino';
 import { Mindstrate } from '@mindstrate/server';
 import { createApp } from './app.js';
+import type { TeamApiKey } from './http/auth-middleware.js';
 
 const logger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
@@ -16,7 +17,8 @@ const logger = pino({
 const port = parseInt(process.env['TEAM_PORT'] ?? '3388', 10);
 const apiKey = process.env['TEAM_API_KEY'] ?? '';
 const memory = new Mindstrate();
-const app = createApp({ apiKey, memory });
+const authKeys = readTeamApiKeys();
+const app = createApp({ apiKey, authKeys, memory });
 
 export interface SchedulerEnvConfig {
   enabled: boolean;
@@ -30,8 +32,30 @@ export const readSchedulerEnvConfig = (env: NodeJS.ProcessEnv = process.env): Sc
   project: env['MINDSTRATE_METABOLISM_PROJECT'] || undefined,
 });
 
+export function readTeamApiKeys(env: NodeJS.ProcessEnv = process.env): TeamApiKey[] {
+  const rawKeys = env['TEAM_API_KEYS'];
+  if (rawKeys) {
+    const parsed = JSON.parse(rawKeys) as TeamApiKey[];
+    if (!Array.isArray(parsed) || parsed.some((entry) => !entry.key)) {
+      throw new Error('TEAM_API_KEYS must be a JSON array of objects with a key field.');
+    }
+    return parsed;
+  }
+
+  const singleKey = env['TEAM_API_KEY'];
+  if (!singleKey) {
+    throw new Error('TEAM_API_KEY or TEAM_API_KEYS is required for Team Server.');
+  }
+
+  return [{
+    key: singleKey,
+    scopes: ['read', 'write', 'admin'],
+    projects: ['*'],
+  }];
+}
+
 const warnIfAuthDisabled = (): void => {
-  if (apiKey) {
+  if (authKeys.length > 0) {
     logger.info('Authentication: API Key required');
     return;
   }
