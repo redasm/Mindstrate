@@ -618,17 +618,17 @@ ECS 之后，建议改成：
 - 人类修正入口
 - 可移植上下文包的编辑器
 
-但不建议在第一阶段就把 Markdown 升级为唯一事实源，原因是：
+但不建议把 Markdown 升级为唯一事实源，原因是：
 
-1. 还没有图级版本治理
-2. 还没有多人冲突解决语义
-3. 还没有稳定的 projection 回写机制
+1. 图级版本治理已通过 `graphVersion / previousGraphHash` 起步，但还需要更完整的多人协作语义
+2. 冲突检测与 reflection 已形成候选闭环，但人工合并策略仍应保留在图事实源之上
+3. projection 回写已覆盖 Obsidian 与 editable bundle folder，但仍应作为受控候选入口
 
 更稳妥的顺序是：
 
-- 先让 Markdown 成为 ECS 的一种投影视图
-- 再让部分高层节点支持可控回写
-- 最后才评估是否把某些 bundle 或 project substrate 升级为 canonical source
+- Markdown 和 bundle folder 维持为 ECS 投影视图
+- 高层节点回写统一进入候选、审计和冲突治理流程
+- 暂不把文件系统升级为 canonical source，SQLite 图继续作为唯一事实源
 
 ## 11. 可移植上下文包
 
@@ -706,14 +706,14 @@ MCP 是最适合暴露 ECS 能力的入口。
 - `bundle_create`
 - `bundle_install`
 
-迁移期建议：
+当前实现：
 
-- `memory_search` 仍可用
-- 但底层实现逐步切到图查询 + projection
+- `memory_search` 等既有工具名可继续作为入口，但 payload 与底层结果已经走 graph-first projection
+- `context_internalize` 暴露 AGENTS、project snapshot、system prompt、fine-tune dataset 等内化投影能力
 
 ## 12.4 `web-ui`
 
-Web UI 后续应该新增 ECS 可视化：
+Web UI 已开始承载 ECS 可视化：
 
 - 谱系视图
 - 冲突面板
@@ -889,7 +889,7 @@ Web UI 后续应该新增 ECS 可视化：
 
 ## 15. 建议的近期实施顺序
 
-如果从当前仓库直接开始干，我建议顺序是：
+本轮从当前仓库直接执行的顺序是：
 
 1. 新增 ECS 协议模型和设计文档
 2. 增加图存储骨架，不改现有对外接口
@@ -897,7 +897,7 @@ Web UI 后续应该新增 ECS 可视化：
 4. 把 `session_compressor` 升级为 `Episode -> Snapshot`
 5. 把 `knowledge_evolution` 拆成 `Compress / Prune`
 6. 重写 `context_assemble`，让它从图中装配上下文
-7. 最后再引入 bundle 和更强的 Reflect
+7. 引入 bundle、Reflect、投影回写和内化数据集出口
 
 ## 16. 一句话总结
 
