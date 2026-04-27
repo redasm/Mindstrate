@@ -109,7 +109,21 @@ describe('Pruner', () => {
     const result = pruner.prune({ project: 'mindstrate', apply: true });
 
     expect(result.archivedNodes).toBe(1);
+    expect(result.suggestions).toContainEqual(expect.objectContaining({
+      nodeId: snapshot.id,
+      action: 'archive',
+      reason: 'covered_by_high_level_rule',
+      evidence: expect.objectContaining({
+        ruleId: rule.id,
+      }),
+    }));
     expect(graphStore.getNodeById(snapshot.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
+    expect(graphStore.getNodeById(snapshot.id)?.metadata?.['pruneAudit']).toEqual(expect.objectContaining({
+      reason: 'covered_by_high_level_rule',
+      evidence: expect.objectContaining({
+        ruleId: rule.id,
+      }),
+    }));
     expect(graphStore.getNodeById(rule.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
 
@@ -142,6 +156,38 @@ describe('Pruner', () => {
 
     expect(result.deprecatedNodes).toBe(1);
     expect(graphStore.getNodeById(staleRule.id)?.status).toBe(ContextNodeStatus.DEPRECATED);
+    expect(graphStore.getNodeById(staleRule.id)?.metadata?.['pruneAudit']).toEqual(expect.objectContaining({
+      reason: 'project_environment_mismatch',
+      evidence: expect.objectContaining({
+        framework: expect.objectContaining({
+          node: 'next@14',
+          project: 'next@15',
+        }),
+      }),
+    }));
+  });
+
+  it('supports explicit suggestion mode even when apply thresholds match', () => {
+    const weak = graphStore.createNode({
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Weak summary',
+      content: 'Bad guidance',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 10,
+    });
+
+    const result = pruner.prune({ project: 'mindstrate', mode: 'suggest' });
+
+    expect(result.deprecatedNodes).toBe(0);
+    expect(result.deprecateCandidates).toContain(weak.id);
+    expect(result.suggestions[0]).toEqual(expect.objectContaining({
+      nodeId: weak.id,
+      action: 'deprecate',
+      reason: 'low_quality_or_negative_feedback',
+    }));
+    expect(graphStore.getNodeById(weak.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
 
   it('does not suggest pinned, critical, or verified nodes for pruning', () => {

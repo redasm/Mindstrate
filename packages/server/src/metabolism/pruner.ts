@@ -10,10 +10,18 @@ import type { ContextGraphStore } from '../context-graph/context-graph-store.js'
 export interface PruneOptions {
   project?: string;
   apply?: boolean;
+  mode?: 'suggest' | 'apply';
   archiveOlderThanDays?: number;
   archiveAccessCountAtMost?: number;
   deprecateQualityScoreAtMost?: number;
   deprecateNegativeFeedbackDeltaAtLeast?: number;
+}
+
+export interface PruneSuggestion {
+  nodeId: string;
+  action: 'archive' | 'deprecate';
+  reason: string;
+  evidence: Record<string, unknown>;
 }
 
 export interface PruneResult {
@@ -23,6 +31,7 @@ export interface PruneResult {
   skippedConflictedNodes: number;
   archiveCandidates: string[];
   deprecateCandidates: string[];
+  suggestions: PruneSuggestion[];
 }
 
 export class Pruner {
@@ -48,7 +57,8 @@ export class Pruner {
     let skippedConflictedNodes = 0;
     const archiveCandidates: string[] = [];
     const deprecateCandidates: string[] = [];
-    const apply = options.apply === true;
+    const suggestions: PruneSuggestion[] = [];
+    const apply = options.mode === 'apply' || options.apply === true;
 
     for (const node of nodes) {
       if (node.status === ContextNodeStatus.CONFLICTED) {
@@ -62,44 +72,61 @@ export class Pruner {
         continue;
       }
 
-      if (shouldDeprecate(node, deprecateQualityScoreAtMost, deprecateNegativeFeedbackDeltaAtLeast)) {
-        deprecateCandidates.push(node.id);
-        if (apply) {
-          this.graphStore.updateNode(node.id, { status: ContextNodeStatus.DEPRECATED });
-          deprecatedNodes++;
-        }
-        continue;
-      }
-
-      if (isEnvironmentMismatch(node, projectEnvironment)) {
+      const deprecateEvidence = getDeprecationEvidence(node, deprecateQualityScoreAtMost, deprecateNegativeFeedbackDeltaAtLeast);
+      if (deprecateEvidence) {
+        const suggestion = makeSuggestion(node.id, 'deprecate', 'low_quality_or_negative_feedback', deprecateEvidence);
+        suggestions.push(suggestion);
         deprecateCandidates.push(node.id);
         if (apply) {
           this.graphStore.updateNode(node.id, {
             status: ContextNodeStatus.DEPRECATED,
-            metadata: {
-              ...(node.metadata ?? {}),
-              pruneReason: 'project_environment_mismatch',
-              currentProjectEnvironment: projectEnvironment,
-            },
+            metadata: withPruneAudit(node, suggestion),
           });
           deprecatedNodes++;
         }
         continue;
       }
 
-      if (isCoveredByActiveHighLevelRule(this.graphStore, node)) {
+      const environmentMismatchEvidence = getEnvironmentMismatchEvidence(node, projectEnvironment);
+      if (environmentMismatchEvidence) {
+        const suggestion = makeSuggestion(node.id, 'deprecate', 'project_environment_mismatch', environmentMismatchEvidence);
+        suggestions.push(suggestion);
+        deprecateCandidates.push(node.id);
+        if (apply) {
+          this.graphStore.updateNode(node.id, {
+            status: ContextNodeStatus.DEPRECATED,
+            metadata: withPruneAudit(node, suggestion),
+          });
+          deprecatedNodes++;
+        }
+        continue;
+      }
+
+      const coverageEvidence = getActiveHighLevelRuleCoverage(this.graphStore, node);
+      if (coverageEvidence) {
+        const suggestion = makeSuggestion(node.id, 'archive', 'covered_by_high_level_rule', coverageEvidence);
+        suggestions.push(suggestion);
         archiveCandidates.push(node.id);
         if (apply) {
-          this.graphStore.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
+          this.graphStore.updateNode(node.id, {
+            status: ContextNodeStatus.ARCHIVED,
+            metadata: withPruneAudit(node, suggestion),
+          });
           archivedNodes++;
         }
         continue;
       }
 
-      if (shouldArchive(node, archiveOlderThanDays, archiveAccessCountAtMost)) {
+      const archiveEvidence = getArchiveEvidence(node, archiveOlderThanDays, archiveAccessCountAtMost);
+      if (archiveEvidence) {
+        const suggestion = makeSuggestion(node.id, 'archive', 'stale_low_access_substrate', archiveEvidence);
+        suggestions.push(suggestion);
         archiveCandidates.push(node.id);
         if (apply) {
-          this.graphStore.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
+          this.graphStore.updateNode(node.id, {
+            status: ContextNodeStatus.ARCHIVED,
+            metadata: withPruneAudit(node, suggestion),
+          });
           archivedNodes++;
         }
       }
@@ -112,6 +139,7 @@ export class Pruner {
       skippedConflictedNodes,
       archiveCandidates,
       deprecateCandidates,
+      suggestions,
     };
   }
 }
@@ -134,58 +162,121 @@ function loadProjectEnvironment(nodes: ContextNode[]): Record<string, unknown> {
   return snapshots[0]?.metadata ?? {};
 }
 
-function isEnvironmentMismatch(node: ContextNode, projectEnvironment: Record<string, unknown>): boolean {
-  if (node.domainType === ContextDomainType.PROJECT_SNAPSHOT) return false;
-  if (node.status === ContextNodeStatus.VERIFIED) return false;
+function getEnvironmentMismatchEvidence(
+  node: ContextNode,
+  projectEnvironment: Record<string, unknown>,
+): Record<string, unknown> | null {
+  if (node.domainType === ContextDomainType.PROJECT_SNAPSHOT) return null;
+  if (node.status === ContextNodeStatus.VERIFIED) return null;
 
   const keys = ['runtime', 'language', 'framework'];
-  return keys.some((key) => {
+  const mismatches: Record<string, unknown> = {};
+  for (const key of keys) {
     const nodeValue = node.metadata?.[key];
     const projectValue = projectEnvironment[key];
-    return typeof nodeValue === 'string'
+    if (typeof nodeValue === 'string'
       && typeof projectValue === 'string'
       && nodeValue.length > 0
       && projectValue.length > 0
-      && nodeValue !== projectValue;
-  });
+      && nodeValue !== projectValue) {
+      mismatches[key] = {
+        node: nodeValue,
+        project: projectValue,
+      };
+    }
+  }
+
+  return Object.keys(mismatches).length > 0 ? mismatches : null;
 }
 
-function shouldDeprecate(
+function getDeprecationEvidence(
   node: ContextNode,
   deprecateQualityScoreAtMost: number,
   deprecateNegativeFeedbackDeltaAtLeast: number,
-): boolean {
-  return node.qualityScore <= deprecateQualityScoreAtMost
-    || (node.negativeFeedback - node.positiveFeedback) >= deprecateNegativeFeedbackDeltaAtLeast;
+): Record<string, unknown> | null {
+  const feedbackDelta = node.negativeFeedback - node.positiveFeedback;
+  if (node.qualityScore > deprecateQualityScoreAtMost && feedbackDelta < deprecateNegativeFeedbackDeltaAtLeast) {
+    return null;
+  }
+  return {
+    qualityScore: node.qualityScore,
+    deprecateQualityScoreAtMost,
+    feedbackDelta,
+    deprecateNegativeFeedbackDeltaAtLeast,
+  };
 }
 
-function isCoveredByActiveHighLevelRule(
+function getActiveHighLevelRuleCoverage(
   graphStore: ContextGraphStore,
   node: ContextNode,
-): boolean {
+): Record<string, unknown> | null {
   if ([SubstrateType.RULE, SubstrateType.HEURISTIC, SubstrateType.AXIOM].includes(node.substrateType)) {
-    return false;
+    return null;
   }
 
-  return graphStore.listOutgoingEdges(node.id, ContextRelationType.GENERALIZES).some((edge) => {
+  for (const edge of graphStore.listOutgoingEdges(node.id, ContextRelationType.GENERALIZES)) {
     const target = graphStore.getNodeById(edge.targetId);
-    return target !== null
+    if (target !== null
       && [SubstrateType.RULE, SubstrateType.HEURISTIC, SubstrateType.AXIOM].includes(target.substrateType)
-      && [ContextNodeStatus.ACTIVE, ContextNodeStatus.VERIFIED].includes(target.status);
-  });
+      && [ContextNodeStatus.ACTIVE, ContextNodeStatus.VERIFIED].includes(target.status)) {
+      return {
+        edgeId: edge.id,
+        ruleId: target.id,
+        ruleTitle: target.title,
+        relationType: edge.relationType,
+      };
+    }
+  }
+
+  return null;
 }
 
-function shouldArchive(
+function getArchiveEvidence(
   node: ContextNode,
   archiveOlderThanDays: number,
   archiveAccessCountAtMost: number,
-): boolean {
+): Record<string, unknown> | null {
   if (![SubstrateType.EPISODE, SubstrateType.SNAPSHOT, SubstrateType.SUMMARY].includes(node.substrateType)) {
-    return false;
+    return null;
   }
 
   const staleSince = node.lastAccessedAt ?? node.updatedAt;
   const ageMs = Date.now() - new Date(staleSince).getTime();
   const ageDays = ageMs / (1000 * 60 * 60 * 24);
-  return ageDays >= archiveOlderThanDays && node.accessCount <= archiveAccessCountAtMost;
+  if (ageDays < archiveOlderThanDays || node.accessCount > archiveAccessCountAtMost) {
+    return null;
+  }
+  return {
+    staleSince,
+    ageDays,
+    archiveOlderThanDays,
+    accessCount: node.accessCount,
+    archiveAccessCountAtMost,
+  };
+}
+
+function makeSuggestion(
+  nodeId: string,
+  action: PruneSuggestion['action'],
+  reason: string,
+  evidence: Record<string, unknown>,
+): PruneSuggestion {
+  return {
+    nodeId,
+    action,
+    reason,
+    evidence,
+  };
+}
+
+function withPruneAudit(node: ContextNode, suggestion: PruneSuggestion): Record<string, unknown> {
+  return {
+    ...(node.metadata ?? {}),
+    pruneAudit: {
+      action: suggestion.action,
+      reason: suggestion.reason,
+      evidence: suggestion.evidence,
+      decidedAt: new Date().toISOString(),
+    },
+  };
 }
