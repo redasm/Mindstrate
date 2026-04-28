@@ -52,7 +52,6 @@ import {
   type ConflictReflectionResult,
   type RejectReflectionCandidateResult,
 } from './context-graph/conflict-reflector.js';
-import { digestCompletedSession, digestSessionObservation } from './context-graph/session-digest.js';
 import { type PatternCompressionOptions, type PatternCompressionResult } from './context-graph/pattern-compressor.js';
 import { type RuleCompressionOptions, type RuleCompressionResult } from './context-graph/rule-compressor.js';
 import { type SummaryCompressionOptions, type SummaryCompressionResult } from './context-graph/summary-compressor.js';
@@ -86,6 +85,8 @@ import {
 } from './events/index.js';
 import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleFromRegistryOptions, type InstallBundleResult, type InstallEditableBundleFilesResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
 import { createMindstrateRuntime, type MindstrateRuntime } from './runtime/mindstrate-runtime.js';
+import { MindstrateBundleApi } from './runtime/mindstrate-bundle-api.js';
+import { MindstrateSessionApi } from './runtime/mindstrate-session-api.js';
 import {
   computeGraphNodeMatchScore,
   generateGraphCurationSummary,
@@ -96,6 +97,8 @@ import {
 
 export class Mindstrate {
   private readonly services: MindstrateRuntime;
+  readonly bundles: MindstrateBundleApi;
+  readonly sessions: MindstrateSessionApi;
   private metabolismScheduler: MetabolismScheduler | null = null;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
@@ -108,6 +111,8 @@ export class Mindstrate {
       this.queryGraphKnowledge(query, { topK: options.topK, trackFeedback: false })
         .map((result) => result.view.id),
     );
+    this.bundles = new MindstrateBundleApi(this.services);
+    this.sessions = new MindstrateSessionApi(this.services);
   }
 
   /** 异步初始化（必须在使用前调用，并发安全） */
@@ -562,45 +567,12 @@ export class Mindstrate {
 
   /** 开始新会话（自动压缩并结束同项目的旧活跃会话） */
   async startSession(input: CreateSessionInput = {}): Promise<Session> {
-    // 自动结束同项目的旧活跃会话
-    const active = this.services.sessionStore.getActiveSession(input.project);
-    if (active) {
-      // 自动解决该会话中未响应的反馈
-      this.services.feedbackLoop.resolveTimeouts(active.id);
-      // 自动压缩后再结束，避免丢失观察数据
-      if (!active.summary && (active.observations?.length ?? 0) > 0) {
-        try {
-          await this.autoCompressSession(active.id);
-        } catch (err) {
-          // Compression is best-effort; don't block new session creation
-          console.warn(
-            `[Mindstrate] Failed to auto-compress session ${active.id}: ${err instanceof Error ? err.message : String(err)}`
-          );
-        }
-      }
-      this.services.sessionStore.endSession(active.id, 'abandoned');
-    }
-    return this.services.sessionStore.create(input);
+    return this.sessions.startSession(input);
   }
 
   /** 保存会话观察（AI 工作过程中的关键事件） */
   saveObservation(input: SaveObservationInput): void {
-    this.services.sessionStore.addObservation(input);
-
-    const session = this.services.sessionStore.getById(input.sessionId);
-    if (!session) return;
-
-    digestSessionObservation({
-      graphStore: this.services.contextGraphStore,
-      sessionId: input.sessionId,
-      project: session.project || undefined,
-      observation: {
-        timestamp: new Date().toISOString(),
-        type: input.type,
-        content: input.content,
-        metadata: input.metadata,
-      },
-    });
+    this.sessions.saveObservation(input);
   }
 
   ingestEvent(input: IngestContextEventInput): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
@@ -653,111 +625,42 @@ export class Mindstrate {
 
   /** 压缩当前会话（由 AI 调用，传入摘要） */
   compressSession(input: CompressSessionInput): void {
-    this.services.sessionStore.compress(input);
+    this.sessions.compressSession(input);
   }
 
   /** 自动压缩会话（用 LLM 或规则从观察中生成摘要） */
   async autoCompressSession(sessionId: string): Promise<CompressSessionInput | null> {
-    const session = this.services.sessionStore.getById(sessionId);
-    if (!session) return null;
-
-    const result = await this.services.sessionCompressor.compress(session);
-    this.services.sessionStore.compress(result);
-    return result;
+    return this.sessions.autoCompressSession(sessionId);
   }
 
   /** 结束会话 */
   async endSession(sessionId: string): Promise<void> {
-    let session = this.services.sessionStore.getById(sessionId);
-    if (!session) return;
-
-    // 自动解决未响应的反馈追踪
-    this.services.feedbackLoop.resolveTimeouts(sessionId);
-
-    // 如果没有摘要，自动压缩
-    if (!session.summary && (session.observations?.length ?? 0) > 0) {
-      await this.autoCompressSession(sessionId);
-      session = this.services.sessionStore.getById(sessionId);
-      if (!session) return;
-    }
-
-    this.services.sessionStore.endSession(sessionId, 'completed');
-    const completedSession = this.services.sessionStore.getById(sessionId);
-    if (completedSession) {
-      digestCompletedSession({
-        graphStore: this.services.contextGraphStore,
-        session: completedSession,
-      });
-      const summaryResult = await this.services.summaryCompressor.compressProjectSnapshots({
-        project: completedSession.project || undefined,
-      });
-      if (summaryResult.summaryNodesCreated > 0) {
-        const patternResult = await this.services.patternCompressor.compressProjectSummaries({
-          project: completedSession.project || undefined,
-        });
-        if (patternResult.patternNodesCreated > 0) {
-          const ruleResult = await this.services.ruleCompressor.compressProjectPatterns({
-            project: completedSession.project || undefined,
-          });
-          if (ruleResult.ruleNodesCreated > 0) {
-            const conflictResult = await this.services.conflictDetector.detectConflicts({
-              project: completedSession.project || undefined,
-              substrateType: 'rule' as SubstrateType,
-            });
-            if (conflictResult.conflictsDetected > 0) {
-              this.services.conflictReflector.reflectConflicts({
-                project: completedSession.project || undefined,
-              });
-            }
-          }
-        }
-      }
-    }
+    return this.sessions.endSession(sessionId);
   }
 
   /** 恢复会话上下文（新会话开始时调用） */
   restoreSessionContext(project: string = ''): SessionContext {
-    const context = this.services.sessionStore.restoreContext(project);
-    const graphSnapshots = this.services.contextGraphStore.listNodes({
-      project,
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      limit: 5,
-    });
-
-    if (graphSnapshots.length > 0) {
-      context.graphSnapshots = graphSnapshots.map((node) => ({
-        nodeId: node.id,
-        title: node.title,
-        summary: node.content,
-        endedAt: typeof node.metadata?.['endedAt'] === 'string'
-          ? node.metadata['endedAt']
-          : undefined,
-      }));
-    }
-
-    return context;
+    return this.sessions.restoreSessionContext(project);
   }
 
   /** 格式化会话上下文为可注入的文本 */
   formatSessionContext(project: string = ''): string {
-    const ctx = this.restoreSessionContext(project);
-    return this.services.sessionStore.formatContextForInjection(ctx);
+    return this.sessions.formatSessionContext(project);
   }
 
   /** 获取当前活跃会话 */
   getActiveSession(project: string = ''): Session | null {
-    return this.services.sessionStore.getActiveSession(project);
+    return this.sessions.getActiveSession(project);
   }
 
   /** 获取会话 */
   getSession(id: string): Session | null {
-    return this.services.sessionStore.getById(id);
+    return this.sessions.getSession(id);
   }
 
   /** 获取最近会话列表 */
   getRecentSessions(project: string = '', limit: number = 10): Session[] {
-    return this.services.sessionStore.getRecentSessions(project, limit);
+    return this.sessions.getRecentSessions(project, limit);
   }
 
   // ============================================================
@@ -937,35 +840,35 @@ export class Mindstrate {
   }
 
   createBundle(options: CreateBundleOptions) {
-    return this.services.bundleManager.createBundle(options);
+    return this.bundles.createBundle(options);
   }
 
   validateBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): ValidateBundleResult {
-    return this.services.bundleManager.validateBundle(bundle);
+    return this.bundles.validateBundle(bundle);
   }
 
   installBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): InstallBundleResult {
-    return this.services.bundleManager.installBundle(bundle);
+    return this.bundles.installBundle(bundle);
   }
 
   installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult> {
-    return this.services.bundleManager.installBundleFromRegistry(options);
+    return this.bundles.installBundleFromRegistry(options);
   }
 
   publishBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult {
-    return this.services.bundleManager.publishBundle(bundle, options);
+    return this.bundles.publishBundle(bundle, options);
   }
 
   createEditableBundleFiles(bundle: import('@mindstrate/protocol/models').PortableContextBundle): EditableBundleFiles {
-    return this.services.bundleManager.createEditableBundleFiles(bundle);
+    return this.bundles.createEditableBundleFiles(bundle);
   }
 
   installEditableBundleFiles(files: EditableBundleFiles): InstallEditableBundleFilesResult {
-    return this.services.bundleManager.installEditableBundleFiles(files);
+    return this.bundles.installEditableBundleFiles(files);
   }
 
   installEditableBundleDirectory(directory: string): InstallEditableBundleFilesResult {
-    return this.services.bundleManager.installEditableBundleDirectory(directory);
+    return this.bundles.installEditableBundleDirectory(directory);
   }
 
   readGraphKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {

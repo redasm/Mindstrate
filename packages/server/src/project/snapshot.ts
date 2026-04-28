@@ -28,10 +28,14 @@ import {
 } from '@mindstrate/protocol';
 import type { DetectedProject } from './detector.js';
 import { truncateText } from '../text-format.js';
+import {
+  PRESERVE_CLOSE,
+  PRESERVE_OPEN,
+  extractPreserveBlocks,
+  type PreservedBlocks,
+} from './snapshot-preserve.js';
 
-/** Preserve markers — anything between them is kept across re-generations. */
-export const PRESERVE_OPEN = '<!-- preserve -->';
-export const PRESERVE_CLOSE = '<!-- /preserve -->';
+export { PRESERVE_CLOSE, PRESERVE_OPEN, extractPreserveBlocks } from './snapshot-preserve.js';
 
 /**
  * Compute a stable knowledge id for the given project root.
@@ -281,53 +285,6 @@ function buildTags(p: DetectedProject): string[] {
   if (p.framework) tags.add(p.framework);
   if (p.packageManager) tags.add(p.packageManager);
   return Array.from(tags);
-}
-
-// ============================================================
-// Preserve blocks
-// ============================================================
-
-interface PreservedBlocks {
-  architecture?: string;
-  invariants?: string;
-  conventions?: string;
-  notes?: string;
-}
-
-/**
- * Extract content inside preserve markers from a previous snapshot, keyed by
- * the heading immediately preceding each block.
- */
-export function extractPreserveBlocks(solution: string): PreservedBlocks {
-  const out: PreservedBlocks = {};
-  if (!solution) return out;
-  const sectionRe = /^##\s+(.+?)\s*$/gm;
-  const headings: Array<{ name: string; index: number }> = [];
-  for (const m of solution.matchAll(sectionRe)) {
-    headings.push({ name: m[1].trim().toLowerCase(), index: m.index ?? 0 });
-  }
-
-  for (let i = 0; i < headings.length; i++) {
-    const h = headings[i];
-    const next = headings[i + 1]?.index ?? solution.length;
-    const slice = solution.slice(h.index, next);
-    const block = matchPreserveBlock(slice);
-    if (!block) continue;
-    if (h.name.startsWith('architecture')) out.architecture = block;
-    else if (h.name.startsWith('critical invariants')) out.invariants = block;
-    else if (h.name.startsWith('conventions')) out.conventions = block;
-    else if (h.name.startsWith('notes')) out.notes = block;
-  }
-
-  return out;
-}
-
-function matchPreserveBlock(text: string): string | null {
-  const open = text.indexOf(PRESERVE_OPEN);
-  if (open < 0) return null;
-  const close = text.indexOf(PRESERVE_CLOSE, open + PRESERVE_OPEN.length);
-  if (close < 0) return null;
-  return text.slice(open + PRESERVE_OPEN.length, close).replace(/^\n+|\n+$/g, '');
 }
 
 /**
