@@ -41,7 +41,7 @@ export const terminalOutputCommand = new Command('terminal')
       }
 
       const project = options.project || process.cwd().split(/[/\\]/).pop();
-      const result = memory.ingestTerminalOutput({
+      const result = memory.events.ingestTerminalOutput({
         content,
         project,
         sessionId: options.session,

@@ -101,13 +101,13 @@ export const initCommand = new Command('init')
         // Stack identical -> still call upsert so freshly-introduced preserve
         // sections come into existence; the body hash check inside will skip
         // a no-op write. But we surface the "no change" status to the user.
-        const result = await memory.upsertProjectSnapshot(project, { author: 'mindstrate-init' });
+        const result = await memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-init' });
         snapshotSummary = result.changed
           ? `  Updated: ${result.view.id}`
           : `  Up-to-date: ${result.view.id}`;
         meta.snapshotKnowledgeId = result.view.id;
       } else {
-        const result = await memory.upsertProjectSnapshot(project, { author: 'mindstrate-init' });
+        const result = await memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-init' });
         meta.snapshotKnowledgeId = result.view.id;
         if (result.created) {
           snapshotSummary = `  Created: ${result.view.id}`;

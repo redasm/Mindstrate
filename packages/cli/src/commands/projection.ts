@@ -33,7 +33,7 @@ projectionCommand
 
     try {
       await memory.init();
-      const records = memory.projectSessionSummaries({
+      const records = memory.projections.projectSessionSummaries({
         project: options.project,
         limit: Number(options.limit) || 100,
       });
@@ -56,7 +56,7 @@ projectionCommand
 
     try {
       await memory.init();
-      const records = memory.projectProjectSnapshots({
+      const records = memory.projections.projectProjectSnapshots({
         project: options.project,
         limit: Number(options.limit) || 100,
       });
@@ -80,11 +80,11 @@ projectionCommand
 
     try {
       await memory.init();
-      const records = memory.projectObsidianDocuments({
+      const records = memory.projections.projectObsidianDocuments({
         project: options.project,
         limit: Number(options.limit) || 100,
       });
-      const files = memory.writeObsidianProjectionFiles({
+      const files = memory.projections.writeObsidianProjectionFiles({
         rootDir,
         project: options.project,
         limit: Number(options.limit) || 100,
@@ -115,7 +115,7 @@ projectionCommand
 
     try {
       await memory.init();
-      const result = memory.importObsidianProjectionFile(path.resolve(filePath));
+      const result = memory.projections.importObsidianProjectionFile(path.resolve(filePath));
       if (!result.changed) {
         console.log('No ECS projection changes imported.');
         return;

@@ -1,11 +1,5 @@
 import type { EvolutionRunResult, EvolutionSuggestion } from '@mindstrate/protocol';
 import type {
-  AcceptInternalizationSuggestionsOptions,
-  AcceptInternalizationSuggestionsResult,
-  InternalizationSuggestionOptions,
-  InternalizationSuggestions,
-} from '../context-graph/context-internalizer.js';
-import type {
   AcceptReflectionCandidateResult,
   ConflictReflectionOptions,
   ConflictReflectionResult,
@@ -22,12 +16,10 @@ import type {
   RunMetabolismOptions,
 } from '../metabolism/index.js';
 import { MetabolismScheduler } from '../metabolism/index.js';
-import type { EvalRunResult } from '../quality/eval.js';
-import { getGraphStats } from '../mindstrate-graph-helpers.js';
+import type { MetabolismRun } from '@mindstrate/protocol/models';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
-import type { MetabolismRun, ProjectionRecord } from '@mindstrate/protocol/models';
 
-export class MindstrateOperationsApi {
+export class MindstrateMetabolismApi {
   private metabolismScheduler: MetabolismScheduler | null = null;
 
   constructor(
@@ -57,22 +49,6 @@ export class MindstrateOperationsApi {
 
   applyEvolutionSuggestion(suggestion: EvolutionSuggestion): boolean {
     return this.services.contextGraphStore.getNodeById(suggestion.nodeId) !== null;
-  }
-
-  async runEvaluation(topK?: number): Promise<EvalRunResult> {
-    await this.ensureInit();
-    return this.services.evaluator.runEvaluation(topK);
-  }
-
-  addEvalCase(query: string, expectedIds: string[], options?: {
-    language?: string;
-    framework?: string;
-  }) {
-    return this.services.evaluator.addCase(query, expectedIds, options);
-  }
-
-  getEvalTrend(limit?: number) {
-    return this.services.evaluator.getTrend(limit);
   }
 
   async runSummaryCompression(options?: SummaryCompressionOptions): Promise<SummaryCompressionResult> {
@@ -155,80 +131,8 @@ export class MindstrateOperationsApi {
     return this.services.conflictReflector.rejectCandidate(input);
   }
 
-  projectSessionSummaries(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.services.sessionProjectionMaterializer.materialize(options);
-  }
-
-  projectProjectSnapshots(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.services.projectSnapshotProjectionMaterializer.materialize(options);
-  }
-
-  projectObsidianDocuments(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.services.obsidianProjectionMaterializer.materialize(options);
-  }
-
-  writeObsidianProjectionFiles(options: { project?: string; limit?: number; rootDir: string }): string[] {
-    return this.services.obsidianProjectionMaterializer.writeFiles(options);
-  }
-
-  importObsidianProjectionFile(filePath: string) {
-    return this.services.obsidianProjectionMaterializer.importFile(filePath);
-  }
-
-  generateInternalizationSuggestions(options?: InternalizationSuggestionOptions): InternalizationSuggestions {
-    return this.services.contextInternalizer.generateSuggestions(options);
-  }
-
-  acceptInternalizationSuggestions(options?: AcceptInternalizationSuggestionsOptions): AcceptInternalizationSuggestionsResult {
-    return this.services.contextInternalizer.acceptSuggestions(options);
-  }
-
-  listProjectionRecords(options?: { nodeId?: string; target?: string; limit?: number }): ProjectionRecord[] {
-    return this.services.contextGraphStore.listProjectionRecords(options);
-  }
-
   listMetabolismRuns(project?: string, limit?: number): MetabolismRun[] {
     return this.services.contextGraphStore.listMetabolismRuns({ project, limit });
-  }
-
-  runMaintenance(): {
-    total: number;
-    updated: number;
-    outdated: number;
-  } {
-    return {
-      total: this.services.contextGraphStore.listNodes({ limit: 100000 }).length,
-      updated: 0,
-      outdated: 0,
-    };
-  }
-
-  async getStats(): Promise<{
-    total: number;
-    byType: Record<string, number>;
-    byStatus: Record<string, number>;
-    byLanguage: Record<string, number>;
-    vectorCount: number;
-    feedbackStats: {
-      totalEvents: number;
-      last30Days: number;
-      avgAdoptionRate: number;
-    };
-  }> {
-    const nodes = this.services.contextGraphStore.listNodes({ limit: 100000 });
-    const dbStats = getGraphStats(nodes);
-    const vectorCount = await this.services.vectorStore.count();
-    const feedbackStats = this.services.feedbackLoop.getGlobalStats();
-
-    return {
-      ...dbStats,
-      vectorCount,
-      feedbackStats: {
-        totalEvents: feedbackStats.totalEvents,
-        last30Days: feedbackStats.last30Days,
-        avgAdoptionRate: feedbackStats.avgAdoptionRate,
-      },
-    };
   }
 }
 

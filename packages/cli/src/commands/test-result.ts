@@ -33,7 +33,7 @@ export const testResultCommand = new Command('test')
       }
 
       const project = options.project || process.cwd().split(/[/\\]/).pop();
-      const result = memory.ingestTestRun({
+      const result = memory.events.ingestTestRun({
         content,
         project,
         sessionId: options.session,

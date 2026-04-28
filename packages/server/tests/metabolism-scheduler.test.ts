@@ -34,7 +34,7 @@ describe('Mindstrate metabolism scheduling', () => {
     const memory = new Mindstrate();
     const runMetabolism = vi.spyOn(memory, 'runMetabolism').mockResolvedValue({} as any);
 
-    memory.startMetabolismScheduler({
+    memory.metabolism.startMetabolismScheduler({
       project: 'mindstrate',
       intervalMs: 1000,
     });

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const target = params.get('target') || undefined;
     const limit = parseInt(params.get('limit') || '20', 10);
 
-    const records = memory.listProjectionRecords({ nodeId, target, limit });
+    const records = memory.projections.listProjectionRecords({ nodeId, target, limit });
     return NextResponse.json({ records, total: records.length });
   } catch (error) {
     return errorResponse(error);

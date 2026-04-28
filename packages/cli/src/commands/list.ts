@@ -14,7 +14,7 @@ export const listCommand = new Command('list')
     const memory = createMemory();
 
     try {
-      const entries = memory.readGraphKnowledge({ limit: 100000 })
+      const entries = memory.context.readGraphKnowledge({ limit: 100000 })
         .filter((entry) => !options.type || entry.domainType === options.type)
         .filter((entry) => !options.language || entry.tags.includes(options.language))
         .slice(0, parseInt(options.limit, 10));

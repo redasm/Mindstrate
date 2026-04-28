@@ -17,7 +17,7 @@ export const exportCommand = new Command('export')
 
     try {
       await memory.init();
-      const entries = memory.readGraphKnowledge({ limit: 10000 });
+      const entries = memory.context.readGraphKnowledge({ limit: 10000 });
 
       if (entries.length === 0) {
         console.log('Nothing to export. ECS graph knowledge is empty.');
@@ -74,11 +74,11 @@ export const importCommand = new Command('import')
 
       for (const entry of data.entries) {
         try {
-          const existing = memory.readGraphKnowledge({ limit: 100000 })
+          const existing = memory.context.readGraphKnowledge({ limit: 100000 })
             .find((view) => view.id === entry.id);
           if (existing) continue;
 
-          memory.createContextNode({
+          memory.context.createContextNode({
             substrateType: entry.substrateType,
             domainType: entry.domainType,
             title: entry.title,

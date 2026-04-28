@@ -46,6 +46,6 @@ export const STATUS_LABELS: Record<string, string> = {
 
 /** 根据完整 ID 或部分 ID 前缀查找 ECS 图知识视图 */
 export function findGraphKnowledge(memory: Mindstrate, idOrPrefix: string): GraphKnowledgeView | null {
-  const entries = memory.readGraphKnowledge({ limit: 100000 });
+  const entries = memory.context.readGraphKnowledge({ limit: 100000 });
   return entries.find((entry) => entry.id === idOrPrefix || entry.id.startsWith(idOrPrefix)) ?? null;
 }

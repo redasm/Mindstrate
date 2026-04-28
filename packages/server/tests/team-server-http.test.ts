@@ -93,13 +93,13 @@ describe('team-server HTTP integration', () => {
   it('prevents scoped API keys from reading outside their project', async () => {
     const { client, memory } = await startTeamServer({ projects: ['proj-a'] });
 
-    await memory.add(makeKnowledgeInput({
+    await memory.knowledge.add(makeKnowledgeInput({
       title: 'Project A workflow',
       type: KnowledgeType.WORKFLOW,
       solution: 'Only project A members should read this workflow.',
       context: { project: 'proj-a' },
     }));
-    await memory.add(makeKnowledgeInput({
+    await memory.knowledge.add(makeKnowledgeInput({
       title: 'Project B workflow',
       type: KnowledgeType.WORKFLOW,
       solution: 'Project B guidance must stay isolated from project A keys.',
@@ -128,7 +128,7 @@ describe('team-server HTTP integration', () => {
     }));
 
     expect(result.success).toBe(true);
-    const stored = memory.listContextNodes({ limit: 50 })
+    const stored = memory.context.listContextNodes({ limit: 50 })
       .find((node) => node.id === result.view!.id);
     expect(stored?.metadata?.['actionable']).toMatchObject({
       steps: [
@@ -167,7 +167,7 @@ describe('team-server HTTP integration', () => {
     }));
 
     expect(result.success).toBe(true);
-    const stored = memory.listContextNodes({ limit: 50 })
+    const stored = memory.context.listContextNodes({ limit: 50 })
       .find((node) => node.id === result.view!.id);
     expect(stored?.metadata?.['knowledgeType']).toBe('incident_review');
   });
@@ -182,13 +182,13 @@ describe('team-server HTTP integration', () => {
     expect(active?.id).toBe(started.session.id);
     expect(loaded?.id).toBe(started.session.id);
 
-    await memory.add(makeKnowledgeInput({
+    await memory.knowledge.add(makeKnowledgeInput({
       title: 'Workflow entry',
       type: KnowledgeType.WORKFLOW,
       tags: ['ops', 'rotation'],
       solution: 'Rotate the token with the approved workflow.',
     }));
-    await memory.add(makeKnowledgeInput({
+    await memory.knowledge.add(makeKnowledgeInput({
       title: 'Best practice entry',
       type: KnowledgeType.BEST_PRACTICE,
       tags: ['frontend'],
@@ -279,7 +279,7 @@ describe('team-server HTTP integration', () => {
   it('generates internalization suggestions through the team HTTP API', async () => {
     const { client, memory } = await startTeamServer();
 
-    memory.createContextNode({
+    memory.context.createContextNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
       title: 'Review ECS changes with tests',
@@ -302,7 +302,7 @@ describe('team-server HTTP integration', () => {
   it('exports obsidian projection files through the team HTTP API', async () => {
     const { client, memory, tempDir } = await startTeamServer();
 
-    memory.createContextNode({
+    memory.context.createContextNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
       title: 'Export ECS rule',

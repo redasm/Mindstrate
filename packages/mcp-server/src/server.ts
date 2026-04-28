@@ -137,12 +137,12 @@ const api: McpApi = {
 
   async add(input: CreateKnowledgeInput) {
     if (teamClient) return teamClient.knowledge.add(input);
-    return memory!.add(input);
+    return memory!.knowledge.add(input);
   },
 
   async get(id: string) {
     if (teamClient) return teamClient.knowledge.get(id);
-    return memory!.readGraphKnowledge({ limit: 500 }).find((view) => view.id === id) ?? null;
+    return memory!.context.readGraphKnowledge({ limit: 500 }).find((view) => view.id === id) ?? null;
   },
 
   async startSession(project: string, techContext?: string): Promise<{ session: Session; context: string | null }> {
@@ -150,32 +150,32 @@ const api: McpApi = {
       const result = await teamClient.sessions.start(project, techContext);
       return { session: result.session, context: result.context };
     }
-    const session = await memory!.startSession({ project, techContext });
-    const context = memory!.formatSessionContext(project);
+    const session = await memory!.sessions.startSession({ project, techContext });
+    const context = memory!.sessions.formatSessionContext(project);
     return { session, context: context || null };
   },
 
   async saveObservation(sessionId: string, type: string, content: string, metadata?: Record<string, string>) {
     if (teamClient) return teamClient.sessions.saveObservation(sessionId, type, content, metadata);
-    memory!.saveObservation({ sessionId, type, content, metadata } as SaveObservationInput);
+    memory!.sessions.saveObservation({ sessionId, type, content, metadata } as SaveObservationInput);
   },
 
   async endSession(sessionId: string, summary?: string, openTasks?: string[]) {
     if (teamClient) return teamClient.sessions.end(sessionId, summary, openTasks);
     if (summary) {
-      memory!.compressSession({ sessionId, summary, openTasks });
+      memory!.sessions.compressSession({ sessionId, summary, openTasks });
     }
-    await memory!.endSession(sessionId);
+    await memory!.sessions.endSession(sessionId);
   },
 
   async getSession(id: string): Promise<Session | null> {
     if (teamClient) return teamClient.sessions.get(id);
-    return memory!.getSession(id);
+    return memory!.sessions.getSession(id);
   },
 
   async getActiveSession(project: string): Promise<Session | null> {
     if (teamClient) return teamClient.sessions.getActive(project);
-    return memory!.getActiveSession(project);
+    return memory!.sessions.getActiveSession(project);
   },
 
   async formatSessionContext(project: string): Promise<string | null> {
@@ -183,22 +183,22 @@ const api: McpApi = {
       const result = await teamClient.sessions.restore(project);
       return result.formatted;
     }
-    return memory!.formatSessionContext(project) || null;
+    return memory!.sessions.formatSessionContext(project) || null;
   },
 
   async getStats() {
     if (teamClient) return teamClient.admin.getStats();
-    return memory!.getStats();
+    return memory!.maintenance.getStats();
   },
 
   async recordFeedback(retrievalId: string, signal: 'adopted' | 'rejected' | 'ignored' | 'partial', context?: string) {
     if (teamClient) return teamClient.feedback.record(retrievalId, signal, context);
-    memory!.recordFeedback(retrievalId, signal, context);
+    memory!.context.recordFeedback(retrievalId, signal, context);
   },
 
   async curateContext(task: string, context?: RetrievalContext): Promise<CuratedContext> {
     if (teamClient) return teamClient.context.curate(task, context);
-    return memory!.curateContext(task, context);
+    return memory!.assembly.curateContext(task, context);
   },
 
   async assembleContext(
@@ -206,119 +206,119 @@ const api: McpApi = {
     options?: { project?: string; context?: RetrievalContext; sessionId?: string },
   ) {
     if (teamClient) return teamClient.context.assemble(task, options);
-    return memory!.assembleContext(task, options);
+    return memory!.assembly.assembleContext(task, options);
   },
 
   async runEvolution(options?: { autoApply?: boolean; maxItems?: number; mode?: 'standard' | 'background' }): Promise<EvolutionRunResult> {
     if (teamClient) return teamClient.admin.runEvolution(options);
-    return memory!.runEvolution(options);
+    return memory!.metabolism.runEvolution(options);
   },
 
   async ingestContextEvent(input) {
     if (teamClient) return teamClient.context.ingestEvent(input);
-    const result = memory!.ingestEvent(input);
+    const result = memory!.events.ingestEvent(input as any);
     return { eventId: result.event.id, nodeId: result.node.id };
   },
 
   async queryContextGraph(options) {
     if (teamClient) return teamClient.context.queryGraph(options);
-    return memory!.queryContextGraph(options);
+    return memory!.context.queryContextGraph(options as any);
   },
 
   async listContextEdges(options) {
     if (teamClient) return teamClient.context.listEdges(options);
-    return memory!.listContextEdges(options);
+    return memory!.context.listContextEdges(options as any);
   },
 
   async listContextConflicts(options) {
     if (teamClient) return teamClient.context.listConflicts(options);
-    return memory!.listConflictRecords(options?.project, options?.limit);
+    return memory!.context.listConflictRecords(options?.project, options?.limit);
   },
 
   async acceptConflictCandidate(input) {
     if (teamClient) return teamClient.context.acceptConflictCandidate(input);
-    return memory!.acceptConflictCandidate(input);
+    return memory!.metabolism.acceptConflictCandidate(input);
   },
 
   async rejectConflictCandidate(input) {
     if (teamClient) return teamClient.context.rejectConflictCandidate(input);
-    return memory!.rejectConflictCandidate(input);
+    return memory!.metabolism.rejectConflictCandidate(input);
   },
 
   async runMetabolism(options) {
     if (teamClient) return teamClient.metabolism.run(options);
-    return memory!.runMetabolism(options);
+    return memory!.metabolism.runMetabolism(options);
   },
 
   async runMetabolismStage(stage, options) {
     if (teamClient) return teamClient.metabolism.runStage(stage, options);
     switch (stage) {
       case 'digest':
-        return memory!.runDigest(options);
+        return memory!.metabolism.runDigest(options);
       case 'assimilate':
-        return memory!.runAssimilation(options);
+        return memory!.metabolism.runAssimilation(options);
       case 'compress':
-        return memory!.runCompression(options);
+        return memory!.metabolism.runCompression(options);
       case 'prune':
-        return memory!.runPruning(options);
+        return memory!.metabolism.runPruning(options);
       case 'reflect':
-        return memory!.runReflection(options);
+        return memory!.metabolism.runReflection(options);
     }
   },
 
   async createBundle(options) {
     if (teamClient) return teamClient.bundles.create(options);
-    return memory!.createBundle(options);
+    return memory!.bundles.createBundle(options);
   },
 
   async validateBundle(bundle) {
     if (teamClient) return teamClient.bundles.validate(bundle);
-    return memory!.validateBundle(bundle);
+    return memory!.bundles.validateBundle(bundle);
   },
 
   async installBundle(bundle) {
     if (teamClient) return teamClient.bundles.install(bundle);
-    return memory!.installBundle(bundle);
+    return memory!.bundles.installBundle(bundle);
   },
 
   async installBundleFromRegistry(options) {
     if (teamClient) return teamClient.bundles.installFromRegistry(options);
-    return memory!.installBundleFromRegistry(options);
+    return memory!.bundles.installBundleFromRegistry(options);
   },
 
   async publishBundle(bundle, options) {
     if (teamClient) return teamClient.bundles.publish(bundle, options);
-    return memory!.publishBundle(bundle, options);
+    return memory!.bundles.publishBundle(bundle, options);
   },
 
   async generateInternalizationSuggestions(options) {
     if (teamClient) return teamClient.bundles.generateInternalizationSuggestions(options);
-    return memory!.generateInternalizationSuggestions(options);
+    return memory!.projections.generateInternalizationSuggestions(options);
   },
 
   async acceptInternalizationSuggestions(options) {
     if (teamClient) return teamClient.bundles.acceptInternalizationSuggestions(options);
-    return memory!.acceptInternalizationSuggestions(options);
+    return memory!.projections.acceptInternalizationSuggestions(options as any);
   },
 
   async writeObsidianProjectionFiles(options) {
     if (teamClient) return teamClient.context.writeObsidianProjectionFiles(options);
-    return { files: memory!.writeObsidianProjectionFiles(options) };
+    return { files: memory!.projections.writeObsidianProjectionFiles(options) };
   },
 
   async importObsidianProjectionFile(filePath) {
     if (teamClient) return teamClient.context.importObsidianProjectionFile(filePath);
-    return memory!.importObsidianProjectionFile(filePath);
+    return memory!.projections.importObsidianProjectionFile(filePath);
   },
 
   async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
     if (teamClient) return teamClient.context.readKnowledge(opts);
-    return memory!.readGraphKnowledge(opts);
+    return memory!.context.readGraphKnowledge(opts);
   },
 
   async queryGraphKnowledge(query: string, opts?: { project?: string; topK?: number; limit?: number }) {
     if (teamClient) return teamClient.context.queryKnowledge(query, opts);
-    return memory!.queryGraphKnowledge(query, opts);
+    return memory!.context.queryGraphKnowledge(query, opts);
   },
 
   close() {

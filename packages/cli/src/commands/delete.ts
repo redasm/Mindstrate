@@ -43,7 +43,7 @@ export const deleteCommand = new Command('delete')
         }
       }
 
-      const deleted = memory.deleteContextNode(knowledge.id);
+      const deleted = memory.context.deleteContextNode(knowledge.id);
       if (deleted) {
         console.log(`Deleted: ${knowledge.title}`);
       } else {

@@ -44,7 +44,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
     const input = createKnowledgeInput(body);
     input.context = { ...input.context, project };
 
-    const result = await memory.add(input);
+    const result = await memory.knowledge.add(input);
     if (!result.success) {
       res.json(result);
       return;
@@ -62,7 +62,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       'read',
     );
     if (project === null) return;
-    const entries = filterGraphKnowledgeViews(memory.readGraphKnowledge({
+    const entries = filterGraphKnowledgeViews(memory.context.readGraphKnowledge({
       project,
       limit: parseLimit(req.query.limit, 50),
     }), {
@@ -77,7 +77,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
   app.get('/api/knowledge/:id', asyncRoute((req, res) => {
     const id = readParam(req.params.id);
     const view = id
-      ? memory.queryContextGraph({ query: id, limit: 50 }).find((node) => node.id === id)
+      ? memory.context.queryContextGraph({ query: id, limit: 50 }).find((node) => node.id === id)
       : null;
     if (!view) {
       res.status(404).json({ error: 'Not found' });
@@ -94,7 +94,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       return;
     }
 
-    const deleted = memory.deleteContextNode(id);
+    const deleted = memory.context.deleteContextNode(id);
     if (!deleted) {
       res.status(404).json({ error: 'Not found' });
       return;
@@ -115,7 +115,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       return;
     }
 
-    const results = memory.queryGraphKnowledge(query, {
+    const results = memory.context.queryGraphKnowledge(query, {
       topK: topK || 10,
       project,
       limit: 100,
@@ -143,7 +143,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
 
     for (const entry of entries) {
       try {
-        const result = await memory.add({
+        const result = await memory.knowledge.add({
           type: entry.type,
           title: entry.title,
           problem: entry.problem,

@@ -11,7 +11,7 @@ export const statsCommand = new Command('stats')
     const memory = createMemory();
 
     try {
-      const stats = await memory.getStats();
+      const stats = await memory.maintenance.getStats();
 
       console.log('Mindstrate Statistics\n');
       console.log(`  Total knowledge entries: ${stats.total}`);

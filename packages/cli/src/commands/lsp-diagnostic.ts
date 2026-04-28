@@ -32,7 +32,7 @@ export const lspDiagnosticCommand = new Command('diag')
       }
 
       const project = options.project || process.cwd().split(/[/\\]/).pop();
-      const result = memory.ingestLspDiagnostic({
+      const result = memory.events.ingestLspDiagnostic({
         content,
         project,
         sessionId: options.session,

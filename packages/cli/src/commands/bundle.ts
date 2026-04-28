@@ -25,13 +25,13 @@ bundleCommand
 
     try {
       await memory.init();
-      const bundle = memory.createBundle({
+      const bundle = memory.bundles.createBundle({
         name,
         project: options.project,
         description: options.description,
       });
       if (options.outputDir) {
-        const files = memory.createEditableBundleFiles(bundle);
+        const files = memory.bundles.createEditableBundleFiles(bundle);
         fs.mkdirSync(options.outputDir, { recursive: true });
         for (const [relativePath, content] of Object.entries(files)) {
           const outputPath = path.join(options.outputDir, relativePath);
@@ -67,7 +67,7 @@ bundleCommand
     try {
       await memory.init();
       const bundle = JSON.parse(fs.readFileSync(file, 'utf-8')) as PortableContextBundle;
-      const result = memory.validateBundle(bundle);
+      const result = memory.bundles.validateBundle(bundle);
       if (!result.valid) {
         console.error('Bundle validation failed:');
         for (const error of result.errors) {
@@ -98,8 +98,8 @@ bundleCommand
     try {
       await memory.init();
       const result = fs.statSync(inputPath).isDirectory()
-        ? memory.installEditableBundleDirectory(inputPath)
-        : memory.installBundle(JSON.parse(fs.readFileSync(inputPath, 'utf-8')) as PortableContextBundle);
+        ? memory.bundles.installEditableBundleDirectory(inputPath)
+        : memory.bundles.installBundle(JSON.parse(fs.readFileSync(inputPath, 'utf-8')) as PortableContextBundle);
       console.log('Bundle installed.');
       console.log(`  Installed nodes: ${result.installedNodes}`);
       console.log(`  Updated nodes:   ${result.updatedNodes}`);
@@ -122,7 +122,7 @@ bundleCommand
 
     try {
       await memory.init();
-      const result = await memory.installBundleFromRegistry({
+      const result = await memory.bundles.installBundleFromRegistry({
         registry: options.registry,
         reference,
       });
@@ -155,7 +155,7 @@ bundleCommand
     try {
       await memory.init();
       const bundle = JSON.parse(fs.readFileSync(file, 'utf-8')) as PortableContextBundle;
-      const result = memory.publishBundle(bundle, {
+      const result = memory.bundles.publishBundle(bundle, {
         registry: options.registry,
         visibility: options.visibility,
       });

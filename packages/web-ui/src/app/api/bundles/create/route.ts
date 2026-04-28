@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
     }
 
-    const bundle = memory.createBundle({
+    const bundle = memory.bundles.createBundle({
       name: body.name,
       version: body.version || undefined,
       description: body.description || undefined,

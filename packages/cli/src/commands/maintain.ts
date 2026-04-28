@@ -14,8 +14,8 @@ export const maintainCommand = new Command('doctor')
       await memory.init();
       console.log('Running maintenance tasks...\n');
 
-      const result = memory.runMaintenance();
-      const evolution = await memory.runEvolution({ mode: 'background', maxItems: 100 });
+      const result = memory.maintenance.runMaintenance();
+      const evolution = await memory.metabolism.runEvolution({ mode: 'background', maxItems: 100 });
 
       console.log('Maintenance complete:\n');
       console.log(`  Total entries scanned: ${result.total}`);

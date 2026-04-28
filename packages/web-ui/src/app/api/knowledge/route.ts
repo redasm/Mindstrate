@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const project = params.get('project');
     const limit = parseInt(params.get('limit') || '50', 10);
 
-    const entries = memory.readGraphKnowledge({
+    const entries = memory.context.readGraphKnowledge({
       project: project || undefined,
       limit,
     });
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     if (!body.title || !body.solution) {
       return NextResponse.json({ error: 'title and solution are required' }, { status: 400 });
     }
-    const result = await memory.add({
+    const result = await memory.knowledge.add({
       type: body.type || 'how_to',
       title: body.title,
       problem: body.problem || undefined,

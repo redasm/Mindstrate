@@ -81,7 +81,7 @@ describe('RepoScannerService', () => {
     const result = await service.runSource(source.id);
     expect(result.itemsSeen).toBe(1);
     expect(result.itemsImported).toBe(1);
-    const entries = memory.readGraphKnowledge({ project: 'proj', limit: 10 });
+    const entries = memory.context.readGraphKnowledge({ project: 'proj', limit: 10 });
     expect(entries).toHaveLength(1);
     expect(entries[0].project).toBe('proj');
   });

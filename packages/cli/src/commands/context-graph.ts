@@ -22,7 +22,7 @@ export const contextGraphCommand = new Command('graph')
     try {
       await memory.init();
 
-      const nodes = memory.queryContextGraph({
+      const nodes = memory.context.queryContextGraph({
         query: options.query,
         project: options.project,
         substrateType: options.substrate,

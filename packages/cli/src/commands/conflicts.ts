@@ -13,7 +13,7 @@ const listConflicts = async (options: { project?: string; limit: string }): Prom
   try {
     await memory.init();
 
-    const conflicts = memory.listConflictRecords(
+    const conflicts = memory.context.listConflictRecords(
       options.project,
       parseInt(options.limit, 10),
     );
@@ -70,7 +70,7 @@ conflictsCommand
 
     try {
       await memory.init();
-      const result = memory.acceptConflictCandidate({
+      const result = memory.metabolism.acceptConflictCandidate({
         conflictId,
         candidateNodeId,
         resolution: options.resolution,
@@ -99,7 +99,7 @@ conflictsCommand
 
     try {
       await memory.init();
-      const result = memory.rejectConflictCandidate({
+      const result = memory.metabolism.rejectConflictCandidate({
         conflictId,
         candidateNodeId,
         reason: options.reason,

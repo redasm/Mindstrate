@@ -8,7 +8,7 @@ export async function POST(request: NextRequest) {
     const memory = await getMemoryReady();
     const body = await request.json();
 
-    const results = memory.queryGraphKnowledge(body.query, {
+    const results = memory.context.queryGraphKnowledge(body.query, {
       project: body.project || undefined,
       topK: body.topK || 10,
       limit: body.topK || 10,

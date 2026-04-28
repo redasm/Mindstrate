@@ -44,20 +44,20 @@ describe('Mindstrate', () => {
 
   describe('add and get', () => {
     it('should add and retrieve knowledge', async () => {
-      const result = await memory.add(makeKnowledgeInput());
+      const result = await memory.knowledge.add(makeKnowledgeInput());
       expect(result.success).toBe(true);
       expect(result.view).toBeDefined();
 
-      const view = memory.readGraphKnowledge().find((entry) => entry.id === result.view!.id);
+      const view = memory.context.readGraphKnowledge().find((entry) => entry.id === result.view!.id);
       expect(view).toBeDefined();
       expect(view!.title).toBe('Test knowledge entry');
 
-      const contextNodes = memory.listContextNodes({
+      const contextNodes = memory.context.listContextNodes({
         limit: 10,
       });
       expect(contextNodes.some((node) => node.id === result.view!.id)).toBe(true);
 
-      const projections = memory.listProjectionRecords({
+      const projections = memory.projections.listProjectionRecords({
         target: ProjectionTarget.GRAPH_KNOWLEDGE,
         limit: 10,
       });
@@ -66,8 +66,8 @@ describe('Mindstrate', () => {
 
     it('should detect duplicate entries', async () => {
       const input = makeKnowledgeInput();
-      const r1 = await memory.add(input);
-      const r2 = await memory.add(input);
+      const r1 = await memory.knowledge.add(input);
+      const r2 = await memory.knowledge.add(input);
       expect(r1.success).toBe(true);
       expect(r2.success).toBe(false);
       expect(r2.duplicateOf).toBe(r1.view!.id);
@@ -76,19 +76,19 @@ describe('Mindstrate', () => {
 
   describe('search', () => {
     it('should find relevant knowledge', async () => {
-      await memory.add(makeKnowledgeInput({
+      await memory.knowledge.add(makeKnowledgeInput({
         title: 'Fix React hydration error',
         solution: 'Use useEffect for client-side code',
         context: { language: 'typescript', framework: 'react' },
       }));
 
-      const results = memory.queryGraphKnowledge('hydration error in react');
+      const results = memory.context.queryGraphKnowledge('hydration error in react');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].view.title).toContain('hydration');
     });
 
     it('should return empty for unrelated queries', async () => {
-      await memory.add(makeKnowledgeInput({
+      await memory.knowledge.add(makeKnowledgeInput({
         title: 'Fix Python import error',
         solution: 'Use virtual environment',
         tags: ['python'],
@@ -97,13 +97,13 @@ describe('Mindstrate', () => {
 
       // offline embeddings are word-based, so completely unrelated text should have low similarity
       // but may still return results - we just check it doesn't crash
-      const results = memory.queryGraphKnowledge('quantum physics formulas');
+      const results = memory.context.queryGraphKnowledge('quantum physics formulas');
       expect(results).toBeDefined();
     });
 
     it('should prioritize graph-projected high-level nodes when they match the query', async () => {
 
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Hydration Safety Rule',
@@ -114,13 +114,13 @@ describe('Mindstrate', () => {
         confidence: 0.9,
       });
 
-      await memory.add(makeKnowledgeInput({
+      await memory.knowledge.add(makeKnowledgeInput({
         title: 'Low-level hydration note',
         solution: 'Client-only logic may cause mismatch.',
         context: { project: 'proj', language: 'typescript', framework: 'react' },
       }));
 
-      const results = memory.queryGraphKnowledge('hydration safe SSR', {
+      const results = memory.context.queryGraphKnowledge('hydration safe SSR', {
         project: 'proj',
         topK: 5,
       });
@@ -133,52 +133,52 @@ describe('Mindstrate', () => {
 
   describe('update and delete', () => {
     it('should update graph knowledge', async () => {
-      const r = await memory.add(makeKnowledgeInput());
-      const updated = memory.updateContextNode(r.view!.id, { title: 'New title' });
+      const r = await memory.knowledge.add(makeKnowledgeInput());
+      const updated = memory.context.updateContextNode(r.view!.id, { title: 'New title' });
       expect(updated!.title).toBe('New title');
     });
 
     it('should delete graph knowledge', async () => {
-      const r = await memory.add(makeKnowledgeInput());
-      const deleted = memory.deleteContextNode(r.view!.id);
+      const r = await memory.knowledge.add(makeKnowledgeInput());
+      const deleted = memory.context.deleteContextNode(r.view!.id);
       expect(deleted).toBe(true);
-      expect(memory.readGraphKnowledge().some((entry) => entry.id === r.view!.id)).toBe(false);
+      expect(memory.context.readGraphKnowledge().some((entry) => entry.id === r.view!.id)).toBe(false);
     });
 
     it('should expose graph updates through graph knowledge reads', async () => {
-      const r = await memory.add(makeKnowledgeInput({
+      const r = await memory.knowledge.add(makeKnowledgeInput({
         title: 'Previous architecture guidance',
         solution: 'previous token rotation flow',
       }));
 
-      let entries = memory.readGraphKnowledge();
+      let entries = memory.context.readGraphKnowledge();
       expect(entries.some((item) => item.id === r.view!.id && item.summary === 'previous token rotation flow')).toBe(true);
 
-      memory.updateContextNode(r.view!.id, {
+      memory.context.updateContextNode(r.view!.id, {
         title: 'New architecture guidance',
         content: 'modern secret rotation flow',
       });
 
-      entries = memory.readGraphKnowledge();
+      entries = memory.context.readGraphKnowledge();
       expect(entries.some((item) => item.id === r.view!.id && item.summary === 'modern secret rotation flow')).toBe(true);
     });
   });
 
   describe('list', () => {
     it('should list all knowledge', async () => {
-      await memory.add(makeKnowledgeInput({ title: 'A', solution: 'sol a alpha unique' }));
-      await memory.add(makeKnowledgeInput({ title: 'B', solution: 'sol b beta different topic' }));
-      const all = memory.readGraphKnowledge({ limit: 10 });
+      await memory.knowledge.add(makeKnowledgeInput({ title: 'A', solution: 'sol a alpha unique' }));
+      await memory.knowledge.add(makeKnowledgeInput({ title: 'B', solution: 'sol b beta different topic' }));
+      const all = memory.context.readGraphKnowledge({ limit: 10 });
       expect(all.length).toBe(2);
     });
   });
 
   describe('feedback', () => {
     it('should record graph feedback signals', async () => {
-      const r = await memory.add(makeKnowledgeInput());
-      memory.recordFeedback(r.view!.id, 'adopted', 'test');
+      const r = await memory.knowledge.add(makeKnowledgeInput());
+      memory.context.recordFeedback(r.view!.id, 'adopted', 'test');
 
-      const signals = memory.listContextNodes({
+      const signals = memory.context.listContextNodes({
         substrateType: SubstrateType.EPISODE,
         domainType: ContextDomainType.CONTEXT_EVENT,
       });
@@ -192,31 +192,31 @@ describe('Mindstrate', () => {
 
   describe('sessions', () => {
     it('should start and end a session', async () => {
-      const session = await memory.startSession({ project: 'test-proj' });
+      const session = await memory.sessions.startSession({ project: 'test-proj' });
       expect(session.status).toBe('active');
 
-      memory.saveObservation({
+      memory.sessions.saveObservation({
         sessionId: session.id,
         type: 'task_start',
         content: 'Working on tests',
       });
 
-      await memory.endSession(session.id);
-      const ended = memory.getSession(session.id);
+      await memory.sessions.endSession(session.id);
+      const ended = memory.sessions.getSession(session.id);
       expect(ended!.status).toBe('completed');
     });
 
     it('should restore ECS session snapshot projections with current session context', async () => {
-      const session = await memory.startSession({ project: 'proj' });
-      memory.saveObservation({
+      const session = await memory.sessions.startSession({ project: 'proj' });
+      memory.sessions.saveObservation({
         sessionId: session.id,
         type: 'decision',
         content: 'Keep restored context graph-aware.',
       });
-      await memory.endSession(session.id);
+      await memory.sessions.endSession(session.id);
 
-      const restored = memory.restoreSessionContext('proj');
-      const formatted = memory.formatSessionContext('proj');
+      const restored = memory.sessions.restoreSessionContext('proj');
+      const formatted = memory.sessions.formatSessionContext('proj');
 
       expect(restored.lastSession?.decisions).toContain('Keep restored context graph-aware.');
       expect(restored.graphSnapshots?.[0].title).toContain('Session snapshot');
@@ -226,32 +226,32 @@ describe('Mindstrate', () => {
     });
 
     it('should auto-end previous active session when starting new one', async () => {
-      const s1 = await memory.startSession({ project: 'proj' });
-      const s2 = await memory.startSession({ project: 'proj' });
+      const s1 = await memory.sessions.startSession({ project: 'proj' });
+      const s2 = await memory.sessions.startSession({ project: 'proj' });
 
-      const previous = memory.getSession(s1.id);
+      const previous = memory.sessions.getSession(s1.id);
       expect(previous!.status).toBe('abandoned');
       expect(s2.status).toBe('active');
     });
 
     it('should auto-compress similar session snapshots into a summary node', async () => {
-      const first = await memory.startSession({ project: 'proj' });
-      memory.saveObservation({
+      const first = await memory.sessions.startSession({ project: 'proj' });
+      memory.sessions.saveObservation({
         sessionId: first.id,
         type: 'problem_solved',
         content: 'Fixed hydration mismatch in SSR rendering by moving browser checks into useEffect.',
       });
-      await memory.endSession(first.id);
+      await memory.sessions.endSession(first.id);
 
-      const second = await memory.startSession({ project: 'proj' });
-      memory.saveObservation({
+      const second = await memory.sessions.startSession({ project: 'proj' });
+      memory.sessions.saveObservation({
         sessionId: second.id,
         type: 'problem_solved',
         content: 'Resolved hydration mismatch in SSR rendering by moving browser-only checks into useEffect.',
       });
-      await memory.endSession(second.id);
+      await memory.sessions.endSession(second.id);
 
-      const summaries = memory.listContextNodes({
+      const summaries = memory.context.listContextNodes({
         project: 'proj',
         substrateType: SubstrateType.SUMMARY,
         domainType: ContextDomainType.SESSION_SUMMARY,
@@ -265,20 +265,20 @@ describe('Mindstrate', () => {
 
   describe('assembleContext', () => {
     it('should assemble session continuity, project snapshot, and curated knowledge', async () => {
-      await memory.add(makeKnowledgeInput({
+      await memory.knowledge.add(makeKnowledgeInput({
         title: 'Fix React hydration mismatch',
         solution: 'Use useEffect for browser-only code paths.',
         tags: ['react', 'hydration'],
         context: { project: 'proj', language: 'typescript', framework: 'react' },
       }));
 
-      const previous = await memory.startSession({ project: 'proj' });
-      memory.saveObservation({
+      const previous = await memory.sessions.startSession({ project: 'proj' });
+      memory.sessions.saveObservation({
         sessionId: previous.id,
         type: 'decision',
         content: 'Keep SSR output deterministic before hydration.',
       });
-      await memory.endSession(previous.id);
+      await memory.sessions.endSession(previous.id);
 
       const project: DetectedProject = {
         root: tempDir,
@@ -298,9 +298,9 @@ describe('Mindstrate', () => {
         detectedAt: new Date().toISOString(),
         git: { isRepo: false },
       };
-      await memory.upsertProjectSnapshot(project);
+      await memory.snapshots.upsertProjectSnapshot(project);
 
-      const assembled = await memory.assembleContext('fix hydration mismatch', {
+      const assembled = await memory.assembly.assembleContext('fix hydration mismatch', {
         project: 'proj',
         context: { currentLanguage: 'typescript', currentFramework: 'react' },
       });
@@ -317,7 +317,7 @@ describe('Mindstrate', () => {
     });
 
     it('should gracefully assemble context without session or project snapshot', async () => {
-      const assembled = await memory.assembleContext('brand new task', {
+      const assembled = await memory.assembly.assembleContext('brand new task', {
         project: 'missing-project',
       });
 
@@ -332,7 +332,7 @@ describe('Mindstrate', () => {
   describe('ECS runtime API', () => {
     it('should expose the design-document ECS runtime methods', async () => {
 
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: 'Session snapshot A',
@@ -340,7 +340,7 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.ACTIVE,
       });
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: 'Session snapshot B',
@@ -349,13 +349,13 @@ describe('Mindstrate', () => {
         status: ContextNodeStatus.ACTIVE,
       });
 
-      const digest = memory.runDigest({ project: 'proj' });
-      const assimilation = memory.runAssimilation({ project: 'proj' });
-      const compression = await memory.runCompression({ project: 'proj' });
-      const pruning = memory.runPruning({ project: 'proj' });
-      const reflection = memory.runReflection({ project: 'proj' });
-      const context = await memory.assembleWorkingContext('fix hydration mismatch', { project: 'proj' });
-      const graphKnowledge = memory.readGraphKnowledge({ project: 'proj', limit: 10 });
+      const digest = memory.metabolism.runDigest({ project: 'proj' });
+      const assimilation = memory.metabolism.runAssimilation({ project: 'proj' });
+      const compression = await memory.metabolism.runCompression({ project: 'proj' });
+      const pruning = memory.metabolism.runPruning({ project: 'proj' });
+      const reflection = memory.metabolism.runReflection({ project: 'proj' });
+      const context = await memory.assembly.assembleWorkingContext('fix hydration mismatch', { project: 'proj' });
+      const graphKnowledge = memory.context.readGraphKnowledge({ project: 'proj', limit: 10 });
 
       expect(digest.stage).toBe('digest');
       expect(assimilation.stage).toBe('assimilate');
@@ -370,7 +370,7 @@ describe('Mindstrate', () => {
   describe('memory internalization', () => {
     it('should generate AGENTS and system prompt suggestions from stable rules', () => {
 
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Test-first ECS changes',
@@ -381,7 +381,7 @@ describe('Mindstrate', () => {
         confidence: 0.95,
       });
 
-      const suggestions = memory.generateInternalizationSuggestions({
+      const suggestions = memory.projections.generateInternalizationSuggestions({
         project: 'proj',
       });
 
@@ -394,7 +394,7 @@ describe('Mindstrate', () => {
 
     it('should accept internalization suggestions into auditable projection records', () => {
 
-      const rule = memory.createContextNode({
+      const rule = memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Keep ECS internalization auditable',
@@ -405,7 +405,7 @@ describe('Mindstrate', () => {
         confidence: 0.95,
       });
 
-      const accepted = memory.acceptInternalizationSuggestions({
+      const accepted = memory.projections.acceptInternalizationSuggestions({
         project: 'proj',
         targets: ['agents_md', 'system_prompt'],
       });
@@ -413,12 +413,12 @@ describe('Mindstrate', () => {
       expect(accepted.sourceNodeIds).toEqual([rule.id]);
       expect(accepted.records).toHaveLength(2);
       expect(accepted.records.map((record) => record.target).sort()).toEqual(['agents_md', 'system_prompt']);
-      expect(memory.listProjectionRecords({ nodeId: rule.id, limit: 10 })).toHaveLength(2);
+      expect(memory.projections.listProjectionRecords({ nodeId: rule.id, limit: 10 })).toHaveLength(2);
     });
 
     it('should export stable rules as a governed fine-tune dataset projection', () => {
 
-      const rule = memory.createContextNode({
+      const rule = memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Keep migrations graph-first',
@@ -429,7 +429,7 @@ describe('Mindstrate', () => {
         confidence: 0.96,
       });
 
-      const suggestions = memory.generateInternalizationSuggestions({
+      const suggestions = memory.projections.generateInternalizationSuggestions({
         project: 'proj',
       });
 
@@ -448,7 +448,7 @@ describe('Mindstrate', () => {
         ],
       });
 
-      const accepted = memory.acceptInternalizationSuggestions({
+      const accepted = memory.projections.acceptInternalizationSuggestions({
         project: 'proj',
         targets: [ProjectionTarget.FINE_TUNE_DATASET],
       });
@@ -462,7 +462,7 @@ describe('Mindstrate', () => {
   describe('curateContext', () => {
     it('should produce graph-first curated context', async () => {
 
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Hydration Safety Rule',
@@ -471,7 +471,7 @@ describe('Mindstrate', () => {
         status: ContextNodeStatus.ACTIVE,
       });
 
-      const curated = await memory.curateContext('fix hydration mismatch', {
+      const curated = await memory.assembly.curateContext('fix hydration mismatch', {
         project: 'proj',
         currentLanguage: 'typescript',
         currentFramework: 'react',
@@ -486,7 +486,7 @@ describe('Mindstrate', () => {
   describe('graph knowledge interfaces', () => {
     it('should expose graph-projected knowledge views through the facade', () => {
 
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Hydration Safety Rule',
@@ -497,7 +497,7 @@ describe('Mindstrate', () => {
         confidence: 0.9,
       });
 
-      const projected = memory.readGraphKnowledge({
+      const projected = memory.context.readGraphKnowledge({
         project: 'proj',
         limit: 10,
       });
@@ -509,7 +509,7 @@ describe('Mindstrate', () => {
 
     it('should expose ECS-native projected search through the facade', () => {
 
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Hydration Safety Rule',
@@ -520,7 +520,7 @@ describe('Mindstrate', () => {
         confidence: 0.9,
       });
 
-      const results = memory.queryGraphKnowledge('hydration safe SSR', {
+      const results = memory.context.queryGraphKnowledge('hydration safe SSR', {
         project: 'proj',
         topK: 5,
       });
@@ -534,7 +534,7 @@ describe('Mindstrate', () => {
   describe('metabolism framework', () => {
     it('should expose metabolism runs and projection records through the facade', async () => {
 
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: 'Session snapshot A',
@@ -542,7 +542,7 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.ACTIVE,
       });
-      memory.createContextNode({
+      memory.context.createContextNode({
         substrateType: SubstrateType.SNAPSHOT,
         domainType: ContextDomainType.SESSION_SUMMARY,
         title: 'Session snapshot B',
@@ -551,20 +551,20 @@ describe('Mindstrate', () => {
         status: ContextNodeStatus.ACTIVE,
       });
 
-      const run = await memory.runMetabolism({ project: 'proj', trigger: 'manual' });
+      const run = await memory.metabolism.runMetabolism({ project: 'proj', trigger: 'manual' });
       expect(run.status).toBe(MetabolismRunStatus.COMPLETED);
 
-      const runs = memory.listMetabolismRuns('proj');
+      const runs = memory.metabolism.listMetabolismRuns('proj');
       expect(runs).toHaveLength(1);
 
-      const projections = memory.listProjectionRecords({ target: ProjectionTarget.GRAPH_KNOWLEDGE });
+      const projections = memory.projections.listProjectionRecords({ target: ProjectionTarget.GRAPH_KNOWLEDGE });
       expect(projections.length).toBeGreaterThan(0);
     });
   });
 
   describe('external signal ingestion', () => {
     it('should ingest git activity into the context graph facade', () => {
-      const ingested = memory.ingestGitActivity({
+      const ingested = memory.events.ingestGitActivity({
         content: 'feat: wire capture into ecs event stream',
         project: 'proj',
         actor: 'tester',
@@ -575,7 +575,7 @@ describe('Mindstrate', () => {
       expect(ingested.event.type).toBe('git_activity');
       expect(ingested.node.sourceRef).toBe('abc123');
 
-      const nodes = memory.listContextNodes({
+      const nodes = memory.context.listContextNodes({
         project: 'proj',
         sourceRef: 'abc123',
         limit: 10,
@@ -585,7 +585,7 @@ describe('Mindstrate', () => {
     });
 
     it('should ingest test results into the context graph facade', () => {
-      const ingested = memory.ingestTestRun({
+      const ingested = memory.events.ingestTestRun({
         content: 'Vitest failed in context graph tests',
         project: 'proj',
         actor: 'vitest',
@@ -595,7 +595,7 @@ describe('Mindstrate', () => {
       expect(ingested.event.type).toBe('test_result');
       expect(ingested.node.sourceRef).toBe('test:ctx-graph');
 
-      const nodes = memory.listContextNodes({
+      const nodes = memory.context.listContextNodes({
         project: 'proj',
         sourceRef: 'test:ctx-graph',
         limit: 10,
@@ -605,7 +605,7 @@ describe('Mindstrate', () => {
     });
 
     it('should ingest lsp diagnostics into the context graph facade', () => {
-      const ingested = memory.ingestLspDiagnostic({
+      const ingested = memory.events.ingestLspDiagnostic({
         content: 'Type error TS2322 in src/mindstrate.ts',
         project: 'proj',
         sourceRef: 'lsp:mindstrate.ts',
@@ -615,7 +615,7 @@ describe('Mindstrate', () => {
       expect(ingested.event.type).toBe('lsp_diagnostic');
       expect(ingested.node.sourceRef).toBe('lsp:mindstrate.ts');
 
-      const nodes = memory.listContextNodes({
+      const nodes = memory.context.listContextNodes({
         project: 'proj',
         sourceRef: 'lsp:mindstrate.ts',
         limit: 10,
@@ -625,7 +625,7 @@ describe('Mindstrate', () => {
     });
 
     it('should ingest terminal output into the context graph facade', () => {
-      const ingested = memory.ingestTerminalOutput({
+      const ingested = memory.events.ingestTerminalOutput({
         content: 'npm run build failed with TS2322',
         project: 'proj',
         command: 'npm run build',
@@ -637,7 +637,7 @@ describe('Mindstrate', () => {
       expect(ingested.node.sourceRef).toBe('terminal:build');
       expect(ingested.node.metadata?.command).toBe('npm run build');
 
-      const nodes = memory.listContextNodes({
+      const nodes = memory.context.listContextNodes({
         project: 'proj',
         sourceRef: 'terminal:build',
         limit: 10,
@@ -649,8 +649,8 @@ describe('Mindstrate', () => {
 
   describe('stats', () => {
     it('should return aggregate statistics', async () => {
-      await memory.add(makeKnowledgeInput());
-      const stats = await memory.getStats();
+      await memory.knowledge.add(makeKnowledgeInput());
+      const stats = await memory.maintenance.getStats();
       expect(stats.total).toBe(1);
       expect(stats.vectorCount).toBe(1);
     });
@@ -658,16 +658,16 @@ describe('Mindstrate', () => {
 
   describe('checkQuality', () => {
     it('should check quality without writing', () => {
-      const result = memory.checkQuality(makeKnowledgeInput());
+      const result = memory.knowledge.checkQuality(makeKnowledgeInput());
       expect(result.passed).toBe(true);
-      expect(memory.readGraphKnowledge()).toHaveLength(0);
+      expect(memory.context.readGraphKnowledge()).toHaveLength(0);
     });
   });
 
   describe('maintenance', () => {
     it('should run maintenance without error', async () => {
-      await memory.add(makeKnowledgeInput());
-      const result = memory.runMaintenance();
+      await memory.knowledge.add(makeKnowledgeInput());
+      const result = memory.maintenance.runMaintenance();
       expect(result.total).toBe(1);
     });
   });
@@ -681,18 +681,18 @@ describe('Mindstrate', () => {
 
   describe('conflicts', () => {
     it('should expose conflict detection and conflict records through the facade', async () => {
-      await memory.runConflictDetection({
+      await memory.metabolism.runConflictDetection({
         project: 'proj',
         substrateType: SubstrateType.RULE,
         similarityThreshold: 0.55,
       });
 
-      memory.listContextNodes({
+      memory.context.listContextNodes({
         project: 'proj',
         substrateType: SubstrateType.RULE,
       });
 
-      const existingA = memory.listContextNodes({
+      const existingA = memory.context.listContextNodes({
         project: 'proj',
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
@@ -700,18 +700,14 @@ describe('Mindstrate', () => {
       });
       expect(existingA).toEqual([]);
 
-      const graph = (memory as unknown as {
-        listContextNodes: typeof memory.listContextNodes;
-      });
-
-      const nodeA = graph.listContextNodes({
+      const nodeA = memory.context.listContextNodes({
         project: 'proj',
         substrateType: SubstrateType.RULE,
         limit: 10,
       });
       expect(nodeA).toEqual([]);
 
-      const ruleA = memory.createContextNode({
+      const ruleA = memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Rule A',
@@ -719,7 +715,7 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.ACTIVE,
       });
-      const ruleB = memory.createContextNode({
+      const ruleB = memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Rule B',
@@ -728,7 +724,7 @@ describe('Mindstrate', () => {
         status: ContextNodeStatus.ACTIVE,
       });
 
-      const result = await memory.runConflictDetection({
+      const result = await memory.metabolism.runConflictDetection({
         project: 'proj',
         substrateType: SubstrateType.RULE,
         similarityThreshold: 0.55,
@@ -736,13 +732,13 @@ describe('Mindstrate', () => {
 
       expect(result.conflictsDetected).toBe(1);
 
-      const records = memory.listConflictRecords('proj');
+      const records = memory.context.listConflictRecords('proj');
       expect(records).toHaveLength(1);
       expect(records[0].nodeIds).toEqual(expect.arrayContaining([ruleA.id, ruleB.id]));
     });
 
     it('should expose conflict reflection candidates through the facade', async () => {
-      const ruleA = memory.createContextNode({
+      const ruleA = memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Rule A',
@@ -750,7 +746,7 @@ describe('Mindstrate', () => {
         project: 'proj',
         status: ContextNodeStatus.CONFLICTED,
       });
-      const ruleB = memory.createContextNode({
+      const ruleB = memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
         domainType: ContextDomainType.CONVENTION,
         title: 'Rule B',
@@ -759,17 +755,17 @@ describe('Mindstrate', () => {
         status: ContextNodeStatus.CONFLICTED,
       });
 
-      await memory.runConflictDetection({
+      await memory.metabolism.runConflictDetection({
         project: 'proj',
         substrateType: SubstrateType.RULE,
         similarityThreshold: 0.55,
       });
-      const conflict = memory.listConflictRecords('proj')[0];
+      const conflict = memory.context.listConflictRecords('proj')[0];
 
-      const result = memory.runConflictReflection({ project: 'proj' });
+      const result = memory.metabolism.runConflictReflection({ project: 'proj' });
       expect(result.candidateNodesCreated).toBe(1);
 
-      const candidates = memory.listContextNodes({
+      const candidates = memory.context.listContextNodes({
         project: 'proj',
         sourceRef: conflict.id,
         limit: 10,

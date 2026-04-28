@@ -29,7 +29,7 @@ describe('SyncManager (integration)', () => {
   });
 
   it('exportAll writes all knowledge into project/type folders', async () => {
-    const r1 = await memory.add({
+    const r1 = await memory.knowledge.add({
       type: KnowledgeType.BUG_FIX,
       title: 'Hydration error in Next 15',
       problem: 'Date.now in render causes mismatch',
@@ -40,7 +40,7 @@ describe('SyncManager (integration)', () => {
     });
     expect(r1.success).toBe(true);
 
-    const r2 = await memory.add({
+    const r2 = await memory.knowledge.add({
       type: KnowledgeType.BEST_PRACTICE,
       title: 'Always use absolute imports',
       solution: 'Configure tsconfig paths and prefer @/ imports',
@@ -73,7 +73,7 @@ describe('SyncManager (integration)', () => {
   it('exports graph updates and deletes during full sync', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
 
-    const r = await memory.add({
+    const r = await memory.knowledge.add({
       type: KnowledgeType.GOTCHA,
       title: 'Beware default export with HMR',
       solution: 'Always name your default-exported component to keep refresh state',
@@ -92,7 +92,7 @@ describe('SyncManager (integration)', () => {
     expect(fs.existsSync(abs)).toBe(true);
 
     // Update title and ensure file moves to new slug
-    memory.updateContextNode(r.view!.id, { title: 'Renamed: HMR gotcha with default export' });
+    memory.context.updateContextNode(r.view!.id, { title: 'Renamed: HMR gotcha with default export' });
     await sync.exportAll();
     const idx2 = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
     const newRel = idx2.files[r.view!.id];
@@ -101,7 +101,7 @@ describe('SyncManager (integration)', () => {
     expect(fs.existsSync(abs)).toBe(false);
 
     // Delete propagates
-    memory.deleteContextNode(r.view!.id);
+    memory.context.deleteContextNode(r.view!.id);
     await sync.exportAll();
     expect(fs.existsSync(path.join(vaultDir, newRel.split('/').join(path.sep)))).toBe(false);
     const idx3 = new VaultLayout({ vaultRoot: vaultDir }).loadIndex();
@@ -111,7 +111,7 @@ describe('SyncManager (integration)', () => {
   it('orphan files (KU removed without sink) are cleaned up on full re-export', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
 
-    const r = await memory.add({
+    const r = await memory.knowledge.add({
       type: KnowledgeType.HOW_TO,
       title: 'Set up vitest in monorepo',
       solution: 'Create a vitest.config.ts at the workspace root and reference packages',
@@ -121,7 +121,7 @@ describe('SyncManager (integration)', () => {
     await sync.exportAll();
 
     // Now delete via graph directly (simulating a sink-less deletion)
-    memory.deleteContextNode(r.view!.id);
+    memory.context.deleteContextNode(r.view!.id);
 
     const r2 = await sync.exportAll();
     expect(r2.removed).toBe(1);
@@ -135,7 +135,7 @@ describe('SyncManager (integration)', () => {
     // we exercise the same code path used by the watcher.
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
 
-    const r = await memory.add({
+    const r = await memory.knowledge.add({
       type: KnowledgeType.PATTERN,
       title: 'Repository pattern',
       solution: 'Encapsulate persistence behind an interface',
@@ -167,7 +167,7 @@ describe('SyncManager (integration)', () => {
   it('ignores vault edits for mirror-only knowledge types', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
 
-    const r = await memory.add({
+    const r = await memory.knowledge.add({
       type: KnowledgeType.GOTCHA,
       title: 'Volatile gotcha',
       solution: 'Original volatile guidance',
@@ -186,14 +186,14 @@ describe('SyncManager (integration)', () => {
 
     await (sync.watcher as any).handleAddOrChange(rel);
 
-    const unchanged = memory.listContextNodes({ limit: 100 }).find((node) => node.id === r.view!.id);
+    const unchanged = memory.context.listContextNodes({ limit: 100 }).find((node) => node.id === r.view!.id);
     expect(unchanged!.content).toBe('Original volatile guidance');
   });
 
   it('ignores stale vault edits when Mindstrate has newer content', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
 
-    const r = await memory.add({
+    const r = await memory.knowledge.add({
       type: KnowledgeType.ARCHITECTURE,
       title: 'Service lifecycle',
       solution: 'Version one of the lifecycle note.',
@@ -207,7 +207,7 @@ describe('SyncManager (integration)', () => {
     const abs = path.join(vaultDir, rel.split('/').join(path.sep));
     const staleText = fs.readFileSync(abs, 'utf8');
 
-    memory.updateContextNode(r.view!.id, { content: 'Version two from Mindstrate.' });
+    memory.context.updateContextNode(r.view!.id, { content: 'Version two from Mindstrate.' });
 
     const staleEdited = staleText.replace(
       'Version one of the lifecycle note.',
@@ -217,14 +217,14 @@ describe('SyncManager (integration)', () => {
 
     await (sync.watcher as any).handleAddOrChange(rel);
 
-    const current = memory.listContextNodes({ limit: 100 }).find((node) => node.id === r.view!.id);
+    const current = memory.context.listContextNodes({ limit: 100 }).find((node) => node.id === r.view!.id);
     expect(current!.content).toBe('Version two from Mindstrate.');
   });
 
   it('does not delete mirror-only knowledge when the vault file is removed', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
 
-    const r = await memory.add({
+    const r = await memory.knowledge.add({
       type: KnowledgeType.BUG_FIX,
       title: 'Mirror-only bug fix',
       solution: 'Important fix that should stay canonical in Mindstrate.',
@@ -241,6 +241,6 @@ describe('SyncManager (integration)', () => {
     await (sync.watcher as any).handleUnlink(abs);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(memory.listContextNodes({ limit: 100 }).some((node) => node.id === r.view!.id)).toBe(true);
+    expect(memory.context.listContextNodes({ limit: 100 }).some((node) => node.id === r.view!.id)).toBe(true);
   });
 });

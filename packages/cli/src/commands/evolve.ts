@@ -21,7 +21,7 @@ export function registerEvolveCommand(program: Command): void {
 
         console.log('Running knowledge evolution...\n');
 
-        const result = await memory.runEvolution({
+        const result = await memory.metabolism.runEvolution({
           autoApply: opts.autoApply,
           maxItems: parseInt(opts.max, 10),
           mode: opts.mode,

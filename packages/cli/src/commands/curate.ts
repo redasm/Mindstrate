@@ -20,7 +20,7 @@ export function registerCurateCommand(program: Command): void {
 
         console.log(`Curating context for: "${task}"\n`);
 
-        const curated = await memory.curateContext(task, {
+        const curated = await memory.assembly.curateContext(task, {
           currentLanguage: opts.language,
           currentFramework: opts.framework,
         });

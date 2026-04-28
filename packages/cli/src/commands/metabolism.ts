@@ -24,7 +24,7 @@ export const metabolismCommand = new Command('gc')
         return;
       }
 
-      const run = await memory.runMetabolism({
+      const run = await memory.metabolism.runMetabolism({
         project: options.project,
         trigger: options.trigger,
       });
@@ -62,19 +62,19 @@ export const metabolismCommand = new Command('gc')
 async function runStage(memory: ReturnType<typeof createMemory>, stage: string, project?: string) {
   switch (stage) {
     case 'digest':
-      return memory.runDigest({ project });
+      return memory.metabolism.runDigest({ project });
     case 'assimilate':
     case 'assimilation':
-      return memory.runAssimilation({ project });
+      return memory.metabolism.runAssimilation({ project });
     case 'compress':
     case 'compression':
-      return memory.runCompression({ project });
+      return memory.metabolism.runCompression({ project });
     case 'prune':
     case 'pruning':
-      return memory.runPruning({ project });
+      return memory.metabolism.runPruning({ project });
     case 'reflect':
     case 'reflection':
-      return memory.runReflection({ project });
+      return memory.metabolism.runReflection({ project });
     default:
       throw new Error(`Unknown metabolism stage: ${stage}`);
   }

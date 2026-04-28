@@ -57,7 +57,7 @@ export class VaultExporter {
     this.layout.ensureRoot();
     const result: ExportResult = { written: 0, skipped: 0, removed: 0, moved: 0, errors: [] };
 
-    const all = memory.readGraphKnowledge({ limit: 100000 });
+    const all = memory.context.readGraphKnowledge({ limit: 100000 });
     const idx: VaultIndex = this.layout.loadIndex();
     const newIndex: VaultIndex = { files: {}, version: idx.version, lastFullSyncAt: new Date().toISOString() };
 

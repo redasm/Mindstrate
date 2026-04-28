@@ -10,8 +10,8 @@ export default async function DashboardPage() {
   const locale = detectLocale();
   const t = getTranslations(locale);
   const memory = await getMemoryReady();
-  const stats = await memory.getStats();
-  const recent = memory.readGraphKnowledge({ limit: 5 });
+  const stats = await memory.maintenance.getStats();
+  const recent = memory.context.readGraphKnowledge({ limit: 5 });
 
   const statCards = [
     { label: t.dashboard.totalKnowledge, value: stats.total, color: 'text-brand-600' },

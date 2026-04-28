@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const project = params.get('project') || undefined;
     const limit = parseInt(params.get('limit') || '10', 10);
 
-    const runs = memory.listMetabolismRuns(project, limit);
+    const runs = memory.metabolism.listMetabolismRuns(project, limit);
     return NextResponse.json({ runs, total: runs.length });
   } catch (error) {
     return errorResponse(error);
@@ -25,15 +25,15 @@ export async function POST(request: NextRequest) {
     if (body.stage) {
       const options = { project: body.project || undefined };
       const result = body.stage === 'digest'
-        ? memory.runDigest(options)
+        ? memory.metabolism.runDigest(options)
         : body.stage === 'assimilate'
-          ? memory.runAssimilation(options)
+          ? memory.metabolism.runAssimilation(options)
           : body.stage === 'compress'
-            ? await memory.runCompression(options)
+            ? await memory.metabolism.runCompression(options)
             : body.stage === 'prune'
-              ? memory.runPruning(options)
+              ? memory.metabolism.runPruning(options)
               : body.stage === 'reflect'
-                ? memory.runReflection(options)
+                ? memory.metabolism.runReflection(options)
                 : null;
 
       if (!result) {
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result, { status: 201 });
     }
 
-    const run = await memory.runMetabolism({
+    const run = await memory.metabolism.runMetabolism({
       project: body.project || undefined,
       trigger: body.trigger || 'manual',
     });

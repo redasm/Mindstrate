@@ -200,7 +200,7 @@ export class VaultWatcher {
       }
       // Update path
       const update = parsedToUpdate(parsed);
-      this.memory.updateContextNode(existing.id, {
+      this.memory.context.updateContextNode(existing.id, {
         title: update.title,
         content: update.solution,
         tags: update.tags,
@@ -226,7 +226,7 @@ export class VaultWatcher {
 
     // No existing node -> create
     const create = parsedToCreate(parsed);
-    const result = await this.memory.add(create);
+    const result = await this.memory.knowledge.add(create);
     if (result.success && result.view) {
       this.knownHashes.set(rel, hash);
       this.emit({ type: 'created', relPath: rel, nodeId: result.view.id });
@@ -256,7 +256,7 @@ export class VaultWatcher {
       const base = path.basename(rel);
       const suffix = extractIdSuffixFromFilename(base);
       if (suffix) {
-        const all = this.memory.readGraphKnowledge({ limit: 100000 });
+        const all = this.memory.context.readGraphKnowledge({ limit: 100000 });
         const match = all.find((k) => idMatchesSuffix(k.id, suffix));
         nodeId = match?.id;
       }
@@ -279,7 +279,7 @@ export class VaultWatcher {
       return;
     }
 
-    Promise.resolve(this.memory.deleteContextNode(nodeId)).then((deleted) => {
+    Promise.resolve(this.memory.context.deleteContextNode(nodeId)).then((deleted) => {
       this.knownHashes.delete(rel);
       // Also drop from index
       const idx2 = this.layout.loadIndex();
@@ -298,14 +298,14 @@ export class VaultWatcher {
 
   private findByIdOrSuffix(id: string, rel: string): ContextNode | null {
     if (id) {
-      const exact = this.memory.queryContextGraph({ limit: 100000 }).find((node) => node.id === id || node.id.startsWith(id));
+      const exact = this.memory.context.queryContextGraph({ limit: 100000 }).find((node) => node.id === id || node.id.startsWith(id));
       if (exact) return exact;
     }
     // Fall back to filename suffix
     const base = path.basename(rel);
     const suffix = extractIdSuffixFromFilename(base);
     if (!suffix) return null;
-    const candidate = this.memory.queryContextGraph({ limit: 100000 }).find((node) => node.id === suffix || node.id.startsWith(suffix));
+    const candidate = this.memory.context.queryContextGraph({ limit: 100000 }).find((node) => node.id === suffix || node.id.startsWith(suffix));
     return candidate ?? null;
   }
 

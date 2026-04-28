@@ -56,7 +56,7 @@ export const addCommand = new Command('add')
         ? options.tags.split(',').map((t: string) => t.trim())
         : [];
 
-      const result = await memory.add({
+      const result = await memory.knowledge.add({
         type: options.type as KnowledgeType,
         title: options.title,
         problem: options.problem,

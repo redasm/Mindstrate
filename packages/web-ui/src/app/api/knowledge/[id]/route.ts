@@ -8,7 +8,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   try {
     const { id } = await params;
     const memory = getMemory();
-    const node = memory.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
+    const node = memory.context.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
 
     if (!node) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -27,7 +27,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const memory = getMemory();
     const body = await request.json();
 
-    const updated = memory.updateContextNode(id, {
+    const updated = memory.context.updateContextNode(id, {
       title: body.title,
       content: body.summary ?? body.content,
       tags: body.tags,
@@ -49,7 +49,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   try {
     const { id } = await params;
     const memory = getMemory();
-    const deleted = memory.deleteContextNode(id);
+    const deleted = memory.context.deleteContextNode(id);
 
     if (!deleted) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -66,7 +66,7 @@ export async function PATCH(_: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const memory = getMemory();
-    const node = memory.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
+    const node = memory.context.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
     return NextResponse.json(node ? toGraphKnowledgeView(node) : null);
   } catch (error) {
     return errorResponse(error);

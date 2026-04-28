@@ -115,7 +115,7 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
 
   it('creates a project snapshot graph node with a deterministic id', async () => {
     const p = detectProject(root)!;
-    const r = await memory.upsertProjectSnapshot(p);
+    const r = await memory.snapshots.upsertProjectSnapshot(p);
     expect(r.created).toBe(true);
     expect(r.changed).toBe(true);
     expect(r.node.id).toBe(projectSnapshotId(p));
@@ -124,14 +124,14 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
 
   it('materializes project snapshots from ECS graph nodes', async () => {
     const p = detectProject(root)!;
-    const r = await memory.upsertProjectSnapshot(p);
+    const r = await memory.snapshots.upsertProjectSnapshot(p);
 
-    const nodes = memory.listContextNodes({
+    const nodes = memory.context.listContextNodes({
       project: p.name,
       substrateType: SubstrateType.SNAPSHOT,
       domainType: ContextDomainType.PROJECT_SNAPSHOT,
     });
-    const projection = memory.listProjectionRecords({
+    const projection = memory.projections.listProjectionRecords({
       target: ProjectionTarget.PROJECT_SNAPSHOT,
       limit: 10,
     });
@@ -143,9 +143,9 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
 
   it('is idempotent: repeated upserts converge to a single record', async () => {
     const p = detectProject(root)!;
-    const a = await memory.upsertProjectSnapshot(p);
-    const b = await memory.upsertProjectSnapshot(p);
-    const c = await memory.upsertProjectSnapshot(p);
+    const a = await memory.snapshots.upsertProjectSnapshot(p);
+    const b = await memory.snapshots.upsertProjectSnapshot(p);
+    const c = await memory.snapshots.upsertProjectSnapshot(p);
     expect(a.node.id).toBe(b.node.id);
     expect(b.node.id).toBe(c.node.id);
     expect(b.created).toBe(false);
@@ -154,15 +154,15 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
     expect(b.changed).toBe(false);
     expect(c.changed).toBe(false);
     // Only one record exists
-    expect(memory.listContextNodes({ sourceRef: a.node.id, limit: 100 })).toHaveLength(1);
+    expect(memory.context.listContextNodes({ sourceRef: a.node.id, limit: 100 })).toHaveLength(1);
   });
 
   it('detects stack changes and re-renders, but keeps preserve blocks', async () => {
     const p1 = detectProject(root)!;
-    const r1 = await memory.upsertProjectSnapshot(p1);
+    const r1 = await memory.snapshots.upsertProjectSnapshot(p1);
 
     // User edits the Critical Invariants section in the DB.
-    const node = memory.listContextNodes({
+    const node = memory.context.listContextNodes({
       sourceRef: r1.node.id,
       limit: 10,
     })[0];
@@ -172,7 +172,7 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
       ),
       `$1\nDB writes go through the repository layer only.\n$2`,
     );
-    memory.updateContextNode(node.id, { content: edited });
+    memory.context.updateContextNode(node.id, { content: edited });
 
     // Stack changes (add a new framework dep)
     writePackageJson(root, {
@@ -180,10 +180,10 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
       dependencies: { express: '^4', '@nestjs/core': '^10' },
     });
     const p2 = detectProject(root)!;
-    const r2 = await memory.upsertProjectSnapshot(p2);
+    const r2 = await memory.snapshots.upsertProjectSnapshot(p2);
     expect(r2.created).toBe(false);
     expect(r2.changed).toBe(true);
-    const updatedNode = memory.listContextNodes({ sourceRef: r2.node.id, limit: 10 })[0];
+    const updatedNode = memory.context.listContextNodes({ sourceRef: r2.node.id, limit: 10 })[0];
     expect(updatedNode.content).toContain('DB writes go through the repository layer only.');
     expect(updatedNode.content).toContain('@nestjs/core');
     // Framework hint detection picked up nestjs (higher specificity)
@@ -196,11 +196,11 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
       writePackageJson(root2, { name: 'web', dependencies: { react: '^18' } });
       const p1 = detectProject(root)!;
       const p2 = detectProject(root2)!;
-      const r1 = await memory.upsertProjectSnapshot(p1);
-      const r2 = await memory.upsertProjectSnapshot(p2);
+      const r1 = await memory.snapshots.upsertProjectSnapshot(p1);
+      const r2 = await memory.snapshots.upsertProjectSnapshot(p2);
       expect(r1.node.id).not.toBe(r2.node.id);
-      expect(memory.listContextNodes({ sourceRef: r1.node.id, limit: 100 })).toHaveLength(1);
-      expect(memory.listContextNodes({ sourceRef: r2.node.id, limit: 100 })).toHaveLength(1);
+      expect(memory.context.listContextNodes({ sourceRef: r1.node.id, limit: 100 })).toHaveLength(1);
+      expect(memory.context.listContextNodes({ sourceRef: r2.node.id, limit: 100 })).toHaveLength(1);
     } finally {
       removeTempDir(root2);
     }

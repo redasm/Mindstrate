@@ -147,8 +147,8 @@ const statusCmd = new Command('status')
     }
     const memory = new Mindstrate();
     await memory.init();
-    const stats = await memory.getStats();
-    const graphKnowledge = memory.readGraphKnowledge({ limit: 100000 });
+    const stats = await memory.maintenance.getStats();
+    const graphKnowledge = memory.context.readGraphKnowledge({ limit: 100000 });
     const editableKnowledge = graphKnowledge.filter((view) => getVaultSyncMode(graphViewToKnowledgeType(view)) === 'editable').length;
     const mirrorKnowledge = graphKnowledge.length - editableKnowledge;
     const assessment = assessCanonicalSourceReadiness({

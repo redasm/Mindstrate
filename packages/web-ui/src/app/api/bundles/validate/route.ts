@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'bundle is required' }, { status: 400 });
     }
 
-    const result = memory.validateBundle(body.bundle);
+    const result = memory.bundles.validateBundle(body.bundle);
     return NextResponse.json(result);
   } catch (error) {
     return errorResponse(error);

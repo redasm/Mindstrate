@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const relationType = params.get('relationType') || undefined;
     const limit = parseInt(params.get('limit') || '200', 10);
 
-    const edges = memory.listContextEdges({
+    const edges = memory.context.listContextEdges({
       sourceId,
       targetId,
       relationType: relationType as never,

@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
     }
 
     const result = body.bundle
-      ? memory.installBundle(body.bundle)
-      : await memory.installBundleFromRegistry({
+      ? memory.bundles.installBundle(body.bundle)
+      : await memory.bundles.installBundleFromRegistry({
           registry: body.registry,
           reference: body.reference,
         });

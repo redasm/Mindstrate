@@ -21,7 +21,7 @@ export const searchCommand = new Command('search')
       await memory.init();
 
       const minScore = parseFloat(options.minScore);
-      const results = memory.queryGraphKnowledge(query, {
+      const results = memory.context.queryGraphKnowledge(query, {
         topK: parseInt(options.topK, 10),
         limit: 100,
       }).filter((result) => !options.type || result.view.domainType === options.type)

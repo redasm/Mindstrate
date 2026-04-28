@@ -78,7 +78,7 @@ const main = async (): Promise<void> => {
   await memory.init();
   const scheduler = readSchedulerEnvConfig();
   if (scheduler.enabled) {
-    memory.startMetabolismScheduler({
+    memory.metabolism.startMetabolismScheduler({
       project: scheduler.project,
       intervalMs: scheduler.intervalMs,
     });

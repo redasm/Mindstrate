@@ -27,6 +27,7 @@ import type {
   PublishBundleOptions,
   PublishBundleResult,
 } from '@mindstrate/protocol';
+import type { Mindstrate } from '@mindstrate/server';
 
 export interface InstallBundleFromRegistryOptions {
   registry: string;
@@ -128,15 +129,7 @@ export interface LocalInternalizationApi {
   importObsidianProjectionFile(filePath: string): { sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean };
 }
 
-export interface LocalMemory
-  extends LocalKnowledgeApi,
-    LocalSessionApi,
-    LocalContextGraphApi,
-    LocalMetabolismApi,
-    LocalBundleApi,
-    LocalInternalizationApi {
-  close(): void;
-}
+export type LocalMemory = Mindstrate;
 
 export interface KnowledgeApi {
   init(): Promise<void>;

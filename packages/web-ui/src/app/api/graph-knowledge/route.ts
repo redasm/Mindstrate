@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const project = params.get('project') || undefined;
     const limit = parseInt(params.get('limit') || '50', 10);
 
-    const entries = memory.readGraphKnowledge({ project, limit });
+    const entries = memory.context.readGraphKnowledge({ project, limit });
     return NextResponse.json({ entries, total: entries.length });
   } catch (error) {
     return errorResponse(error);

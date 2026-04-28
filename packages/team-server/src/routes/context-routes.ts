@@ -12,7 +12,7 @@ import { parseLimit, withInitializedMemory, type TeamRouteDeps } from '../http/r
 export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): void => {
   app.get('/api/graph/knowledge', withInitializedMemory(memory, async (req, res) => {
     const project = typeof req.query.project === 'string' ? req.query.project : undefined;
-    const entries = memory.readGraphKnowledge({
+    const entries = memory.context.readGraphKnowledge({
       project,
       limit: parseLimit(req.query.limit, 20),
     });
@@ -27,7 +27,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.queryGraphKnowledge(query, {
+    res.json(memory.context.queryGraphKnowledge(query, {
       project,
       topK: topK || 10,
       limit: limit || 50,
@@ -42,7 +42,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    const result = memory.ingestEvent({
+    const result = memory.events.ingestEvent({
       type: type as ContextEventType,
       content,
       project,
@@ -59,7 +59,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/context/graph', withInitializedMemory(memory, async (req, res) => {
-    const nodes = memory.queryContextGraph({
+    const nodes = memory.context.queryContextGraph({
       query: typeof req.query.query === 'string' ? req.query.query : undefined,
       project: typeof req.query.project === 'string' ? req.query.project : undefined,
       substrateType: req.query.substrateType as SubstrateType | undefined,
@@ -72,7 +72,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/context/conflicts', withInitializedMemory(memory, async (req, res) => {
-    const conflicts = memory.listConflictRecords(
+    const conflicts = memory.context.listConflictRecords(
       typeof req.query.project === 'string' ? req.query.project : undefined,
       parseLimit(req.query.limit, 20),
     );
@@ -81,7 +81,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/context/projections', withInitializedMemory(memory, async (req, res) => {
-    const records = memory.listProjectionRecords({
+    const records = memory.projections.listProjectionRecords({
       nodeId: typeof req.query.nodeId === 'string' ? req.query.nodeId : undefined,
       target: typeof req.query.target === 'string' ? req.query.target : undefined,
       limit: parseLimit(req.query.limit, 50),
@@ -97,7 +97,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.acceptConflictCandidate({ conflictId, candidateNodeId, resolution }));
+    res.json(memory.metabolism.acceptConflictCandidate({ conflictId, candidateNodeId, resolution }));
   }));
 
   app.post('/api/context/conflicts/reject', withInitializedMemory(memory, async (req, res) => {
@@ -107,11 +107,11 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.rejectConflictCandidate({ conflictId, candidateNodeId, reason }));
+    res.json(memory.metabolism.rejectConflictCandidate({ conflictId, candidateNodeId, reason }));
   }));
 
   app.get('/api/context/edges', withInitializedMemory(memory, async (req, res) => {
-    const edges = memory.listContextEdges({
+    const edges = memory.context.listContextEdges({
       sourceId: typeof req.query.sourceId === 'string' ? req.query.sourceId : undefined,
       targetId: typeof req.query.targetId === 'string' ? req.query.targetId : undefined,
       relationType: req.query.relationType as never,
@@ -128,7 +128,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    const curated = await memory.curateContext(task, {
+    const curated = await memory.assembly.curateContext(task, {
       currentLanguage: language,
       currentFramework: framework,
     });
@@ -143,7 +143,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    const assembled = await memory.assembleContext(task, {
+    const assembled = await memory.assembly.assembleContext(task, {
       project,
       sessionId,
       context: {
@@ -158,7 +158,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
 
   app.post('/api/context/internalize', withInitializedMemory(memory, async (req, res) => {
     const { project, limit } = req.body;
-    res.json(memory.generateInternalizationSuggestions({
+    res.json(memory.projections.generateInternalizationSuggestions({
       project,
       limit,
     }));
@@ -166,7 +166,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
 
   app.post('/api/context/internalize/accept', withInitializedMemory(memory, async (req, res) => {
     const { project, limit, targets } = req.body;
-    res.json(memory.acceptInternalizationSuggestions({
+    res.json(memory.projections.acceptInternalizationSuggestions({
       project,
       limit,
       targets,
@@ -180,7 +180,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    const files = memory.writeObsidianProjectionFiles({
+    const files = memory.projections.writeObsidianProjectionFiles({
       project,
       limit,
       rootDir,
@@ -195,36 +195,36 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.importObsidianProjectionFile(filePath));
+    res.json(memory.projections.importObsidianProjectionFile(filePath));
   }));
 
   app.post('/api/evolve', withInitializedMemory(memory, async (req, res) => {
     const { autoApply, maxItems, mode } = req.body;
-    res.json(await memory.runEvolution({ autoApply, maxItems, mode }));
+    res.json(await memory.metabolism.runEvolution({ autoApply, maxItems, mode }));
   }));
 
   app.post('/api/metabolism/run', withInitializedMemory(memory, async (req, res) => {
     const { project, trigger } = req.body;
-    res.json(await memory.runMetabolism({ project, trigger }));
+    res.json(await memory.metabolism.runMetabolism({ project, trigger }));
   }));
 
   app.post('/api/metabolism/stage', withInitializedMemory(memory, async (req, res) => {
     const { project, stage } = req.body;
     switch (stage) {
       case 'digest':
-        res.json(memory.runDigest({ project }));
+        res.json(memory.metabolism.runDigest({ project }));
         return;
       case 'assimilate':
-        res.json(memory.runAssimilation({ project }));
+        res.json(memory.metabolism.runAssimilation({ project }));
         return;
       case 'compress':
-        res.json(await memory.runCompression({ project }));
+        res.json(await memory.metabolism.runCompression({ project }));
         return;
       case 'prune':
-        res.json(memory.runPruning({ project }));
+        res.json(memory.metabolism.runPruning({ project }));
         return;
       case 'reflect':
-        res.json(memory.runReflection({ project }));
+        res.json(memory.metabolism.runReflection({ project }));
         return;
       default:
         res.status(400).json({ error: 'stage must be digest, assimilate, compress, prune, or reflect' });
@@ -238,7 +238,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.status(201).json(memory.createBundle({
+    res.status(201).json(memory.bundles.createBundle({
       name,
       version,
       description,
@@ -255,7 +255,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.validateBundle(bundle));
+    res.json(memory.bundles.validateBundle(bundle));
   }));
 
   app.post('/api/bundles/install', withInitializedMemory(memory, async (req, res) => {
@@ -265,7 +265,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.installBundle(bundle));
+    res.json(memory.bundles.installBundle(bundle));
   }));
 
   app.post('/api/bundles/install-ref', withInitializedMemory(memory, async (req, res) => {
@@ -275,7 +275,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(await memory.installBundleFromRegistry({ registry, reference }));
+    res.json(await memory.bundles.installBundleFromRegistry({ registry, reference }));
   }));
 
   app.post('/api/bundles/publish', withInitializedMemory(memory, async (req, res) => {
@@ -285,7 +285,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.publishBundle(bundle, {
+    res.json(memory.bundles.publishBundle(bundle, {
       registry: req.body.registry,
       visibility: req.body.visibility,
     } as PublishBundleOptions));

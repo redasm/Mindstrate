@@ -50,11 +50,11 @@ class LocalMemorySink implements KnowledgeSink {
   }
 
   async addKnowledge(input: any): Promise<AddKnowledgeResult> {
-    return this.memory.add(input);
+    return this.memory.knowledge.add(input);
   }
 
   async ingestGitActivity(input: Parameters<KnowledgeSink['ingestGitActivity']>[0]): Promise<void> {
-    this.memory.ingestGitActivity(input);
+    this.memory.events.ingestGitActivity(input);
   }
 
   async close(): Promise<void> {

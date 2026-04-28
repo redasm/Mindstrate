@@ -6,7 +6,7 @@ import { errorResponse } from '@/app/api/error-response';
 export async function GET() {
   try {
     const memory = await getMemoryReady();
-    const stats = await memory.getStats();
+    const stats = await memory.maintenance.getStats();
 
     return NextResponse.json({
       total: stats.total,

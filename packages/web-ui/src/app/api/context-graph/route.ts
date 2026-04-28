@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const status = params.get('status') || undefined;
     const limit = parseInt(params.get('limit') || '50', 10);
 
-    const nodes = memory.queryContextGraph({
+    const nodes = memory.context.queryContextGraph({
       query,
       project,
       substrateType: substrateType as never,

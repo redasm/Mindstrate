@@ -19,7 +19,7 @@ export function registerEvaluateCommand(program: Command): void {
         await memory.init();
 
         if (opts.trend) {
-          const trend = memory.getEvalTrend(10);
+          const trend = memory.evaluation.getEvalTrend(10);
           console.log(`Evaluation Trend: ${trend.trend}\n`);
           if (trend.runs.length === 0) {
             console.log('No evaluation runs yet. Run `mindstrate eval` first.');
@@ -35,7 +35,7 @@ export function registerEvaluateCommand(program: Command): void {
           }
       } else {
         console.log('Running retrieval evaluation...\n');
-        const result = await memory.runEvaluation(parseInt(opts.topK, 10));
+        const result = await memory.evaluation.runEvaluation(parseInt(opts.topK, 10));
         const project = process.cwd().split(/[/\\]/).pop();
 
         if (result.totalCases === 0) {
@@ -56,7 +56,7 @@ export function registerEvaluateCommand(program: Command): void {
             }
           }
 
-          memory.ingestTestRun({
+          memory.events.ingestTestRun({
             content: `Retrieval evaluation completed. Cases=${result.totalCases}, precision=${(result.precision * 100).toFixed(1)}%, recall=${(result.recall * 100).toFixed(1)}%, f1=${(result.f1 * 100).toFixed(1)}%, mrr=${(result.meanReciprocalRank * 100).toFixed(1)}%`,
             project,
             actor: 'mindstrate-evaluate',

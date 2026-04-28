@@ -4,12 +4,12 @@ import { asyncRoute, readParam, type TeamRouteDeps } from '../http/route-support
 export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): void => {
   app.post('/api/session/start', asyncRoute(async (req, res) => {
     const project = req.body.project || '';
-    const session = await memory.startSession({
+    const session = await memory.sessions.startSession({
       project,
       techContext: req.body.techContext,
     });
 
-    const context = memory.formatSessionContext(project);
+    const context = memory.sessions.formatSessionContext(project);
     res.json({ session, context: context || null });
   }));
 
@@ -20,7 +20,7 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    memory.saveObservation({ sessionId, type, content, metadata });
+    memory.sessions.saveObservation({ sessionId, type, content, metadata });
     res.json({ success: true });
   }));
 
@@ -32,23 +32,23 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
     }
 
     if (summary) {
-      memory.compressSession({ sessionId, summary, openTasks });
+      memory.sessions.compressSession({ sessionId, summary, openTasks });
     }
 
-    await memory.endSession(sessionId);
-    res.json({ success: true, session: memory.getSession(sessionId) });
+    await memory.sessions.endSession(sessionId);
+    res.json({ success: true, session: memory.sessions.getSession(sessionId) });
   }));
 
   app.get('/api/session/restore', asyncRoute((req, res) => {
     const project = typeof req.query.project === 'string' ? req.query.project : '';
-    const context = memory.restoreSessionContext(project);
-    const formatted = memory.formatSessionContext(project);
+    const context = memory.sessions.restoreSessionContext(project);
+    const formatted = memory.sessions.formatSessionContext(project);
     res.json({ context, formatted: formatted || null });
   }));
 
   app.get('/api/session/active', asyncRoute((req, res) => {
     const project = typeof req.query.project === 'string' ? req.query.project : '';
-    res.json({ session: memory.getActiveSession(project) });
+    res.json({ session: memory.sessions.getActiveSession(project) });
   }));
 
   app.get('/api/session/:id', asyncRoute((req, res) => {
@@ -58,7 +58,7 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    const session = memory.getSession(id);
+    const session = memory.sessions.getSession(id);
     if (!session) {
       res.status(404).json({ error: 'Not found' });
       return;
@@ -79,7 +79,7 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    memory.recordFeedback(retrievalId, signal, context);
+    memory.context.recordFeedback(retrievalId, signal, context);
     res.json({ success: true });
   }));
 
@@ -90,10 +90,10 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    res.json(memory.getFeedbackStats(nodeId));
+    res.json(memory.context.getFeedbackStats(nodeId));
   }));
 
   app.get('/api/stats', asyncRoute(async (_req, res) => {
-    res.json(await memory.getStats());
+    res.json(await memory.maintenance.getStats());
   }));
 };
