@@ -53,29 +53,34 @@ export default function EcsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [conflictsRes, runsRes, projectionsRes, graphNodes, graphEdges] = await Promise.all([
-      fetch('/api/context-conflicts?limit=20'),
-      fetch('/api/metabolism-runs?limit=10'),
-      fetch('/api/projection-records?limit=10'),
-      fetchContextGraph(120),
-      fetchContextEdges(400),
-    ]);
+    try {
+      const [conflictsRes, runsRes, projectionsRes, graphNodes, graphEdges] = await Promise.all([
+        fetch('/api/context-conflicts?limit=20'),
+        fetch('/api/metabolism-runs?limit=10'),
+        fetch('/api/projection-records?limit=10'),
+        fetchContextGraph(120),
+        fetchContextEdges(400),
+      ]);
 
-    if (conflictsRes.ok) {
-      const data = await conflictsRes.json();
-      setConflicts(data.conflicts || []);
+      if (conflictsRes.ok) {
+        const data = await conflictsRes.json();
+        setConflicts(data.conflicts || []);
+      }
+      if (runsRes.ok) {
+        const data = await runsRes.json();
+        setRuns(data.runs || []);
+      }
+      if (projectionsRes.ok) {
+        const data = await projectionsRes.json();
+        setProjections(data.records || []);
+      }
+      setNodes(graphNodes);
+      setEdges(graphEdges);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
     }
-    if (runsRes.ok) {
-      const data = await runsRes.json();
-      setRuns(data.runs || []);
-    }
-    if (projectionsRes.ok) {
-      const data = await projectionsRes.json();
-      setProjections(data.records || []);
-    }
-    setNodes(graphNodes);
-    setEdges(graphEdges);
-    setLoading(false);
   }, []);
 
   useEffect(() => {

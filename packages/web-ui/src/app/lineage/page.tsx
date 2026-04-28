@@ -31,13 +31,18 @@ function LineagePageContent() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [graphNodes, graphEdges] = await Promise.all([
-      fetchContextGraph(80),
-      fetchContextEdges(200),
-    ]);
-    setNodes(graphNodes);
-    setEdges(graphEdges);
-    setLoading(false);
+    try {
+      const [graphNodes, graphEdges] = await Promise.all([
+        fetchContextGraph(80),
+        fetchContextEdges(200),
+      ]);
+      setNodes(graphNodes);
+      setEdges(graphEdges);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {

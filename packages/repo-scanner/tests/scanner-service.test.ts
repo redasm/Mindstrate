@@ -1,14 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 import { Mindstrate } from '@mindstrate/server';
 import { RepoScannerService } from '../src/scanner-service.js';
-
-function tmp(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+import { createTempDir, removeTempDir } from './helpers.js';
 
 function initRepo(repoPath: string): void {
   execSync('git init', { cwd: repoPath, stdio: 'pipe' });
@@ -30,9 +26,9 @@ describe('RepoScannerService', () => {
   let service: RepoScannerService;
 
   beforeEach(async () => {
-    repoDir = tmp('repo-scanner-repo-');
-    memoryDir = tmp('repo-scanner-memory-');
-    scannerDir = tmp('repo-scanner-db-');
+    repoDir = createTempDir('repo-scanner-repo-');
+    memoryDir = createTempDir('repo-scanner-memory-');
+    scannerDir = createTempDir('repo-scanner-db-');
     initRepo(repoDir);
     commitFile(repoDir, 'app.ts', [
       'export function fixUser() {',
@@ -54,9 +50,9 @@ describe('RepoScannerService', () => {
   afterEach(async () => {
     await service.close();
     memory.close();
-    fs.rmSync(repoDir, { recursive: true, force: true });
-    fs.rmSync(memoryDir, { recursive: true, force: true });
-    fs.rmSync(scannerDir, { recursive: true, force: true });
+    removeTempDir(repoDir);
+    removeTempDir(memoryDir);
+    removeTempDir(scannerDir);
   });
 
   it('initializes from current head when initMode=from_now', async () => {

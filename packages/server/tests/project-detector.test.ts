@@ -1,12 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import { detectProject, findProjectRoot } from '../src/project/detector.js';
-
-function tmp(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+import { createTempDir, removeTempDir } from './helpers.js';
 
 function write(root: string, rel: string, content: string): void {
   const abs = path.join(root, rel);
@@ -18,11 +14,11 @@ describe('detectProject', () => {
   let root: string;
 
   beforeEach(() => {
-    root = tmp('mindstrate-detect-');
+    root = createTempDir('mindstrate-detect-');
   });
 
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    removeTempDir(root);
   });
 
   it('returns null for an empty unrelated directory (still falls back to generic)', () => {

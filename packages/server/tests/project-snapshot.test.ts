@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import {
   Mindstrate,
   ContextDomainType,
@@ -16,10 +15,7 @@ import {
   saveProjectMeta,
   dependencyFingerprint,
 } from '../src/index.js';
-
-function tmp(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+import { createTempDir, removeTempDir } from './helpers.js';
 
 function writePackageJson(root: string, body: any): void {
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(body), 'utf8');
@@ -27,7 +23,7 @@ function writePackageJson(root: string, body: any): void {
 
 describe('buildProjectSnapshot', () => {
   it('produces deterministic ids for the same root + name', () => {
-    const root = tmp('mindstrate-snap-');
+    const root = createTempDir('mindstrate-snap-');
     try {
       writePackageJson(root, { name: 'x', dependencies: { react: '^18' } });
       const p = detectProject(root)!;
@@ -36,12 +32,12 @@ describe('buildProjectSnapshot', () => {
       expect(a).toBe(b);
       expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });
 
   it('renders a complete snapshot body with required sections', () => {
-    const root = tmp('mindstrate-snap-');
+    const root = createTempDir('mindstrate-snap-');
     try {
       writePackageJson(root, {
         name: 'svc',
@@ -71,12 +67,12 @@ describe('buildProjectSnapshot', () => {
       expect(r.input.tags).toContain('express');
       expect(r.input.tags).toContain('project-snapshot');
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });
 
   it('preserves user-edited content inside preserve markers across re-renders', () => {
-    const root = tmp('mindstrate-snap-');
+    const root = createTempDir('mindstrate-snap-');
     try {
       writePackageJson(root, { name: 'svc', dependencies: { express: '^4' } });
       const p = detectProject(root)!;
@@ -93,7 +89,7 @@ describe('buildProjectSnapshot', () => {
       // Other preserve sections still get default text
       expect(second.input.solution).toContain('## Architecture & Lifecycle');
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });
 });
@@ -104,8 +100,8 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
   let memory: Mindstrate;
 
   beforeEach(async () => {
-    root = tmp('mindstrate-snap-');
-    dataDir = tmp('mindstrate-data-');
+    root = createTempDir('mindstrate-snap-');
+    dataDir = createTempDir('mindstrate-data-');
     writePackageJson(root, { name: 'svc', dependencies: { express: '^4' } });
     memory = new Mindstrate({ dataDir });
     await memory.init();
@@ -113,8 +109,8 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
 
   afterEach(() => {
     try { memory.close(); } catch {}
-    fs.rmSync(root, { recursive: true, force: true });
-    fs.rmSync(dataDir, { recursive: true, force: true });
+    removeTempDir(root);
+    removeTempDir(dataDir);
   });
 
   it('creates a project snapshot graph node with a deterministic id', async () => {
@@ -129,19 +125,13 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
   it('materializes project snapshots from ECS graph nodes', async () => {
     const p = detectProject(root)!;
     const r = await memory.upsertProjectSnapshot(p);
-    const internal = memory as unknown as {
-      contextGraphStore: {
-        listNodes(input: Record<string, unknown>): Array<{ id: string; sourceRef?: string }>;
-        listProjectionRecords(input: Record<string, unknown>): Array<{ nodeId: string; target: string; targetRef: string }>;
-      };
-    };
 
-    const nodes = internal.contextGraphStore.listNodes({
+    const nodes = memory.listContextNodes({
       project: p.name,
       substrateType: SubstrateType.SNAPSHOT,
       domainType: ContextDomainType.PROJECT_SNAPSHOT,
     });
-    const projection = internal.contextGraphStore.listProjectionRecords({
+    const projection = memory.listProjectionRecords({
       target: ProjectionTarget.PROJECT_SNAPSHOT,
       limit: 10,
     });
@@ -201,7 +191,7 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
   });
 
   it('keeps two different projects isolated (different ids, both stored)', async () => {
-    const root2 = tmp('mindstrate-snap-');
+    const root2 = createTempDir('mindstrate-snap-');
     try {
       writePackageJson(root2, { name: 'web', dependencies: { react: '^18' } });
       const p1 = detectProject(root)!;
@@ -212,14 +202,14 @@ describe('Mindstrate.upsertProjectSnapshot', () => {
       expect(memory.listContextNodes({ sourceRef: r1.node.id, limit: 100 })).toHaveLength(1);
       expect(memory.listContextNodes({ sourceRef: r2.node.id, limit: 100 })).toHaveLength(1);
     } finally {
-      fs.rmSync(root2, { recursive: true, force: true });
+      removeTempDir(root2);
     }
   });
 });
 
 describe('project meta file', () => {
   it('round-trips and writes a sensible .gitignore', () => {
-    const root = tmp('mindstrate-meta-');
+    const root = createTempDir('mindstrate-meta-');
     try {
       const meta = {
         version: 1,
@@ -237,7 +227,7 @@ describe('project meta file', () => {
       expect(gi).toContain('vectors/');
       expect(gi).toContain('!project.json');
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeTempDir(root);
     }
   });
 

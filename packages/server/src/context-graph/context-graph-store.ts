@@ -39,6 +39,7 @@ import {
   type ListProjectionRecordsOptions,
   type UpsertProjectionRecordInput,
 } from './context-record-repositories.js';
+import { GraphQuery } from './graph-query.js';
 
 type DbHandle = Database.Database | string;
 
@@ -243,6 +244,10 @@ export class ContextGraphStore {
 
   recordNodeAccess(id: string, accessedAt = new Date().toISOString()): void {
     this.nodes.recordAccess(id, accessedAt);
+  }
+
+  createGraphQuery(): GraphQuery {
+    return new GraphQuery(this.nodes, this.edges);
   }
 
   createEdge(input: CreateContextEdgeInput): ContextEdge {

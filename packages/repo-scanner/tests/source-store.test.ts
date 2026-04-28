@@ -1,11 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 import { SourceStore } from '../src/source-store.js';
+import { createTempDir, removeTempDir } from './helpers.js';
 
-function tmpDb(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-scanner-'));
+function createDbPath(): string {
+  const dir = createTempDir('repo-scanner-');
   return path.join(dir, 'scanner.db');
 }
 
@@ -14,12 +13,12 @@ describe('SourceStore', () => {
 
   afterEach(() => {
     for (const file of toClean.splice(0)) {
-      fs.rmSync(path.dirname(file), { recursive: true, force: true });
+      removeTempDir(path.dirname(file));
     }
   });
 
   it('creates and lists git-local sources', () => {
-    const dbPath = tmpDb();
+    const dbPath = createDbPath();
     toClean.push(dbPath);
     const store = new SourceStore(dbPath);
 
@@ -37,7 +36,7 @@ describe('SourceStore', () => {
   });
 
   it('stores runs and failed items for later inspection', () => {
-    const dbPath = tmpDb();
+    const dbPath = createDbPath();
     toClean.push(dbPath);
     const store = new SourceStore(dbPath);
     const source = store.createGitLocalSource({
@@ -62,7 +61,7 @@ describe('SourceStore', () => {
   });
 
   it('can enable and disable sources', () => {
-    const dbPath = tmpDb();
+    const dbPath = createDbPath();
     toClean.push(dbPath);
     const store = new SourceStore(dbPath);
     const source = store.createGitLocalSource({

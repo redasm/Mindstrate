@@ -1,13 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import * as os from 'node:os';
 import { Mindstrate, KnowledgeType, CaptureSource } from '@mindstrate/server';
 import { SyncManager, parseMarkdown, VaultLayout } from '../src/index.js';
-
-function tmp(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+import { createTempDir, removeTempDir } from './helpers.js';
 
 async function makeMemory(dataDir: string): Promise<Mindstrate> {
   const memory = new Mindstrate({ dataDir });
@@ -21,15 +17,15 @@ describe('SyncManager (integration)', () => {
   let memory: Mindstrate;
 
   beforeEach(async () => {
-    dataDir = tmp('mindstrate-data-');
-    vaultDir = tmp('mindstrate-vault-');
+    dataDir = createTempDir('mindstrate-data-');
+    vaultDir = createTempDir('mindstrate-vault-');
     memory = await makeMemory(dataDir);
   });
 
   afterEach(() => {
     try { memory.close(); } catch { /* ignore */ }
-    fs.rmSync(dataDir, { recursive: true, force: true });
-    fs.rmSync(vaultDir, { recursive: true, force: true });
+    removeTempDir(dataDir);
+    removeTempDir(vaultDir);
   });
 
   it('exportAll writes all knowledge into project/type folders', async () => {

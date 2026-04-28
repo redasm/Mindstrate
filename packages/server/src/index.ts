@@ -44,9 +44,6 @@ export { VectorStore } from './storage/vector-store.js';
 export { SessionStore } from './storage/session-store.js';
 export {
   ContextGraphStore,
-  ContextNodeRepository,
-  ContextEdgeRepository,
-  GraphQuery,
   ContextPrioritySelector,
   GraphKnowledgeProjector,
   toGraphKnowledgeView,

@@ -6,14 +6,9 @@ import {
   SubstrateType,
 } from '@mindstrate/protocol/models';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
-import {
-  ContextEdgeRepository,
-  ContextNodeRepository,
-  GraphQuery,
-} from '../src/context-graph/index.js';
 import { createTempDir, removeTempDir } from './helpers.js';
 
-describe('context graph repositories', () => {
+describe('context graph store boundaries', () => {
   let tempDir: string;
   let graphStore: ContextGraphStore;
 
@@ -27,52 +22,47 @@ describe('context graph repositories', () => {
     removeTempDir(tempDir);
   });
 
-  it('wraps node and edge persistence behind document-named repositories', () => {
-    const nodes = new ContextNodeRepository(graphStore);
-    const edges = new ContextEdgeRepository(graphStore);
-
-    const source = nodes.create({
+  it('persists nodes and edges through the graph store boundary', () => {
+    const source = graphStore.createNode({
       substrateType: SubstrateType.EPISODE,
       domainType: ContextDomainType.CONTEXT_EVENT,
       title: 'Observed failure',
       content: 'A failing test was observed.',
       project: 'mindstrate',
     });
-    const target = nodes.create({
+    const target = graphStore.createNode({
       substrateType: SubstrateType.SNAPSHOT,
       domainType: ContextDomainType.SESSION_SUMMARY,
       title: 'Debugging snapshot',
       content: 'The failure was summarized.',
       project: 'mindstrate',
     });
-    const edge = edges.create({
+    const edge = graphStore.createEdge({
       sourceId: source.id,
       targetId: target.id,
       relationType: ContextRelationType.DERIVED_FROM,
     });
 
-    expect(nodes.get(source.id)?.title).toBe('Observed failure');
-    expect(edges.get(edge.id)?.targetId).toBe(target.id);
+    expect(graphStore.getNodeById(source.id)?.title).toBe('Observed failure');
+    expect(graphStore.getEdgeById(edge.id)?.targetId).toBe(target.id);
   });
 
   it('queries neighborhood nodes through graph-query', () => {
-    const nodes = new ContextNodeRepository(graphStore);
-    const edges = new ContextEdgeRepository(graphStore);
-    const query = new GraphQuery(nodes, edges);
+    const query = graphStore.createGraphQuery();
 
-    const source = nodes.create({
+    const source = graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
-      title: 'Use repository wrappers',
+      title: 'Use graph store boundary',
       content: 'Graph access should be discoverable by module name.',
     });
-    const target = nodes.create({
+    const target = graphStore.createNode({
       substrateType: SubstrateType.PATTERN,
       domainType: ContextDomainType.PATTERN,
       title: 'Repository naming pattern',
-      content: 'Documented module names should resolve to focused wrappers.',
+      content: 'Documented module names should resolve to focused graph operations.',
     });
-    edges.create({
+    graphStore.createEdge({
       sourceId: source.id,
       targetId: target.id,
       relationType: ContextRelationType.SUPPORTS,
