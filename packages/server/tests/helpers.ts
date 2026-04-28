@@ -1,4 +1,4 @@
-export { createTempDir, removeTempDir } from '../../../tests/support/temp-dir.js';
+export { createTempDir, removeTempDir } from '../../../tests/support/index.js';
 import { KnowledgeType, CaptureSource, type CreateKnowledgeInput } from '@mindstrate/protocol';
 
 /** Build a minimal valid knowledge input */

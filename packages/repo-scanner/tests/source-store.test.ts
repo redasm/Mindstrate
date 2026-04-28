@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { SourceStore } from '../src/source-store.js';
-import { createTempDir, removeTempDir } from '../../../tests/support/temp-dir.js';
+import { createTempDir, removeTempDir } from '../../../tests/support/index.js';
 
 function createDbPath(): string {
   const dir = createTempDir('repo-scanner-');
