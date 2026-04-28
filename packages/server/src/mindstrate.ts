@@ -1,68 +1,27 @@
 /**
  * Mindstrate - Main Entry (Facade)
  *
- * Mindstrate 主类，统一封装所有子模块，
- * 提供简洁的 API 供 CLI 和 MCP Server 使用。
- *
- * 新增能力：
- * - 图节点反馈闭环（FeedbackLoop）
- * - ECS 代谢演化（MetabolismEngine）
- * - 图优先上下文策划
- * - 图检索质量评估（RetrievalEvaluator）
- * - 质量门禁（KnowledgeQualityGate）
+ * The class is intentionally thin: runtime construction and lifecycle stay
+ * here, while graph, session, bundle and operations behavior live in focused
+ * API modules.
  */
 
-import type { MindstrateConfig } from './config.js';
 import type {
-  CreateKnowledgeInput,
-  RetrievalContext,
-  AssembledContext,
   AddKnowledgeResult,
-  FeedbackEvent,
+  AssembledContext,
+  CompressSessionInput,
+  CreateKnowledgeInput,
+  CreateSessionInput,
   EvolutionRunResult,
   EvolutionSuggestion,
+  FeedbackEvent,
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
-} from '@mindstrate/protocol';
-import { CaptureSource } from '@mindstrate/protocol';
-import type {
-  Session,
-  CreateSessionInput,
+  RetrievalContext,
   SaveObservationInput,
-  CompressSessionInput,
+  Session,
   SessionContext,
 } from '@mindstrate/protocol';
-import type { IVectorStore } from './storage/vector-store-interface.js';
-import type { QualityGateResult } from '@mindstrate/protocol';
-import { RetrievalEvaluator, type EvalRunResult } from './quality/eval.js';
-import {
-  buildProjectSnapshot,
-  type DetectedProject,
-} from './project/index.js';
-import { runContextAssemblyDag } from './context-graph/context-assembly-dag.js';
-import { type AcceptInternalizationSuggestionsOptions, type AcceptInternalizationSuggestionsResult, type InternalizationSuggestionOptions, type InternalizationSuggestions } from './context-graph/context-internalizer.js';
-import { ContextGraphStore, type CreateContextNodeInput, type UpdateContextNodeInput } from './context-graph/context-graph-store.js';
-import { GraphKnowledgeProjector, toGraphKnowledgeView, type GraphKnowledgeProjectionOptions } from './context-graph/knowledge-projector.js';
-import { ProjectedKnowledgeSearch, type ProjectedKnowledgeSearchOptions } from './context-graph/projected-knowledge-search.js';
-import { ConflictDetector, type ConflictDetectionOptions, type ConflictDetectionResult } from './context-graph/conflict-detector.js';
-import {
-  ConflictReflector,
-  type AcceptReflectionCandidateResult,
-  type ConflictReflectionOptions,
-  type ConflictReflectionResult,
-  type RejectReflectionCandidateResult,
-} from './context-graph/conflict-reflector.js';
-import { type PatternCompressionOptions, type PatternCompressionResult } from './context-graph/pattern-compressor.js';
-import { type RuleCompressionOptions, type RuleCompressionResult } from './context-graph/rule-compressor.js';
-import { type SummaryCompressionOptions, type SummaryCompressionResult } from './context-graph/summary-compressor.js';
-import {
-  MetabolismScheduler,
-  type MetabolismSchedulerOptions,
-  type RunMetabolismOptions,
-  type PruneOptions,
-  type PruneResult,
-} from './metabolism/index.js';
-import { ContextDomainType, ContextEventType, SubstrateType } from '@mindstrate/protocol/models';
 import type {
   ConflictRecord,
   ContextEdge,
@@ -71,40 +30,67 @@ import type {
   ContextNodeStatus,
   CuratedContext,
   MetabolismRun,
+  PortableContextBundle,
   ProjectionRecord,
 } from '@mindstrate/protocol/models';
-import { digestKnowledgeInput } from './context-graph/knowledge-digest.js';
-import {
-  ingestContextEvent,
-  ingestGitActivity,
-  ingestLspDiagnostic,
-  ingestTerminalOutput,
-  ingestTestRun,
-  ingestUserFeedback,
-  type IngestContextEventInput,
-} from './events/index.js';
-import { PortableContextBundleManager, type CreateBundleOptions, type EditableBundleFiles, type InstallBundleFromRegistryOptions, type InstallBundleResult, type InstallEditableBundleFilesResult, type PublishBundleOptions, type PublishBundleResult, type ValidateBundleResult } from './bundles/index.js';
+import { ContextDomainType, SubstrateType } from '@mindstrate/protocol/models';
+import type { MindstrateConfig } from './config.js';
+import type { IVectorStore } from './storage/vector-store-interface.js';
+import type { QualityGateResult } from '@mindstrate/protocol';
+import type { EvalRunResult } from './quality/eval.js';
+import type { DetectedProject } from './project/index.js';
+import type { CreateContextNodeInput, UpdateContextNodeInput } from './context-graph/context-graph-store.js';
+import type { GraphKnowledgeProjectionOptions } from './context-graph/knowledge-projector.js';
+import type { ProjectedKnowledgeSearchOptions } from './context-graph/projected-knowledge-search.js';
+import type {
+  AcceptInternalizationSuggestionsOptions,
+  AcceptInternalizationSuggestionsResult,
+  InternalizationSuggestionOptions,
+  InternalizationSuggestions,
+} from './context-graph/context-internalizer.js';
+import type {
+  AcceptReflectionCandidateResult,
+  ConflictReflectionOptions,
+  ConflictReflectionResult,
+  RejectReflectionCandidateResult,
+} from './context-graph/conflict-reflector.js';
+import type { ConflictDetectionOptions, ConflictDetectionResult } from './context-graph/conflict-detector.js';
+import type { PatternCompressionOptions, PatternCompressionResult } from './context-graph/pattern-compressor.js';
+import type { RuleCompressionOptions, RuleCompressionResult } from './context-graph/rule-compressor.js';
+import type { SummaryCompressionOptions, SummaryCompressionResult } from './context-graph/summary-compressor.js';
+import type {
+  CreateBundleOptions,
+  EditableBundleFiles,
+  InstallBundleFromRegistryOptions,
+  InstallBundleResult,
+  InstallEditableBundleFilesResult,
+  PublishBundleOptions,
+  PublishBundleResult,
+  ValidateBundleResult,
+} from './bundles/index.js';
+import type {
+  MetabolismSchedulerOptions,
+  PruneOptions,
+  PruneResult,
+  RunMetabolismOptions,
+} from './metabolism/index.js';
+import type { IngestContextEventInput } from './events/index.js';
 import { createMindstrateRuntime, type MindstrateRuntime } from './runtime/mindstrate-runtime.js';
 import { MindstrateBundleApi } from './runtime/mindstrate-bundle-api.js';
+import { MindstrateGraphApi } from './runtime/mindstrate-graph-api.js';
+import { MindstrateOperationsApi } from './runtime/mindstrate-operations-api.js';
 import { MindstrateSessionApi } from './runtime/mindstrate-session-api.js';
-import {
-  computeGraphNodeMatchScore,
-  generateGraphCurationSummary,
-  getGraphStats,
-  getStringMetadata,
-  knowledgeTypeToContextDomain,
-} from './mindstrate-graph-helpers.js';
 
 export class Mindstrate {
   private readonly services: MindstrateRuntime;
+  private readonly graph: MindstrateGraphApi;
+  private readonly operations: MindstrateOperationsApi;
   readonly bundles: MindstrateBundleApi;
   readonly sessions: MindstrateSessionApi;
-  private metabolismScheduler: MetabolismScheduler | null = null;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
 
   constructor(configOverrides?: Partial<MindstrateConfig> & {
-    /** Custom vector store implementation (default: local JSON-based VectorStore) */
     vectorStore?: IVectorStore;
   }) {
     this.services = createMindstrateRuntime(configOverrides, (query, options) =>
@@ -113,276 +99,57 @@ export class Mindstrate {
     );
     this.bundles = new MindstrateBundleApi(this.services);
     this.sessions = new MindstrateSessionApi(this.services);
+    this.graph = new MindstrateGraphApi(
+      this.services,
+      () => this.ensureInit(),
+      (project) => this.sessions.formatSessionContext(project),
+    );
+    this.operations = new MindstrateOperationsApi(this.services, () => this.ensureInit());
   }
 
-  /** 异步初始化（必须在使用前调用，并发安全） */
   async init(): Promise<void> {
     if (this.initialized) return;
     if (!this.initPromise) {
-      this.initPromise = this.services.vectorStore.initialize().then(() => {
-        this.initialized = true;
-      }).catch((err) => {
-        // 重置以允许重试
-        this.initPromise = null;
-        throw err;
-      });
+      this.initPromise = this.services.vectorStore.initialize()
+        .then(() => {
+          this.initialized = true;
+        })
+        .catch((err) => {
+          this.initPromise = null;
+          throw err;
+        });
     }
     return this.initPromise;
   }
 
-  // ============================================================
-  // 知识写入
-  // ============================================================
-
-  /** 添加一条新知识 */
   async add(input: CreateKnowledgeInput): Promise<AddKnowledgeResult> {
-    await this.ensureInit();
-    const gateResult = this.services.qualityGate.check(input);
-    if (!gateResult.passed) {
-      return {
-        success: false,
-        message: `Quality gate failed: ${gateResult.errors.join('; ')}`,
-        qualityWarnings: gateResult.warnings,
-      };
-    }
-
-    const exactDuplicate = this.findExactGraphDuplicate(input);
-    if (exactDuplicate) {
-      return {
-        success: false,
-        message: `Exact duplicate detected. Existing knowledge ID: ${exactDuplicate.id}`,
-        duplicateOf: exactDuplicate.id,
-      };
-    }
-
-    const digested = digestKnowledgeInput(input, {
-      completenessScore: gateResult.completenessScore,
-    });
-    const text = `${digested.nodeInput.title}\n${digested.nodeInput.content}`;
-    const embedding = await this.services.embedder.embed(text);
-    const duplicates = await this.services.vectorStore.findDuplicates(
-      embedding,
-      this.getConfig().deduplicationThreshold,
-    );
-
-    if (duplicates.length > 0) {
-      const dup = duplicates[0];
-      return {
-        success: false,
-        message: `Duplicate detected (similarity: ${(dup.score * 100).toFixed(1)}%). Existing knowledge ID: ${dup.id}`,
-        duplicateOf: dup.id,
-      };
-    }
-
-    const node = this.services.contextGraphStore.createNode(digested.nodeInput);
-    this.services.contextGraphStore.createEvent({
-      type: ContextEventType.KNOWLEDGE_WRITE,
-      project: node.project,
-      actor: input.author,
-      content: `${node.title}\n${node.content}`,
-      metadata: {
-        nodeId: node.id,
-        domainType: node.domainType,
-        substrateType: node.substrateType,
-      },
-    });
-    await this.services.vectorStore.add({
-      id: node.id,
-      embedding,
-      text,
-      metadata: {
-        type: node.domainType,
-        language: getStringMetadata(node, 'context', 'language'),
-        framework: getStringMetadata(node, 'context', 'framework'),
-        project: node.project ?? '',
-      },
-    });
-    this.services.projectionMaterializer.materialize({ project: node.project, limit: 50 });
-
-    return {
-      success: true,
-      view: toGraphKnowledgeView(node),
-      message: `Context node added successfully: ${node.title}`,
-      qualityWarnings: gateResult.warnings.length > 0 ? gateResult.warnings : undefined,
-    };
+    return this.graph.add(input);
   }
 
-  /**
-   * Idempotent upsert of a project snapshot KU.
-   *
-   * Behavior:
-   *  - Computes a deterministic id from `project.root + project.name`.
-   *  - Extracts preserve blocks from the existing KU's solution (if any).
-   *  - Re-renders the snapshot body, merging preserved sections.
-   *  - Inserts the KU directly (bypassing dedup / quality gate) so
-   *    multiple `mindstrate init` runs always converge on the same record.
-   *  - Returns whether the body actually changed since last time.
-   */
   async upsertProjectSnapshot(
     project: DetectedProject,
     options: { author?: string; trusted?: boolean } = {},
   ): Promise<{ node: ContextNode; view: GraphKnowledgeView; changed: boolean; created: boolean }> {
-    await this.ensureInit();
-
-    const { id } = buildProjectSnapshot(project, options);
-    const existingNode = this.services.contextGraphStore.getNodeById(id);
-    const previousSolution = existingNode?.content;
-    const built = buildProjectSnapshot(project, { ...options, previousSolution });
-
-    const nodeInput: CreateContextNodeInput = {
-      id,
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.PROJECT_SNAPSHOT,
-      title: built.input.title,
-      content: built.input.solution,
-      tags: built.input.tags,
-      project: built.input.context?.project,
-      compressionLevel: 0.02,
-      confidence: built.input.confidence,
-      qualityScore: options.trusted ? 90 : 70,
-      status: 'active' as ContextNodeStatus,
-      sourceRef: id,
-      metadata: {
-        problem: built.input.problem,
-        actionable: built.input.actionable,
-        context: built.input.context,
-        author: built.input.author,
-        source: built.input.source,
-      },
-    };
-
-    const created = !existingNode;
-    const node = existingNode
-      ? this.services.contextGraphStore.updateNode(id, {
-        title: nodeInput.title,
-        content: nodeInput.content,
-        tags: nodeInput.tags,
-        project: nodeInput.project,
-        compressionLevel: nodeInput.compressionLevel,
-        confidence: nodeInput.confidence,
-        qualityScore: nodeInput.qualityScore,
-        status: nodeInput.status,
-        sourceRef: nodeInput.sourceRef,
-        metadata: nodeInput.metadata,
-      })!
-      : this.services.contextGraphStore.createNode(nodeInput);
-
-    try {
-      const text = `${node.title}\n${node.content}`;
-      const embedding = await this.services.embedder.embed(text);
-      await this.services.vectorStore.delete(id);
-      await this.services.vectorStore.add({
-        id,
-        embedding,
-        text,
-        metadata: {
-          type: node.domainType,
-          language: getStringMetadata(node, 'context', 'language'),
-          framework: getStringMetadata(node, 'context', 'framework'),
-          project: node.project ?? '',
-        },
-      });
-    } catch (err) {
-      // Embedding failures shouldn't break init; the metadata is still queryable.
-      console.warn(
-        `[Mindstrate] project snapshot embedding failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    if (created || built.changed) {
-      this.services.contextGraphStore.createEvent({
-        type: ContextEventType.PROJECT_SNAPSHOT,
-        project: node.project,
-        actor: typeof node.metadata?.['author'] === 'string' ? node.metadata['author'] : undefined,
-        content: node.content,
-        metadata: { nodeId: node.id },
-      });
-      this.services.projectSnapshotProjectionMaterializer.materialize({ project: node.project, limit: 10 });
-    }
-
-    const view = this.readGraphKnowledge({ project: node.project, limit: 100 })
-      .find((entry) => entry.id === node.id);
-
-    return {
-      node,
-      view: view ?? toGraphKnowledgeView(node),
-      changed: built.changed || created,
-      created,
-    };
+    return this.graph.upsertProjectSnapshot(project, options);
   }
 
   getProjectSnapshot(project: DetectedProject): ContextNode | null {
-    const { id } = buildProjectSnapshot(project);
-    return this.services.contextGraphStore.getNodeById(id);
+    return this.graph.getProjectSnapshot(project);
   }
 
-  /** 质量门禁预检查（不写入，仅检查质量） */
   checkQuality(input: CreateKnowledgeInput): QualityGateResult {
-    return this.services.qualityGate.check(input);
+    return this.graph.checkQuality(input);
   }
 
-  // ============================================================
-  // 知识检索
-  // ============================================================
-
-  /**
-   * 上下文策划：自动组装任务知识包
-   */
-  async curateContext(
+  curateContext(
     taskDescription: string,
     context?: RetrievalContext,
-    _sessionId?: string,
+    sessionId?: string,
   ): Promise<CuratedContext> {
-    await this.ensureInit();
-    const project = context?.project;
-    const graphSelection = this.services.contextPrioritySelector.select({
-      project,
-      perLayerLimit: 5,
-    });
-    const conflicts = this.listConflictRecords(project, 5);
-    const knowledge = this.queryGraphKnowledge(taskDescription, { project, limit: 5 });
-    const workflows = this.queryGraphKnowledge(taskDescription, { project, limit: 10 })
-      .filter((result) => result.view.domainType === ContextDomainType.WORKFLOW)
-      .slice(0, 3);
-    const warnings = this.queryGraphKnowledge(`common mistakes pitfalls when ${taskDescription}`, {
-      project,
-      limit: 3,
-    });
-
-    const sections: string[] = [`## Context for: ${taskDescription}`];
-    if (graphSelection.rules.length > 0) {
-      sections.push('\n### Operational Rules');
-      sections.push(...graphSelection.rules.map((node) => `- ${node.title}`));
-    }
-    if (graphSelection.patterns.length > 0) {
-      sections.push('\n### Repeated Patterns');
-      sections.push(...graphSelection.patterns.map((node) => `- ${node.title}`));
-    }
-    if (graphSelection.summaries.length > 0) {
-      sections.push('\n### Recent Summary Clusters');
-      sections.push(...graphSelection.summaries.map((node) => `- ${node.title}`));
-    }
-    if (conflicts.length > 0) {
-      sections.push('\n### Active Conflicts');
-      sections.push(...conflicts.map((record) => `- ${record.reason}`));
-    }
-    sections.push('\n### Task Curation');
-    sections.push(generateGraphCurationSummary(taskDescription, knowledge, workflows, warnings));
-
-    return {
-      taskDescription,
-      knowledge,
-      workflows,
-      warnings,
-      graphRules: graphSelection.rules.map((node) => node.title),
-      graphPatterns: graphSelection.patterns.map((node) => node.title),
-      graphSummaries: graphSelection.summaries.map((node) => node.title),
-      graphConflicts: conflicts.map((record) => record.reason),
-      summary: sections.join('\n'),
-    };
+    return this.graph.curateContext(taskDescription, context, sessionId);
   }
 
-  async assembleContext(
+  assembleContext(
     taskDescription: string,
     options?: {
       project?: string;
@@ -391,51 +158,10 @@ export class Mindstrate {
       maxSummaryCharacters?: number;
     },
   ): Promise<AssembledContext> {
-    await this.ensureInit();
-    const queryEmbedding = await this.services.embedder.embed(taskDescription);
-    const graphSelection = this.services.contextPrioritySelector.select({
-      project: options?.project ?? options?.context?.project,
-      context: options?.context,
-      queryEmbedding,
-      embeddingModel: this.services.config.embeddingModel,
-      perLayerLimit: 5,
-    });
-    const result = await runContextAssemblyDag(
-      {
-        taskDescription,
-        project: options?.project,
-        context: options?.context,
-        sessionId: options?.sessionId,
-        maxSummaryCharacters: options?.maxSummaryCharacters,
-      },
-      {
-        loadSessionContext: (project) => project ? this.formatSessionContext(project) || undefined : undefined,
-        loadProjectSnapshot: (project) => project ? this.findProjectSnapshot(project) : null,
-        loadGraphSummaries: () => graphSelection.summaries,
-        loadGraphPatterns: () => graphSelection.patterns,
-        loadGraphRules: () => graphSelection.rules,
-        loadGraphConflicts: (project) => this.listConflictRecords(project, 10),
-        curateContext: (task, context, sessionId) => this.curateContext(task, context, sessionId),
-        formatSummary: (
-          task,
-          project,
-          sessionContext,
-          projectSnapshot,
-          curated,
-        ) => this.formatAssembledContext(
-          task,
-          project,
-          sessionContext,
-          projectSnapshot,
-          curated,
-        ),
-      },
-    );
-
-    return result.assembled;
+    return this.graph.assembleContext(taskDescription, options);
   }
 
-  async assembleWorkingContext(
+  assembleWorkingContext(
     taskDescription: string,
     options?: {
       project?: string;
@@ -444,139 +170,78 @@ export class Mindstrate {
       maxSummaryCharacters?: number;
     },
   ): Promise<AssembledContext> {
-    return this.assembleContext(taskDescription, options);
+    return this.graph.assembleWorkingContext(taskDescription, options);
   }
 
   updateContextNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
-    return this.services.contextGraphStore.updateNode(id, input);
+    return this.graph.updateContextNode(id, input);
   }
 
   createContextNode(input: CreateContextNodeInput): ContextNode {
-    return this.services.contextGraphStore.createNode(input);
+    return this.graph.createContextNode(input);
   }
 
   deleteContextNode(id: string): boolean {
-    return this.services.contextGraphStore.deleteNode(id);
+    return this.graph.deleteContextNode(id);
   }
 
-  // ============================================================
-  // 图节点反馈
-  // ============================================================
-
   upvote(id: string): void {
-    const node = this.services.contextGraphStore.getNodeById(id);
-    if (!node) return;
-    this.services.contextGraphStore.updateNode(id, {
-      positiveFeedback: node.positiveFeedback + 1,
-    });
+    this.graph.upvote(id);
   }
 
   downvote(id: string): void {
-    const node = this.services.contextGraphStore.getNodeById(id);
-    if (!node) return;
-    this.services.contextGraphStore.updateNode(id, {
-      negativeFeedback: node.negativeFeedback + 1,
-    });
+    this.graph.downvote(id);
   }
 
-  /**
-   * 记录自动反馈（检索结果的使用情况）
-   */
   recordFeedback(
     retrievalId: string,
     signal: FeedbackEvent['signal'],
     context?: string,
   ): void {
-    this.services.feedbackLoop.recordFeedback(retrievalId, signal, context);
-    this.tryIngestDerivedEvent(() => ingestUserFeedback(this.services.contextGraphStore, {
-      retrievalId,
-      signal,
-      context,
-    }));
+    this.graph.recordFeedback(retrievalId, signal, context);
   }
 
-  /**
-   * 获取图节点的反馈统计
-   */
   getFeedbackStats(nodeId: string) {
-    return this.services.feedbackLoop.getFeedbackStats(nodeId);
+    return this.graph.getFeedbackStats(nodeId);
   }
 
-  // ============================================================
-  // 图代谢演化
-  // ============================================================
-
-  /**
-   * 运行图代谢演化循环
-   */
-  async runEvolution(options?: {
+  runEvolution(options?: {
     autoApply?: boolean;
     maxItems?: number;
     mode?: 'standard' | 'background';
   }): Promise<EvolutionRunResult> {
-    await this.ensureInit();
-    const run = await this.runMetabolism({ trigger: 'manual' });
-    const scanned = Object.values(run.stageStats)
-      .reduce((sum, stats) => sum + (stats?.scanned ?? 0), 0);
-    return {
-      mode: options?.mode ?? 'standard',
-      scanned,
-      suggestions: [],
-      summary: { merge: 0, improve: 0, validate: 0, archive: 0, split: 0 },
-      llmEnhanced: 0,
-      autoApplied: 0,
-      pendingReview: 0,
-    };
+    return this.operations.runEvolution(options);
   }
 
-  /**
-   * 应用图演化建议
-   */
   applyEvolutionSuggestion(suggestion: EvolutionSuggestion): boolean {
-    return this.services.contextGraphStore.getNodeById(suggestion.nodeId) !== null;
+    return this.operations.applyEvolutionSuggestion(suggestion);
   }
 
-  // ============================================================
-  // 检索评估
-  // ============================================================
-
-  /**
-   * 运行检索质量评估
-   */
-  async runEvaluation(topK?: number): Promise<EvalRunResult> {
-    await this.ensureInit();
-    return this.services.evaluator.runEvaluation(topK);
+  runEvaluation(topK?: number): Promise<EvalRunResult> {
+    return this.operations.runEvaluation(topK);
   }
 
-  /** 添加评估用例 */
   addEvalCase(query: string, expectedIds: string[], options?: {
     language?: string;
     framework?: string;
   }) {
-    return this.services.evaluator.addCase(query, expectedIds, options);
+    return this.operations.addEvalCase(query, expectedIds, options);
   }
 
-  /** 获取评估趋势 */
   getEvalTrend(limit?: number) {
-    return this.services.evaluator.getTrend(limit);
+    return this.operations.getEvalTrend(limit);
   }
 
-  // ============================================================
-  // 会话记忆
-  // ============================================================
-
-  /** 开始新会话（自动压缩并结束同项目的旧活跃会话） */
-  async startSession(input: CreateSessionInput = {}): Promise<Session> {
+  startSession(input: CreateSessionInput = {}): Promise<Session> {
     return this.sessions.startSession(input);
   }
 
-  /** 保存会话观察（AI 工作过程中的关键事件） */
   saveObservation(input: SaveObservationInput): void {
     this.sessions.saveObservation(input);
   }
 
   ingestEvent(input: IngestContextEventInput): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestContextEvent(this.services.contextGraphStore, input);
+    return this.graph.ingestEvent(input);
   }
 
   ingestGitActivity(input: {
@@ -586,7 +251,7 @@ export class Mindstrate {
     sourceRef?: string;
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestGitActivity(this.services.contextGraphStore, input);
+    return this.graph.ingestGitActivity(input);
   }
 
   ingestTestRun(input: {
@@ -597,7 +262,7 @@ export class Mindstrate {
     sourceRef?: string;
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestTestRun(this.services.contextGraphStore, input);
+    return this.graph.ingestTestRun(input);
   }
 
   ingestLspDiagnostic(input: {
@@ -607,7 +272,7 @@ export class Mindstrate {
     sourceRef?: string;
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestLspDiagnostic(this.services.contextGraphStore, input);
+    return this.graph.ingestLspDiagnostic(input);
   }
 
   ingestTerminalOutput(input: {
@@ -620,115 +285,91 @@ export class Mindstrate {
     sourceRef?: string;
     metadata?: Record<string, unknown>;
   }): { event: ContextEvent; node: ContextNode; previousNodeId?: string } {
-    return ingestTerminalOutput(this.services.contextGraphStore, input);
+    return this.graph.ingestTerminalOutput(input);
   }
 
-  /** 压缩当前会话（由 AI 调用，传入摘要） */
   compressSession(input: CompressSessionInput): void {
     this.sessions.compressSession(input);
   }
 
-  /** 自动压缩会话（用 LLM 或规则从观察中生成摘要） */
-  async autoCompressSession(sessionId: string): Promise<CompressSessionInput | null> {
+  autoCompressSession(sessionId: string): Promise<CompressSessionInput | null> {
     return this.sessions.autoCompressSession(sessionId);
   }
 
-  /** 结束会话 */
-  async endSession(sessionId: string): Promise<void> {
+  endSession(sessionId: string): Promise<void> {
     return this.sessions.endSession(sessionId);
   }
 
-  /** 恢复会话上下文（新会话开始时调用） */
   restoreSessionContext(project: string = ''): SessionContext {
     return this.sessions.restoreSessionContext(project);
   }
 
-  /** 格式化会话上下文为可注入的文本 */
   formatSessionContext(project: string = ''): string {
     return this.sessions.formatSessionContext(project);
   }
 
-  /** 获取当前活跃会话 */
   getActiveSession(project: string = ''): Session | null {
     return this.sessions.getActiveSession(project);
   }
 
-  /** 获取会话 */
   getSession(id: string): Session | null {
     return this.sessions.getSession(id);
   }
 
-  /** 获取最近会话列表 */
   getRecentSessions(project: string = '', limit: number = 10): Session[] {
     return this.sessions.getRecentSessions(project, limit);
   }
 
-  // ============================================================
-  // ECS context graph
-  // ============================================================
-
-  async runSummaryCompression(options?: SummaryCompressionOptions): Promise<SummaryCompressionResult> {
-    await this.ensureInit();
-    return this.services.summaryCompressor.compressProjectSnapshots(options);
+  runSummaryCompression(options?: SummaryCompressionOptions): Promise<SummaryCompressionResult> {
+    return this.operations.runSummaryCompression(options);
   }
 
-  async runPatternCompression(options?: PatternCompressionOptions): Promise<PatternCompressionResult> {
-    await this.ensureInit();
-    return this.services.patternCompressor.compressProjectSummaries(options);
+  runPatternCompression(options?: PatternCompressionOptions): Promise<PatternCompressionResult> {
+    return this.operations.runPatternCompression(options);
   }
 
-  async runRuleCompression(options?: RuleCompressionOptions): Promise<RuleCompressionResult> {
-    await this.ensureInit();
-    return this.services.ruleCompressor.compressProjectPatterns(options);
+  runRuleCompression(options?: RuleCompressionOptions): Promise<RuleCompressionResult> {
+    return this.operations.runRuleCompression(options);
   }
 
-  async runConflictDetection(options?: ConflictDetectionOptions): Promise<ConflictDetectionResult> {
-    await this.ensureInit();
-    return this.services.conflictDetector.detectConflicts(options);
+  runConflictDetection(options?: ConflictDetectionOptions): Promise<ConflictDetectionResult> {
+    return this.operations.runConflictDetection(options);
   }
 
   runConflictReflection(options?: ConflictReflectionOptions): ConflictReflectionResult {
-    return this.services.conflictReflector.reflectConflicts(options);
+    return this.operations.runConflictReflection(options);
   }
 
-  async runMetabolism(options?: RunMetabolismOptions): Promise<MetabolismRun> {
-    await this.ensureInit();
-    return this.services.metabolismEngine.run(options);
+  runMetabolism(options?: RunMetabolismOptions): Promise<MetabolismRun> {
+    return this.operations.runMetabolism(options);
   }
 
   startMetabolismScheduler(options: Omit<MetabolismSchedulerOptions, 'runMetabolism'>): void {
-    this.stopMetabolismScheduler();
-    this.metabolismScheduler = new MetabolismScheduler({
-      ...options,
-      runMetabolism: (runOptions) => this.runMetabolism(runOptions),
-    });
-    this.metabolismScheduler.start();
+    this.operations.startMetabolismScheduler(options);
   }
 
   stopMetabolismScheduler(): void {
-    this.metabolismScheduler?.stop();
-    this.metabolismScheduler = null;
+    this.operations.stopMetabolismScheduler();
   }
 
   runDigest(options?: { project?: string }) {
-    return this.services.metabolismEngine.runDigest(options);
+    return this.operations.runDigest(options);
   }
 
   runAssimilation(options?: { project?: string }) {
-    return this.services.metabolismEngine.runAssimilation(options);
+    return this.operations.runAssimilation(options);
   }
 
-  async runCompression(options?: { project?: string }) {
-    await this.ensureInit();
-    return this.services.metabolismEngine.runCompression(options);
+  runCompression(options?: { project?: string }) {
+    return this.operations.runCompression(options);
   }
 
   runPruning(options?: PruneOptions): PruneResult {
-    return this.services.pruner.prune(options);
+    return this.operations.runPruning(options);
   }
 
   runReflection(options?: ConflictReflectionOptions): ConflictReflectionResult {
-    return this.runConflictReflection(options);
+    return this.operations.runReflection(options);
   }
 
   acceptConflictCandidate(input: {
@@ -736,7 +377,7 @@ export class Mindstrate {
     candidateNodeId: string;
     resolution: string;
   }): AcceptReflectionCandidateResult {
-    return this.services.conflictReflector.acceptCandidate(input);
+    return this.operations.acceptConflictCandidate(input);
   }
 
   rejectConflictCandidate(input: {
@@ -744,35 +385,35 @@ export class Mindstrate {
     candidateNodeId: string;
     reason: string;
   }): RejectReflectionCandidateResult {
-    return this.services.conflictReflector.rejectCandidate(input);
+    return this.operations.rejectConflictCandidate(input);
   }
 
   projectSessionSummaries(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.services.sessionProjectionMaterializer.materialize(options);
+    return this.operations.projectSessionSummaries(options);
   }
 
   projectProjectSnapshots(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.services.projectSnapshotProjectionMaterializer.materialize(options);
+    return this.operations.projectProjectSnapshots(options);
   }
 
   projectObsidianDocuments(options?: { project?: string; limit?: number }): ProjectionRecord[] {
-    return this.services.obsidianProjectionMaterializer.materialize(options);
+    return this.operations.projectObsidianDocuments(options);
   }
 
   writeObsidianProjectionFiles(options: { project?: string; limit?: number; rootDir: string }): string[] {
-    return this.services.obsidianProjectionMaterializer.writeFiles(options);
+    return this.operations.writeObsidianProjectionFiles(options);
   }
 
   importObsidianProjectionFile(filePath: string) {
-    return this.services.obsidianProjectionMaterializer.importFile(filePath);
+    return this.operations.importObsidianProjectionFile(filePath);
   }
 
   generateInternalizationSuggestions(options?: InternalizationSuggestionOptions): InternalizationSuggestions {
-    return this.services.contextInternalizer.generateSuggestions(options);
+    return this.operations.generateInternalizationSuggestions(options);
   }
 
   acceptInternalizationSuggestions(options?: AcceptInternalizationSuggestionsOptions): AcceptInternalizationSuggestionsResult {
-    return this.services.contextInternalizer.acceptSuggestions(options);
+    return this.operations.acceptInternalizationSuggestions(options);
   }
 
   listContextNodes(options?: {
@@ -783,11 +424,11 @@ export class Mindstrate {
     sourceRef?: string;
     limit?: number;
   }): ContextNode[] {
-    return this.services.contextGraphStore.listNodes(options);
+    return this.graph.listContextNodes(options);
   }
 
   listConflictRecords(project?: string, limit?: number): ConflictRecord[] {
-    return this.services.contextGraphStore.listConflictRecords({ project, limit });
+    return this.graph.listConflictRecords(project, limit);
   }
 
   listContextEdges(options?: {
@@ -796,7 +437,7 @@ export class Mindstrate {
     relationType?: import('@mindstrate/protocol/models').ContextRelationType;
     limit?: number;
   }): ContextEdge[] {
-    return this.services.contextGraphStore.listEdges(options);
+    return this.graph.listContextEdges(options);
   }
 
   queryContextGraph(options?: {
@@ -807,47 +448,26 @@ export class Mindstrate {
     status?: ContextNodeStatus;
     limit?: number;
   }): ContextNode[] {
-    const nodes = this.services.contextGraphStore.listNodes({
-      project: options?.project,
-      substrateType: options?.substrateType,
-      domainType: options?.domainType,
-      status: options?.status,
-      limit: Math.max(options?.limit ?? 20, 1) * 10,
-    });
-    const query = options?.query?.trim().toLowerCase();
-    if (!query) {
-      return nodes.slice(0, options?.limit ?? 20);
-    }
-
-    const tokens = query.split(/[^a-z0-9\u4e00-\u9fff]+/).filter(Boolean);
-    return nodes
-      .map((node) => ({
-        node,
-        score: computeGraphNodeMatchScore(tokens, node),
-      }))
-      .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, options?.limit ?? 20)
-      .map((entry) => entry.node);
+    return this.graph.queryContextGraph(options);
   }
 
   listProjectionRecords(options?: { nodeId?: string; target?: string; limit?: number }): ProjectionRecord[] {
-    return this.services.contextGraphStore.listProjectionRecords(options);
+    return this.operations.listProjectionRecords(options);
   }
 
   listMetabolismRuns(project?: string, limit?: number): MetabolismRun[] {
-    return this.services.contextGraphStore.listMetabolismRuns({ project, limit });
+    return this.operations.listMetabolismRuns(project, limit);
   }
 
-  createBundle(options: CreateBundleOptions) {
+  createBundle(options: CreateBundleOptions): PortableContextBundle {
     return this.bundles.createBundle(options);
   }
 
-  validateBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): ValidateBundleResult {
+  validateBundle(bundle: PortableContextBundle): ValidateBundleResult {
     return this.bundles.validateBundle(bundle);
   }
 
-  installBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle): InstallBundleResult {
+  installBundle(bundle: PortableContextBundle): InstallBundleResult {
     return this.bundles.installBundle(bundle);
   }
 
@@ -855,11 +475,11 @@ export class Mindstrate {
     return this.bundles.installBundleFromRegistry(options);
   }
 
-  publishBundle(bundle: import('@mindstrate/protocol/models').PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult {
+  publishBundle(bundle: PortableContextBundle, options?: PublishBundleOptions): PublishBundleResult {
     return this.bundles.publishBundle(bundle, options);
   }
 
-  createEditableBundleFiles(bundle: import('@mindstrate/protocol/models').PortableContextBundle): EditableBundleFiles {
+  createEditableBundleFiles(bundle: PortableContextBundle): EditableBundleFiles {
     return this.bundles.createEditableBundleFiles(bundle);
   }
 
@@ -872,40 +492,22 @@ export class Mindstrate {
   }
 
   readGraphKnowledge(options?: GraphKnowledgeProjectionOptions): GraphKnowledgeView[] {
-    return this.services.graphKnowledgeProjector.project(options);
+    return this.graph.readGraphKnowledge(options);
   }
 
-  queryGraphKnowledge(query: string, options?: ProjectedKnowledgeSearchOptions) {
-    const results = this.services.projectedKnowledgeSearch.search(query, options);
-    if (options?.trackFeedback === false) return results;
-
-    return results.map((result) => ({
-      ...result,
-      retrievalId: this.services.feedbackLoop.trackRetrieval(
-        result.view.id,
-        query,
-        options?.sessionId,
-      ),
-    }));
+  queryGraphKnowledge(query: string, options?: ProjectedKnowledgeSearchOptions): GraphKnowledgeSearchResult[] {
+    return this.graph.queryGraphKnowledge(query, options);
   }
-
-  // ============================================================
-  // 维护
-  // ============================================================
 
   runMaintenance(): {
     total: number;
     updated: number;
     outdated: number;
   } {
-    return {
-      total: this.services.contextGraphStore.listNodes({ limit: 100000 }).length,
-      updated: 0,
-      outdated: 0,
-    };
+    return this.operations.runMaintenance();
   }
 
-  async getStats(): Promise<{
+  getStats(): Promise<{
     total: number;
     byType: Record<string, number>;
     byStatus: Record<string, number>;
@@ -917,27 +519,9 @@ export class Mindstrate {
       avgAdoptionRate: number;
     };
   }> {
-    const nodes = this.services.contextGraphStore.listNodes({ limit: 100000 });
-    const dbStats = getGraphStats(nodes);
-    const vectorCount = await this.services.vectorStore.count();
-    const feedbackStats = this.services.feedbackLoop.getGlobalStats();
-
-    return {
-      ...dbStats,
-      vectorCount,
-      feedbackStats: {
-        totalEvents: feedbackStats.totalEvents,
-        last30Days: feedbackStats.last30Days,
-        avgAdoptionRate: feedbackStats.avgAdoptionRate,
-      },
-    };
+    return this.operations.getStats();
   }
 
-  // ============================================================
-  // 生命周期
-  // ============================================================
-
-  /** 关闭所有连接，确保数据持久化 */
   close(): void {
     this.stopMetabolismScheduler();
     this.services.vectorStore.flush();
@@ -953,78 +537,5 @@ export class Mindstrate {
       await this.init();
     }
   }
-
-  private findProjectSnapshot(project: string): ContextNode | null {
-    return this.services.contextGraphStore.listNodes({
-      project,
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.PROJECT_SNAPSHOT,
-      limit: 1,
-    })[0] ?? null;
-  }
-
-  private findExactGraphDuplicate(input: CreateKnowledgeInput): ContextNode | null {
-    const title = input.title.trim();
-    const content = input.solution.trim();
-    const candidates = this.services.contextGraphStore.listNodes({
-      project: input.context?.project,
-      domainType: knowledgeTypeToContextDomain(input.type),
-      limit: 500,
-    });
-    return candidates.find((node) =>
-      node.title === title &&
-      node.content === content &&
-      getStringMetadata(node, 'context', 'language') === (input.context?.language ?? '') &&
-      getStringMetadata(node, 'context', 'framework') === (input.context?.framework ?? '')
-    ) ?? null;
-  }
-
-  private formatAssembledContext(
-    taskDescription: string,
-    project: string | undefined,
-    sessionContext: string | undefined,
-    projectSnapshot: ContextNode | undefined,
-    curated: CuratedContext,
-    options?: {
-      includeTaskCuration?: boolean;
-    },
-  ): string {
-    const sections: string[] = [`## Working Context for: ${taskDescription}`];
-
-    if (project) {
-      sections.push(`Project: ${project}`);
-    }
-
-    if (sessionContext) {
-      sections.push('\n### Session Continuity');
-      sections.push(sessionContext);
-    }
-
-    if (projectSnapshot) {
-      sections.push('\n### Project Snapshot');
-      sections.push(`Title: ${projectSnapshot.title}`);
-      sections.push(projectSnapshot.content);
-    }
-
-    if (options?.includeTaskCuration !== false) {
-      sections.push('\n### Task Curation');
-      sections.push(curated.summary);
-    }
-
-    return sections.join('\n').trim();
-  }
-
-  private tryIngestDerivedEvent(work: () => void): void {
-    try {
-      work();
-    } catch (err) {
-      console.warn(
-        `[Mindstrate] derived event ingestion failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
 }
-
-
-
 
