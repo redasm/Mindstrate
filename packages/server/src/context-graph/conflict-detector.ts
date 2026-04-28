@@ -14,7 +14,7 @@ const NEGATION_MARKERS = [
   'never',
   'must not',
   'do not',
-  'deprecated',
+  'obsolete',
   'reject',
   'forbidden',
 ];
@@ -58,7 +58,7 @@ export class ConflictDetector {
       project: options.project,
       substrateType: options.substrateType,
       limit,
-    }).filter((node) => node.status !== ContextNodeStatus.DEPRECATED);
+    }).filter((node) => node.status !== ContextNodeStatus.ARCHIVED);
 
     const embeddings = new Map<string, number[]>();
     for (const node of nodes) {

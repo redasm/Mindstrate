@@ -591,7 +591,7 @@ export async function handleMemoryEvolve(
   response += `- Suggestions: ${evolveResult.suggestions.length}\n`;
   response += `- Merge: ${evolveResult.summary.merge}\n`;
   response += `- Improve: ${evolveResult.summary.improve}\n`;
-  response += `- Deprecate: ${evolveResult.summary.deprecate}\n`;
+  response += `- Archive: ${evolveResult.summary.archive}\n`;
   response += `- LLM enhanced: ${evolveResult.llmEnhanced}\n`;
   response += `- Auto-applied: ${evolveResult.autoApplied}\n`;
   response += `- Pending review: ${evolveResult.pendingReview}\n`;

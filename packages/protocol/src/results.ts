@@ -37,7 +37,7 @@ export interface QualityGateResult {
 /** A single recommendation produced by the graph metabolism facade. */
 export interface EvolutionSuggestion {
   nodeId: string;
-  type: 'merge' | 'improve' | 'validate' | 'deprecate' | 'split';
+  type: 'merge' | 'improve' | 'validate' | 'archive' | 'split';
   description: string;
   /** Confidence 0-1 */
   confidence: number;
@@ -99,7 +99,7 @@ export interface EvolutionSuggestionSummary {
   merge: number;
   improve: number;
   validate: number;
-  deprecate: number;
+  archive: number;
   split: number;
 }
 

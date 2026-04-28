@@ -22,7 +22,7 @@ const groupEpisodesBySource = (episodes: ContextNode[]): Map<string, ContextNode
   return groups;
 };
 
-const NEGATION_MARKERS = ['avoid', 'never', 'must not', 'do not', 'deprecated', 'forbidden'];
+const NEGATION_MARKERS = ['avoid', 'never', 'must not', 'do not', 'obsolete', 'forbidden'];
 
 const AFFIRMATION_MARKERS = ['use', 'should', 'must', 'recommended', 'allow', 'supported'];
 
@@ -147,7 +147,7 @@ function findBestOverlap(
 ): { node: ContextNode; score: number } | null {
   let best: { node: ContextNode; score: number } | null = null;
   for (const node of candidates) {
-    if (node.status === ContextNodeStatus.DEPRECATED || node.status === ContextNodeStatus.ARCHIVED) continue;
+    if (node.status === ContextNodeStatus.ARCHIVED) continue;
     const score = lexicalOverlap(content, node.content);
     if (!best || score > best.score) {
       best = { node, score };

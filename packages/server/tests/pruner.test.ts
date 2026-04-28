@@ -53,9 +53,8 @@ describe('Pruner', () => {
     const result = pruner.prune({ project: 'mindstrate' });
 
     expect(result.archiveCandidates).toContain(stale.id);
-    expect(result.deprecateCandidates).toContain(weak.id);
+    expect(result.archiveCandidates).toContain(weak.id);
     expect(result.archivedNodes).toBe(0);
-    expect(result.deprecatedNodes).toBe(0);
     expect(graphStore.getNodeById(stale.id)?.status).toBe(ContextNodeStatus.ACTIVE);
     expect(graphStore.getNodeById(weak.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
@@ -127,7 +126,7 @@ describe('Pruner', () => {
     expect(graphStore.getNodeById(rule.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
 
-  it('deprecates nodes whose runtime environment no longer matches the project snapshot', () => {
+  it('archives nodes whose runtime environment no longer matches the project snapshot', () => {
     const staleRule = graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
@@ -154,8 +153,8 @@ describe('Pruner', () => {
 
     const result = pruner.prune({ project: 'mindstrate', apply: true });
 
-    expect(result.deprecatedNodes).toBe(1);
-    expect(graphStore.getNodeById(staleRule.id)?.status).toBe(ContextNodeStatus.DEPRECATED);
+    expect(result.archivedNodes).toBe(1);
+    expect(graphStore.getNodeById(staleRule.id)?.status).toBe(ContextNodeStatus.ARCHIVED);
     expect(graphStore.getNodeById(staleRule.id)?.metadata?.['pruneAudit']).toEqual(expect.objectContaining({
       reason: 'project_environment_mismatch',
       evidence: expect.objectContaining({
@@ -180,11 +179,11 @@ describe('Pruner', () => {
 
     const result = pruner.prune({ project: 'mindstrate', mode: 'suggest' });
 
-    expect(result.deprecatedNodes).toBe(0);
-    expect(result.deprecateCandidates).toContain(weak.id);
+    expect(result.archivedNodes).toBe(0);
+    expect(result.archiveCandidates).toContain(weak.id);
     expect(result.suggestions[0]).toEqual(expect.objectContaining({
       nodeId: weak.id,
-      action: 'deprecate',
+      action: 'archive',
       reason: 'low_quality_or_negative_feedback',
     }));
     expect(graphStore.getNodeById(weak.id)?.status).toBe(ContextNodeStatus.ACTIVE);
@@ -205,7 +204,6 @@ describe('Pruner', () => {
     const result = pruner.prune({ project: 'mindstrate' });
 
     expect(result.archiveCandidates).not.toContain(critical.id);
-    expect(result.deprecateCandidates).not.toContain(critical.id);
     expect(graphStore.getNodeById(critical.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
 });

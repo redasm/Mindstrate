@@ -40,7 +40,6 @@ export enum KnowledgeStatus {
   PROBATION = 'probation',
   ACTIVE = 'active',
   VERIFIED = 'verified',
-  DEPRECATED = 'deprecated',
   OUTDATED = 'outdated',
 }
 

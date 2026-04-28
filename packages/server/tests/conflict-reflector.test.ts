@@ -168,7 +168,7 @@ describe('ConflictReflector', () => {
       reason: 'Candidate is too vague.',
     });
 
-    expect(result.rejectedNode?.status).toBe(ContextNodeStatus.DEPRECATED);
+    expect(result.rejectedNode?.status).toBe(ContextNodeStatus.ARCHIVED);
     expect(graphStore.getConflictRecordById(conflict.id)?.resolvedAt).toBeUndefined();
   });
 });

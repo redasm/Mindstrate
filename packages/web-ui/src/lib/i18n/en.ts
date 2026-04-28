@@ -26,7 +26,6 @@ const en = {
     probation: 'Probation',
     active: 'Active',
     verified: 'Verified',
-    deprecated: 'Deprecated',
     outdated: 'Outdated',
   } as Record<string, string>,
 

@@ -53,7 +53,6 @@ describe('ECS enum stability', () => {
       'candidate',
       'active',
       'verified',
-      'deprecated',
       'archived',
       'conflicted',
     ]);

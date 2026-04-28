@@ -47,7 +47,6 @@ describe('protocol enum stability', () => {
     expect(KnowledgeStatus.PROBATION).toBe('probation');
     expect(KnowledgeStatus.ACTIVE).toBe('active');
     expect(KnowledgeStatus.VERIFIED).toBe('verified');
-    expect(KnowledgeStatus.DEPRECATED).toBe('deprecated');
     expect(KnowledgeStatus.OUTDATED).toBe('outdated');
   });
 

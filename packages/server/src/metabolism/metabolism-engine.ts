@@ -175,7 +175,7 @@ export class MetabolismEngine {
         },
         [MetabolismStage.PRUNE]: {
           scanned: prune.scannedNodes,
-          created: prune.archivedNodes + prune.deprecatedNodes,
+          created: prune.archivedNodes,
           updated: 0,
           skipped: prune.skippedConflictedNodes,
         },
@@ -190,7 +190,6 @@ export class MetabolismEngine {
         `conflictsDetected=${reflection.conflictsDetected}`,
         `reflectionCandidates=${reflection.candidateNodesCreated}`,
         `archivedNodes=${prune.archivedNodes}`,
-        `deprecatedNodes=${prune.deprecatedNodes}`,
         `projectionRecords=${projections.length}`,
       ],
     })!;

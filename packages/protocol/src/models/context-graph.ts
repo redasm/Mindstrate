@@ -36,7 +36,6 @@ export enum ContextNodeStatus {
   CANDIDATE = 'candidate',
   ACTIVE = 'active',
   VERIFIED = 'verified',
-  DEPRECATED = 'deprecated',
   ARCHIVED = 'archived',
   CONFLICTED = 'conflicted',
 }

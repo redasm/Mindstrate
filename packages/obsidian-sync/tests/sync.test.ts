@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Mindstrate, KnowledgeType, CaptureSource } from '@mindstrate/server';
 import { SyncManager, parseMarkdown, VaultLayout } from '../src/index.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from '../../../tests/support/temp-dir.js';
 
 async function makeMemory(dataDir: string): Promise<Mindstrate> {
   const memory = new Mindstrate({ dataDir });

@@ -239,9 +239,8 @@ function graphStatusToKnowledgeStatus(status: string): KnowledgeStatus {
   switch (status) {
     case 'verified':
       return KnowledgeStatus.VERIFIED;
-    case 'deprecated':
     case 'archived':
-      return KnowledgeStatus.DEPRECATED;
+      return KnowledgeStatus.OUTDATED;
     case 'active':
       return KnowledgeStatus.ACTIVE;
     default:

@@ -7,7 +7,6 @@
 import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { v4 as uuidv4 } from 'uuid';
 import type {
   ContextEdge,
   ContextEvent,
@@ -17,7 +16,6 @@ import {
   type ConflictRecord,
   type MetabolismRun,
   type ProjectionRecord,
-  ContextEventType,
   ContextRelationType,
 } from '@mindstrate/protocol/models';
 import {
@@ -32,6 +30,22 @@ import {
   type UpdateContextNodeInput,
 } from './context-node-repository.js';
 import {
+  ContextEventRepository,
+  type CreateContextEventInput,
+  type ListContextEventsOptions,
+} from './context-event-repository.js';
+import {
+  NodeEmbeddingRepository,
+  type NodeEmbeddingRecord,
+  type UpsertNodeEmbeddingInput,
+} from './node-embedding-repository.js';
+import {
+  MetabolismRunRepository,
+  type CreateMetabolismRunInput,
+  type ListMetabolismRunsOptions,
+  type UpdateMetabolismRunInput,
+} from './metabolism-run-repository.js';
+import {
   ConflictRecordRepository,
   ProjectionRecordRepository,
   type CreateConflictRecordInput,
@@ -43,41 +57,19 @@ import { GraphQuery } from './graph-query.js';
 
 type DbHandle = Database.Database | string;
 
-export interface CreateContextEventInput {
-  id?: string;
-  type: ContextEventType;
-  project?: string;
-  sessionId?: string;
-  actor?: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-  observedAt?: string;
-}
-
-export interface NodeEmbeddingRecord {
-  nodeId: string;
-  model: string;
-  dimensions: number;
-  embedding: number[];
-  text?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface UpsertNodeEmbeddingInput {
-  nodeId: string;
-  model: string;
-  dimensions: number;
-  embedding: number[];
-  text?: string;
-}
-
 export type {
   CreateContextEdgeInput,
+  CreateContextEventInput,
+  CreateMetabolismRunInput,
   CreateContextNodeInput,
   ListContextEdgesOptions,
+  ListContextEventsOptions,
+  ListMetabolismRunsOptions,
   ListContextNodesOptions,
+  NodeEmbeddingRecord,
+  UpdateMetabolismRunInput,
   UpdateContextNodeInput,
+  UpsertNodeEmbeddingInput,
 };
 
 export class ContextGraphStore {
@@ -85,8 +77,11 @@ export class ContextGraphStore {
   private readonly ownsDb: boolean;
   private readonly nodes: ContextNodeRepository;
   private readonly edges: ContextEdgeRepository;
+  private readonly events: ContextEventRepository;
+  private readonly nodeEmbeddings: NodeEmbeddingRepository;
   private readonly conflictRecords: ConflictRecordRepository;
   private readonly projectionRecords: ProjectionRecordRepository;
+  private readonly metabolismRuns: MetabolismRunRepository;
 
   constructor(dbOrPath: DbHandle) {
     if (typeof dbOrPath === 'string') {
@@ -106,8 +101,11 @@ export class ContextGraphStore {
     this.initialize();
     this.nodes = new ContextNodeRepository(this.db);
     this.edges = new ContextEdgeRepository(this.db);
+    this.events = new ContextEventRepository(this.db);
+    this.nodeEmbeddings = new NodeEmbeddingRepository(this.db);
     this.conflictRecords = new ConflictRecordRepository(this.db);
     this.projectionRecords = new ProjectionRecordRepository(this.db);
+    this.metabolismRuns = new MetabolismRunRepository(this.db);
   }
 
   private initialize(): void {
@@ -271,87 +269,23 @@ export class ContextGraphStore {
   }
 
   createEvent(input: CreateContextEventInput): ContextEvent {
-    const now = new Date().toISOString();
-    const id = input.id ?? uuidv4();
-    const observedAt = input.observedAt ?? now;
-
-    this.db.prepare(`
-      INSERT INTO context_events (
-        id, type, project, session_id, actor, content, metadata, observed_at, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      input.type,
-      input.project ?? null,
-      input.sessionId ?? null,
-      input.actor ?? null,
-      input.content,
-      input.metadata ? JSON.stringify(input.metadata) : null,
-      observedAt,
-      now,
-    );
-
-    return this.getEventById(id)!;
+    return this.events.create(input);
   }
 
   getEventById(id: string): ContextEvent | null {
-    const row = this.db.prepare('SELECT * FROM context_events WHERE id = ?').get(id) as EventRow | undefined;
-    return row ? this.rowToEvent(row) : null;
+    return this.events.getById(id);
   }
 
-  listEvents(options: { project?: string; type?: ContextEventType; limit?: number } = {}): ContextEvent[] {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-
-    if (options.project) {
-      conditions.push('project = ?');
-      params.push(options.project);
-    }
-    if (options.type) {
-      conditions.push('type = ?');
-      params.push(options.type);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM context_events ${where} ORDER BY observed_at DESC LIMIT ?`;
-    params.push(options.limit ?? 100);
-
-    const rows = this.db.prepare(sql).all(...params) as EventRow[];
-    return rows.map((row) => this.rowToEvent(row));
+  listEvents(options: ListContextEventsOptions = {}): ContextEvent[] {
+    return this.events.list(options);
   }
 
   upsertNodeEmbedding(input: UpsertNodeEmbeddingInput): NodeEmbeddingRecord {
-    const existing = this.getNodeEmbedding(input.nodeId, input.model);
-    const now = new Date().toISOString();
-    const createdAt = existing?.createdAt ?? now;
-
-    this.db.prepare(`
-      INSERT INTO node_embeddings (
-        node_id, model, dimensions, embedding, text, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(node_id, model) DO UPDATE SET
-        dimensions = excluded.dimensions,
-        embedding = excluded.embedding,
-        text = excluded.text,
-        updated_at = excluded.updated_at
-    `).run(
-      input.nodeId,
-      input.model,
-      input.dimensions,
-      JSON.stringify(input.embedding),
-      input.text ?? null,
-      createdAt,
-      now,
-    );
-
-    return this.getNodeEmbedding(input.nodeId, input.model)!;
+    return this.nodeEmbeddings.upsert(input);
   }
 
   getNodeEmbedding(nodeId: string, model: string): NodeEmbeddingRecord | null {
-    const row = this.db.prepare(`
-      SELECT * FROM node_embeddings WHERE node_id = ? AND model = ?
-    `).get(nodeId, model) as NodeEmbeddingRow | undefined;
-    return row ? this.rowToNodeEmbedding(row) : null;
+    return this.nodeEmbeddings.get(nodeId, model);
   }
 
   createConflictRecord(input: CreateConflictRecordInput): ConflictRecord {
@@ -382,91 +316,20 @@ export class ContextGraphStore {
     return this.projectionRecords.list(options);
   }
 
-  createMetabolismRun(input: {
-    id?: string;
-    project?: string;
-    trigger: string;
-    status: string;
-    startedAt?: string;
-    stageStats?: Record<string, unknown>;
-    notes?: string[];
-  }): MetabolismRun {
-    const id = input.id ?? uuidv4();
-    const startedAt = input.startedAt ?? new Date().toISOString();
-
-    this.db.prepare(`
-      INSERT INTO metabolism_runs (
-        id, project, trigger_type, status, started_at, ended_at, stage_stats, notes
-      ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
-    `).run(
-      id,
-      input.project ?? null,
-      input.trigger,
-      input.status,
-      startedAt,
-      JSON.stringify(input.stageStats ?? {}),
-      JSON.stringify(input.notes ?? []),
-    );
-
-    return this.getMetabolismRunById(id)!;
+  createMetabolismRun(input: CreateMetabolismRunInput): MetabolismRun {
+    return this.metabolismRuns.create(input);
   }
 
-  updateMetabolismRun(id: string, input: {
-    status?: string;
-    endedAt?: string;
-    stageStats?: Record<string, unknown>;
-    notes?: string[];
-  }): MetabolismRun | null {
-    const existing = this.getMetabolismRunById(id);
-    if (!existing) return null;
-
-    const sets: string[] = [];
-    const params: unknown[] = [];
-
-    if (input.status !== undefined) {
-      sets.push('status = ?');
-      params.push(input.status);
-    }
-    if (input.endedAt !== undefined) {
-      sets.push('ended_at = ?');
-      params.push(input.endedAt);
-    }
-    if (input.stageStats !== undefined) {
-      sets.push('stage_stats = ?');
-      params.push(JSON.stringify(input.stageStats));
-    }
-    if (input.notes !== undefined) {
-      sets.push('notes = ?');
-      params.push(JSON.stringify(input.notes));
-    }
-
-    if (sets.length === 0) return existing;
-
-    params.push(id);
-    this.db.prepare(`UPDATE metabolism_runs SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-    return this.getMetabolismRunById(id);
+  updateMetabolismRun(id: string, input: UpdateMetabolismRunInput): MetabolismRun | null {
+    return this.metabolismRuns.update(id, input);
   }
 
   getMetabolismRunById(id: string): MetabolismRun | null {
-    const row = this.db.prepare('SELECT * FROM metabolism_runs WHERE id = ?').get(id) as MetabolismRow | undefined;
-    return row ? this.rowToMetabolismRun(row) : null;
+    return this.metabolismRuns.getById(id);
   }
 
-  listMetabolismRuns(options: { project?: string; limit?: number } = {}): MetabolismRun[] {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-
-    if (options.project) {
-      conditions.push('project = ?');
-      params.push(options.project);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM metabolism_runs ${where} ORDER BY started_at DESC LIMIT ?`;
-    params.push(options.limit ?? 100);
-
-    const rows = this.db.prepare(sql).all(...params) as MetabolismRow[];
-    return rows.map((row) => this.rowToMetabolismRun(row));
+  listMetabolismRuns(options: ListMetabolismRunsOptions = {}): MetabolismRun[] {
+    return this.metabolismRuns.list(options);
   }
 
   close(): void {
@@ -475,75 +338,4 @@ export class ContextGraphStore {
     }
   }
 
-  private rowToEvent(row: EventRow): ContextEvent {
-    return {
-      id: row.id,
-      type: row.type,
-      project: row.project ?? undefined,
-      sessionId: row.session_id ?? undefined,
-      actor: row.actor ?? undefined,
-      content: row.content,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      observedAt: row.observed_at,
-      createdAt: row.created_at,
-    };
-  }
-
-  private rowToNodeEmbedding(row: NodeEmbeddingRow): NodeEmbeddingRecord {
-    return {
-      nodeId: row.node_id,
-      model: row.model,
-      dimensions: row.dimensions,
-      embedding: JSON.parse(row.embedding),
-      text: row.text ?? undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  }
-
-  private rowToMetabolismRun(row: MetabolismRow): MetabolismRun {
-    return {
-      id: row.id,
-      project: row.project ?? undefined,
-      trigger: row.trigger_type as MetabolismRun['trigger'],
-      status: row.status as MetabolismRun['status'],
-      startedAt: row.started_at,
-      endedAt: row.ended_at ?? undefined,
-      stageStats: JSON.parse(row.stage_stats),
-      notes: JSON.parse(row.notes),
-    };
-  }
-}
-
-interface EventRow {
-  id: string;
-  type: ContextEventType;
-  project: string | null;
-  session_id: string | null;
-  actor: string | null;
-  content: string;
-  metadata: string | null;
-  observed_at: string;
-  created_at: string;
-}
-
-interface NodeEmbeddingRow {
-  node_id: string;
-  model: string;
-  dimensions: number;
-  embedding: string;
-  text: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-interface MetabolismRow {
-  id: string;
-  project: string | null;
-  trigger_type: string;
-  status: string;
-  started_at: string;
-  ended_at: string | null;
-  stage_stats: string;
-  notes: string;
 }

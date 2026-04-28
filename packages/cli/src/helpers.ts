@@ -41,7 +41,6 @@ export const STATUS_LABELS: Record<string, string> = {
   probation: '试用期',
   active: '活跃',
   verified: '已验证',
-  deprecated: '已废弃',
   outdated: '已过期',
 };
 

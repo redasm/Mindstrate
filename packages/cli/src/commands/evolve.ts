@@ -32,7 +32,7 @@ export function registerEvolveCommand(program: Command): void {
         console.log(`Suggestions: ${result.suggestions.length}`);
         console.log(`Merge: ${result.summary.merge}`);
         console.log(`Improve: ${result.summary.improve}`);
-        console.log(`Deprecate: ${result.summary.deprecate}`);
+        console.log(`Archive: ${result.summary.archive}`);
         console.log(`LLM enhanced: ${result.llmEnhanced}`);
         console.log(`Auto-applied: ${result.autoApplied}`);
         console.log(`Pending review: ${result.pendingReview}`);

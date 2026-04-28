@@ -510,7 +510,7 @@ export class Mindstrate {
       mode: options?.mode ?? 'standard',
       scanned,
       suggestions: [],
-      summary: { merge: 0, improve: 0, validate: 0, deprecate: 0, split: 0 },
+      summary: { merge: 0, improve: 0, validate: 0, archive: 0, split: 0 },
       llmEnhanced: 0,
       autoApplied: 0,
       pendingReview: 0,
@@ -986,13 +986,11 @@ export class Mindstrate {
   runMaintenance(): {
     total: number;
     updated: number;
-    deprecated: number;
     outdated: number;
   } {
     return {
       total: this.services.contextGraphStore.listNodes({ limit: 100000 }).length,
       updated: 0,
-      deprecated: 0,
       outdated: 0,
     };
   }

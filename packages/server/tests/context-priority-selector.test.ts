@@ -81,10 +81,10 @@ describe('ContextPrioritySelector', () => {
     graphStore.createNode({
       substrateType: SubstrateType.PATTERN,
       domainType: ContextDomainType.PATTERN,
-      title: 'Deprecated Pattern',
-      content: 'deprecated pattern',
+      title: 'Archived Pattern',
+      content: 'archived pattern',
       project: 'mindstrate',
-      status: ContextNodeStatus.DEPRECATED,
+      status: ContextNodeStatus.ARCHIVED,
     });
     graphStore.createNode({
       substrateType: SubstrateType.SUMMARY,

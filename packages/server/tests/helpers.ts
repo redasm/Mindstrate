@@ -1,26 +1,4 @@
-/**
- * Shared test helpers — create temp directories, in-memory Mindstrate instances, etc.
- */
-
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
-
-/** Create an isolated temp directory for a single test run */
-export function createTempDir(prefix = 'mindstrate-test-'): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  return dir;
-}
-
-/** Remove temp directory */
-export function removeTempDir(dir: string): void {
-  try {
-    fs.rmSync(dir, { recursive: true, force: true });
-  } catch {
-    // best-effort cleanup
-  }
-}
-
+export { createTempDir, removeTempDir } from '../../../tests/support/temp-dir.js';
 import { KnowledgeType, CaptureSource, type CreateKnowledgeInput } from '@mindstrate/protocol';
 
 /** Build a minimal valid knowledge input */

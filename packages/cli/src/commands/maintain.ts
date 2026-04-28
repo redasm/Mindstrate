@@ -20,13 +20,12 @@ export const maintainCommand = new Command('doctor')
       console.log('Maintenance complete:\n');
       console.log(`  Total entries scanned: ${result.total}`);
       console.log(`  Entries updated:       ${result.updated}`);
-      console.log(`  Entries deprecated:    ${result.deprecated}`);
       console.log(`  Entries outdated:      ${result.outdated}`);
       console.log('\nBackground evolution report:\n');
       console.log(`  Suggestions:           ${evolution.suggestions.length}`);
       console.log(`  Merge:                 ${evolution.summary.merge}`);
       console.log(`  Improve:               ${evolution.summary.improve}`);
-      console.log(`  Deprecate:             ${evolution.summary.deprecate}`);
+      console.log(`  Archive:               ${evolution.summary.archive}`);
     } catch (error) {
       console.error('Maintenance failed:', errorMessage(error));
       process.exit(1);

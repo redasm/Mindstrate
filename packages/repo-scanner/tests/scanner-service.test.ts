@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { execSync } from 'node:child_process';
 import { Mindstrate } from '@mindstrate/server';
 import { RepoScannerService } from '../src/scanner-service.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from '../../../tests/support/temp-dir.js';
 
 function initRepo(repoPath: string): void {
   execSync('git init', { cwd: repoPath, stdio: 'pipe' });

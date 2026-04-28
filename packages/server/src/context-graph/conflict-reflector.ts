@@ -164,7 +164,7 @@ export class ConflictReflector {
     }
 
     const rejectedNode = this.graphStore.updateNode(candidate.id, {
-      status: ContextNodeStatus.DEPRECATED,
+      status: ContextNodeStatus.ARCHIVED,
       metadata: {
         ...candidate.metadata,
         rejectedAt: new Date().toISOString(),

@@ -13,13 +13,13 @@ export interface PruneOptions {
   mode?: 'suggest' | 'apply';
   archiveOlderThanDays?: number;
   archiveAccessCountAtMost?: number;
-  deprecateQualityScoreAtMost?: number;
-  deprecateNegativeFeedbackDeltaAtLeast?: number;
+  archiveQualityScoreAtMost?: number;
+  archiveNegativeFeedbackDeltaAtLeast?: number;
 }
 
 export interface PruneSuggestion {
   nodeId: string;
-  action: 'archive' | 'deprecate';
+  action: 'archive';
   reason: string;
   evidence: Record<string, unknown>;
 }
@@ -27,10 +27,8 @@ export interface PruneSuggestion {
 export interface PruneResult {
   scannedNodes: number;
   archivedNodes: number;
-  deprecatedNodes: number;
   skippedConflictedNodes: number;
   archiveCandidates: string[];
-  deprecateCandidates: string[];
   suggestions: PruneSuggestion[];
 }
 
@@ -44,8 +42,8 @@ export class Pruner {
   prune(options: PruneOptions = {}): PruneResult {
     const archiveOlderThanDays = options.archiveOlderThanDays ?? 30;
     const archiveAccessCountAtMost = options.archiveAccessCountAtMost ?? 1;
-    const deprecateQualityScoreAtMost = options.deprecateQualityScoreAtMost ?? 20;
-    const deprecateNegativeFeedbackDeltaAtLeast = options.deprecateNegativeFeedbackDeltaAtLeast ?? 3;
+    const archiveQualityScoreAtMost = options.archiveQualityScoreAtMost ?? 20;
+    const archiveNegativeFeedbackDeltaAtLeast = options.archiveNegativeFeedbackDeltaAtLeast ?? 3;
     const nodes = this.graphStore.listNodes({
       project: options.project,
       limit: 1000,
@@ -53,10 +51,8 @@ export class Pruner {
     const projectEnvironment = loadProjectEnvironment(nodes);
 
     let archivedNodes = 0;
-    let deprecatedNodes = 0;
     let skippedConflictedNodes = 0;
     const archiveCandidates: string[] = [];
-    const deprecateCandidates: string[] = [];
     const suggestions: PruneSuggestion[] = [];
     const apply = options.mode === 'apply' || options.apply === true;
 
@@ -65,39 +61,39 @@ export class Pruner {
         skippedConflictedNodes++;
         continue;
       }
-      if (node.status === ContextNodeStatus.ARCHIVED || node.status === ContextNodeStatus.DEPRECATED) {
+      if (node.status === ContextNodeStatus.ARCHIVED) {
         continue;
       }
       if (isProtected(node)) {
         continue;
       }
 
-      const deprecateEvidence = getDeprecationEvidence(node, deprecateQualityScoreAtMost, deprecateNegativeFeedbackDeltaAtLeast);
-      if (deprecateEvidence) {
-        const suggestion = makeSuggestion(node.id, 'deprecate', 'low_quality_or_negative_feedback', deprecateEvidence);
+      const lowQualityEvidence = getLowQualityEvidence(node, archiveQualityScoreAtMost, archiveNegativeFeedbackDeltaAtLeast);
+      if (lowQualityEvidence) {
+        const suggestion = makeSuggestion(node.id, 'archive', 'low_quality_or_negative_feedback', lowQualityEvidence);
         suggestions.push(suggestion);
-        deprecateCandidates.push(node.id);
+        archiveCandidates.push(node.id);
         if (apply) {
           this.graphStore.updateNode(node.id, {
-            status: ContextNodeStatus.DEPRECATED,
+            status: ContextNodeStatus.ARCHIVED,
             metadata: withPruneAudit(node, suggestion),
           });
-          deprecatedNodes++;
+          archivedNodes++;
         }
         continue;
       }
 
       const environmentMismatchEvidence = getEnvironmentMismatchEvidence(node, projectEnvironment);
       if (environmentMismatchEvidence) {
-        const suggestion = makeSuggestion(node.id, 'deprecate', 'project_environment_mismatch', environmentMismatchEvidence);
+        const suggestion = makeSuggestion(node.id, 'archive', 'project_environment_mismatch', environmentMismatchEvidence);
         suggestions.push(suggestion);
-        deprecateCandidates.push(node.id);
+        archiveCandidates.push(node.id);
         if (apply) {
           this.graphStore.updateNode(node.id, {
-            status: ContextNodeStatus.DEPRECATED,
+            status: ContextNodeStatus.ARCHIVED,
             metadata: withPruneAudit(node, suggestion),
           });
-          deprecatedNodes++;
+          archivedNodes++;
         }
         continue;
       }
@@ -135,10 +131,8 @@ export class Pruner {
     return {
       scannedNodes: nodes.length,
       archivedNodes,
-      deprecatedNodes,
       skippedConflictedNodes,
       archiveCandidates,
-      deprecateCandidates,
       suggestions,
     };
   }
@@ -155,7 +149,6 @@ function loadProjectEnvironment(nodes: ContextNode[]): Record<string, unknown> {
   const snapshots = nodes
     .filter((node) => node.substrateType === SubstrateType.SNAPSHOT
       && node.domainType === ContextDomainType.PROJECT_SNAPSHOT
-      && node.status !== ContextNodeStatus.DEPRECATED
       && node.status !== ContextNodeStatus.ARCHIVED)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
@@ -189,20 +182,20 @@ function getEnvironmentMismatchEvidence(
   return Object.keys(mismatches).length > 0 ? mismatches : null;
 }
 
-function getDeprecationEvidence(
+function getLowQualityEvidence(
   node: ContextNode,
-  deprecateQualityScoreAtMost: number,
-  deprecateNegativeFeedbackDeltaAtLeast: number,
+  archiveQualityScoreAtMost: number,
+  archiveNegativeFeedbackDeltaAtLeast: number,
 ): Record<string, unknown> | null {
   const feedbackDelta = node.negativeFeedback - node.positiveFeedback;
-  if (node.qualityScore > deprecateQualityScoreAtMost && feedbackDelta < deprecateNegativeFeedbackDeltaAtLeast) {
+  if (node.qualityScore > archiveQualityScoreAtMost && feedbackDelta < archiveNegativeFeedbackDeltaAtLeast) {
     return null;
   }
   return {
     qualityScore: node.qualityScore,
-    deprecateQualityScoreAtMost,
+    archiveQualityScoreAtMost,
     feedbackDelta,
-    deprecateNegativeFeedbackDeltaAtLeast,
+    archiveNegativeFeedbackDeltaAtLeast,
   };
 }
 
