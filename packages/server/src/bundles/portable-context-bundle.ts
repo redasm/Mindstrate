@@ -11,11 +11,20 @@ import type {
   PublishBundleOptions,
   PublishBundleResult,
 } from '@mindstrate/protocol';
-import { createHash } from 'node:crypto';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import { slugifyAscii } from '../text-format.js';
+import {
+  type InstallBundleFromRegistryOptions,
+  publishBundleToRegistry,
+  readBundleFromRegistry,
+} from './bundle-registry.js';
+import {
+  type EditableBundleFiles,
+  type InstallEditableBundleFilesResult,
+  createEditableBundleFiles,
+  installEditableBundleDirectory,
+  installEditableBundleFiles,
+} from './editable-bundle-files.js';
 
 export type {
   BundlePublicationManifest,
@@ -34,30 +43,10 @@ export interface CreateBundleOptions {
   includeRelatedEdges?: boolean;
 }
 
-export interface InstallEditableBundleFilesResult extends InstallBundleResult {
-  bundle: PortableContextBundle;
-  updatedBundleNodes: number;
-}
-
 export interface ValidateBundleResult {
   valid: boolean;
   errors: string[];
 }
-
-export interface InstallBundleFromRegistryOptions {
-  registry: string;
-  reference: string;
-}
-
-interface BundleRegistryIndex {
-  bundles: BundleRegistryEntry[];
-}
-
-interface BundleRegistryEntry extends BundlePublicationManifest {
-  bundlePath: string;
-}
-
-export type EditableBundleFiles = Record<string, string>;
 
 export class PortableContextBundleManager {
   private readonly graphStore: ContextGraphStore;
@@ -201,30 +190,7 @@ export class PortableContextBundleManager {
       throw new Error(`Invalid bundle: ${validation.errors.join('; ')}`);
     }
 
-    const digest = createHash('sha256')
-      .update(JSON.stringify(bundle))
-      .digest('hex');
-
-    const manifest: BundlePublicationManifest = {
-      id: bundle.id,
-      name: bundle.name,
-      version: bundle.version,
-      registry: options.registry ?? 'local',
-      visibility: options.visibility ?? 'unlisted',
-      nodeCount: bundle.nodeIds.length,
-      edgeCount: bundle.edgeIds.length,
-      digest: `sha256:${digest}`,
-      publishedAt: new Date().toISOString(),
-    };
-
-    if (options.registry && isLocalRegistry(options.registry)) {
-      writeBundleToLocalRegistry(options.registry, bundle, manifest);
-    }
-
-    return {
-      bundle,
-      manifest,
-    };
+    return publishBundleToRegistry(bundle, options);
   }
 
   async installBundleFromRegistry(options: InstallBundleFromRegistryOptions): Promise<InstallBundleResult> {
@@ -238,66 +204,16 @@ export class PortableContextBundleManager {
       throw new Error(`Invalid bundle: ${validation.errors.join('; ')}`);
     }
 
-    return {
-      'bundle.json': JSON.stringify(bundle, null, 2),
-      'rules.md': formatBundleMarkdown('Rules', bundle.nodes?.filter((node) => node.substrateType === 'rule') ?? []),
-      'skills.md': formatBundleMarkdown('Skills', bundle.nodes?.filter((node) => node.substrateType === 'skill') ?? []),
-      'invariants.md': formatBundleMarkdown(
-        'Invariants',
-        bundle.nodes?.filter((node) => ['heuristic', 'axiom'].includes(node.substrateType)) ?? [],
-      ),
-    };
+    return createEditableBundleFiles(bundle);
   }
 
   installEditableBundleFiles(files: EditableBundleFiles): InstallEditableBundleFilesResult {
-    const bundle = readEditableBundle(files);
-    const edits = new Map<string, EditableBundleNodeEdit>();
-    for (const fileName of ['rules.md', 'skills.md', 'invariants.md']) {
-      for (const edit of parseEditableBundleMarkdown(files[fileName] ?? '')) {
-        edits.set(edit.id, edit);
-      }
-    }
-
-    let updatedBundleNodes = 0;
-    const nodes = (bundle.nodes ?? []).map((node) => {
-      const edit = edits.get(node.id);
-      if (!edit) return node;
-      updatedBundleNodes++;
-      return {
-        ...node,
-        title: edit.title,
-        content: edit.content,
-      };
-    });
-
-    const editedBundle = {
-      ...bundle,
-      nodes,
-    };
-    const install = this.installBundle(editedBundle);
-    return {
-      ...install,
-      bundle: editedBundle,
-      updatedBundleNodes,
-    };
+    return installEditableBundleFiles(files, (bundle) => this.installBundle(bundle));
   }
 
   installEditableBundleDirectory(directory: string): InstallEditableBundleFilesResult {
-    const files: EditableBundleFiles = {};
-    for (const fileName of ['bundle.json', 'rules.md', 'skills.md', 'invariants.md']) {
-      const filePath = path.join(directory, fileName);
-      if (fs.existsSync(filePath)) {
-        files[fileName] = fs.readFileSync(filePath, 'utf-8');
-      }
-    }
-    return this.installEditableBundleFiles(files);
+    return installEditableBundleDirectory(directory, (bundle) => this.installBundle(bundle));
   }
-}
-
-interface EditableBundleNodeEdit {
-  id: string;
-  title: string;
-  content: string;
 }
 
 function serializeNode(node: ContextNode): PortableContextBundleNode {
@@ -327,186 +243,4 @@ function serializeEdge(edge: ContextEdge): PortableContextBundleEdge {
     strength: edge.strength,
     evidence: edge.evidence,
   };
-}
-
-function formatBundleMarkdown(
-  title: string,
-  nodes: PortableContextBundleNode[],
-): string {
-  const lines = [`# ${title}`, ''];
-  if (nodes.length === 0) {
-    lines.push('_No entries in this bundle._');
-    return lines.join('\n');
-  }
-
-  for (const node of nodes) {
-    lines.push(`## ${node.title}`);
-    lines.push('');
-    lines.push(node.content);
-    lines.push('');
-    lines.push(`- ID: ${node.id}`);
-    lines.push(`- Domain: ${node.domainType}`);
-    lines.push(`- Status: ${node.status}`);
-    if (node.tags.length > 0) {
-      lines.push(`- Tags: ${node.tags.join(', ')}`);
-    }
-    lines.push('');
-  }
-
-  return lines.join('\n').trimEnd() + '\n';
-}
-
-function readEditableBundle(files: EditableBundleFiles): PortableContextBundle {
-  const rawBundle = files['bundle.json'];
-  if (!rawBundle) {
-    throw new Error('Editable bundle files must include bundle.json');
-  }
-  return JSON.parse(rawBundle) as PortableContextBundle;
-}
-
-function parseEditableBundleMarkdown(markdown: string): EditableBundleNodeEdit[] {
-  const edits: EditableBundleNodeEdit[] = [];
-  const lines = markdown.split(/\r?\n/);
-  let index = 0;
-
-  while (index < lines.length) {
-    const heading = lines[index].match(/^##\s+(.+?)\s*$/);
-    if (!heading) {
-      index++;
-      continue;
-    }
-
-    const title = heading[1].trim();
-    index++;
-    const contentLines: string[] = [];
-    let id: string | undefined;
-
-    while (index < lines.length && !lines[index].startsWith('## ')) {
-      const idMatch = lines[index].match(/^-\s+ID:\s*(.+?)\s*$/);
-      if (idMatch) {
-        id = idMatch[1].trim();
-        index++;
-        continue;
-      }
-      if (id) {
-        index++;
-        continue;
-      }
-      contentLines.push(lines[index]);
-      index++;
-    }
-
-    if (id) {
-      edits.push({
-        id,
-        title,
-        content: contentLines.join('\n').trim(),
-      });
-    }
-  }
-
-  return edits;
-}
-
-function isLocalRegistry(registry: string): boolean {
-  return !/^[a-z][a-z0-9+.-]*:\/\//i.test(registry);
-}
-
-function writeBundleToLocalRegistry(
-  registry: string,
-  bundle: PortableContextBundle,
-  manifest: BundlePublicationManifest,
-): void {
-  const bundleRelativePath = path.join('bundles', bundle.id, bundle.version, 'bundle.json');
-  const bundlePath = path.join(registry, bundleRelativePath);
-  fs.mkdirSync(path.dirname(bundlePath), { recursive: true });
-  fs.writeFileSync(bundlePath, JSON.stringify(bundle, null, 2), 'utf-8');
-
-  const index = readRegistryIndex(registry);
-  const entry: BundleRegistryEntry = {
-    ...manifest,
-    bundlePath: normalizeRegistryPath(bundleRelativePath),
-  };
-  index.bundles = [
-    entry,
-    ...index.bundles.filter((item) => !(item.name === entry.name && item.version === entry.version)),
-  ];
-  fs.mkdirSync(registry, { recursive: true });
-  fs.writeFileSync(path.join(registry, 'index.json'), JSON.stringify(index, null, 2), 'utf-8');
-}
-
-async function readBundleFromRegistry(registry: string, reference: string): Promise<PortableContextBundle> {
-  const index = isLocalRegistry(registry)
-    ? readRegistryIndex(registry)
-    : await fetchRemoteRegistryIndex(registry);
-  const { name, version } = parseBundleReference(reference);
-  const candidates = index.bundles.filter((entry) => entry.name === name || entry.id === name);
-  const entry = version
-    ? candidates.find((item) => item.version === version)
-    : candidates.sort((a, b) => compareVersionsDescending(a.version, b.version))[0];
-
-  if (!entry) {
-    throw new Error(`Bundle not found in registry: ${reference}`);
-  }
-
-  if (isLocalRegistry(registry)) {
-    const bundlePath = path.join(registry, entry.bundlePath);
-    return JSON.parse(fs.readFileSync(bundlePath, 'utf-8')) as PortableContextBundle;
-  }
-
-  return fetchRemoteBundle(registry, entry.bundlePath);
-}
-
-function readRegistryIndex(registry: string): BundleRegistryIndex {
-  const indexPath = path.join(registry, 'index.json');
-  if (!fs.existsSync(indexPath)) {
-    return { bundles: [] };
-  }
-
-  const parsed = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as Partial<BundleRegistryIndex>;
-  return {
-    bundles: Array.isArray(parsed.bundles) ? parsed.bundles : [],
-  };
-}
-
-function parseBundleReference(reference: string): { name: string; version?: string } {
-  const atIndex = reference.lastIndexOf('@');
-  if (atIndex <= 0) {
-    return { name: reference };
-  }
-  return {
-    name: reference.slice(0, atIndex),
-    version: reference.slice(atIndex + 1),
-  };
-}
-
-function compareVersionsDescending(a: string, b: string): number {
-  return b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' });
-}
-
-function normalizeRegistryPath(value: string): string {
-  return value.split(path.sep).join('/');
-}
-
-async function fetchRemoteRegistryIndex(registry: string): Promise<BundleRegistryIndex> {
-  const response = await fetch(new URL('index.json', ensureTrailingSlash(registry)));
-  if (!response.ok) {
-    throw new Error(`Failed to fetch bundle registry index: ${response.status} ${response.statusText}`);
-  }
-  const parsed = await response.json() as Partial<BundleRegistryIndex>;
-  return {
-    bundles: Array.isArray(parsed.bundles) ? parsed.bundles : [],
-  };
-}
-
-async function fetchRemoteBundle(registry: string, bundlePath: string): Promise<PortableContextBundle> {
-  const response = await fetch(new URL(bundlePath, ensureTrailingSlash(registry)));
-  if (!response.ok) {
-    throw new Error(`Failed to fetch bundle: ${response.status} ${response.statusText}`);
-  }
-  return await response.json() as PortableContextBundle;
-}
-
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith('/') ? value : `${value}/`;
 }

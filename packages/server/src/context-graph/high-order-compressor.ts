@@ -1,10 +1,8 @@
-import { Embedder } from '../processing/embedder.js';
-import { clusterContextNodes, hasGeneralizationParent } from './context-clustering.js';
+import type { Embedder } from '../processing/embedder.js';
 import type { ContextGraphStore } from './context-graph-store.js';
+import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
 import {
   ContextDomainType,
-  ContextNodeStatus,
-  ContextRelationType,
   SubstrateType,
   type ContextNode,
 } from '@mindstrate/protocol/models';
@@ -81,66 +79,35 @@ export class HighOrderCompressor {
     options: HighOrderCompressionOptions,
     spec: UpgradeSpec,
   ): Promise<HighOrderCompressionResult> {
-    const minClusterSize = options.minClusterSize ?? 2;
-    const similarityThreshold = options.similarityThreshold ?? 0.82;
-    const limit = options.limit ?? 200;
-    const nodes = this.graphStore.listNodes({
-      project: options.project,
-      substrateType: spec.sourceType,
-      limit,
-    });
-    const eligible = nodes.filter((node) => !hasGeneralizationParent(this.graphStore, node.id, spec.targetType));
-    const clusters = await clusterContextNodes({
-      nodes: eligible,
-      embedder: this.embedder,
-      minClusterSize,
-      similarityThreshold,
-    });
-    const resultClusters: HighOrderCompressionResult['clusters'] = [];
-
-    for (const cluster of clusters) {
-      const targetNode = this.graphStore.createNode({
-        substrateType: spec.targetType,
-        domainType: spec.targetDomain,
-        title: buildTitle(spec.targetType, cluster),
-        content: buildContent(spec.targetType, cluster),
-        tags: [spec.tag, 'high-order-compression'],
-        project: cluster[0].project,
-        compressionLevel: spec.compressionLevel,
-        confidence: spec.confidence,
-        qualityScore: spec.qualityScore,
-        status: ContextNodeStatus.ACTIVE,
-        metadata: {
-          sourceNodeIds: cluster.map((item) => item.id),
-          sourceSubstrateType: spec.sourceType,
-          clusterSize: cluster.length,
-        },
-      });
-
-      for (const source of cluster) {
-        this.graphStore.createEdge({
-          sourceId: source.id,
-          targetId: targetNode.id,
-          relationType: ContextRelationType.GENERALIZES,
-          strength: 1,
-          evidence: {
-            sourceNodeId: source.id,
-            sourceSubstrateType: spec.sourceType,
-            targetSubstrateType: spec.targetType,
-          },
-        });
-      }
-
-      resultClusters.push({
-        targetNodeId: targetNode.id,
+    const run = await runSubstrateCompression(this.graphStore, this.embedder, {
+      sourceType: spec.sourceType,
+      targetType: spec.targetType,
+      targetDomain: spec.targetDomain,
+      tags: [spec.tag, 'high-order-compression'],
+      compressionLevel: spec.compressionLevel,
+      confidence: spec.confidence,
+      qualityScore: spec.qualityScore,
+      defaultSimilarityThreshold: 0.82,
+      title: (cluster) => buildTitle(spec.targetType, cluster),
+      content: (cluster) => buildContent(spec.targetType, cluster),
+      metadata: (cluster) => ({
         sourceNodeIds: cluster.map((item) => item.id),
-      });
-    }
+        sourceSubstrateType: spec.sourceType,
+      }),
+      evidence: (source) => ({
+        sourceNodeId: source.id,
+        sourceSubstrateType: spec.sourceType,
+        targetSubstrateType: spec.targetType,
+      }),
+    }, options);
 
     return {
-      scannedNodes: eligible.length,
-      nodesCreated: resultClusters.length,
-      clusters: resultClusters,
+      scannedNodes: run.scannedNodes,
+      nodesCreated: run.clusters.length,
+      clusters: run.clusters.map(({ targetNode, sourceNodes }) => ({
+        targetNodeId: targetNode.id,
+        sourceNodeIds: sourceNodes.map((item) => item.id),
+      })),
     };
   }
 }
@@ -150,8 +117,7 @@ const buildTitle = (targetType: SubstrateType, cluster: ContextNode[]): string =
   return `${targetType} cluster: ${project} (${cluster.length} nodes)`;
 };
 
-const buildContent = (targetType: SubstrateType, cluster: ContextNode[]): string => [
+const buildContent = (targetType: SubstrateType, cluster: ContextNode[]): string => buildClusterContent(
   `Generalized ${targetType} from ${cluster.length} related ${cluster[0].substrateType} nodes.`,
-  '',
-  ...cluster.map((node, index) => `${index + 1}. ${node.title}\n${node.content.split('\n')[0] ?? node.content}`),
-].join('\n');
+  cluster,
+);

@@ -12,7 +12,15 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execSync } from 'node:child_process';
+import { listTopDirs, readGitInfo, readReadmeExcerpt } from './detection-enrichment.js';
+import {
+  MAX_DEPS,
+  depsFromTomlBlock,
+  pickFramework,
+  safeJson,
+  safeRead,
+  scalarFromToml,
+} from './detection-support.js';
 
 export interface DetectedDependency {
   name: string;
@@ -59,35 +67,6 @@ export interface DetectedProject {
   /** README.md first paragraph (capped) */
   readmeExcerpt?: string;
 }
-
-const MAX_DEPS = 40;
-const README_EXCERPT_MAX = 600;
-
-const FRAMEWORK_HINTS: Array<{ dep: string | RegExp; framework: string }> = [
-  { dep: 'next', framework: 'next.js' },
-  { dep: 'nuxt', framework: 'nuxt' },
-  { dep: '@nestjs/core', framework: 'nestjs' },
-  { dep: 'react', framework: 'react' },
-  { dep: 'vue', framework: 'vue' },
-  { dep: '@angular/core', framework: 'angular' },
-  { dep: 'svelte', framework: 'svelte' },
-  { dep: 'express', framework: 'express' },
-  { dep: 'fastify', framework: 'fastify' },
-  { dep: 'koa', framework: 'koa' },
-  { dep: 'hono', framework: 'hono' },
-  { dep: 'electron', framework: 'electron' },
-  { dep: 'react-native', framework: 'react-native' },
-  { dep: 'django', framework: 'django' },
-  { dep: 'flask', framework: 'flask' },
-  { dep: 'fastapi', framework: 'fastapi' },
-  { dep: 'rails', framework: 'rails' },
-  { dep: 'spring-boot', framework: 'spring-boot' },
-  { dep: /(^|\/)gin(-gonic)?(\/gin)?$/, framework: 'gin' },
-  { dep: /(^|\/)echo$/, framework: 'echo' },
-  { dep: /^actix(-web)?$/, framework: 'actix' },
-  { dep: 'rocket', framework: 'rocket' },
-  { dep: /^axum$/, framework: 'axum' },
-];
 
 /**
  * Detect a project rooted at `cwd`. Returns null when no project root can be
@@ -438,115 +417,4 @@ function detectGenericProject(root: string): DetectedProject {
 // Helpers
 // ============================================================
 
-function pickFramework(depNames: string[]): string | undefined {
-  for (const hint of FRAMEWORK_HINTS) {
-    for (const dep of depNames) {
-      if (typeof hint.dep === 'string' ? dep === hint.dep : hint.dep.test(dep)) {
-        return hint.framework;
-      }
-    }
-  }
-  return undefined;
-}
 
-function readGitInfo(root: string): DetectedProject['git'] {
-  if (!fs.existsSync(path.join(root, '.git'))) {
-    return { isRepo: false };
-  }
-  let branch: string | undefined;
-  let remote: string | undefined;
-  try {
-    branch = execSync('git rev-parse --abbrev-ref HEAD', {
-      cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-  } catch { /* ignore */ }
-  try {
-    remote = execSync('git config --get remote.origin.url', {
-      cwd: root, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-  } catch { /* ignore */ }
-  return { isRepo: true, branch, remote };
-}
-
-function listTopDirs(root: string): string[] {
-  try {
-    return fs.readdirSync(root, { withFileTypes: true })
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules' && e.name !== 'dist' && e.name !== 'build' && e.name !== 'target' && e.name !== '__pycache__')
-      .map((e) => e.name)
-      .slice(0, 30)
-      .sort();
-  } catch {
-    return [];
-  }
-}
-
-function readReadmeExcerpt(root: string): string | undefined {
-  const candidates = ['README.md', 'README.MD', 'Readme.md', 'readme.md'];
-  for (const name of candidates) {
-    const p = path.join(root, name);
-    if (fs.existsSync(p)) {
-      const text = safeRead(p);
-      if (!text) return undefined;
-      // strip title line + empty lines, take first paragraph
-      const stripped = text.replace(/^#.*$/m, '').trim();
-      const para = stripped.split(/\n\s*\n/)[0]?.trim();
-      if (!para) return undefined;
-      return para.length > README_EXCERPT_MAX
-        ? para.slice(0, README_EXCERPT_MAX) + '...'
-        : para;
-    }
-  }
-  return undefined;
-}
-
-function safeJson(p: string): any | null {
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
-}
-
-function safeRead(p: string): string | null {
-  try { return fs.readFileSync(p, 'utf8'); } catch { return null; }
-}
-
-/** Extract a top-level scalar value from a TOML file (very rough). */
-function scalarFromToml(text: string, key: string): string | undefined {
-  // Match `key = "value"` only at top level (not inside [tool.x] tables)
-  const re = new RegExp(`^${escapeRe(key)}\\s*=\\s*"([^"\\n]+)"`, 'm');
-  const m = text.match(re);
-  return m?.[1];
-}
-
-/** Extract dependency names from a TOML block.
- *  Matches both `[deps]` (top-level Cargo style) and `[tool.poetry.deps]` (Python). */
-function depsFromTomlBlock(text: string, blockName: string): string[] {
-  const out: string[] = [];
-
-  // Match any `[...{blockName}]` heading (top-level OR nested with dots).
-  const headerRe = new RegExp(
-    `^\\[(?:[^\\]\\n]*\\.)?${escapeRe(blockName)}\\][^\\n]*\\n([\\s\\S]*?)(?=\\n\\[|$)`,
-    'gm',
-  );
-  for (const m of text.matchAll(headerRe)) {
-    const body = m[1] ?? '';
-    for (const line of body.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const dm = trimmed.match(/^([a-zA-Z0-9_.\-]+)\s*=/);
-      if (dm) out.push(dm[1]);
-    }
-  }
-
-  // Also support PEP 621 list form: dependencies = ["foo>=1", "bar"]
-  const listRe = new RegExp(`^${escapeRe(blockName)}\\s*=\\s*\\[([\\s\\S]*?)\\]`, 'm');
-  const lm = text.match(listRe);
-  if (lm) {
-    for (const m of lm[1].matchAll(/"([^"]+)"/g)) {
-      const dep = m[1].split(/[<>=!~ ]/)[0].trim();
-      if (dep) out.push(dep);
-    }
-  }
-  return out;
-}
-
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
