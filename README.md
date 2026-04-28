@@ -141,7 +141,7 @@ mindstrate init --tool opencode --with-vault ~/Documents/MyVault
 
 ### 团队部署（Docker）
 
-团队场景下，把 Team Server + Web UI 部署到一台**内网服务器**，所有成员的 MCP 客户端连过来共享知识。**部署形式：独立的 Docker compose 项目**，与服务器上现有的 Docker 服务（飞书机器人等）零冲突。
+团队场景下，把 Team Server + Web UI 部署到一台**内网服务器**，所有成员的 MCP 客户端连过来共享知识。**部署形式：独立的 Docker compose 项目**。
 
 **架构：**
 ```
@@ -279,20 +279,33 @@ iwr http://<nginx>/mindstrate/install.ps1 -UseBasicParsing | iex
 
 ### 自动会话管理
 
-在项目根目录创建 `AGENTS.md`，AI 会自动管理会话生命周期：
+在项目根目录创建 `AGENTS.md`，AI 会自动管理会话生命周期。以下是 Mindstrate MCP 的通用知识管理规则模板，可复制到其他项目中：
 
 ```markdown
-## 知识管理 (mindstrate MCP)
+# Mindstrate - Project Agent Rules
+
+## 知识管理 (Mindstrate MCP)
 
 ### 会话生命周期（自动执行）
 - **对话开始时**：立即调用 `session_start`，project 设为当前目录名
 - **做出关键决策时**：调用 `session_save`，type 为 `decision`
 - **解决问题后**：调用 `session_save`，type 为 `problem_solved`
-- **对话结束时**：调用 `session_end`，总结本次工作内容
+- **尝试失败的方案后**：调用 `session_save`，type 为 `failed_path`
+- **对话结束或用户说"结束/再见/bye"时**：调用 `session_end`，总结本次工作内容和未完成任务
 
 ### 知识检索（自动执行）
-- 遇到 bug 时，先用 `memory_search` 查询是否已有相关知识
-- 新对话开始时，用 `session_restore` 恢复上次的工作上下文
+- 遇到 bug 或技术问题时，先用 `memory_search` 查询是否已有相关知识
+- 开始复杂任务前，用 `memory_curate` 获取相关上下文
+- 新对话开始时，用 `session_restore` 恢复上次的会话上下文
+
+### 知识沉淀（自动执行）
+- 解决了有价值的 bug 时，用 `memory_add` 记录（type: bug_fix）
+- 发现最佳实践时，用 `memory_add` 记录（type: best_practice）
+- 发现踩坑点时，用 `memory_add` 记录（type: gotcha）
+
+### 反馈闭环（自动执行）
+- 搜索结果被采用后，用 `memory_feedback_auto` 记录 signal: adopted
+- 搜索结果不适用时，用 `memory_feedback_auto` 记录 signal: rejected
 ```
 
 ## Git / P4 自动采集
@@ -501,6 +514,50 @@ mindstrate-scan ingest git --last-commit --project my-project
 
 > 如果你不想安装全局命令，可以在任意命令前加上 `node packages/cli/dist/index.js`。
 
+## 当前运行时 API
+
+`Mindstrate` 主类现在只负责初始化、关闭和子域 API 组合；业务能力不再挂在主类的一层扁平方法上。应用层代码应按职责调用子域对象：
+
+```ts
+import { Mindstrate } from '@mindstrate/server';
+
+const memory = new Mindstrate();
+await memory.init();
+
+await memory.knowledge.add(input);
+await memory.snapshots.upsertProjectSnapshot(project);
+
+const results = memory.context.queryGraphKnowledge('hydration mismatch', {
+  project: 'web-ui',
+  topK: 5,
+});
+
+const assembled = await memory.assembly.assembleContext('fix flaky test', {
+  project: 'server',
+});
+
+await memory.metabolism.runMetabolism({ project: 'server', trigger: 'manual' });
+const stats = await memory.maintenance.getStats();
+
+memory.close();
+```
+
+子域边界：
+
+| 子域 | 职责 |
+|------|------|
+| `knowledge` | 知识写入、质量检查 |
+| `snapshots` | 项目快照 upsert / 查询 |
+| `context` | ECS 图节点、边、冲突记录、图知识检索、反馈 |
+| `assembly` | 上下文策划与完整工作上下文装配 |
+| `events` | Git、测试、LSP、终端、通用事件摄入 |
+| `sessions` | 会话生命周期、观察、压缩、恢复 |
+| `metabolism` | 代谢、压缩、冲突检测/反射、调度、剪枝 |
+| `evaluation` | 检索质量评估 |
+| `projections` | 投影、Obsidian 投影、internalization |
+| `bundles` | bundle 创建、校验、安装、发布 |
+| `maintenance` | 维护任务与统计 |
+
 ## 项目结构
 
 ```
@@ -516,12 +573,16 @@ Mindstrate/
 │   ├── server/                # 服务端运行时 — SQLite/OpenAI/检索/进化/采集
 │   │   └── src/
 │   │       ├── capture/       # 提取器（把变更转换为知识），不负责数据源采集
+│   │       ├── context-graph/ # ECS 图存储、优先级选择、上下文装配 DAG、压缩器
+│   │       ├── events/        # 外部信号摄入（Git / test / LSP / terminal / feedback）
+│   │       ├── metabolism/    # Digest / Assimilation / Compression / Prune / Reflection
 │   │       ├── processing/    # 处理流水线（去重、标准化、Embedding）
-│   │       ├── storage/       # 存储层（SQLite + JSON 向量索引）
-│   │       ├── retrieval/     # 检索层（混合检索 + 上下文策划）
-│   │       ├── quality/       # 质量管理（评分、反馈闭环、进化、评估）
-│   │       ├── project/       # 项目检测 + 快照生成
-│   │       └── server facade 主入口
+│   │       ├── project/       # 项目检测器 + 快照 ID/渲染/upsert 输入生成
+│   │       ├── projections/   # Knowledge / Session / Snapshot / Obsidian 投影
+│   │       ├── quality/       # 反馈闭环与检索评估
+│   │       ├── runtime/       # Mindstrate 子域 API 与运行时装配
+│   │       ├── storage/       # SQLite + 本地向量索引 / Qdrant
+│   │       └── mindstrate.ts  # 轻量生命周期入口，只组合子域 API
 │   ├── mcp-server/            # MCP Server，esbuild 单文件 bundle (~1.2 MB)
 │   │   └── src/
 │   │       ├── tools/         # MCP 工具定义、Schema 验证、处理函数
@@ -544,7 +605,7 @@ Mindstrate/
 │   └── README.md              # 管理员发布、成员安装指南
 ├── docs/architecture.md       # 4 层包架构与 ESLint 防御规则
 ├── eslint.config.mjs          # 强制层级边界，防止反向依赖
-├── AGENTS.md                  # AI 助手自动行为规则
+├── AGENTS.md                  # 当前仓库的 AI 实施规则
 └── .env.example
 ```
 
@@ -566,7 +627,7 @@ Mindstrate/
 | CLI | Commander.js |
 | Web UI | Next.js 15 + React 19 + Tailwind CSS + 中英文 i18n |
 | 质量管理 | 自动反馈闭环 + 知识进化引擎 + 检索评估系统 |
-| 测试 | Vitest (201 单元测试) |
+| 测试 | Vitest（核心 server / scanner / Obsidian 同步回归测试） |
 
 ## 环境变量
 
