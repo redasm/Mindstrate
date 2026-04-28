@@ -1,0 +1,43 @@
+{
+  "id": "vue-project",
+  "name": "Vue Project",
+  "priority": 70,
+  "match": {
+    "all": [
+      { "file": "package.json" },
+      { "packageDependency": "vue" }
+    ]
+  },
+  "detect": {
+    "framework": "vue",
+    "manifest": "package.json",
+    "entryPoints": [
+      "src/App.vue",
+      "src/main.ts",
+      "src/main.js",
+      "src/router/index.ts",
+      "src/router/index.js"
+    ],
+    "topDirs": {
+      "src": "Vue application source code.",
+      "components": "Reusable Vue components.",
+      "views": "Route-level Vue views.",
+      "router": "Vue Router configuration.",
+      "public": "Static assets served directly by the dev/build tool.",
+      "tests": "Automated tests."
+    }
+  },
+  "snapshot": {
+    "overview": "This appears to be a Vue application.",
+    "invariants": [
+      "Keep component reactivity explicit; avoid mutating props directly.",
+      "Respect Vue Router and store boundaries when changing navigation or shared state.",
+      "Do not put server-only secrets into client-side Vue code."
+    ],
+    "conventions": [
+      "Treat package.json as the package manifest.",
+      "Treat src/main.* as the application bootstrap entry point when present.",
+      "Use .vue single-file components for component-local template, script, and style."
+    ]
+  }
+}

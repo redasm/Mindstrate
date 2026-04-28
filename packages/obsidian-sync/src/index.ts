@@ -19,6 +19,7 @@ export {
 
 export {
   VaultLayout,
+  graphDomainToKnowledgeType,
   extractIdSuffixFromFilename,
   idMatchesSuffix,
   GLOBAL_PROJECT_FOLDER,

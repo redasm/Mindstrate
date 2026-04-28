@@ -63,10 +63,7 @@ export class VaultLayout {
 
   relativePathForGraphView(k: GraphKnowledgeView): string {
     const project = sanitizeFolder(k.project) || GLOBAL_PROJECT_FOLDER;
-    const domainType = String(k.domainType);
-    const type = Object.values(KnowledgeType).includes(domainType as KnowledgeType)
-      ? domainType as KnowledgeType
-      : KnowledgeType.BEST_PRACTICE;
+    const type = graphDomainToKnowledgeType(String(k.domainType));
     const typeFolder = TYPE_FOLDERS[type] ?? 'misc';
     const filename = makeFilename(k.title, k.id);
     return joinForward(project, typeFolder, filename);
@@ -154,6 +151,14 @@ export class VaultLayout {
     const norm = rel.split(path.sep).join('/');
     return norm.startsWith(`${META_FOLDER}/`) || norm === META_FOLDER;
   }
+}
+
+export function graphDomainToKnowledgeType(domainType: string): KnowledgeType {
+  if (domainType === 'project_snapshot') return KnowledgeType.ARCHITECTURE;
+  if (domainType === 'session_summary') return KnowledgeType.WORKFLOW;
+  return Object.values(KnowledgeType).includes(domainType as KnowledgeType)
+    ? domainType as KnowledgeType
+    : KnowledgeType.BEST_PRACTICE;
 }
 
 // ============================================================

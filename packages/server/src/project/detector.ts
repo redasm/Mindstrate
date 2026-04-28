@@ -18,6 +18,7 @@ import { pythonProjectDetector } from './detectors/python-project-detector.js';
 import { rustProjectDetector } from './detectors/rust-project-detector.js';
 import { goProjectDetector } from './detectors/go-project-detector.js';
 import type { ProjectDetector } from './detectors/project-detector.js';
+import { detectProjectByRules, type ProjectDetectionRuleMatch } from './project-detection-rules.js';
 
 export interface DetectedDependency {
   name: string;
@@ -63,6 +64,16 @@ export interface DetectedProject {
   detectedAt: string;
   /** README.md first paragraph (capped) */
   readmeExcerpt?: string;
+  /** Detection rule that matched this project, if any. */
+  detectionRule?: ProjectDetectionRuleMatch;
+  /** Domain-specific descriptions for top-level directories. */
+  topDirDescriptions?: Record<string, string>;
+  /** Rule-derived project snapshot guidance. */
+  snapshotHints?: {
+    overview?: string;
+    invariants?: string[];
+    conventions?: string[];
+  };
 }
 
 const PROJECT_DETECTORS: ProjectDetector[] = [
@@ -82,10 +93,13 @@ export function detectProject(cwd: string = process.cwd()): DetectedProject | nu
 
   const detectedAt = new Date().toISOString();
 
-  const detected = PROJECT_DETECTORS
+  const ruleDetected = detectProjectByRules(root);
+  const baseDetected = PROJECT_DETECTORS
     .map((detector) => detector.detect(root))
-    .find((project): project is DetectedProject => project !== null)
-    ?? detectGenericProject(root);
+    .find((project): project is DetectedProject => project !== null);
+  const detected = ruleDetected
+    ? mergeRuleDetection(ruleDetected, baseDetected)
+    : baseDetected ?? detectGenericProject(root);
   detected.root = root;
   detected.detectedAt = detectedAt;
   detected.git = readGitInfo(root);
@@ -116,6 +130,7 @@ export function findProjectRoot(cwd: string): string | null {
     for (const m of markers) {
       if (fs.existsSync(path.join(dir, m))) return dir;
     }
+    if (fs.readdirSync(dir).some((entry) => entry.endsWith('.uproject'))) return dir;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -139,6 +154,24 @@ function detectGenericProject(root: string): DetectedProject {
     detectedAt: '',
   };
 }
+
+const mergeRuleDetection = (
+  ruleDetected: DetectedProject,
+  baseDetected?: DetectedProject,
+): DetectedProject => {
+  if (!baseDetected) return ruleDetected;
+  return {
+    ...baseDetected,
+    manifestPath: baseDetected.manifestPath ?? ruleDetected.manifestPath,
+    language: ruleDetected.language ?? baseDetected.language,
+    framework: ruleDetected.framework ?? baseDetected.framework,
+    packageManager: baseDetected.packageManager ?? ruleDetected.packageManager,
+    entryPoints: Array.from(new Set([...baseDetected.entryPoints, ...ruleDetected.entryPoints])),
+    detectionRule: ruleDetected.detectionRule,
+    topDirDescriptions: ruleDetected.topDirDescriptions,
+    snapshotHints: ruleDetected.snapshotHints,
+  };
+};
 
 // ============================================================
 // Helpers

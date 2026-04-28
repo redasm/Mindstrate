@@ -14,6 +14,8 @@ export interface GraphKnowledgeView {
   id: string;
   title: string;
   summary: string;
+  /** Full node content when available. Projection consumers may use summary for compact lists. */
+  content?: string;
   substrateType: SubstrateType;
   domainType: ContextDomainType;
   project?: string;
@@ -21,6 +23,8 @@ export interface GraphKnowledgeView {
   status: ContextNodeStatus;
   sourceRef?: string;
   tags: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface GraphKnowledgeSearchResult {

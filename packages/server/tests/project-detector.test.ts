@@ -53,6 +53,53 @@ describe('detectProject', () => {
     expect(p.entryPoints).toContain('src/index.ts');
     expect(p.dependencies.find((d) => d.name === 'react')?.kind).toBe('prod');
     expect(p.dependencies.find((d) => d.name === 'typescript')?.kind).toBe('dev');
+    expect(p.detectionRule?.id).toBe('nextjs-project');
+    expect(p.snapshotHints?.overview).toContain('Next.js');
+  });
+
+  it('detects React, Vue, and Vite projects from built-in JSON rules', () => {
+    write(root, 'package.json', JSON.stringify({
+      name: 'react-app',
+      scripts: { dev: 'vite --host 0.0.0.0' },
+      dependencies: { react: '^19.0.0' },
+      devDependencies: { vite: '^6.0.0' },
+    }));
+    write(root, 'src/main.tsx', 'import React from "react";');
+
+    const reactProject = detectProject(root)!;
+    expect(reactProject.name).toBe('react-app');
+    expect(reactProject.framework).toBe('react');
+    expect(reactProject.detectionRule?.id).toBe('react-project');
+    expect(reactProject.scripts.dev).toBe('vite --host 0.0.0.0');
+    expect(reactProject.dependencies.find((d) => d.name === 'vite')?.kind).toBe('dev');
+    expect(reactProject.entryPoints).toContain('src/main.tsx');
+
+    removeTempDir(root);
+    root = createTempDir('mindstrate-detect-');
+    write(root, 'package.json', JSON.stringify({
+      name: 'vue-app',
+      dependencies: { vue: '^3.0.0' },
+      devDependencies: { vite: '^6.0.0' },
+    }));
+    write(root, 'src/App.vue', '<template />');
+
+    const vueProject = detectProject(root)!;
+    expect(vueProject.framework).toBe('vue');
+    expect(vueProject.detectionRule?.id).toBe('vue-project');
+    expect(vueProject.entryPoints).toContain('src/App.vue');
+
+    removeTempDir(root);
+    root = createTempDir('mindstrate-detect-');
+    write(root, 'package.json', JSON.stringify({
+      name: 'plain-vite-app',
+      devDependencies: { vite: '^6.0.0' },
+    }));
+    write(root, 'index.html', '<div id="app"></div>');
+
+    const viteProject = detectProject(root)!;
+    expect(viteProject.framework).toBe('vite');
+    expect(viteProject.detectionRule?.id).toBe('vite-project');
+    expect(viteProject.entryPoints).toContain('index.html');
   });
 
   it('detects pnpm via lockfile', () => {
@@ -90,6 +137,98 @@ describe('detectProject', () => {
     expect(p.runtime).toBe('go@1.22');
     expect(p.framework).toBe('gin');
     expect(p.entryPoints).toContain('main.go');
+  });
+
+  it('detects an Unreal project from built-in project detection rules', () => {
+    write(root, 'Client.uproject', JSON.stringify({ FileVersion: 3 }));
+    fs.mkdirSync(path.join(root, 'Content'));
+    fs.mkdirSync(path.join(root, 'Config'));
+    fs.mkdirSync(path.join(root, 'Source', 'Client'), { recursive: true });
+    write(root, 'Source/Client/Client.Build.cs', 'public class Client {}');
+
+    const p = detectProject(root)!;
+    expect(p.name).toBe('Client');
+    expect(p.language).toBe('cpp');
+    expect(p.framework).toBe('unreal-engine');
+    expect(p.packageManager).toBe('unreal');
+    expect(p.manifestPath).toBe('Client.uproject');
+    expect(p.entryPoints).toContain('Source/Client/Client.Build.cs');
+    expect(p.detectionRule?.id).toBe('unreal-project');
+    expect(p.topDirDescriptions?.['Intermediate']).toContain('Generated build intermediates');
+    expect(p.snapshotHints?.invariants).toContain('Do not edit Binaries, Intermediate, Saved, or DerivedDataCache unless explicitly requested.');
+  });
+
+  it('loads project-local detection rules before built-ins', () => {
+    write(root, '.mindstrate/rules/custom-engine.json', JSON.stringify({
+      id: 'custom-engine',
+      name: 'Custom Engine',
+      priority: 200,
+      match: { all: [{ dir: 'GameSource' }] },
+      detect: {
+        language: 'cpp',
+        framework: 'custom-engine',
+        manifest: 'Game.project',
+        entryPoints: ['GameSource/Main.cpp'],
+        topDirs: {
+          GameSource: 'Custom engine source code.',
+        },
+      },
+      snapshot: {
+        overview: 'This is a custom engine project.',
+        invariants: ['Do not edit generated custom-engine output.'],
+      },
+    }));
+    fs.mkdirSync(path.join(root, 'GameSource'), { recursive: true });
+    write(root, 'GameSource/Main.cpp', 'int main() { return 0; }');
+    write(root, 'Game.project', '{}');
+
+    const p = detectProject(root)!;
+    expect(p.framework).toBe('custom-engine');
+    expect(p.detectionRule?.source).toBe('project');
+    expect(p.snapshotHints?.overview).toBe('This is a custom engine project.');
+  });
+
+  it('ignores invalid project-local detection rule files', () => {
+    write(root, '.mindstrate/rules/bad.json', JSON.stringify({
+      name: 'Missing id',
+      match: { all: [{ dir: 'src' }] },
+    }));
+    fs.mkdirSync(path.join(root, 'src'));
+
+    const p = detectProject(root)!;
+    expect(p.detectionRule).toBeUndefined();
+    expect(p.topDirs).toContain('src');
+  });
+
+  it('supports declarative rule operators without leaving the project root', () => {
+    write(root, '.mindstrate/rules/web-tool.json', JSON.stringify({
+      id: 'web-tool',
+      name: 'Web Tool',
+      priority: 200,
+      match: {
+        all: [
+          { file: 'package.json', jsonPath: 'scripts.build' },
+          { packageDependency: 'vite' },
+          { file: 'Project.toml', tomlKey: 'tool.mindstrate' },
+        ],
+        none: [
+          { file: '../outside.txt' },
+        ],
+      },
+      detect: {
+        language: 'typescript',
+        framework: 'vite-tool',
+      },
+    }));
+    write(root, 'package.json', JSON.stringify({
+      scripts: { build: 'vite build' },
+      devDependencies: { vite: '^6.0.0' },
+    }));
+    write(root, 'Project.toml', '[tool]\nmindstrate = true\n');
+
+    const p = detectProject(root)!;
+    expect(p.framework).toBe('vite-tool');
+    expect(p.detectionRule?.id).toBe('web-tool');
   });
 
   it('truncates large dependency lists and reports overflow', () => {

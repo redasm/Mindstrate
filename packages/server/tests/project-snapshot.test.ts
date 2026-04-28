@@ -71,6 +71,30 @@ describe('buildProjectSnapshot', () => {
     }
   });
 
+  it('renders rule-derived snapshot guidance outside preserve blocks', () => {
+    const root = createTempDir('mindstrate-snap-');
+    try {
+      fs.writeFileSync(path.join(root, 'Client.uproject'), JSON.stringify({ FileVersion: 3 }), 'utf8');
+      fs.mkdirSync(path.join(root, 'Content'));
+      fs.mkdirSync(path.join(root, 'Config'));
+      fs.mkdirSync(path.join(root, 'Source', 'Client'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'Source', 'Client', 'Client.Build.cs'), 'public class Client {}', 'utf8');
+
+      const p = detectProject(root)!;
+      const r = buildProjectSnapshot(p);
+      const sol = r.input.solution;
+
+      expect(sol).toContain('This appears to be an Unreal Engine project.');
+      expect(sol).toContain('## Directory Notes');
+      expect(sol).toContain('- `Binaries/` — Generated build output; do not edit manually.');
+      expect(sol).toContain('## Detected Invariants');
+      expect(sol).toContain('Do not edit Binaries, Intermediate, Saved, or DerivedDataCache unless explicitly requested.');
+      expect(sol).toContain(PRESERVE_OPEN);
+    } finally {
+      removeTempDir(root);
+    }
+  });
+
   it('preserves user-edited content inside preserve markers across re-renders', () => {
     const root = createTempDir('mindstrate-snap-');
     try {

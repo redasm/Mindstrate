@@ -16,15 +16,13 @@ import {
   SyncManager,
   VaultLayout,
   assessCanonicalSourceReadiness,
+  graphDomainToKnowledgeType,
   getVaultSyncMode,
 } from '@mindstrate/obsidian-sync';
 import { readProjectCliConfig, resolveProjectDataDir, writeProjectCliConfig } from '../cli-config.js';
 
 function graphViewToKnowledgeType(view: GraphKnowledgeView): KnowledgeType {
-  const domainType = String(view.domainType);
-  return Object.values(KnowledgeType).includes(domainType as KnowledgeType)
-    ? domainType as KnowledgeType
-    : KnowledgeType.BEST_PRACTICE;
+  return graphDomainToKnowledgeType(String(view.domainType));
 }
 
 function resolveVaultPath(provided?: string): string {

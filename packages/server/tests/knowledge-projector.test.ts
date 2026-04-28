@@ -54,6 +54,24 @@ describe('GraphKnowledgeProjector', () => {
     expect(projected[0].summary).toBe('Rule paragraph.');
   });
 
+  it('projects project snapshots so first-run vault export is not empty', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.PROJECT_SNAPSHOT,
+      title: 'Project Snapshot',
+      content: 'Project overview',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+
+    const projected = projector.project({ project: 'mindstrate', limit: 10 });
+    expect(projected).toHaveLength(1);
+    expect(projected[0]).toEqual(expect.objectContaining({
+      title: 'Project Snapshot',
+      substrateType: SubstrateType.SNAPSHOT,
+    }));
+  });
+
   it('filters out low-level substrate nodes from the projected view', () => {
     graphStore.createNode({
       substrateType: SubstrateType.EPISODE,

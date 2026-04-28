@@ -56,6 +56,7 @@ import {
   CaptureSource,
   KnowledgeStatus,
 } from '@mindstrate/server';
+import { graphDomainToKnowledgeType } from './vault-layout.js';
 
 const END_MARKER = '<!-- mindstrate:end -->';
 export type VaultSyncMode = 'editable' | 'mirror';
@@ -124,19 +125,21 @@ export function serializeGraphKnowledge(
     source: CaptureSource.AUTO_DETECT,
     author: 'ecs-graph',
     confidence: round(knowledge.priorityScore, 2),
-    createdAt: new Date(0).toISOString(),
-    updatedAt: new Date(0).toISOString(),
+    createdAt: knowledge.createdAt ?? new Date(0).toISOString(),
+    updatedAt: knowledge.updatedAt ?? new Date(0).toISOString(),
     syncedAt: options.syncedAt ?? new Date().toISOString(),
-    syncMode: 'mirror',
+    syncMode: getVaultSyncMode(type),
   };
   if (knowledge.project) fm.project = knowledge.project;
 
+  const content = (knowledge.content ?? '').trim();
+  const bodyContent = content
+    ? content
+    : ['## Solution', '', knowledge.summary.trim()].join('\n');
   const body = [
     `# ${escapeTitle(knowledge.title)}`,
     '',
-    '## Solution',
-    '',
-    knowledge.summary.trim(),
+    bodyContent,
   ].join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
 
   fm.bodyHash = simpleHash(body);
@@ -179,7 +182,7 @@ export function parseMarkdown(text: string): ParsedMarkdown | null {
   const sections = splitSections(body);
 
   const problem = sections.get('problem');
-  const solution = sections.get('solution') ?? '';
+  const solution = sections.get('solution') ?? plainBodyWithoutTitle(body);
 
   const codeSnippets = parseCodeSnippets(sections.get('code'));
   const actionable = parseActionable(sections);
@@ -227,12 +230,6 @@ export function getVaultSyncMode(type: KnowledgeType): VaultSyncMode {
     default:
       return 'mirror';
   }
-}
-
-function graphDomainToKnowledgeType(domainType: string): KnowledgeType {
-  return Object.values(KnowledgeType).includes(domainType as KnowledgeType)
-    ? domainType as KnowledgeType
-    : KnowledgeType.BEST_PRACTICE;
 }
 
 function graphStatusToKnowledgeStatus(status: string): KnowledgeStatus {
@@ -324,6 +321,14 @@ function splitSections(body: string): Map<string, string> {
   }
   flush();
   return sections;
+}
+
+function plainBodyWithoutTitle(body: string): string {
+  return body
+    .split(/\r?\n/)
+    .filter((line) => !line.match(/^#\s+.+$/))
+    .join('\n')
+    .trim();
 }
 
 function parseCodeSnippets(section: string | undefined): CodeSnippet[] {

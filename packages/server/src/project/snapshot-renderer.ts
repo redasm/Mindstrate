@@ -26,7 +26,9 @@ export const renderSnapshotMarkdown = (
   appendEntryPoints(lines, project);
   appendScripts(lines, project);
   appendDirectoryLayout(lines, project);
+  appendDirectoryNotes(lines, project);
   appendWorkspaces(lines, project);
+  appendDetectedGuidance(lines, project);
   appendPreservedSection(lines, 'Architecture & Lifecycle', [
     '_Document how this project boots, what owns each resource, and how data flows._',
   ], preserved.architecture ?? '<!-- Add or refine your architecture notes here. They are kept across `mindstrate init` re-runs. -->');
@@ -59,12 +61,16 @@ export const snapshotSolutionsEqual = (left: string, right: string): boolean =>
 
 const appendOverview = (lines: string[], project: DetectedProject): void => {
   lines.push('## Overview', '');
-  if (project.description) lines.push(project.description);
+  if (project.snapshotHints?.overview) lines.push(project.snapshotHints.overview);
+  if (project.description) {
+    if (project.snapshotHints?.overview) lines.push('');
+    lines.push(project.description);
+  }
   if (project.readmeExcerpt) {
-    if (project.description) lines.push('');
+    if (project.description || project.snapshotHints?.overview) lines.push('');
     lines.push(project.readmeExcerpt);
   }
-  if (!project.description && !project.readmeExcerpt) {
+  if (!project.snapshotHints?.overview && !project.description && !project.readmeExcerpt) {
     lines.push(`Project _${project.name}_ at \`${path.basename(project.root)}\`.`);
   }
   lines.push('');
@@ -130,6 +136,30 @@ const appendDirectoryLayout = (lines: string[], project: DetectedProject): void 
   lines.push('');
 };
 
+const appendDirectoryNotes = (lines: string[], project: DetectedProject): void => {
+  if (!project.topDirDescriptions || Object.keys(project.topDirDescriptions).length === 0) return;
+  lines.push('## Directory Notes', '');
+  Object.entries(project.topDirDescriptions)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .forEach(([directory, description]) => lines.push(`- \`${directory}/\` — ${description}`));
+  lines.push('');
+};
+
+const appendDetectedGuidance = (lines: string[], project: DetectedProject): void => {
+  const invariants = project.snapshotHints?.invariants ?? [];
+  const conventions = project.snapshotHints?.conventions ?? [];
+  if (invariants.length > 0) {
+    lines.push('## Detected Invariants', '');
+    invariants.forEach((invariant) => lines.push(`- ${invariant}`));
+    lines.push('');
+  }
+  if (conventions.length > 0) {
+    lines.push('## Detected Conventions', '');
+    conventions.forEach((convention) => lines.push(`- ${convention}`));
+    lines.push('');
+  }
+};
+
 const appendWorkspaces = (lines: string[], project: DetectedProject): void => {
   if (!project.workspaces?.length) return;
   lines.push('## Workspaces', '');
@@ -158,4 +188,3 @@ const normalizeSnapshotSolution = (solution: string): string => solution
   .replace(/_Detected: [^\n]*_/g, '')
   .replace(/\s+/g, ' ')
   .trim();
-

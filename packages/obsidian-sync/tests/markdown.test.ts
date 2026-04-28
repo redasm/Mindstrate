@@ -62,6 +62,21 @@ describe('markdown serializer', () => {
     expect(computeBodyHash(md1)).toBe(computeBodyHash(md2));
   });
 
+  it('serializes full graph content when present', () => {
+    const md = serializeGraphKnowledge(makeView({
+      content: '## Overview\n\nFull project snapshot body.\n\n## Entry Points\n\n- `src/main.ts`',
+      domainType: ContextDomainType.PROJECT_SNAPSHOT,
+      createdAt: '2026-01-02T03:04:05.000Z',
+      updatedAt: '2026-01-03T03:04:05.000Z',
+    }));
+
+    expect(md).toContain('type: architecture');
+    expect(md).toContain('syncMode: editable');
+    expect(md).toContain('createdAt: 2026-01-02T03:04:05.000Z');
+    expect(md).toContain('## Overview\n\nFull project snapshot body.');
+    expect(md).toContain('## Entry Points');
+  });
+
   it('parsedToUpdate maps graph markdown fields back into UpdateKnowledgeInput', () => {
     const view = makeView();
     const parsed = parseMarkdown(serializeGraphKnowledge(view))!;

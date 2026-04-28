@@ -1,0 +1,44 @@
+{
+  "id": "nextjs-project",
+  "name": "Next.js Project",
+  "priority": 86,
+  "match": {
+    "all": [
+      { "file": "package.json" },
+      { "packageDependency": "next" }
+    ]
+  },
+  "detect": {
+    "framework": "next.js",
+    "manifest": "package.json",
+    "entryPoints": [
+      "app/page.tsx",
+      "app/layout.tsx",
+      "pages/index.tsx",
+      "src/app/page.tsx",
+      "src/app/layout.tsx",
+      "src/pages/index.tsx"
+    ],
+    "topDirs": {
+      "app": "Next.js App Router routes, layouts, and server components.",
+      "pages": "Next.js Pages Router routes and API routes.",
+      "components": "Reusable React UI components.",
+      "src": "Application source code.",
+      "public": "Static assets served from the site root.",
+      "styles": "Global CSS and styling assets."
+    }
+  },
+  "snapshot": {
+    "overview": "This appears to be a Next.js application.",
+    "invariants": [
+      "Respect server/client component boundaries; add 'use client' only where browser APIs or client state are required.",
+      "Keep route files aligned with the active router convention: App Router under app/ or Pages Router under pages/.",
+      "Do not put secrets in client components or public runtime configuration."
+    ],
+    "conventions": [
+      "Treat package.json as the package manifest.",
+      "Use route directories and layout/page files as primary navigation entry points.",
+      "Prefer framework data-loading and routing conventions over ad hoc browser navigation."
+    ]
+  }
+}

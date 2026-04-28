@@ -1,0 +1,41 @@
+{
+  "id": "vite-project",
+  "name": "Vite Project",
+  "priority": 60,
+  "match": {
+    "all": [
+      { "file": "package.json" },
+      { "packageDependency": "vite" }
+    ]
+  },
+  "detect": {
+    "framework": "vite",
+    "manifest": "package.json",
+    "entryPoints": [
+      "index.html",
+      "src/main.ts",
+      "src/main.tsx",
+      "src/main.js",
+      "src/main.jsx"
+    ],
+    "topDirs": {
+      "src": "Application source code.",
+      "public": "Static assets copied through Vite.",
+      "assets": "Bundled source assets.",
+      "tests": "Automated tests."
+    }
+  },
+  "snapshot": {
+    "overview": "This appears to be a Vite-powered frontend project.",
+    "invariants": [
+      "Keep browser-only code out of build-time configuration.",
+      "Treat index.html and src/main.* as the application bootstrap surface.",
+      "Do not put secrets in Vite client-exposed environment variables."
+    ],
+    "conventions": [
+      "Treat package.json as the package manifest.",
+      "Treat vite.config.* as build/dev-server configuration.",
+      "Use import.meta.env only for intentionally client-exposed configuration."
+    ]
+  }
+}

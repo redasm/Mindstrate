@@ -1,0 +1,49 @@
+{
+  "id": "unreal-project",
+  "name": "Unreal Engine Project",
+  "priority": 90,
+  "match": {
+    "all": [
+      { "glob": "*.uproject" },
+      { "dir": "Content" },
+      { "dir": "Config" }
+    ],
+    "any": [
+      { "dir": "Source" },
+      { "dir": "Plugins" }
+    ]
+  },
+  "detect": {
+    "language": "cpp",
+    "framework": "unreal-engine",
+    "packageManager": "unreal",
+    "manifest": "*.uproject",
+    "entryPoints": [
+      "Source/**/*.Build.cs",
+      "Source/**/*.Target.cs"
+    ],
+    "topDirs": {
+      "Source": "C++ gameplay/client/server modules.",
+      "Content": "Unreal assets and maps.",
+      "Config": "Engine/game/project configuration.",
+      "Plugins": "Project plugins and third-party extensions.",
+      "Binaries": "Generated build output; do not edit manually.",
+      "Intermediate": "Generated build intermediates; do not edit manually.",
+      "Saved": "Local/editor generated state; do not edit manually.",
+      "DerivedDataCache": "Generated asset cache; do not edit manually.",
+      "SoundBanks": "Audio middleware generated assets, often Wwise."
+    }
+  },
+  "snapshot": {
+    "overview": "This appears to be an Unreal Engine project.",
+    "invariants": [
+      "Do not edit Binaries, Intermediate, Saved, or DerivedDataCache unless explicitly requested.",
+      "Prefer source, config, or plugin edits over generated output.",
+      "Asset references may be path-sensitive; validate renames through Unreal-aware tooling."
+    ],
+    "conventions": [
+      "Treat .uproject as the project manifest.",
+      "Treat *.Build.cs and *.Target.cs as module/build entry points."
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "nuxt-project",
+  "name": "Nuxt Project",
+  "priority": 86,
+  "match": {
+    "all": [
+      { "file": "package.json" },
+      { "packageDependency": "nuxt" }
+    ]
+  },
+  "detect": {
+    "framework": "nuxt",
+    "manifest": "package.json",
+    "entryPoints": [
+      "app.vue",
+      "pages/index.vue",
+      "layouts/default.vue",
+      "nuxt.config.ts",
+      "nuxt.config.js"
+    ],
+    "topDirs": {
+      "pages": "File-based Nuxt routes.",
+      "components": "Auto-imported Vue components.",
+      "layouts": "Nuxt page layout shells.",
+      "server": "Server routes, middleware, and API handlers.",
+      "plugins": "Nuxt runtime plugins.",
+      "public": "Static assets served from the site root."
+    }
+  },
+  "snapshot": {
+    "overview": "This appears to be a Nuxt application.",
+    "invariants": [
+      "Respect Nuxt server/client execution boundaries.",
+      "Keep file-based routes and layouts aligned with Nuxt conventions.",
+      "Do not expose server-only secrets through public runtime config."
+    ],
+    "conventions": [
+      "Treat package.json as the package manifest.",
+      "Treat nuxt.config.* as framework configuration.",
+      "Use pages/, layouts/, server/, and plugins/ according to Nuxt conventions."
+    ]
+  }
+}

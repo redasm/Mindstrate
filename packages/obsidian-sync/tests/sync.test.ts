@@ -70,6 +70,28 @@ describe('SyncManager (integration)', () => {
     expect(Object.keys(idx.files)).toHaveLength(2);
   });
 
+  it('exports project snapshot graph nodes into architecture folders', async () => {
+    await memory.snapshots.upsertProjectSnapshot({
+      name: 'website',
+      root: path.join(dataDir, 'website'),
+      dependencies: [],
+      truncatedDeps: 0,
+      entryPoints: [],
+      scripts: {},
+      topDirs: ['src'],
+      detectedAt: new Date().toISOString(),
+    });
+
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    const out = await sync.exportAll();
+    expect(out.errors).toHaveLength(0);
+    expect(out.written).toBe(1);
+
+    const files = fs.readdirSync(path.join(vaultDir, 'website', 'architecture'));
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^project-snapshot-website--/);
+  });
+
   it('exports graph updates and deletes during full sync', async () => {
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
 

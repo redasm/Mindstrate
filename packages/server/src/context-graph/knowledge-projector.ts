@@ -55,6 +55,7 @@ export class GraphKnowledgeProjector {
 
 function isProjectable(substrateType: SubstrateType): boolean {
   return [
+    SubstrateType.SNAPSHOT,
     SubstrateType.SUMMARY,
     SubstrateType.PATTERN,
     SubstrateType.SKILL,
@@ -73,6 +74,7 @@ export function toGraphKnowledgeView(node: ContextNode): GraphKnowledgeView {
     id: node.id,
     title: node.title,
     summary: summarize(node.content),
+    content: node.content,
     substrateType: node.substrateType,
     domainType: node.domainType,
     project: node.project,
@@ -80,6 +82,8 @@ export function toGraphKnowledgeView(node: ContextNode): GraphKnowledgeView {
     status: node.status,
     sourceRef: node.sourceRef,
     tags: node.tags,
+    createdAt: node.createdAt,
+    updatedAt: node.updatedAt,
   };
 }
 

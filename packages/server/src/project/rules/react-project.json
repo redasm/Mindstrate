@@ -1,0 +1,43 @@
+{
+  "id": "react-project",
+  "name": "React Project",
+  "priority": 70,
+  "match": {
+    "all": [
+      { "file": "package.json" },
+      { "packageDependency": "react" }
+    ]
+  },
+  "detect": {
+    "framework": "react",
+    "manifest": "package.json",
+    "entryPoints": [
+      "src/App.tsx",
+      "src/App.jsx",
+      "src/main.tsx",
+      "src/main.jsx",
+      "src/index.tsx",
+      "src/index.jsx"
+    ],
+    "topDirs": {
+      "src": "React application source code.",
+      "components": "Reusable React UI components.",
+      "public": "Static assets served directly by the dev/build tool.",
+      "styles": "Global CSS and styling assets.",
+      "tests": "Automated tests."
+    }
+  },
+  "snapshot": {
+    "overview": "This appears to be a React application.",
+    "invariants": [
+      "Keep component state and side effects explicit; avoid hidden global mutable state.",
+      "Do not call browser-only APIs during server-side or build-time execution.",
+      "Preserve component boundaries before extracting shared UI abstractions."
+    ],
+    "conventions": [
+      "Treat package.json as the package manifest.",
+      "Treat src/main.* or src/index.* as the browser entry point when present.",
+      "Use framework/router conventions if this React app is also using Next, Remix, or another meta-framework."
+    ]
+  }
+}
