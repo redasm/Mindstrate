@@ -2,6 +2,13 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import {
+  SUBSTRATE_ORDER,
+  fetchContextEdges,
+  fetchContextGraph,
+  type ContextGraphEdgeDto,
+  type ContextGraphNodeDto,
+} from '@/lib/context-graph-api';
 
 type ConflictRecord = {
   id: string;
@@ -33,32 +40,12 @@ type ProjectionRecord = {
   projectedAt: string;
 };
 
-type ContextNode = {
-  id: string;
-  substrateType: string;
-  domainType: string;
-  title: string;
-  project?: string;
-  status: string;
-  qualityScore: number;
-};
-
-type ContextEdge = {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  relationType: string;
-  strength: number;
-};
-
-const SUBSTRATE_ORDER = ['axiom', 'heuristic', 'rule', 'skill', 'pattern', 'summary', 'snapshot', 'episode'];
-
 export default function EcsPage() {
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [runs, setRuns] = useState<MetabolismRun[]>([]);
   const [projections, setProjections] = useState<ProjectionRecord[]>([]);
-  const [nodes, setNodes] = useState<ContextNode[]>([]);
-  const [edges, setEdges] = useState<ContextEdge[]>([]);
+  const [nodes, setNodes] = useState<ContextGraphNodeDto[]>([]);
+  const [edges, setEdges] = useState<ContextGraphEdgeDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
   const [stage, setStage] = useState('');
@@ -66,12 +53,12 @@ export default function EcsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [conflictsRes, runsRes, projectionsRes, nodesRes, edgesRes] = await Promise.all([
+    const [conflictsRes, runsRes, projectionsRes, graphNodes, graphEdges] = await Promise.all([
       fetch('/api/context-conflicts?limit=20'),
       fetch('/api/metabolism-runs?limit=10'),
       fetch('/api/projection-records?limit=10'),
-      fetch('/api/context-graph?limit=120'),
-      fetch('/api/context-edges?limit=400'),
+      fetchContextGraph(120),
+      fetchContextEdges(400),
     ]);
 
     if (conflictsRes.ok) {
@@ -86,14 +73,8 @@ export default function EcsPage() {
       const data = await projectionsRes.json();
       setProjections(data.records || []);
     }
-    if (nodesRes.ok) {
-      const data = await nodesRes.json();
-      setNodes(data.nodes || []);
-    }
-    if (edgesRes.ok) {
-      const data = await edgesRes.json();
-      setEdges(data.edges || []);
-    }
+    setNodes(graphNodes);
+    setEdges(graphEdges);
     setLoading(false);
   }, []);
 

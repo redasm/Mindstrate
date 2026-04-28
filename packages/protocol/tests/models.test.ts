@@ -14,7 +14,7 @@ import {
  * value here is a BREAKING change for every existing knowledge base.
  *
  * If a test below fails because you intentionally renamed a value, add the
- * old value to a migration step BEFORE updating the test.
+ * previous value to a migration step BEFORE updating the test.
  */
 describe('protocol enum stability', () => {
   it('KnowledgeType values are stable', () => {

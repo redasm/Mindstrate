@@ -17,18 +17,18 @@ export class GraphQuery {
   ) {}
 
   neighborhood(nodeId: string): GraphNeighborhood {
-    const outgoingEdges = this.edges.outgoing(nodeId);
-    const incomingEdges = this.edges.incoming(nodeId);
+    const outgoingEdges = this.edges.listOutgoing(nodeId);
+    const incomingEdges = this.edges.listIncoming(nodeId);
 
     return {
-      center: this.nodes.get(nodeId),
+      center: this.nodes.getById(nodeId),
       outgoingEdges,
       incomingEdges,
       outgoingNodes: outgoingEdges
-        .map((edge) => this.nodes.get(edge.targetId))
+        .map((edge) => this.nodes.getById(edge.targetId))
         .filter((node): node is ContextNode => node !== null),
       incomingNodes: incomingEdges
-        .map((edge) => this.nodes.get(edge.sourceId))
+        .map((edge) => this.nodes.getById(edge.sourceId))
         .filter((node): node is ContextNode => node !== null),
     };
   }

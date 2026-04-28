@@ -7,7 +7,6 @@
 import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { createHash } from 'node:crypto';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   ContextEdge,
@@ -18,12 +17,20 @@ import {
   type ConflictRecord,
   type MetabolismRun,
   type ProjectionRecord,
-  ContextDomainType,
   ContextEventType,
-  ContextNodeStatus,
   ContextRelationType,
-  SubstrateType,
 } from '@mindstrate/protocol/models';
+import {
+  ContextEdgeRepository,
+  type CreateContextEdgeInput,
+  type ListContextEdgesOptions,
+} from './context-edge-repository.js';
+import {
+  ContextNodeRepository,
+  type CreateContextNodeInput,
+  type ListContextNodesOptions,
+  type UpdateContextNodeInput,
+} from './context-node-repository.js';
 import {
   ConflictRecordRepository,
   ProjectionRecordRepository,
@@ -34,48 +41,6 @@ import {
 } from './context-record-repositories.js';
 
 type DbHandle = Database.Database | string;
-
-export interface CreateContextNodeInput {
-  id?: string;
-  substrateType: SubstrateType;
-  domainType: ContextDomainType;
-  title: string;
-  content: string;
-  tags?: string[];
-  project?: string;
-  compressionLevel?: number;
-  confidence?: number;
-  qualityScore?: number;
-  status?: ContextNodeStatus;
-  sourceRef?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface UpdateContextNodeInput {
-  title?: string;
-  content?: string;
-  tags?: string[];
-  project?: string;
-  compressionLevel?: number;
-  confidence?: number;
-  qualityScore?: number;
-  status?: ContextNodeStatus;
-  sourceRef?: string;
-  metadata?: Record<string, unknown>;
-  lastAccessedAt?: string;
-  accessCount?: number;
-  positiveFeedback?: number;
-  negativeFeedback?: number;
-}
-
-export interface CreateContextEdgeInput {
-  id?: string;
-  sourceId: string;
-  targetId: string;
-  relationType: ContextRelationType;
-  strength?: number;
-  evidence?: Record<string, unknown>;
-}
 
 export interface CreateContextEventInput {
   id?: string;
@@ -106,9 +71,19 @@ export interface UpsertNodeEmbeddingInput {
   text?: string;
 }
 
+export type {
+  CreateContextEdgeInput,
+  CreateContextNodeInput,
+  ListContextEdgesOptions,
+  ListContextNodesOptions,
+  UpdateContextNodeInput,
+};
+
 export class ContextGraphStore {
   private readonly db: Database.Database;
   private readonly ownsDb: boolean;
+  private readonly nodes: ContextNodeRepository;
+  private readonly edges: ContextEdgeRepository;
   private readonly conflictRecords: ConflictRecordRepository;
   private readonly projectionRecords: ProjectionRecordRepository;
 
@@ -128,6 +103,8 @@ export class ContextGraphStore {
     }
 
     this.initialize();
+    this.nodes = new ContextNodeRepository(this.db);
+    this.edges = new ContextEdgeRepository(this.db);
     this.conflictRecords = new ConflictRecordRepository(this.db);
     this.projectionRecords = new ProjectionRecordRepository(this.db);
   }
@@ -245,251 +222,47 @@ export class ContextGraphStore {
   }
 
   createNode(input: CreateContextNodeInput): ContextNode {
-    const now = new Date().toISOString();
-    const id = input.id ?? uuidv4();
-
-    this.db.prepare(`
-      INSERT INTO context_nodes (
-        id, substrate_type, domain_type, title, content, tags, project,
-        compression_level, confidence, quality_score, status, source_ref,
-        metadata, created_at, updated_at, last_accessed_at, access_count,
-        positive_feedback, negative_feedback
-      ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
-        ?, ?, ?, NULL, 0,
-        0, 0
-      )
-    `).run(
-      id,
-      input.substrateType,
-      input.domainType,
-      input.title,
-      input.content,
-      JSON.stringify(input.tags ?? []),
-      input.project ?? null,
-      input.compressionLevel ?? 1,
-      input.confidence ?? 0.5,
-      input.qualityScore ?? 50,
-      input.status ?? ContextNodeStatus.CANDIDATE,
-      input.sourceRef ?? null,
-      JSON.stringify({
-        ...(input.metadata ?? {}),
-        graphVersion: typeof input.metadata?.['graphVersion'] === 'number' ? input.metadata['graphVersion'] : 1,
-      }),
-      now,
-      now,
-    );
-
-    return this.getNodeById(id)!;
+    return this.nodes.create(input);
   }
 
   getNodeById(id: string): ContextNode | null {
-    const row = this.db.prepare('SELECT * FROM context_nodes WHERE id = ?').get(id) as NodeRow | undefined;
-    return row ? this.rowToNode(row) : null;
+    return this.nodes.getById(id);
   }
 
-  listNodes(options: {
-    project?: string;
-    substrateType?: SubstrateType;
-    domainType?: ContextDomainType;
-    status?: ContextNodeStatus;
-    sourceRef?: string;
-    limit?: number;
-  } = {}): ContextNode[] {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-
-    if (options.project) {
-      conditions.push('project = ?');
-      params.push(options.project);
-    }
-    if (options.substrateType) {
-      conditions.push('substrate_type = ?');
-      params.push(options.substrateType);
-    }
-    if (options.domainType) {
-      conditions.push('domain_type = ?');
-      params.push(options.domainType);
-    }
-    if (options.status) {
-      conditions.push('status = ?');
-      params.push(options.status);
-    }
-    if (options.sourceRef) {
-      conditions.push('source_ref = ?');
-      params.push(options.sourceRef);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM context_nodes ${where} ORDER BY updated_at DESC LIMIT ?`;
-    params.push(options.limit ?? 100);
-
-    const rows = this.db.prepare(sql).all(...params) as NodeRow[];
-    return rows.map((row) => this.rowToNode(row));
+  listNodes(options: ListContextNodesOptions = {}): ContextNode[] {
+    return this.nodes.list(options);
   }
 
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
-    const existing = this.getNodeById(id);
-    if (!existing) return null;
-
-    const sets: string[] = ['updated_at = ?'];
-    const params: unknown[] = [new Date().toISOString()];
-
-    if (input.title !== undefined) {
-      sets.push('title = ?');
-      params.push(input.title);
-    }
-    if (input.content !== undefined) {
-      sets.push('content = ?');
-      params.push(input.content);
-    }
-    if (input.tags !== undefined) {
-      sets.push('tags = ?');
-      params.push(JSON.stringify(input.tags));
-    }
-    if (input.project !== undefined) {
-      sets.push('project = ?');
-      params.push(input.project);
-    }
-    if (input.compressionLevel !== undefined) {
-      sets.push('compression_level = ?');
-      params.push(input.compressionLevel);
-    }
-    if (input.confidence !== undefined) {
-      sets.push('confidence = ?');
-      params.push(input.confidence);
-    }
-    if (input.qualityScore !== undefined) {
-      sets.push('quality_score = ?');
-      params.push(input.qualityScore);
-    }
-    if (input.status !== undefined) {
-      sets.push('status = ?');
-      params.push(input.status);
-    }
-    if (input.sourceRef !== undefined) {
-      sets.push('source_ref = ?');
-      params.push(input.sourceRef);
-    }
-    sets.push('metadata = ?');
-    params.push(JSON.stringify(nextVersionMetadata(existing, input.metadata)));
-    if (input.lastAccessedAt !== undefined) {
-      sets.push('last_accessed_at = ?');
-      params.push(input.lastAccessedAt);
-    }
-    if (input.accessCount !== undefined) {
-      sets.push('access_count = ?');
-      params.push(input.accessCount);
-    }
-    if (input.positiveFeedback !== undefined) {
-      sets.push('positive_feedback = ?');
-      params.push(input.positiveFeedback);
-    }
-    if (input.negativeFeedback !== undefined) {
-      sets.push('negative_feedback = ?');
-      params.push(input.negativeFeedback);
-    }
-
-    params.push(id);
-    this.db.prepare(`UPDATE context_nodes SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-    return this.getNodeById(id);
+    return this.nodes.update(id, input);
   }
 
   deleteNode(id: string): boolean {
-    const result = this.db.prepare('DELETE FROM context_nodes WHERE id = ?').run(id);
-    return result.changes > 0;
+    return this.nodes.delete(id);
   }
 
   recordNodeAccess(id: string, accessedAt = new Date().toISOString()): void {
-    this.db.prepare(`
-      UPDATE context_nodes
-      SET access_count = access_count + 1,
-          last_accessed_at = ?,
-          updated_at = ?
-      WHERE id = ?
-    `).run(accessedAt, accessedAt, id);
+    this.nodes.recordAccess(id, accessedAt);
   }
 
   createEdge(input: CreateContextEdgeInput): ContextEdge {
-    const now = new Date().toISOString();
-    const id = input.id ?? uuidv4();
-
-    this.db.prepare(`
-      INSERT INTO context_edges (
-        id, source_id, target_id, relation_type, strength, evidence, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      input.sourceId,
-      input.targetId,
-      input.relationType,
-      input.strength ?? 1,
-      input.evidence ? JSON.stringify(input.evidence) : null,
-      now,
-      now,
-    );
-
-    return this.getEdgeById(id)!;
+    return this.edges.create(input);
   }
 
   getEdgeById(id: string): ContextEdge | null {
-    const row = this.db.prepare('SELECT * FROM context_edges WHERE id = ?').get(id) as EdgeRow | undefined;
-    return row ? this.rowToEdge(row) : null;
+    return this.edges.getById(id);
   }
 
   listOutgoingEdges(sourceId: string, relationType?: ContextRelationType): ContextEdge[] {
-    const rows = relationType
-      ? this.db.prepare(
-        'SELECT * FROM context_edges WHERE source_id = ? AND relation_type = ? ORDER BY updated_at DESC',
-      ).all(sourceId, relationType) as EdgeRow[]
-      : this.db.prepare(
-        'SELECT * FROM context_edges WHERE source_id = ? ORDER BY updated_at DESC',
-      ).all(sourceId) as EdgeRow[];
-
-    return rows.map((row) => this.rowToEdge(row));
+    return this.edges.listOutgoing(sourceId, relationType);
   }
 
   listIncomingEdges(targetId: string, relationType?: ContextRelationType): ContextEdge[] {
-    const rows = relationType
-      ? this.db.prepare(
-        'SELECT * FROM context_edges WHERE target_id = ? AND relation_type = ? ORDER BY updated_at DESC',
-      ).all(targetId, relationType) as EdgeRow[]
-      : this.db.prepare(
-        'SELECT * FROM context_edges WHERE target_id = ? ORDER BY updated_at DESC',
-      ).all(targetId) as EdgeRow[];
-
-    return rows.map((row) => this.rowToEdge(row));
+    return this.edges.listIncoming(targetId, relationType);
   }
 
-  listEdges(options: {
-    sourceId?: string;
-    targetId?: string;
-    relationType?: ContextRelationType;
-    limit?: number;
-  } = {}): ContextEdge[] {
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-
-    if (options.sourceId) {
-      conditions.push('source_id = ?');
-      params.push(options.sourceId);
-    }
-    if (options.targetId) {
-      conditions.push('target_id = ?');
-      params.push(options.targetId);
-    }
-    if (options.relationType) {
-      conditions.push('relation_type = ?');
-      params.push(options.relationType);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const sql = `SELECT * FROM context_edges ${where} ORDER BY updated_at DESC LIMIT ?`;
-    params.push(options.limit ?? 500);
-
-    const rows = this.db.prepare(sql).all(...params) as EdgeRow[];
-    return rows.map((row) => this.rowToEdge(row));
+  listEdges(options: ListContextEdgesOptions = {}): ContextEdge[] {
+    return this.edges.list(options);
   }
 
   createEvent(input: CreateContextEventInput): ContextEvent {
@@ -697,43 +470,6 @@ export class ContextGraphStore {
     }
   }
 
-  private rowToNode(row: NodeRow): ContextNode {
-    return {
-      id: row.id,
-      substrateType: row.substrate_type,
-      domainType: row.domain_type,
-      title: row.title,
-      content: row.content,
-      tags: JSON.parse(row.tags),
-      project: row.project ?? undefined,
-      compressionLevel: row.compression_level,
-      confidence: row.confidence,
-      qualityScore: row.quality_score,
-      status: row.status,
-      sourceRef: row.source_ref ?? undefined,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      lastAccessedAt: row.last_accessed_at ?? undefined,
-      accessCount: row.access_count,
-      positiveFeedback: row.positive_feedback,
-      negativeFeedback: row.negative_feedback,
-    };
-  }
-
-  private rowToEdge(row: EdgeRow): ContextEdge {
-    return {
-      id: row.id,
-      sourceId: row.source_id,
-      targetId: row.target_id,
-      relationType: row.relation_type,
-      strength: row.strength,
-      evidence: row.evidence ? JSON.parse(row.evidence) : undefined,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  }
-
   private rowToEvent(row: EventRow): ContextEvent {
     return {
       id: row.id,
@@ -772,73 +508,6 @@ export class ContextGraphStore {
       notes: JSON.parse(row.notes),
     };
   }
-}
-
-function nextVersionMetadata(
-  existing: ContextNode,
-  updates?: Record<string, unknown>,
-): Record<string, unknown> {
-  const current = existing.metadata ?? {};
-  const currentVersion = typeof current['graphVersion'] === 'number' ? current['graphVersion'] : 1;
-  return {
-    ...current,
-    ...(updates ?? {}),
-    graphVersion: currentVersion + 1,
-    previousGraphHash: hashGraphNode(existing),
-  };
-}
-
-function hashGraphNode(node: ContextNode): string {
-  return createHash('sha256')
-    .update(JSON.stringify({
-      id: node.id,
-      substrateType: node.substrateType,
-      domainType: node.domainType,
-      title: node.title,
-      content: node.content,
-      tags: node.tags,
-      project: node.project,
-      compressionLevel: node.compressionLevel,
-      confidence: node.confidence,
-      qualityScore: node.qualityScore,
-      status: node.status,
-      sourceRef: node.sourceRef,
-      metadata: node.metadata,
-    }))
-    .digest('hex');
-}
-
-interface NodeRow {
-  id: string;
-  substrate_type: SubstrateType;
-  domain_type: ContextDomainType;
-  title: string;
-  content: string;
-  tags: string;
-  project: string | null;
-  compression_level: number;
-  confidence: number;
-  quality_score: number;
-  status: ContextNodeStatus;
-  source_ref: string | null;
-  metadata: string | null;
-  created_at: string;
-  updated_at: string;
-  last_accessed_at: string | null;
-  access_count: number;
-  positive_feedback: number;
-  negative_feedback: number;
-}
-
-interface EdgeRow {
-  id: string;
-  source_id: string;
-  target_id: string;
-  relation_type: ContextRelationType;
-  strength: number;
-  evidence: string | null;
-  created_at: string;
-  updated_at: string;
 }
 
 interface EventRow {

@@ -68,20 +68,20 @@ describe('Embedder', () => {
     });
 
     it('should produce similar vectors for similar text', async () => {
-      const v1 = await embedder.embed('fix typescript null pointer error');
-      const v2 = await embedder.embed('fix typescript null reference error');
-      const v3 = await embedder.embed('cooking recipe for chocolate cake');
+      const nullPointerEmbedding = await embedder.embed('fix typescript null pointer error');
+      const nullReferenceEmbedding = await embedder.embed('fix typescript null reference error');
+      const recipeEmbedding = await embedder.embed('cooking recipe for chocolate cake');
 
-      const sim12 = cosine(v1, v2);
-      const sim13 = cosine(v1, v3);
+      const relatedSimilarity = cosine(nullPointerEmbedding, nullReferenceEmbedding);
+      const unrelatedSimilarity = cosine(nullPointerEmbedding, recipeEmbedding);
 
-      expect(sim12).toBeGreaterThan(sim13);
+      expect(relatedSimilarity).toBeGreaterThan(unrelatedSimilarity);
     });
 
     it('should produce deterministic results', async () => {
-      const v1 = await embedder.embed('test input');
-      const v2 = await embedder.embed('test input');
-      expect(v1).toEqual(v2);
+      const firstEmbedding = await embedder.embed('test input');
+      const repeatedEmbedding = await embedder.embed('test input');
+      expect(firstEmbedding).toEqual(repeatedEmbedding);
     });
   });
 

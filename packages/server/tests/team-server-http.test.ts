@@ -121,7 +121,7 @@ describe('team-server HTTP integration', () => {
       solution: 'Follow the rotation workflow.',
       actionable: {
         preconditions: ['Production access approved'],
-        steps: ['Disable old secret', 'Create new secret', 'Roll restart services'],
+        steps: ['Disable current secret', 'Create new secret', 'Roll restart services'],
         verification: 'Confirm all services authenticate with the new secret.',
         antiPatterns: ['Do not rotate secrets during an outage'],
       },
@@ -132,7 +132,7 @@ describe('team-server HTTP integration', () => {
       .find((node) => node.id === result.view!.id);
     expect(stored?.metadata?.['actionable']).toMatchObject({
       steps: [
-        'Disable old secret',
+        'Disable current secret',
         'Create new secret',
         'Roll restart services',
       ],

@@ -4,28 +4,13 @@ import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { truncateText } from '@mindstrate/protocol/text';
-
-type ContextNode = {
-  id: string;
-  substrateType: string;
-  domainType: string;
-  title: string;
-  content: string;
-  tags: string[];
-  project?: string;
-  status: string;
-  qualityScore: number;
-};
-
-type ContextEdge = {
-  id: string;
-  sourceId: string;
-  targetId: string;
-  relationType: string;
-  strength: number;
-};
-
-const SUBSTRATE_ORDER = ['axiom', 'heuristic', 'rule', 'skill', 'pattern', 'summary', 'snapshot', 'episode'];
+import {
+  SUBSTRATE_ORDER,
+  fetchContextEdges,
+  fetchContextGraph,
+  type ContextGraphEdgeDto,
+  type ContextGraphNodeDto,
+} from '@/lib/context-graph-api';
 
 export default function LineagePage() {
   return (
@@ -37,8 +22,8 @@ export default function LineagePage() {
 
 function LineagePageContent() {
   const searchParams = useSearchParams();
-  const [nodes, setNodes] = useState<ContextNode[]>([]);
-  const [edges, setEdges] = useState<ContextEdge[]>([]);
+  const [nodes, setNodes] = useState<ContextGraphNodeDto[]>([]);
+  const [edges, setEdges] = useState<ContextGraphEdgeDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [substrateFilter, setSubstrateFilter] = useState('all');
@@ -46,19 +31,12 @@ function LineagePageContent() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [nodesRes, edgesRes] = await Promise.all([
-      fetch('/api/context-graph?limit=80'),
-      fetch('/api/context-edges?limit=200'),
+    const [graphNodes, graphEdges] = await Promise.all([
+      fetchContextGraph(80),
+      fetchContextEdges(200),
     ]);
-
-    if (nodesRes.ok) {
-      const data = await nodesRes.json();
-      setNodes(data.nodes || []);
-    }
-    if (edgesRes.ok) {
-      const data = await edgesRes.json();
-      setEdges(data.edges || []);
-    }
+    setNodes(graphNodes);
+    setEdges(graphEdges);
     setLoading(false);
   }, []);
 
@@ -90,7 +68,7 @@ function LineagePageContent() {
   }, [nodes, query, substrateFilter]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, ContextNode[]>();
+    const map = new Map<string, ContextGraphNodeDto[]>();
     for (const substrate of SUBSTRATE_ORDER) {
       map.set(substrate, []);
     }
