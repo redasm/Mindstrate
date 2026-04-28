@@ -5,22 +5,14 @@
  * evaluation stores.
  */
 
-import Database from 'better-sqlite3';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import type Database from 'better-sqlite3';
+import { openSqliteDatabase } from './sqlite-database.js';
 
 export class DatabaseStore {
   private db: Database.Database;
 
   constructor(dbPath: string) {
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
+    this.db = openSqliteDatabase(dbPath);
   }
 
   getDb(): Database.Database {

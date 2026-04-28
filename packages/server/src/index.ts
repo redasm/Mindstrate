@@ -40,6 +40,7 @@ export * from '@mindstrate/protocol';
 
 // Storage
 export type { IVectorStore, VectorDocument, VectorSearchResult } from './storage/vector-store-interface.js';
+export { openSqliteDatabase } from './storage/sqlite-database.js';
 export { VectorStore } from './storage/vector-store.js';
 export { SessionStore } from './storage/session-store.js';
 export {
