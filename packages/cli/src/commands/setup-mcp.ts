@@ -69,10 +69,10 @@ export function writeMcpConfig(options: {
     existing.mcp = {
       ...(existing.mcp ?? {}),
       'mindstrate': {
+        enabled: true,
         type: 'local',
-        command: nodePath,
-        args: [serverPath],
-        env: baseEnv,
+        command: [nodePath, serverPath],
+        environment: baseEnv,
       },
     };
     fs.writeFileSync(opencodePath, JSON.stringify(existing, null, 2));
@@ -154,8 +154,12 @@ function readJsonOrEmpty(p: string): any {
 function findServerPath(): string | null {
   const candidates = [
     path.resolve(__dirname, '../../mcp-server/dist/server.js'),
+    path.resolve(__dirname, '../../../mcp-server/dist/server.js'),
+    path.resolve(__dirname, '../../../mcp-server/bundle/mindstrate-mcp.js'),
     path.resolve(process.cwd(), 'packages/mcp-server/dist/server.js'),
+    path.resolve(process.cwd(), 'packages/mcp-server/bundle/mindstrate-mcp.js'),
     path.resolve(process.cwd(), 'node_modules/@mindstrate/mcp-server/dist/server.js'),
+    path.resolve(process.cwd(), 'node_modules/@mindstrate/mcp-server/bundle/mindstrate-mcp.js'),
   ];
 
   for (const c of candidates) {
