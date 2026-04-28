@@ -121,20 +121,48 @@ Mindstrate 有两种使用方式，根据场景选一种：
 
 ### 个人使用
 
+先把 Mindstrate 仓库构建好：
+
 ```bash
-# 安装
-git clone https://github.com/redasm/Mindstrate.git && cd Mindstrate
+git clone https://github.com/redasm/Mindstrate.git
+cd Mindstrate
 npm install
-
-# 构建
 npx turbo build
+```
 
-# 在你的项目里初始化（自动检测 + 生成项目快照知识）
+如果你在开发机上使用源码版，可以把 CLI 链接成全局命令：
+
+```bash
+npm link
+```
+
+然后进入你真正要使用 Mindstrate 的项目，启动交互式向导：
+
+```bash
 cd /path/to/your/project
-mindstrate init
+mindstrate setup
+```
 
-# 一站式：检测项目 + 生成快照 + 配 MCP + 配 Vault
-mindstrate init --tool opencode --with-vault ~/Documents/MyVault
+向导会一步一步让你选择：
+
+```text
+1. Local personal use          本地个人使用，数据在当前项目 .mindstrate/
+2. Team member client          连接已有 Team Server
+3. Team server deployment      准备 Docker 团队服务器部署配置
+```
+
+个人使用时选择 `Local personal use`，再选择 OpenCode / Cursor / Claude Desktop，按需连接 Obsidian Vault 和 LLM 服务商。向导会自动生成项目快照、写入 MCP 配置，并把项目级配置保存到 `.mindstrate/config.json`。
+
+如果 `mindstrate` 还没有加入 PATH，也可以直接运行本地入口：
+
+```bash
+node /path/to/Mindstrate/packages/cli/dist/index.js setup
+```
+
+Windows 示例：
+
+```powershell
+node C:\AppProject\Mindstrate\packages\cli\dist\index.js setup
 ```
 
 > `mindstrate init` 是**幂等**的：再次运行只会更新已变化的部分。它会在项目根创建 `.mindstrate/` 数据目录，并生成一条「项目快照知识」，让 AI 助手在做局部修改时能看到全局心智模型（避免给系统不变量已经保证非空的字段乱加 null check 之类的局部最优错误）。
@@ -165,6 +193,18 @@ mindstrate init --tool opencode --with-vault ~/Documents/MyVault
 ```
 
 #### 第 1 步：管理员在服务器上部署 Team Server + Web UI
+
+推荐使用向导准备部署配置：
+
+```bash
+cd Mindstrate
+mindstrate setup
+# 选择：Team server deployment
+```
+
+向导会引导填写 `TEAM_API_KEY`、端口和可选 LLM 配置，并写入 `deploy/.env.deploy`。
+
+也可以手动配置：
 
 ```bash
 # 在服务器上
@@ -197,6 +237,17 @@ rsync -avz install/dist/ user@nginx:/var/www/share/mindstrate/ # 推到内网 Ng
 产物是一个 1.2 MB 的单文件 `mindstrate-mcp.js` + manifest + install 脚本。
 
 #### 第 3 步：团队成员一行命令安装
+
+源码/开发模式下，团队成员可以在自己的项目里运行：
+
+```bash
+mindstrate setup
+# 选择：Team member client
+```
+
+然后输入 Team Server URL 和 API Key。向导会把 MCP 配置写到当前项目对应的 AI 工具配置中。
+
+发布安装包后，也可以用一行安装脚本：
 
 Linux / macOS：
 ```bash
@@ -462,6 +513,7 @@ AI 助手可调用的工具：
 
 ```
 mindstrate init                    初始化（幂等；生成项目快照 + 元数据）
+mindstrate setup                   交互式安装向导（本地个人 / 团队成员 / 团队服务器）
 mindstrate add [options]           添加知识
 mindstrate search <query>          语义搜索
 mindstrate list [options]          列出知识
@@ -653,7 +705,9 @@ Mindstrate/
 
 ### LLM 服务商配置示例
 
-Mindstrate 默认走 OpenAI 官方 API，但**任何兼容 OpenAI HTTP 接口的厂商都能直接接入**——只要设置 `OPENAI_BASE_URL`。
+Mindstrate 默认可以不配置 LLM；未设置 `OPENAI_API_KEY` 时会使用本地 hash embedding + 规则提取，功能可用但语义检索和自动提取质量较弱。推荐在 `mindstrate setup` 向导里选择配置 LLM，它会把环境变量写入当前 AI 工具的 MCP 配置。
+
+Mindstrate 支持任何兼容 OpenAI HTTP 接口的厂商，只要设置 `OPENAI_BASE_URL`。
 
 **阿里云通义千问**（推荐国内场景）：
 ```bash

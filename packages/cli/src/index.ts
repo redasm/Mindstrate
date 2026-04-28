@@ -5,6 +5,7 @@
  *
  * Usage:
  *   mindstrate init                 初始化 Mindstrate
+ *   mindstrate setup                交互式安装向导
  *   mindstrate add                  添加一条知识
  *   mindstrate search <query>       搜索相关知识
  *   mindstrate list                 列出知识
@@ -30,6 +31,7 @@
 
 import { Command } from 'commander';
 import { initCommand } from './commands/init.js';
+import { setupCommand } from './commands/setup.js';
 import { addCommand } from './commands/add.js';
 import { searchCommand } from './commands/search.js';
 import { listCommand } from './commands/list.js';
@@ -60,6 +62,7 @@ program
   .version('0.1.0');
 
 program.addCommand(initCommand);
+program.addCommand(setupCommand);
 program.addCommand(addCommand);
 program.addCommand(searchCommand);
 program.addCommand(listCommand);

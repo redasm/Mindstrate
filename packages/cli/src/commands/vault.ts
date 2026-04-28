@@ -18,6 +18,7 @@ import {
   assessCanonicalSourceReadiness,
   getVaultSyncMode,
 } from '@mindstrate/obsidian-sync';
+import { readProjectCliConfig, resolveProjectDataDir, writeProjectCliConfig } from '../cli-config.js';
 
 function graphViewToKnowledgeType(view: GraphKnowledgeView): KnowledgeType {
   const domainType = String(view.domainType);
@@ -75,10 +76,16 @@ const initCmd = new Command('init')
 const exportCmd = new Command('export')
   .description('Full export of all knowledge into the vault (one-shot)')
   .argument('[path]', 'Vault root directory (or use OBSIDIAN_VAULT_PATH)')
-  .action(async (vaultPath?: string) => {
+  .option('-d, --data-dir <path>', 'Mindstrate data directory (defaults to current project .mindstrate when present)')
+  .action(async (vaultPath: string | undefined, options: { dataDir?: string }) => {
     const root = resolveVaultPath(vaultPath);
-    const memory = new Mindstrate();
+    const dataDir = resolveProjectDataDir(process.cwd(), options.dataDir);
+    const memory = new Mindstrate(dataDir ? { dataDir } : undefined);
     await memory.init();
+    writeProjectCliConfig(process.cwd(), {
+      ...(readProjectCliConfig(process.cwd()) ?? {}),
+      vaultPath: root,
+    });
     const sync = new SyncManager(memory, { vaultRoot: root });
     const r = await sync.exportAll();
     console.log(`\nExport complete:`);
@@ -96,10 +103,16 @@ const watchCmd = new Command('watch')
   .description('Bidirectional sync: export then watch the vault for edits')
   .argument('[path]', 'Vault root directory (or use OBSIDIAN_VAULT_PATH)')
   .option('--debounce <ms>', 'Debounce window for file events', '500')
+  .option('-d, --data-dir <path>', 'Mindstrate data directory (defaults to current project .mindstrate when present)')
   .action(async (vaultPath: string | undefined, options) => {
     const root = resolveVaultPath(vaultPath);
-    const memory = new Mindstrate();
+    const dataDir = resolveProjectDataDir(process.cwd(), options.dataDir);
+    const memory = new Mindstrate(dataDir ? { dataDir } : undefined);
     await memory.init();
+    writeProjectCliConfig(process.cwd(), {
+      ...(readProjectCliConfig(process.cwd()) ?? {}),
+      vaultPath: root,
+    });
     const sync = new SyncManager(memory, {
       vaultRoot: root,
       debounceMs: Number(options.debounce) || 500,
@@ -128,7 +141,8 @@ const watchCmd = new Command('watch')
 const statusCmd = new Command('status')
   .description('Show vault sync status')
   .argument('[path]', 'Vault root directory (or use OBSIDIAN_VAULT_PATH)')
-  .action(async (vaultPath?: string) => {
+  .option('-d, --data-dir <path>', 'Mindstrate data directory (defaults to current project .mindstrate when present)')
+  .action(async (vaultPath: string | undefined, options: { dataDir?: string }) => {
     const root = resolveVaultPath(vaultPath);
     const layout = new VaultLayout({ vaultRoot: root });
     if (!fs.existsSync(root)) {
@@ -145,7 +159,8 @@ const statusCmd = new Command('status')
     } else {
       console.log('Last full sync:  never (run `mindstrate vault export` first)');
     }
-    const memory = new Mindstrate();
+    const dataDir = resolveProjectDataDir(process.cwd(), options.dataDir);
+    const memory = new Mindstrate(dataDir ? { dataDir } : undefined);
     await memory.init();
     const stats = await memory.maintenance.getStats();
     const graphKnowledge = memory.context.readGraphKnowledge({ limit: 100000 });

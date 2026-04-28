@@ -25,6 +25,7 @@ import {
 } from '@mindstrate/server';
 import { errorMessage } from '../helpers.js';
 import { writeMcpConfig } from './setup-mcp.js';
+import { writeProjectCliConfig } from '../cli-config.js';
 
 interface InitOptions {
   dataDir?: string;
@@ -121,6 +122,12 @@ export const initCommand = new Command('init')
 
       // 5) Write project meta file (always, for ownership + fingerprint cache)
       saveProjectMeta(project.root, meta);
+      writeProjectCliConfig(project.root, {
+        mode: process.env['TEAM_SERVER_URL'] ? 'team' : 'local',
+        tool: options.tool === 'all' ? undefined : options.tool,
+        vaultPath: options.withVault,
+        teamServerUrl: process.env['TEAM_SERVER_URL'],
+      });
       console.log(`  Meta:    ${metaPath(project.root)}`);
 
       // 6) Optional: Obsidian vault
