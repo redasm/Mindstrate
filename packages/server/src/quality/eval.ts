@@ -11,6 +11,7 @@
 
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
+import { initializeEvaluationSchema } from './evaluation-schema.js';
 
 export type EvaluationSearch = (
   query: string,
@@ -70,34 +71,7 @@ export class RetrievalEvaluator {
   constructor(db: Database.Database, search: EvaluationSearch) {
     this.db = db;
     this.search = search;
-    this.initialize();
-  }
-
-  private initialize(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS eval_cases (
-        id TEXT PRIMARY KEY,
-        query TEXT NOT NULL,
-        expected_ids TEXT NOT NULL,  -- JSON array
-        language TEXT,
-        framework TEXT,
-        created_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS eval_runs (
-        id TEXT PRIMARY KEY,
-        timestamp TEXT NOT NULL,
-        total_cases INTEGER NOT NULL,
-        precision REAL NOT NULL,
-        recall REAL NOT NULL,
-        f1 REAL NOT NULL,
-        mrr REAL NOT NULL,
-        details TEXT NOT NULL  -- JSON
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_eval_runs_timestamp
-        ON eval_runs(timestamp);
-    `);
+    initializeEvaluationSchema(this.db);
   }
 
   /** 添加评估用例 */

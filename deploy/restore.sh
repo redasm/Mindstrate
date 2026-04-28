@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Restore a Mindstrate data volume from a tarball produced by backup.sh.
+# Restore a Mindstrate data volume from a tarball produced by export-data-volume.sh.
 # This OVERWRITES the current volume contents. The script will refuse to
 # proceed unless the team-server and web-ui containers are stopped, to
 # guarantee SQLite consistency.
 #
 # Usage:
-#   bash deploy/restore.sh ./backups/mindstrate-20260420-101500.tgz
+#   bash deploy/restore.sh ./data-exports/mindstrate-20260420-101500.tgz
 
 set -euo pipefail
 
 if [ $# -lt 1 ]; then
-  echo "Usage: $0 <backup.tgz>" >&2
+  echo "Usage: $0 <archive.tgz>" >&2
   exit 1
 fi
 ARCHIVE=$(realpath "$1")

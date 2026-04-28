@@ -1,6 +1,5 @@
-import Database from 'better-sqlite3';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import type Database from 'better-sqlite3';
+import { openSqliteDatabase } from '../storage/sqlite-database.js';
 
 export type ContextGraphDbHandle = Database.Database | string;
 
@@ -14,15 +13,7 @@ export function openContextGraphDatabase(dbOrPath: ContextGraphDbHandle): Contex
     return { db: dbOrPath, ownsDb: false };
   }
 
-  const dir = path.dirname(dbOrPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  const db = new Database(dbOrPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  return { db, ownsDb: true };
+  return { db: openSqliteDatabase(dbOrPath), ownsDb: true };
 }
 
 export function initializeContextGraphSchema(db: Database.Database): void {

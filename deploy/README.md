@@ -18,7 +18,7 @@ deploy/
 ├── team-server.Dockerfile      # Team Server 镜像
 ├── web-ui.Dockerfile           # Web UI 镜像
 ├── preflight.sh                # 部署前自检（端口/资源/冲突）
-├── backup.sh                   # 备份数据卷
+├── export-data-volume.sh       # 导出数据卷
 ├── restore.sh                  # 从备份恢复
 └── README.md                   # 本文档
 ```
@@ -112,21 +112,21 @@ docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy
 
 ```bash
 # 备份（服务可继续运行；SQLite WAL 模式支持热备）
-bash deploy/backup.sh
-# 写到 ./backups/mindstrate-YYYYMMDD-HHMMSS.tgz
+bash deploy/export-data-volume.sh
+# 写到 ./data-exports/mindstrate-YYYYMMDD-HHMMSS.tgz
 
 # 自定义目录
-BACKUP_DIR=/srv/backups bash deploy/backup.sh
+EXPORT_DIR=/srv/mindstrate-data-exports bash deploy/export-data-volume.sh
 
 # 恢复（必须先停服务）
 docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy stop
-bash deploy/restore.sh ./backups/mindstrate-20260420-101500.tgz
+bash deploy/restore.sh ./data-exports/mindstrate-20260420-101500.tgz
 docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d
 ```
 
 定期备份建议用 cron：
 ```cron
-0 3 * * *  cd /opt/Mindstrate && BACKUP_DIR=/srv/backups bash deploy/backup.sh >> /var/log/mindstrate-backup.log 2>&1
+0 3 * * *  cd /opt/Mindstrate && EXPORT_DIR=/srv/mindstrate-data-exports bash deploy/export-data-volume.sh >> /var/log/mindstrate-data-export.log 2>&1
 ```
 
 ## 卸载（绝对不影响其他服务）
