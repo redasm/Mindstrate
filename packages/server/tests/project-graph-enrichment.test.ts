@@ -1,10 +1,14 @@
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  ContextDomainType,
+  ContextNodeStatus,
   ProjectGraphNodeKind,
   ProjectGraphProvenance,
+  SubstrateType,
 } from '@mindstrate/protocol/models';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
+import { Mindstrate } from '../src/mindstrate.js';
 import { enrichProjectGraph } from '../src/project-graph/enrichment.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
@@ -64,5 +68,51 @@ describe('project graph LLM enrichment boundary', () => {
     expect(nodes[0].metadata?.['evidence']).toEqual([
       { path: 'src/auth/session.ts', extractorId: 'llm-enrichment' },
     ]);
+  });
+
+  it('exposes provider-aware enrichment through the context API', async () => {
+    const memory = new Mindstrate({ dataDir: tempDir, openaiApiKey: 'test-key' });
+    await memory.init();
+    try {
+      memory.context.createContextNode({
+        id: 'pg:demo:file:src/App.tsx',
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: 'src/App.tsx',
+        content: 'file: src/App.tsx',
+        project: 'demo',
+        status: ContextNodeStatus.ACTIVE,
+        metadata: {
+          projectGraph: true,
+          kind: ProjectGraphNodeKind.FILE,
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'src/App.tsx', extractorId: 'project-graph-scanner' }],
+        },
+      });
+
+      const result = await memory.context.enrichProjectGraph({
+        name: 'demo',
+        root: tempDir,
+        dependencies: [],
+        entryPoints: [],
+      } as never, {
+        summarize: async () => [
+          {
+            id: 'pg:demo:concept:app-shell',
+            kind: ProjectGraphNodeKind.CONCEPT,
+            label: 'App shell',
+            project: 'demo',
+            provenance: ProjectGraphProvenance.INFERRED,
+            evidence: [{ path: 'src/App.tsx', extractorId: 'llm-enrichment' }],
+          },
+        ],
+      });
+
+      expect(result.status).toBe('enriched');
+      expect(memory.context.listContextNodes({ project: 'demo', limit: 10 })
+        .some((node) => node.id === 'pg:demo:concept:app-shell')).toBe(true);
+    } finally {
+      memory.close();
+    }
   });
 });
