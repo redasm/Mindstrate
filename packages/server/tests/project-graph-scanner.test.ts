@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { createTempDir, removeTempDir } from './test-support.js';
 import {
   diffProjectGraphCache,
+  estimateProjectGraphScanScope,
   scanProjectFiles,
   type ProjectFileInventoryEntry,
 } from '../src/project-graph/scanner.js';
@@ -71,6 +72,31 @@ describe('project graph scanner', () => {
       unchanged: [current[0]],
       deleted: [previous[2]],
     });
+  });
+
+  it('estimates scan scope before project graph indexing starts', () => {
+    write(root, 'package.json', '{"name":"demo"}');
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    write(root, 'src/server.ts', 'export const port = 3000;');
+    write(root, 'README.md', '# Demo');
+    write(root, 'node_modules/lib/index.js', 'ignored');
+
+    const scope = estimateProjectGraphScanScope(root, {
+      generatedRoots: ['dist'],
+      llmProviderConfigured: true,
+    });
+
+    expect(scope.filesToScan).toBe(4);
+    expect(scope.totalBytes).toBeGreaterThan(0);
+    expect(scope.languages).toEqual({
+      json: 1,
+      markdown: 1,
+      tsx: 1,
+      typescript: 1,
+    });
+    expect(scope.ignoredDirectories).toContain('node_modules');
+    expect(scope.ignoredDirectories).toContain('dist');
+    expect(scope.llmEnrichment).toBe('enabled');
   });
 });
 

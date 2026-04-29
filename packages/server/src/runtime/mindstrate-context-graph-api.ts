@@ -17,7 +17,12 @@ import type { GraphKnowledgeProjectionOptions } from '../context-graph/knowledge
 import type { ProjectedKnowledgeSearchOptions } from '../context-graph/projected-knowledge-search.js';
 import { computeGraphNodeMatchScore } from '../context-graph/graph-match-score.js';
 import { ingestUserFeedback } from '../events/index.js';
-import { indexProjectGraph, type ProjectGraphIndexResult } from '../project-graph/index.js';
+import {
+  estimateProjectGraphScanScope,
+  indexProjectGraph,
+  type ProjectGraphIndexResult,
+  type ProjectGraphScanScope,
+} from '../project-graph/index.js';
 import {
   writeProjectGraphArtifacts,
   writeProjectGraphObsidianProjection,
@@ -160,6 +165,14 @@ export class MindstrateContextGraphApi {
 
   indexProjectGraph(project: DetectedProject): ProjectGraphIndexResult {
     return indexProjectGraph(this.services.contextGraphStore, project);
+  }
+
+  estimateProjectGraphScanScope(project: DetectedProject): ProjectGraphScanScope {
+    return estimateProjectGraphScanScope(project.root, {
+      ignore: project.graphHints?.ignore,
+      generatedRoots: project.graphHints?.generatedRoots,
+      llmProviderConfigured: this.services.config.openaiApiKey.length > 0,
+    });
   }
 
   writeProjectGraphArtifacts(project: DetectedProject): ProjectGraphArtifactResult {

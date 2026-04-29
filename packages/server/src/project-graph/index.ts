@@ -21,7 +21,10 @@ export {
 } from './query-pack.js';
 export {
   diffProjectGraphCache,
+  estimateProjectGraphScanScope,
   scanProjectFiles,
+  type ProjectGraphScanScope,
+  type ProjectGraphScanScopeOptions,
   type ProjectFileInventoryEntry,
   type ProjectGraphCacheDiff,
   type ScanProjectFilesOptions,

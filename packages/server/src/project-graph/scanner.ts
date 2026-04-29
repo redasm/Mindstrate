@@ -26,7 +26,20 @@ export interface ProjectGraphCacheDiff {
   deleted: ProjectFileInventoryEntry[];
 }
 
-const DEFAULT_IGNORES = [
+export interface ProjectGraphScanScope {
+  filesToScan: number;
+  totalBytes: number;
+  languages: Record<string, number>;
+  ignoredDirectories: string[];
+  generatedRoots: string[];
+  llmEnrichment: 'enabled' | 'skipped';
+}
+
+export interface ProjectGraphScanScopeOptions extends ScanProjectFilesOptions {
+  llmProviderConfigured?: boolean;
+}
+
+export const DEFAULT_PROJECT_GRAPH_IGNORES = [
   '.git',
   '.gitignore',
   '.mindstrate',
@@ -40,6 +53,33 @@ const DEFAULT_IGNORES = [
   'Saved',
   'DerivedDataCache',
 ];
+
+export const estimateProjectGraphScanScope = (
+  root: string,
+  options: ProjectGraphScanScopeOptions = {},
+): ProjectGraphScanScope => {
+  const entries = scanProjectFiles(root, options);
+  const languages: Record<string, number> = {};
+  let totalBytes = 0;
+  for (const entry of entries) {
+    totalBytes += entry.size;
+    const language = entry.language ?? 'unknown';
+    languages[language] = (languages[language] ?? 0) + 1;
+  }
+
+  return {
+    filesToScan: entries.length,
+    totalBytes,
+    languages: Object.fromEntries(Object.entries(languages).sort(([left], [right]) => left.localeCompare(right))),
+    ignoredDirectories: uniqueSorted([
+      ...DEFAULT_PROJECT_GRAPH_IGNORES.filter((pattern) => !pattern.includes('.')),
+      ...(options.ignore ?? []),
+      ...(options.generatedRoots ?? []),
+    ]),
+    generatedRoots: uniqueSorted(options.generatedRoots ?? []),
+    llmEnrichment: options.llmProviderConfigured ? 'enabled' : 'skipped',
+  };
+};
 
 export const scanProjectFiles = (
   root: string,
@@ -123,7 +163,7 @@ interface IgnoreRule {
 }
 
 const loadIgnoreRules = (root: string, options: ScanProjectFilesOptions): IgnoreRule[] => [
-  ...DEFAULT_IGNORES.map((pattern) => ({ pattern, directoryOnly: false })),
+  ...DEFAULT_PROJECT_GRAPH_IGNORES.map((pattern) => ({ pattern, directoryOnly: false })),
   ...(options.ignore ?? []).map((pattern) => ({ pattern, directoryOnly: false })),
   ...(options.generatedRoots ?? []).map((pattern) => ({ pattern, directoryOnly: false })),
   ...readIgnoreFile(path.join(root, '.gitignore')),
@@ -173,3 +213,6 @@ const languageForExtension = (extension: string): string | undefined => {
 };
 
 const normalizePath = (value: string): string => value.replace(/\\/g, '/');
+
+const uniqueSorted = (values: string[]): string[] =>
+  Array.from(new Set(values.map(normalizePath))).sort();
