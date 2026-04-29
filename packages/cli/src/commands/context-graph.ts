@@ -1,60 +1,172 @@
 /**
  * CLI Command: graph
  *
- * Query raw ECS context graph nodes.
+ * Focused project graph commands. These commands expose bounded graph context
+ * for humans and MCP clients rather than dumping the entire ECS graph.
  */
 
 import { Command } from 'commander';
-import { errorMessage, truncateText as truncate } from '@mindstrate/server';
+import {
+  ContextDomainType,
+  type ContextEdge,
+  type ContextNode,
+} from '@mindstrate/server';
+import { detectProject, errorMessage, truncateText as truncate } from '@mindstrate/server';
 import { createMemory } from '../memory-factory.js';
 
 export const contextGraphCommand = new Command('graph')
-  .description('Query ECS context graph nodes')
-  .option('-q, --query <query>', 'Lexical query over node title/content/tags')
-  .option('-p, --project <project>', 'Project scope')
-  .option('-s, --substrate <type>', 'Substrate type filter')
-  .option('-d, --domain <type>', 'Domain type filter')
-  .option('--status <status>', 'Status filter')
-  .option('-l, --limit <number>', 'Maximum number of nodes', '10')
-  .option('-v, --verbose', 'Show detailed content')
+  .description('Query Mindstrate project graph');
+
+contextGraphCommand
+  .command('report')
+  .description('Regenerate PROJECT_GRAPH.md and .mindstrate/project-graph.json')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .action(async (options) => {
     const memory = createMemory();
-
     try {
       await memory.init();
-
-      const nodes = memory.context.queryContextGraph({
-        query: options.query,
-        project: options.project,
-        substrateType: options.substrate,
-        domainType: options.domain,
-        status: options.status,
-        limit: parseInt(options.limit, 10),
-      });
-
-      if (nodes.length === 0) {
-        console.log('No ECS context nodes matched the query.');
-        return;
-      }
-
-      console.log(`Found ${nodes.length} ECS context node(s):\n`);
-      for (const node of nodes) {
-        console.log(`[${node.substrateType}] ${node.title}`);
-        console.log(`  Domain: ${node.domainType} | Status: ${node.status} | Quality: ${node.qualityScore.toFixed(0)}`);
-        if (node.project) {
-          console.log(`  Project: ${node.project}`);
-        }
-        if (node.tags.length > 0) {
-          console.log(`  Tags: ${node.tags.join(', ')}`);
-        }
-        console.log(`  Content: ${options.verbose ? node.content : truncate(node.content, 120)}`);
-        console.log(`  ID: ${node.id}`);
-        console.log('');
-      }
+      const project = detectProject(options.cwd ?? process.cwd());
+      if (!project) throw new Error('Could not detect project.');
+      const result = memory.context.writeProjectGraphArtifacts(project);
+      console.log(`Report: ${result.reportPath}`);
+      console.log(`Stats:  ${result.statsPath}`);
+      console.log(`Nodes:  ${result.nodes}`);
+      console.log(`Edges:  ${result.edges}`);
     } catch (error) {
-      console.error('Context graph query failed:', errorMessage(error));
-      process.exit(1);
+      fail('Graph report failed', error);
     } finally {
       memory.close();
     }
   });
+
+contextGraphCommand
+  .command('stats')
+  .description('Print project graph health and coverage stats')
+  .option('-p, --project <project>', 'Project scope')
+  .action(async (options) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const nodes = projectGraphNodes(memory.context.listContextNodes({
+        project: options.project,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: 100000,
+      }));
+      const edges = projectGraphEdges(memory.context.listContextEdges({ limit: 100000 }));
+      console.log(`Nodes: ${nodes.length}`);
+      console.log(`Edges: ${edges.length}`);
+      printCounts('Kinds', countBy(nodes, (node) => String(node.metadata?.['kind'] ?? 'unknown')));
+      printCounts('Provenance', countBy(nodes, (node) => String(node.metadata?.['provenance'] ?? 'unknown')));
+    } catch (error) {
+      fail('Graph stats failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
+contextGraphCommand
+  .command('query <query>')
+  .description('Search focused project graph nodes')
+  .option('-p, --project <project>', 'Project scope')
+  .option('-l, --limit <number>', 'Maximum number of nodes', '10')
+  .action(async (query: string, options) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const nodes = projectGraphNodes(memory.context.queryContextGraph({
+        query,
+        project: options.project,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: parseInt(options.limit, 10),
+      }));
+      printNodes(nodes, false);
+    } catch (error) {
+      fail('Graph query failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
+contextGraphCommand
+  .command('context <id>')
+  .description('Show a bounded 360-degree view around a project graph node')
+  .option('-l, --limit <number>', 'Maximum neighbor edges', '20')
+  .action(async (id: string, options) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const node = memory.context.listContextNodes({ limit: 100000 })
+        .find((entry) => entry.id === id || entry.title === id);
+      if (!node || node.metadata?.['projectGraph'] !== true) {
+        console.log('No project graph node matched.');
+        return;
+      }
+      const limit = parseInt(options.limit, 10);
+      const outgoing = memory.context.listContextEdges({ sourceId: node.id, limit });
+      const incoming = memory.context.listContextEdges({ targetId: node.id, limit });
+      printNodes([node], true);
+      printEdges('Outgoing', outgoing);
+      printEdges('Incoming', incoming);
+    } catch (error) {
+      fail('Graph context failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
+const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
+  nodes.filter((node) => node.metadata?.['projectGraph'] === true);
+
+const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
+  edges.filter((edge) => edge.evidence?.['projectGraph'] === true);
+
+const printNodes = (nodes: ContextNode[], verbose: boolean): void => {
+  if (nodes.length === 0) {
+    console.log('No project graph nodes matched.');
+    return;
+  }
+  for (const node of nodes) {
+    console.log(`[${node.metadata?.['kind'] ?? 'node'}] ${node.title}`);
+    console.log(`  ID: ${node.id}`);
+    console.log(`  Provenance: ${node.metadata?.['provenance'] ?? 'unknown'}`);
+    console.log(`  Evidence: ${evidencePaths(node).join(', ') || '(none)'}`);
+    console.log(`  Content: ${verbose ? node.content : truncate(node.content, 120)}`);
+    console.log('');
+  }
+};
+
+const printEdges = (label: string, edges: ContextEdge[]): void => {
+  console.log(`${label}: ${edges.length}`);
+  for (const edge of projectGraphEdges(edges)) {
+    console.log(`  ${edge.relationType}: ${edge.sourceId} -> ${edge.targetId}`);
+  }
+};
+
+const evidencePaths = (node: ContextNode): string[] => {
+  const evidence = node.metadata?.['evidence'];
+  return Array.isArray(evidence)
+    ? evidence.map((entry) => typeof entry === 'object' && entry && 'path' in entry ? String(entry.path) : '')
+      .filter(Boolean)
+    : [];
+};
+
+const printCounts = (label: string, counts: Record<string, number>): void => {
+  console.log(`\n${label}:`);
+  for (const [key, count] of Object.entries(counts).sort()) {
+    console.log(`  ${key}: ${count}`);
+  }
+};
+
+const countBy = <T>(items: T[], keyFor: (item: T) => string): Record<string, number> => {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    const key = keyFor(item);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+};
+
+const fail = (prefix: string, error: unknown): never => {
+  console.error(`${prefix}:`, errorMessage(error));
+  process.exit(1);
+};
