@@ -249,6 +249,11 @@ const formatProjectGraphEnrichment = (
       ? 'skipped (no LLM provider configured)'
       : 'skipped (LLM client unavailable)';
   }
+  if (enrichment.status === 'noop') {
+    return enrichment.reason === 'unchanged_input'
+      ? 'no changes since previous enrichment'
+      : 'no inferred nodes produced';
+  }
   return `${enrichment.nodesCreated} inferred nodes created, ${enrichment.nodesUpdated} updated`;
 };
 
@@ -290,8 +295,8 @@ export async function publishProjectGraphToTeamServer(
 async function createTeamClientFromEnv(): Promise<ProjectGraphTeamClient> {
   const serverUrl = process.env['TEAM_SERVER_URL'];
   if (!serverUrl) throw new Error('TEAM_SERVER_URL is required for team project graph publish.');
-  const clientPackage = '@mindstrate/client';
-  const { TeamClient } = await import(clientPackage);
+  // Lazy-load keeps local init usable in downstream packages that omit the client bundle.
+  const { TeamClient } = await import('@mindstrate/client');
   return new TeamClient({
     serverUrl,
     apiKey: process.env['TEAM_API_KEY'],

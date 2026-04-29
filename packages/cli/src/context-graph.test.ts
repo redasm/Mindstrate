@@ -7,10 +7,15 @@ import {
   buildGraphOverlayLines,
   buildGraphChangeResultLines,
   buildGraphStatusLines,
-  extractProjectGraphUserNotes,
+} from './commands/graph-render.js';
+import {
   parseExternalChangeSetJson,
+  parseGitStatusPorcelainChangedFiles,
+} from './commands/graph-parsers.js';
+import {
+  extractProjectGraphUserNotes,
   resolveGraphSyncPlan,
-} from './commands/context-graph.js';
+} from './commands/graph-sync.js';
 
 test('buildGraphStatusLines shows local canonical graph and projection targets', () => {
   const lines = buildGraphStatusLines({
@@ -130,6 +135,68 @@ test('parseExternalChangeSetJson normalizes collector changeset payloads', () =>
       },
     ],
   });
+});
+
+test('parseExternalChangeSetJson rejects invalid external payloads', () => {
+  assert.throws(
+    () => parseExternalChangeSetJson(JSON.stringify({ source: 'svn', files: [] })),
+    /ChangeSet source is required/,
+  );
+  assert.throws(
+    () => parseExternalChangeSetJson(JSON.stringify({ source: ChangeSource.P4 })),
+    /ChangeSet files must be an array/,
+  );
+  assert.throws(
+    () => parseExternalChangeSetJson(JSON.stringify({
+      source: ChangeSource.P4,
+      files: [{ path: 42, status: 'modified' }],
+    })),
+    /Changed file path is required/,
+  );
+  assert.throws(
+    () => parseExternalChangeSetJson(JSON.stringify({
+      source: ChangeSource.P4,
+      files: [{ path: 'src/App.tsx', status: 'unknown' }],
+    })),
+    /Unsupported changed file status/,
+  );
+});
+
+test('parseExternalChangeSetJson rejects oversized external payloads', () => {
+  assert.throws(
+    () => parseExternalChangeSetJson(JSON.stringify({
+      source: ChangeSource.P4,
+      files: Array.from({ length: 5001 }, (_, index) => ({
+        path: `src/file-${index}.ts`,
+        status: 'modified',
+      })),
+    })),
+    /ChangeSet files cannot exceed 5000 entries/,
+  );
+});
+
+test('parseGitStatusPorcelainChangedFiles returns the current path for renames', () => {
+  assert.deepEqual(parseGitStatusPorcelainChangedFiles([
+    ' M src/App.tsx',
+    'R  src/old.ts -> src/new.ts',
+    '?? src/new-file.ts',
+  ].join('\n')), [
+    'src/App.tsx',
+    'src/new.ts',
+    'src/new-file.ts',
+  ]);
+});
+
+test('parseGitStatusPorcelainChangedFiles supports porcelain v2 rename records', () => {
+  assert.deepEqual(parseGitStatusPorcelainChangedFiles([
+    '1 .M N... 100644 100644 100644 abc abc src/App.tsx',
+    '2 R. N... 100644 100644 100644 abc def R100 src/new.ts\tsrc/old.ts',
+    '? src/new-file.ts',
+  ].join('\n')), [
+    'src/App.tsx',
+    'src/new.ts',
+    'src/new-file.ts',
+  ]);
 });
 
 test('buildGraphChangeResultLines renders external changeset analysis', () => {

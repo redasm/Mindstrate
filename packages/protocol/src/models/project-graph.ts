@@ -1,3 +1,17 @@
+import type { ContextEdge, ContextNode } from './context-graph.js';
+
+export const PROJECT_GRAPH_METADATA_KEYS = {
+  projectGraph: 'projectGraph',
+  projectGraphOverlay: 'projectGraphOverlay',
+  kind: 'kind',
+  provenance: 'provenance',
+  evidence: 'evidence',
+  ownedByFile: 'ownedByFile',
+} as const;
+
+export const PROJECT_GRAPH_DEFAULT_QUERY_LIMIT = 100000;
+export const MAX_PROJECT_GRAPH_CHANGESET_FILES = 5000;
+
 export enum ProjectGraphNodeKind {
   PROJECT = 'project',
   DIRECTORY = 'directory',
@@ -132,3 +146,9 @@ export interface ChangeSet {
   head?: string;
   files: ChangedFile[];
 }
+
+export const isProjectGraphNode = (node: ContextNode): boolean =>
+  node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.projectGraph] === true;
+
+export const isProjectGraphEdge = (edge: ContextEdge): boolean =>
+  edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.projectGraph] === true;

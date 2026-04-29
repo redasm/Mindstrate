@@ -1,4 +1,4 @@
-import type { ContextEdge, ContextNode } from '@mindstrate/protocol/models';
+import { isProjectGraphEdge, isProjectGraphNode, type ContextEdge, type ContextNode } from '@mindstrate/protocol/models';
 
 export interface ProjectGraphAnalysisInput {
   nodes: ContextNode[];
@@ -110,10 +110,10 @@ export const estimateProjectGraphBlastRadius = (
 };
 
 const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
-  nodes.filter((node) => node.metadata?.['projectGraph'] === true);
+  nodes.filter(isProjectGraphNode);
 
 const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
-  edges.filter((edge) => edge.evidence?.['projectGraph'] === true);
+  edges.filter(isProjectGraphEdge);
 
 const findNode = (nodes: ContextNode[], id: string): ContextNode | undefined =>
   nodes.find((node) => node.id === id || node.title === id || node.sourceRef === id);

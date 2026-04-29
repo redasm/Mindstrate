@@ -5,6 +5,7 @@ import type {
 } from '@mindstrate/protocol';
 import {
   ContextDomainType,
+  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   SubstrateType,
   type ConflictRecord,
   type ContextEdge,
@@ -20,6 +21,7 @@ import { computeGraphNodeMatchScore } from '../context-graph/graph-match-score.j
 import { ingestUserFeedback } from '../events/index.js';
 import {
   enrichProjectGraph,
+  detectProjectGraphChanges,
   detectProjectGraphChangeSet,
   estimateProjectGraphScanScope,
   indexProjectGraph,
@@ -29,6 +31,7 @@ import {
   type ProjectGraphIndexResult,
   type ProjectGraphScanScope,
   type ProjectGraphChangeDetectionResult,
+  type ProjectGraphChangeDetectionInput,
 } from '../project-graph/index.js';
 import {
   writeProjectGraphArtifacts,
@@ -59,6 +62,10 @@ export class MindstrateContextGraphApi {
 
   deleteContextNode(id: string): boolean {
     return this.services.contextGraphStore.deleteNode(id);
+  }
+
+  getContextNode(id: string): ContextNode | null {
+    return this.services.contextGraphStore.getNodeById(id);
   }
 
   upvote(id: string): void {
@@ -175,6 +182,13 @@ export class MindstrateContextGraphApi {
     return indexProjectGraph(this.services.contextGraphStore, project);
   }
 
+  detectProjectGraphChanges(
+    project: DetectedProject,
+    input: ProjectGraphChangeDetectionInput,
+  ): ProjectGraphChangeDetectionResult {
+    return detectProjectGraphChanges(this.services.contextGraphStore, project, input);
+  }
+
   ingestProjectGraphChangeSet(
     project: DetectedProject,
     changeSet: ChangeSet,
@@ -190,6 +204,11 @@ export class MindstrateContextGraphApi {
     return enrichProjectGraph(this.services.contextGraphStore, {
       project: project.name,
       llmConfigured: this.services.config.openaiApiKey.length > 0,
+      extractedNodes: this.services.contextGraphStore.listNodes({
+        project: project.name,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+      }),
       summarize,
     });
   }
@@ -241,7 +260,7 @@ export class MindstrateContextGraphApi {
       extractedNodes: this.services.contextGraphStore.listNodes({
         project: project.name,
         domainType: ContextDomainType.ARCHITECTURE,
-        limit: 100000,
+        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
       }),
     });
   }

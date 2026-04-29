@@ -1,6 +1,9 @@
 import {
   ContextDomainType,
+  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   ProjectGraphOverlaySource,
+  isProjectGraphEdge,
+  isProjectGraphNode,
   type ContextEdge,
   type ContextEventType,
   type ContextNode,
@@ -299,9 +302,9 @@ export async function handleProjectGraphPath(
   const nodes = projectGraphNodes(await api.queryContextGraph({
     project: input.project,
     domainType: ContextDomainType.ARCHITECTURE,
-    limit: 100000,
+    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   }));
-  const edges = projectGraphEdges(await api.listContextEdges({ limit: 100000 }));
+  const edges = projectGraphEdges(await api.listContextEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }));
   const path = shortestProjectGraphPath(nodes, edges, input.from, input.to, input.maxDepth ?? 6);
   if (!path) return { content: [{ type: 'text', text: 'No project graph path found.' }] };
   const text = [
@@ -324,9 +327,9 @@ export async function handleProjectGraphBlastRadius(
   const nodes = projectGraphNodes(await api.queryContextGraph({
     project: input.project,
     domainType: ContextDomainType.ARCHITECTURE,
-    limit: 100000,
+    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   }));
-  const edges = projectGraphEdges(await api.listContextEdges({ limit: 100000 }));
+  const edges = projectGraphEdges(await api.listContextEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }));
   const root = findProjectGraphNodeInList(nodes, input.id);
   if (!root) return { content: [{ type: 'text', text: 'Project graph node not found.' }], isError: true };
 
@@ -382,16 +385,16 @@ const findProjectGraphNode = async (
   const nodes = projectGraphNodes(await api.queryContextGraph({
     project,
     domainType: ContextDomainType.ARCHITECTURE,
-    limit: 100000,
+    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   }));
   return findProjectGraphNodeInList(nodes, id) ?? null;
 };
 
 const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
-  nodes.filter((node) => node.metadata?.['projectGraph'] === true);
+  nodes.filter(isProjectGraphNode);
 
 const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
-  edges.filter((edge) => edge.evidence?.['projectGraph'] === true);
+  edges.filter(isProjectGraphEdge);
 
 const findProjectGraphNodeInList = (nodes: ContextNode[], id: string): ContextNode | undefined =>
   nodes.find((node) => node.id === id || node.title === id || node.sourceRef === id);

@@ -9,7 +9,15 @@ import {
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
 import { createKnowledgeSink, defaultScannerDbPath, type KnowledgeSink } from './knowledge-sink.js';
 import { SourceStore } from './source-store.js';
-import type { CommitIngestionOptions, CommitIngestionResult, GitLocalSourceInput, ScanExecutionResult, ScanSource } from './types.js';
+import type {
+  CommitIngestionOptions,
+  CommitIngestionResult,
+  GitLocalSourceInput,
+  RepoScannerMindstrateInput,
+  RepoScannerSourceAdapter,
+  ScanExecutionResult,
+  ScanSource,
+} from './types.js';
 
 export interface RepoScannerOptions {
   scannerDbPath?: string;
@@ -20,10 +28,12 @@ export class RepoScannerService {
   readonly store: SourceStore;
   private sink: KnowledgeSink;
   private extractor: KnowledgeExtractor;
+  private readonly adapterMemory?: Mindstrate;
 
   constructor(options: RepoScannerOptions = {}) {
     const scannerDbPath = options.scannerDbPath ?? defaultScannerDbPath();
     this.store = new SourceStore(scannerDbPath);
+    this.adapterMemory = options.memory;
     const config = loadConfig(options.memory?.getConfig());
     this.sink = createKnowledgeSink(options.memory);
     this.extractor = new KnowledgeExtractor(
@@ -164,6 +174,36 @@ export class RepoScannerService {
     };
   }
 
+  async runAdapter<TItem>(
+    adapter: RepoScannerSourceAdapter<TItem>,
+    input?: { sourceId?: string; cursor?: string },
+  ): Promise<ScanExecutionResult> {
+    const sourceId = input?.sourceId ?? adapter.id;
+    const discovered = await adapter.discover({ sourceId, cursor: input?.cursor });
+    let itemsImported = 0;
+    let itemsSkipped = 0;
+    let itemsFailed = 0;
+
+    for (const item of discovered.items) {
+      try {
+        await this.routeMindstrateInput(await adapter.toMindstrateInput(item));
+        itemsImported++;
+      } catch {
+        itemsFailed++;
+      }
+    }
+
+    return {
+      sourceId,
+      mode: 'incremental',
+      itemsSeen: discovered.items.length,
+      itemsImported,
+      itemsSkipped,
+      itemsFailed,
+      cursor: discovered.cursor,
+    };
+  }
+
   async close(): Promise<void> {
     this.store.close();
     await this.sink.close();
@@ -217,6 +257,32 @@ export class RepoScannerService {
       reason: result.message ?? 'Commit processed',
       view: result.view,
     };
+  }
+
+  private async routeMindstrateInput(input: RepoScannerMindstrateInput): Promise<void> {
+    if (input.type === 'event') {
+      this.sinkMemory().events.ingestEvent(input.event);
+      return;
+    }
+    if (input.type === 'bundle') {
+      this.sinkMemory().bundles.installBundle(input.bundle);
+      return;
+    }
+    this.sinkMemory().context.ingestProjectGraphChangeSet({
+      name: input.project,
+      root: process.cwd(),
+      dependencies: [],
+      entryPoints: [],
+      truncatedDeps: 0,
+      scripts: {},
+      topDirs: [],
+      detectedAt: new Date().toISOString(),
+    }, input.changeSet);
+  }
+
+  private sinkMemory(): Mindstrate {
+    if (!this.adapterMemory) throw new Error('RepoScannerService requires a Mindstrate instance for source adapters.');
+    return this.adapterMemory;
   }
 
   private async executeGitLocalSource(source: ScanSource): Promise<ScanExecutionResult> {

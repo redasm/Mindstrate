@@ -1,5 +1,8 @@
 import {
   ChangeSource,
+  MAX_PROJECT_GRAPH_CHANGESET_FILES,
+  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  isProjectGraphNode,
   type ChangeSet,
   type ChangedFile,
   type ContextNode,
@@ -20,8 +23,7 @@ export interface ProjectGraphChangeDetectionResult {
 }
 
 export interface ProjectGraphChangeStore {
-  listContextNodes?: (options?: { project?: string; limit?: number }) => ContextNode[];
-  listNodes?: (options?: { project?: string; limit?: number }) => ContextNode[];
+  listNodes(options?: { project?: string; limit?: number }): ContextNode[];
 }
 
 export const detectProjectGraphChanges = (
@@ -41,9 +43,12 @@ export const detectProjectGraphChangeSet = (
   project: DetectedProject,
   changeSet: ChangeSet,
 ): ProjectGraphChangeDetectionResult => {
+  if (changeSet.files.length > MAX_PROJECT_GRAPH_CHANGESET_FILES) {
+    throw new Error(`ChangeSet files cannot exceed ${MAX_PROJECT_GRAPH_CHANGESET_FILES} entries.`);
+  }
   const changedFiles = changeSet.files.map(normalizeChangedFile);
-  const nodes = listChangeStoreNodes(store, { project: project.name, limit: 100000 })
-    .filter((node) => node.metadata?.['projectGraph'] === true);
+  const nodes = store.listNodes({ project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT })
+    .filter(isProjectGraphNode);
   const affectedNodeIds = nodes
     .filter((node) => changedFiles.some((file) => nodeMatchesFile(node, file.path)))
     .map((node) => node.id);
@@ -77,18 +82,9 @@ const normalizeChangedFile = (file: ChangedFile): ChangedFile => ({
 });
 
 const nodeMatchesFile = (node: ContextNode, filePath: string): boolean =>
-  node.title === filePath ||
-  node.sourceRef === filePath ||
-  node.metadata?.['ownedByFile'] === filePath;
-
-const listChangeStoreNodes = (
-  store: ProjectGraphChangeStore,
-  options: { project?: string; limit?: number },
-): ContextNode[] => {
-  if (store.listNodes) return store.listNodes(options);
-  if (store.listContextNodes) return store.listContextNodes(options);
-  return [];
-};
+  normalizePath(node.title) === filePath ||
+  normalizePath(node.sourceRef ?? '') === filePath ||
+  normalizePath(String(node.metadata?.['ownedByFile'] ?? '')) === filePath;
 
 const layerForPath = (project: DetectedProject, filePath: string): string | undefined => {
   const rel = normalizePath(filePath);

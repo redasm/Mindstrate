@@ -2,10 +2,13 @@ import {
   ContextDomainType,
   ContextNodeStatus,
   ContextRelationType,
+  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  PROJECT_GRAPH_METADATA_KEYS,
   ProjectGraphEdgeKind,
   type ProjectGraphEdgeDto,
   type ProjectGraphNodeDto,
   SubstrateType,
+  isProjectGraphNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 
@@ -60,10 +63,10 @@ export const writeProjectGraphExtraction = (
       relationType: relationForProjectGraphEdge(edge.kind),
       strength: 1,
       evidence: {
-        projectGraph: true,
-        kind: edge.kind,
-        provenance: edge.provenance,
-        evidence: edge.evidence,
+        [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true,
+        [PROJECT_GRAPH_METADATA_KEYS.kind]: edge.kind,
+        [PROJECT_GRAPH_METADATA_KEYS.provenance]: edge.provenance,
+        [PROJECT_GRAPH_METADATA_KEYS.evidence]: edge.evidence,
         ...(edge.metadata ?? {}),
       },
     });
@@ -77,9 +80,9 @@ export const archiveProjectGraphFileFacts = (
   store: ContextGraphStore,
   input: ArchiveProjectGraphFileFactsInput,
 ): number => {
-  const nodes = store.listNodes({ project: input.project, limit: 100000 })
-    .filter((node) => node.metadata?.['projectGraph'] === true)
-    .filter((node) => node.metadata?.['ownedByFile'] === input.filePath);
+  const nodes = store.listNodes({ project: input.project, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT })
+    .filter(isProjectGraphNode)
+    .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.ownedByFile] === input.filePath);
 
   for (const node of nodes) {
     store.updateNode(node.id, { status: ContextNodeStatus.ARCHIVED });
@@ -118,11 +121,11 @@ const toContextNodeUpdate = (node: ProjectGraphNodeDto) => ({
 
 const projectGraphNodeMetadata = (node: ProjectGraphNodeDto): Record<string, unknown> => ({
   ...(node.metadata ?? {}),
-  projectGraph: true,
-  kind: node.kind,
-  provenance: node.provenance,
-  evidence: node.evidence,
-  ownedByFile: node.metadata?.['ownedByFile'] ?? node.evidence[0]?.path,
+  [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true,
+  [PROJECT_GRAPH_METADATA_KEYS.kind]: node.kind,
+  [PROJECT_GRAPH_METADATA_KEYS.provenance]: node.provenance,
+  [PROJECT_GRAPH_METADATA_KEYS.evidence]: node.evidence,
+  [PROJECT_GRAPH_METADATA_KEYS.ownedByFile]: node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.ownedByFile] ?? node.evidence[0]?.path,
 });
 
 const relationForProjectGraphEdge = (kind: ProjectGraphEdgeKind): ContextRelationType => {

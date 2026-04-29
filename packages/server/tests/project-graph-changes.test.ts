@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ChangeSource } from '@mindstrate/protocol/models';
+import {
+  ChangeSource,
+  ContextDomainType,
+  ContextNodeStatus,
+  ProjectGraphNodeKind,
+  ProjectGraphProvenance,
+  SubstrateType,
+} from '@mindstrate/protocol/models';
 import { Mindstrate, detectProject } from '../src/index.js';
-import { detectProjectGraphChanges, detectProjectGraphChangeSet } from '../src/project-graph/changes.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 const write = (root: string, rel: string, content: string): void => {
@@ -40,7 +46,7 @@ describe('project graph change detection', () => {
     const project = detectProject(root)!;
     memory.context.indexProjectGraph(project);
 
-    const result = detectProjectGraphChanges(memory.context, project, {
+    const result = memory.context.detectProjectGraphChanges(project, {
       source: ChangeSource.MANUAL,
       files: ['Source/Client/Client.Build.cs', 'Intermediate/generated.txt'],
     });
@@ -91,5 +97,32 @@ describe('project graph change detection', () => {
     });
     expect(result.affectedNodeIds.length).toBeGreaterThan(0);
     expect(result.affectedLayers).toEqual(['custom-gameplay']);
+  });
+
+  it('matches normalized changed files against graph nodes written with platform separators', () => {
+    write(root, 'package.json', JSON.stringify({ scripts: { build: 'tsc' } }));
+    const project = detectProject(root)!;
+    memory.context.createContextNode({
+      id: 'pg:demo:file:windows',
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'src\\App.tsx',
+      content: 'file: src\\App.tsx',
+      project: project.name,
+      status: ContextNodeStatus.ACTIVE,
+      metadata: {
+        projectGraph: true,
+        kind: ProjectGraphNodeKind.FILE,
+        provenance: ProjectGraphProvenance.EXTRACTED,
+        ownedByFile: 'src\\App.tsx',
+      },
+    });
+
+    const result = memory.context.ingestProjectGraphChangeSet(project, {
+      source: ChangeSource.MANUAL,
+      files: [{ path: 'src/App.tsx', status: 'modified' }],
+    });
+
+    expect(result.affectedNodeIds).toContain('pg:demo:file:windows');
   });
 });

@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ContextEdge, ContextNode } from '@mindstrate/protocol/models';
+import { isProjectGraphEdge, isProjectGraphNode, type ContextEdge, type ContextNode } from '@mindstrate/protocol/models';
 import type { ProjectGraphIndexResult } from './project-graph-service.js';
 
 export type ProjectGraphEvaluationFixtureId =
@@ -330,8 +330,8 @@ export const evaluateProjectGraphFixture = (
   fixture: ProjectGraphEvaluationFixture,
   input: ProjectGraphFixtureEvaluationInput,
 ): ProjectGraphFixtureEvaluationResult => {
-  const projectGraphNodes = input.nodes.filter((node) => node.metadata?.['projectGraph'] === true);
-  const projectGraphEdges = input.edges.filter((edge) => edge.evidence?.['projectGraph'] === true);
+  const projectGraphNodes = input.nodes.filter(isProjectGraphNode);
+  const projectGraphEdges = input.edges.filter(isProjectGraphEdge);
   const nodeTitles = new Set(projectGraphNodes.map((node) => node.title));
   const failures = [
     ...minFailure('files scanned', input.indexResult.filesScanned, fixture.expected.minFilesScanned),

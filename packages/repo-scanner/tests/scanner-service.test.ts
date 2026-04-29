@@ -177,4 +177,41 @@ describe('RepoScannerService', () => {
       },
     });
   });
+
+  it('runs custom source adapters and routes changesets into Mindstrate', async () => {
+    const adapter: RepoScannerSourceAdapter<{ id: string; files: string[] }> = {
+      id: 'custom-p4',
+      kind: 'custom',
+      async discover(input) {
+        expect(input.cursor).toBeUndefined();
+        return {
+          cursor: '101',
+          items: [{ id: '101', files: ['app.ts'] }],
+        };
+      },
+      async toMindstrateInput(item) {
+        return {
+          type: 'changeset',
+          project: 'proj',
+          changeSet: {
+            source: ChangeSource.P4,
+            head: item.id,
+            files: item.files.map((file) => ({ path: file, status: 'modified' })),
+          },
+        };
+      },
+    };
+
+    const result = await service.runAdapter(adapter, { sourceId: 'custom-p4' });
+
+    expect(result).toMatchObject({
+      sourceId: 'custom-p4',
+      mode: 'incremental',
+      itemsSeen: 1,
+      itemsImported: 1,
+      itemsSkipped: 0,
+      itemsFailed: 0,
+      cursor: '101',
+    });
+  });
 });

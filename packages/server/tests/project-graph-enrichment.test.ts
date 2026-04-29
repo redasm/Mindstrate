@@ -6,6 +6,7 @@ import {
   ProjectGraphNodeKind,
   ProjectGraphProvenance,
   SubstrateType,
+  type ContextNode,
 } from '@mindstrate/protocol/models';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { Mindstrate } from '../src/mindstrate.js';
@@ -69,6 +70,49 @@ describe('project graph LLM enrichment boundary', () => {
     expect(nodes[0].metadata?.['evidence']).toEqual([
       { path: 'src/auth/session.ts', extractorId: 'llm-enrichment' },
     ]);
+  });
+
+  it('returns noop when LLM enrichment has no acceptable nodes', async () => {
+    const result = await enrichProjectGraph(store, {
+      project: 'demo',
+      llmConfigured: true,
+      summarize: async () => [],
+    });
+
+    expect(result).toEqual({ status: 'noop', nodesCreated: 0, nodesUpdated: 0 });
+  });
+
+  it('skips repeated LLM enrichment for unchanged extracted facts', async () => {
+    let calls = 0;
+    const result1 = await enrichProjectGraph(store, {
+      project: 'demo',
+      llmConfigured: true,
+      extractedNodes: [projectGraphNode('src/App.tsx')],
+      summarize: async () => {
+        calls++;
+        return [{
+          id: 'pg:demo:concept:app-shell',
+          kind: ProjectGraphNodeKind.CONCEPT,
+          label: 'App shell',
+          project: 'demo',
+          provenance: ProjectGraphProvenance.INFERRED,
+          evidence: [{ path: 'src/App.tsx', extractorId: 'llm-enrichment' }],
+        }];
+      },
+    });
+    const result2 = await enrichProjectGraph(store, {
+      project: 'demo',
+      llmConfigured: true,
+      extractedNodes: [projectGraphNode('src/App.tsx')],
+      summarize: async () => {
+        calls++;
+        return [];
+      },
+    });
+
+    expect(result1.status).toBe('enriched');
+    expect(result2).toEqual({ status: 'noop', reason: 'unchanged_input', nodesCreated: 0, nodesUpdated: 0 });
+    expect(calls).toBe(1);
   });
 
   it('exposes provider-aware enrichment through the context API', async () => {
@@ -194,17 +238,73 @@ describe('project graph LLM enrichment boundary', () => {
       },
     });
   });
+
+  it('sends salient extracted facts to the LLM before applying the cap', async () => {
+    let payload = '';
+    const client = fakeChatClient(JSON.stringify({ summaries: [] }), (content) => {
+      payload = content;
+    });
+
+    await summarizeProjectGraphWithLlm({
+      client,
+      model: 'test-model',
+      project: 'demo',
+      extractedNodes: [
+        ...Array.from({ length: 80 }, (_, index) => projectGraphNode(`src/low-${index}.ts`, { accessCount: 0 })),
+        projectGraphNode('src/App.tsx', { accessCount: 10, positiveFeedback: 5 }),
+      ],
+    });
+
+    const parsed = JSON.parse(payload) as { extractedFacts: Array<{ title: string }> };
+    const titles = parsed.extractedFacts.map((fact) => fact.title);
+    expect(titles).toHaveLength(80);
+    expect(titles).toContain('src/App.tsx');
+    expect(titles.filter((title) => title.startsWith('src/low-'))).toHaveLength(79);
+  });
 });
 
-const fakeChatClient = (content: string): OpenAIClient => ({
+const projectGraphNode = (
+  filePath: string,
+  overrides: Partial<Pick<ContextNode, 'accessCount' | 'positiveFeedback'>> = {},
+): ContextNode => ({
+  id: `pg:demo:file:${filePath}`,
+  substrateType: SubstrateType.SNAPSHOT,
+  domainType: ContextDomainType.ARCHITECTURE,
+  title: filePath,
+  content: `file: ${filePath}`,
+  tags: ['project-graph', 'file'],
+  project: 'demo',
+  compressionLevel: 1,
+  confidence: 1,
+  qualityScore: 80,
+  positiveFeedback: overrides.positiveFeedback ?? 0,
+  negativeFeedback: 0,
+  accessCount: overrides.accessCount ?? 0,
+  status: ContextNodeStatus.ACTIVE,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  sourceRef: filePath,
+  metadata: {
+    projectGraph: true,
+    kind: ProjectGraphNodeKind.FILE,
+    provenance: ProjectGraphProvenance.EXTRACTED,
+    evidence: [{ path: filePath, extractorId: 'project-graph-scanner' }],
+  },
+});
+
+const fakeChatClient = (content: string, onUserContent?: (content: string) => void): OpenAIClient => ({
   embeddings: {
     create: async () => ({ data: [] }),
   },
   chat: {
     completions: {
-      create: async () => ({
-        choices: [{ message: { content } }],
-      }),
+      create: async (input) => {
+        const user = input.messages.find((message) => message.role === 'user');
+        if (typeof user?.content === 'string') onUserContent?.(user.content);
+        return {
+          choices: [{ message: { content } }],
+        };
+      },
     },
   },
 });

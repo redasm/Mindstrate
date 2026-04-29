@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { PROJECT_GRAPH_METADATA_KEYS } from '@mindstrate/protocol';
 import { fetchContextGraph, type ContextGraphNodeDto } from '@/lib/context-graph-api';
 
 type ProjectGraphOverlay = {
@@ -29,7 +30,7 @@ export default function ProjectGraphPage() {
   const [status, setStatus] = useState('');
 
   const projectGraphNodes = useMemo(
-    () => nodes.filter((node) => node.metadata?.projectGraph === true),
+    () => nodes.filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.projectGraph] === true),
     [nodes],
   );
   const selectedNode = projectGraphNodes.find((node) => node.id === selectedId) ?? projectGraphNodes[0];
@@ -39,7 +40,7 @@ export default function ProjectGraphPage() {
     setLoading(true);
     try {
       const graphNodes = await fetchContextGraph(500);
-      const filtered = graphNodes.filter((node) => node.metadata?.projectGraph === true);
+      const filtered = graphNodes.filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.projectGraph] === true);
       setNodes(graphNodes);
       const firstNode = filtered[0];
       if (firstNode && !selectedId) setSelectedId(firstNode.id);

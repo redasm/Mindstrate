@@ -1,6 +1,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ContextDomainType, ProjectionTarget, type ContextNode } from '@mindstrate/protocol/models';
+import {
+  ContextDomainType,
+  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  PROJECT_GRAPH_METADATA_KEYS,
+  ProjectionTarget,
+  isProjectGraphEdge,
+  isProjectGraphNode,
+  type ContextNode,
+} from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
 
@@ -107,12 +115,12 @@ export const collectProjectGraphStats = (
   const nodes = store.listNodes({
     project: project.name,
     domainType: ContextDomainType.ARCHITECTURE,
-    limit: 100000,
-  }).filter((node) => node.metadata?.['projectGraph'] === true);
-  const edges = store.listEdges({ limit: 100000 })
-    .filter((edge) => edge.evidence?.['projectGraph'] === true);
+    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  }).filter(isProjectGraphNode);
+  const edges = store.listEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT })
+    .filter(isProjectGraphEdge);
   const firstFiles = nodes
-    .filter((node) => node.metadata?.['kind'] === 'file')
+    .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'file')
     .map((node) => node.title)
     .sort()
     .slice(0, 12);
@@ -126,26 +134,26 @@ export const collectProjectGraphStats = (
     firstFiles,
     inferredSummaries: nodes
       .filter((node) => {
-        const provenance = String(node.metadata?.['provenance'] ?? '');
+        const provenance = String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? '');
         return provenance === 'INFERRED';
       })
       .map((node) => ({
         title: node.title,
         summary: typeof node.metadata?.['summary'] === 'string' ? node.metadata['summary'] : node.content,
-        provenance: String(node.metadata?.['provenance'] ?? 'unknown'),
+        provenance: String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? 'unknown'),
         evidencePaths: evidencePathsForNode(node),
       }))
       .slice(0, 12),
     openQuestions: nodes
-      .filter((node) => String(node.metadata?.['provenance'] ?? '') === 'AMBIGUOUS')
+      .filter((node) => String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? '') === 'AMBIGUOUS')
       .map((node) => ({
         title: node.title,
         summary: typeof node.metadata?.['summary'] === 'string' ? node.metadata['summary'] : node.content,
         evidencePaths: evidencePathsForNode(node),
       }))
       .slice(0, 12),
-    provenanceCounts: countBy(nodes, (node) => String(node.metadata?.['provenance'] ?? 'unknown')),
-    nodeKindCounts: countBy(nodes, (node) => String(node.metadata?.['kind'] ?? 'unknown')),
+    provenanceCounts: countBy(nodes, (node) => String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? 'unknown')),
+    nodeKindCounts: countBy(nodes, (node) => String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? 'unknown')),
   };
 };
 
@@ -265,7 +273,7 @@ const slugify = (value: string): string =>
   value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 
 const evidencePathsForNode = (node: ContextNode): string[] => {
-  const evidence = node.metadata?.['evidence'];
+  const evidence = node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.evidence];
   return Array.isArray(evidence)
     ? evidence
       .map((entry) => typeof entry === 'object' && entry && 'path' in entry ? String(entry.path) : '')
