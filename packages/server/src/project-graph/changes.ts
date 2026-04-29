@@ -20,7 +20,8 @@ export interface ProjectGraphChangeDetectionResult {
 }
 
 export interface ProjectGraphChangeStore {
-  listContextNodes(options?: { project?: string; limit?: number }): ContextNode[];
+  listContextNodes?: (options?: { project?: string; limit?: number }) => ContextNode[];
+  listNodes?: (options?: { project?: string; limit?: number }) => ContextNode[];
 }
 
 export const detectProjectGraphChanges = (
@@ -41,7 +42,7 @@ export const detectProjectGraphChangeSet = (
   changeSet: ChangeSet,
 ): ProjectGraphChangeDetectionResult => {
   const changedFiles = changeSet.files.map(normalizeChangedFile);
-  const nodes = store.listContextNodes({ project: project.name, limit: 100000 })
+  const nodes = listChangeStoreNodes(store, { project: project.name, limit: 100000 })
     .filter((node) => node.metadata?.['projectGraph'] === true);
   const affectedNodeIds = nodes
     .filter((node) => changedFiles.some((file) => nodeMatchesFile(node, file.path)))
@@ -79,6 +80,15 @@ const nodeMatchesFile = (node: ContextNode, filePath: string): boolean =>
   node.title === filePath ||
   node.sourceRef === filePath ||
   node.metadata?.['ownedByFile'] === filePath;
+
+const listChangeStoreNodes = (
+  store: ProjectGraphChangeStore,
+  options: { project?: string; limit?: number },
+): ContextNode[] => {
+  if (store.listNodes) return store.listNodes(options);
+  if (store.listContextNodes) return store.listContextNodes(options);
+  return [];
+};
 
 const layerForPath = (project: DetectedProject, filePath: string): string | undefined => {
   const rel = normalizePath(filePath);

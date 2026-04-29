@@ -60,7 +60,7 @@ describe('project graph change detection', () => {
     const project = detectProject(root)!;
     memory.context.indexProjectGraph(project);
 
-    const result = detectProjectGraphChangeSet(memory.context, project, {
+    const result = memory.context.ingestProjectGraphChangeSet(project, {
       source: ChangeSource.P4,
       base: '123',
       head: '124',

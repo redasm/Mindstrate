@@ -11,6 +11,7 @@ import {
   type ContextNode,
   type ContextNodeStatus,
   type ContextRelationType,
+  type ChangeSet,
 } from '@mindstrate/protocol/models';
 import type { CreateContextNodeInput, UpdateContextNodeInput } from '../context-graph/context-graph-store.js';
 import type { GraphKnowledgeProjectionOptions } from '../context-graph/knowledge-projector.js';
@@ -19,6 +20,7 @@ import { computeGraphNodeMatchScore } from '../context-graph/graph-match-score.j
 import { ingestUserFeedback } from '../events/index.js';
 import {
   enrichProjectGraph,
+  detectProjectGraphChangeSet,
   estimateProjectGraphScanScope,
   indexProjectGraph,
   summarizeProjectGraphWithLlm,
@@ -26,6 +28,7 @@ import {
   type ProjectGraphEnrichmentResult,
   type ProjectGraphIndexResult,
   type ProjectGraphScanScope,
+  type ProjectGraphChangeDetectionResult,
 } from '../project-graph/index.js';
 import {
   writeProjectGraphArtifacts,
@@ -170,6 +173,13 @@ export class MindstrateContextGraphApi {
 
   indexProjectGraph(project: DetectedProject): ProjectGraphIndexResult {
     return indexProjectGraph(this.services.contextGraphStore, project);
+  }
+
+  ingestProjectGraphChangeSet(
+    project: DetectedProject,
+    changeSet: ChangeSet,
+  ): ProjectGraphChangeDetectionResult {
+    return detectProjectGraphChangeSet(this.services.contextGraphStore, project, changeSet);
   }
 
   async enrichProjectGraph(
