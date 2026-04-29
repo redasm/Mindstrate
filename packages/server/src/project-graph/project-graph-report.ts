@@ -27,7 +27,7 @@ export const writeProjectGraphArtifacts = (
   project: DetectedProject,
 ): ProjectGraphArtifactResult => {
   const stats = collectProjectGraphStats(store, project);
-  const report = renderProjectGraphReport(project, stats);
+  const report = renderProjectGraphRepoEntry(project, stats);
   const reportPath = path.join(project.root, 'PROJECT_GRAPH.md');
   const statsPath = path.join(project.root, '.mindstrate', 'project-graph.json');
 
@@ -148,6 +148,32 @@ const renderProjectGraphReport = (
   '- mindstrate graph query "entry points"',
   '- mindstrate graph query "high impact files"',
   '- mindstrate graph context src/App.tsx',
+  '',
+].join('\n');
+
+const renderProjectGraphRepoEntry = (
+  project: DetectedProject,
+  stats: ProjectGraphStatsExport,
+): string => [
+  '# PROJECT_GRAPH.md',
+  '',
+  'Canonical project graph facts live in Mindstrate ECS.',
+  '',
+  'This file is a lightweight repository entry point. Edit project graph notes in Obsidian or through Mindstrate overlays; user edits are stored as overlays and do not mutate extracted facts.',
+  '',
+  '## Current Index',
+  '',
+  `- Project: ${project.name}`,
+  `- Nodes: ${stats.nodes}`,
+  `- Edges: ${stats.edges}`,
+  `- Stats: .mindstrate/project-graph.json`,
+  '',
+  '## Useful Commands',
+  '',
+  '- mindstrate graph status',
+  '- mindstrate graph query "entry points"',
+  '- mindstrate graph context <node id>',
+  '- mindstrate graph sync',
   '',
 ].join('\n');
 

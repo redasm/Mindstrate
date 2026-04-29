@@ -29,7 +29,7 @@ describe('project graph report export', () => {
     removeTempDir(dataDir);
   });
 
-  it('writes a readable report and machine stats next to the project', () => {
+  it('writes a lightweight repo entry and machine stats next to the project', () => {
     write(root, 'package.json', JSON.stringify({
       name: 'demo-report',
       dependencies: { react: '^19.0.0' },
@@ -50,9 +50,10 @@ describe('project graph report export', () => {
     };
 
     expect(result.reportPath).toBe(path.join(root, 'PROJECT_GRAPH.md'));
-    expect(report).toContain('# Project Graph: demo-report');
-    expect(report).toContain('src/App.tsx');
-    expect(report).toContain('EXTRACTED');
+    expect(report).toContain('# PROJECT_GRAPH.md');
+    expect(report).toContain('Canonical project graph facts live in Mindstrate ECS.');
+    expect(report).not.toContain('## User Notes');
+    expect(report).not.toContain('src/App.tsx');
     expect(report).toContain('mindstrate graph query "entry points"');
     expect(stats.project).toBe('demo-report');
     expect(stats.nodes).toBeGreaterThan(0);
