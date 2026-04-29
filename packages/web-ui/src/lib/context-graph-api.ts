@@ -8,6 +8,8 @@ export type ContextGraphNodeDto = {
   project?: string;
   status: string;
   qualityScore: number;
+  sourceRef?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type ContextGraphEdgeDto = {
