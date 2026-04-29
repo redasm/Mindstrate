@@ -60,6 +60,20 @@ export const ProjectGraphNeighborsSchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
 });
 
+export const ProjectGraphPathSchema = z.object({
+  from: z.string().min(1, 'from is required'),
+  to: z.string().min(1, 'to is required'),
+  project: z.string().optional(),
+  maxDepth: z.number().int().min(1).max(20).optional(),
+});
+
+export const ProjectGraphBlastRadiusSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  project: z.string().optional(),
+  depth: z.number().int().min(1).max(5).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
 export const ContextConflictsSchema = z.object({
   project: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),

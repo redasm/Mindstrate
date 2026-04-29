@@ -285,6 +285,58 @@ export async function handleProjectGraphExplainNode(
   return { content: [{ type: 'text', text }] };
 }
 
+export async function handleProjectGraphPath(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  const nodes = projectGraphNodes(await api.queryContextGraph({
+    project: input.project,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: 100000,
+  }));
+  const edges = projectGraphEdges(await api.listContextEdges({ limit: 100000 }));
+  const path = shortestProjectGraphPath(nodes, edges, input.from, input.to, input.maxDepth ?? 6);
+  if (!path) return { content: [{ type: 'text', text: 'No project graph path found.' }] };
+  const text = [
+    `Found project graph path with ${path.nodes.length} node(s).`,
+    '',
+    ...path.nodes.map((node, index) => [
+      `### ${index + 1}. ${node.title}`,
+      `ID: ${node.id}`,
+      `Kind: ${node.metadata?.['kind'] ?? 'unknown'}`,
+      path.edges[index] ? `Next edge: ${path.edges[index].evidence?.['kind'] ?? path.edges[index].relationType}` : null,
+    ].filter(Boolean).join('\n')),
+  ].join('\n');
+  return { content: [{ type: 'text', text }] };
+}
+
+export async function handleProjectGraphBlastRadius(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  const nodes = projectGraphNodes(await api.queryContextGraph({
+    project: input.project,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: 100000,
+  }));
+  const edges = projectGraphEdges(await api.listContextEdges({ limit: 100000 }));
+  const root = findProjectGraphNodeInList(nodes, input.id);
+  if (!root) return { content: [{ type: 'text', text: 'Project graph node not found.' }], isError: true };
+
+  const affected = collectBlastRadius(nodes, edges, root.id, input.depth ?? 1, input.limit ?? 20);
+  const text = [
+    `### Blast Radius: ${root.title}`,
+    `Affected nodes: ${affected.nodes.length}`,
+    `Edges: ${affected.edges.length}`,
+    '',
+    formatProjectGraphNodes(affected.nodes),
+    '',
+    '### Connecting Edges',
+    formatProjectGraphEdges(affected.edges),
+  ].join('\n');
+  return { content: [{ type: 'text', text }] };
+}
+
 const findProjectGraphNode = async (
   api: McpApi,
   id: string,
@@ -295,7 +347,7 @@ const findProjectGraphNode = async (
     domainType: ContextDomainType.ARCHITECTURE,
     limit: 100000,
   }));
-  return nodes.find((node) => node.id === id || node.title === id) ?? null;
+  return findProjectGraphNodeInList(nodes, id) ?? null;
 };
 
 const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
@@ -303,6 +355,82 @@ const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
 
 const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
   edges.filter((edge) => edge.evidence?.['projectGraph'] === true);
+
+const findProjectGraphNodeInList = (nodes: ContextNode[], id: string): ContextNode | undefined =>
+  nodes.find((node) => node.id === id || node.title === id || node.sourceRef === id);
+
+const shortestProjectGraphPath = (
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  from: string,
+  to: string,
+  maxDepth: number,
+): { nodes: ContextNode[]; edges: ContextEdge[] } | null => {
+  const start = findProjectGraphNodeInList(nodes, from);
+  const target = findProjectGraphNodeInList(nodes, to);
+  if (!start || !target) return null;
+  if (start.id === target.id) return { nodes: [start], edges: [] };
+
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const seen = new Set([start.id]);
+  const queue: Array<{ id: string; nodeIds: string[]; edges: ContextEdge[] }> = [{
+    id: start.id,
+    nodeIds: [start.id],
+    edges: [],
+  }];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current.edges.length >= maxDepth) continue;
+    for (const edge of adjacentProjectGraphEdges(edges, current.id)) {
+      const nextId = edge.sourceId === current.id ? edge.targetId : edge.sourceId;
+      if (seen.has(nextId) || !byId.has(nextId)) continue;
+      const nodeIds = [...current.nodeIds, nextId];
+      const pathEdges = [...current.edges, edge];
+      if (nextId === target.id) {
+        return { nodes: nodeIds.map((id) => byId.get(id)!), edges: pathEdges };
+      }
+      seen.add(nextId);
+      queue.push({ id: nextId, nodeIds, edges: pathEdges });
+    }
+  }
+
+  return null;
+};
+
+const collectBlastRadius = (
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  rootId: string,
+  depth: number,
+  limit: number,
+): { nodes: ContextNode[]; edges: ContextEdge[] } => {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const seen = new Set([rootId]);
+  const affected: ContextNode[] = [];
+  const edgeById = new Map<string, ContextEdge>();
+  const queue: Array<{ id: string; depth: number }> = [{ id: rootId, depth: 0 }];
+
+  while (queue.length > 0 && affected.length < limit) {
+    const current = queue.shift()!;
+    if (current.depth >= depth) continue;
+    for (const edge of adjacentProjectGraphEdges(edges, current.id)) {
+      edgeById.set(edge.id, edge);
+      const nextId = edge.sourceId === current.id ? edge.targetId : edge.sourceId;
+      const next = byId.get(nextId);
+      if (!next || seen.has(nextId)) continue;
+      seen.add(nextId);
+      affected.push(next);
+      if (affected.length >= limit) break;
+      queue.push({ id: nextId, depth: current.depth + 1 });
+    }
+  }
+
+  return { nodes: affected, edges: Array.from(edgeById.values()) };
+};
+
+const adjacentProjectGraphEdges = (edges: ContextEdge[], nodeId: string): ContextEdge[] =>
+  edges.filter((edge) => edge.sourceId === nodeId || edge.targetId === nodeId);
 
 const formatProjectGraphNodes = (nodes: ContextNode[]): string => [
   `Found ${nodes.length} project graph node(s).`,

@@ -8,8 +8,10 @@ import {
   handleContextInternalize,
   handleContextQueryGraph,
   handleProjectGraphExplainNode,
+  handleProjectGraphBlastRadius,
   handleProjectGraphGetNeighbors,
   handleProjectGraphGetNode,
+  handleProjectGraphPath,
   handleProjectGraphQuery,
 } from './handlers.js';
 import {
@@ -23,6 +25,8 @@ import {
   ContextQueryGraphSchema,
   ProjectGraphNeighborsSchema,
   ProjectGraphNodeSchema,
+  ProjectGraphBlastRadiusSchema,
+  ProjectGraphPathSchema,
   ProjectGraphQuerySchema,
 } from './tool-schemas.js';
 import { defineTool } from './tool-types.js';
@@ -99,5 +103,17 @@ export const contextTools = [
     description: 'Explain why a project graph node matters using stored evidence and local graph edges.',
     schema: ProjectGraphNodeSchema,
     handler: (api, input) => handleProjectGraphExplainNode(api, input),
+  }),
+  defineTool({
+    name: 'get_project_graph_path',
+    description: 'Find a bounded shortest path between two project graph nodes or files.',
+    schema: ProjectGraphPathSchema,
+    handler: (api, input) => handleProjectGraphPath(api, input),
+  }),
+  defineTool({
+    name: 'get_project_graph_blast_radius',
+    description: 'Estimate local blast radius around a project graph node before editing.',
+    schema: ProjectGraphBlastRadiusSchema,
+    handler: (api, input) => handleProjectGraphBlastRadius(api, input),
   }),
 ];

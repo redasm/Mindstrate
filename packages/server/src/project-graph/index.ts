@@ -54,3 +54,11 @@ export {
   type ProjectGraphEnrichmentInput,
   type ProjectGraphEnrichmentResult,
 } from './enrichment.js';
+export {
+  estimateProjectGraphBlastRadius,
+  findProjectGraphPath,
+  type ProjectGraphBlastRadiusInput,
+  type ProjectGraphBlastRadiusResult,
+  type ProjectGraphPathInput,
+  type ProjectGraphPathResult,
+} from './analysis.js';

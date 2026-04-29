@@ -12,7 +12,14 @@ import {
   type ContextEdge,
   type ContextNode,
 } from '@mindstrate/server';
-import { detectProject, detectProjectGraphChanges, errorMessage, truncateText as truncate } from '@mindstrate/server';
+import {
+  detectProject,
+  detectProjectGraphChanges,
+  errorMessage,
+  estimateProjectGraphBlastRadius,
+  findProjectGraphPath,
+  truncateText as truncate,
+} from '@mindstrate/server';
 import { execSync } from 'node:child_process';
 import { createMemory } from '../memory-factory.js';
 
@@ -117,6 +124,78 @@ contextGraphCommand
   });
 
 contextGraphCommand
+  .command('path <from> <to>')
+  .description('Show the shortest bounded project graph path between two nodes')
+  .option('-p, --project <project>', 'Project scope')
+  .option('-d, --max-depth <number>', 'Maximum path depth', '6')
+  .action(async (from: string, to: string, options) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const nodes = memory.context.listContextNodes({
+        project: options.project,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: 100000,
+      });
+      const edges = memory.context.listContextEdges({ limit: 100000 });
+      const result = findProjectGraphPath({
+        nodes,
+        edges,
+        from,
+        to,
+        maxDepth: parseInt(options.maxDepth, 10),
+      });
+      if (!result.found) {
+        console.log('No project graph path found.');
+        return;
+      }
+      printPath(result.nodes, result.edges);
+    } catch (error) {
+      fail('Graph path failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
+contextGraphCommand
+  .command('impact <id>')
+  .description('Estimate project graph blast radius around a node')
+  .option('-p, --project <project>', 'Project scope')
+  .option('-d, --depth <number>', 'Neighbor depth', '1')
+  .option('-l, --limit <number>', 'Maximum affected nodes', '20')
+  .action(async (id: string, options) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const nodes = memory.context.listContextNodes({
+        project: options.project,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: 100000,
+      });
+      const edges = memory.context.listContextEdges({ limit: 100000 });
+      const result = estimateProjectGraphBlastRadius({
+        nodes,
+        edges,
+        id,
+        depth: parseInt(options.depth, 10),
+        limit: parseInt(options.limit, 10),
+      });
+      if (!result.root) {
+        console.log('No project graph node matched.');
+        return;
+      }
+      console.log(`Root: ${result.root.title}`);
+      console.log(`Affected nodes: ${result.affectedNodes.length}`);
+      printNodes(result.affectedNodes, false);
+      printEdges('Edges', result.edges);
+    } catch (error) {
+      fail('Graph impact failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
+contextGraphCommand
   .command('changes')
   .description('Map workspace or manual file changes onto project graph nodes and risk hints')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
@@ -175,6 +254,18 @@ const printEdges = (label: string, edges: ContextEdge[]): void => {
   console.log(`${label}: ${edges.length}`);
   for (const edge of projectGraphEdges(edges)) {
     console.log(`  ${edge.relationType}: ${edge.sourceId} -> ${edge.targetId}`);
+  }
+};
+
+const printPath = (nodes: ContextNode[], edges: ContextEdge[]): void => {
+  console.log(`Path nodes: ${nodes.length}`);
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    console.log(`  ${index + 1}. [${node.metadata?.['kind'] ?? 'node'}] ${node.title}`);
+    const edge = edges[index];
+    if (edge) {
+      console.log(`     ${edge.evidence?.['kind'] ?? edge.relationType}`);
+    }
   }
 };
 
