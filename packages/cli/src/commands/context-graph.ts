@@ -6,9 +6,13 @@
  */
 
 import { Command } from 'commander';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   ChangeSource,
   ContextDomainType,
+  ProjectGraphOverlayKind,
+  ProjectGraphOverlaySource,
   ProjectionTarget,
   type ContextEdge,
   type ContextNode,
@@ -24,7 +28,9 @@ import {
   truncateText as truncate,
 } from '@mindstrate/server';
 import { execSync } from 'node:child_process';
+import { readProjectCliConfig, type ProjectCliConfig } from '../cli-config.js';
 import { createMemory } from '../memory-factory.js';
+import { publishProjectGraphToTeamServer, type ProjectGraphTeamClient } from './init.js';
 
 export const contextGraphCommand = new Command('graph')
   .description('Query Mindstrate project graph');
@@ -104,6 +110,59 @@ contextGraphCommand
       for (const line of lines) console.log(line);
     } catch (error) {
       fail('Graph status failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
+contextGraphCommand
+  .command('sync')
+  .description('Sync project graph edits: local Obsidian notes become overlays, team mode publishes the graph')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
+  .option('--vault <path>', 'Obsidian vault path for local mode')
+  .option('--team-server-url <url>', 'Team Server URL for team mode')
+  .option('--team-api-key <key>', 'Team API key for team mode')
+  .action(async (options) => {
+    const cwd = path.resolve(options.cwd ?? process.cwd());
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const project = detectProject(cwd);
+      if (!project) throw new Error('Could not detect project.');
+      const config = readProjectCliConfig(project.root);
+      const plan = resolveGraphSyncPlan({
+        projectName: project.name,
+        config,
+        vaultPath: options.vault,
+        teamServerUrl: options.teamServerUrl ?? process.env['TEAM_SERVER_URL'] ?? config?.teamServerUrl,
+      });
+
+      if (plan.mode === 'team') {
+        memory.context.indexProjectGraph(project);
+        const publish = await publishProjectGraphToTeamServer(
+          memory,
+          project,
+          await createGraphSyncTeamClient(plan.teamServerUrl, options.teamApiKey),
+        );
+        console.log(`Team sync: ${publish.installedNodes} installed, ${publish.updatedNodes} updated`);
+        return;
+      }
+
+      if (!plan.obsidianFile) {
+        throw new Error('No Obsidian vault configured. Pass --vault or run setup/init with a vault.');
+      }
+      if (!fs.existsSync(plan.obsidianFile)) {
+        throw new Error(`Project graph projection not found: ${plan.obsidianFile}`);
+      }
+
+      const notes = extractProjectGraphUserNotes(fs.readFileSync(plan.obsidianFile, 'utf8'));
+      const created = notes ? upsertObsidianProjectGraphNoteOverlay(memory, project.name, notes) : false;
+      const vaultRoot = path.dirname(path.dirname(path.dirname(plan.obsidianFile)));
+      const artifacts = memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultRoot));
+      console.log(`Obsidian sync: ${created ? 'overlay updated' : 'no user notes to import'}`);
+      console.log(`Projection: ${artifacts.reportPath}`);
+    } catch (error) {
+      fail('Graph sync failed', error);
     } finally {
       memory.close();
     }
@@ -309,6 +368,78 @@ export const buildGraphOverlayLines = (overlays: ProjectGraphOverlay[]): string[
     ])
     : ['  - none']),
 ];
+
+export const resolveGraphSyncPlan = (input: {
+  projectName: string;
+  config: ProjectCliConfig | null;
+  vaultPath?: string;
+  teamServerUrl?: string;
+}): { mode: 'local' | 'team'; teamServerUrl?: string; obsidianFile?: string } => {
+  if (input.teamServerUrl || input.config?.mode === 'team') {
+    return {
+      mode: 'team',
+      teamServerUrl: input.teamServerUrl ?? input.config?.teamServerUrl,
+      obsidianFile: undefined,
+    };
+  }
+  const vaultPath = input.vaultPath ?? input.config?.vaultPath;
+  return {
+    mode: 'local',
+    teamServerUrl: undefined,
+    obsidianFile: vaultPath
+      ? path.join(vaultPath, slugifyProjectName(input.projectName), 'architecture', 'project-graph.md')
+      : undefined,
+  };
+};
+
+export const extractProjectGraphUserNotes = (text: string): string => {
+  const start = '<!-- mindstrate:project-graph:user-notes:start -->';
+  const end = '<!-- mindstrate:project-graph:user-notes:end -->';
+  const startIndex = text.indexOf(start);
+  const endIndex = text.indexOf(end);
+  if (startIndex < 0 || endIndex < 0 || endIndex < startIndex) return '';
+  const notes = text.slice(startIndex + start.length, endIndex).trim();
+  return notes === '- Add architecture notes, confirmations, corrections, or risks here.' ? '' : notes;
+};
+
+const upsertObsidianProjectGraphNoteOverlay = (
+  memory: ReturnType<typeof createMemory>,
+  project: string,
+  content: string,
+): boolean => {
+  const existing = memory.context.listProjectGraphOverlays({ project, limit: 500 })
+    .find((overlay) =>
+      overlay.source === ProjectGraphOverlaySource.OBSIDIAN
+      && overlay.kind === ProjectGraphOverlayKind.NOTE
+      && !overlay.targetNodeId
+      && !overlay.targetEdgeId
+      && overlay.content === content);
+  if (existing) return false;
+  memory.context.createProjectGraphOverlay({
+    project,
+    kind: ProjectGraphOverlayKind.NOTE,
+    content,
+    source: ProjectGraphOverlaySource.OBSIDIAN,
+    author: 'obsidian',
+  });
+  return true;
+};
+
+async function createGraphSyncTeamClient(
+  serverUrl?: string,
+  apiKey?: string,
+): Promise<ProjectGraphTeamClient> {
+  if (!serverUrl) throw new Error('TEAM_SERVER_URL or --team-server-url is required for team graph sync.');
+  const clientPackage = '@mindstrate/client';
+  const { TeamClient } = await import(clientPackage);
+  return new TeamClient({
+    serverUrl,
+    apiKey: apiKey ?? process.env['TEAM_API_KEY'],
+  });
+}
+
+const slugifyProjectName = (value: string): string =>
+  value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 
 const printNodes = (nodes: ContextNode[], verbose: boolean): void => {
   if (nodes.length === 0) {

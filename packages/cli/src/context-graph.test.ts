@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as path from 'node:path';
 import { ProjectGraphOverlayKind, ProjectGraphOverlaySource, ProjectionTarget } from '@mindstrate/server';
-import { buildGraphOverlayLines, buildGraphStatusLines } from './commands/context-graph.js';
+import {
+  buildGraphOverlayLines,
+  buildGraphStatusLines,
+  extractProjectGraphUserNotes,
+  resolveGraphSyncPlan,
+} from './commands/context-graph.js';
 
 test('buildGraphStatusLines shows local canonical graph and projection targets', () => {
   const lines = buildGraphStatusLines({
@@ -30,6 +36,43 @@ test('buildGraphStatusLines shows local canonical graph and projection targets',
     '  Projections:',
     '    - project_graph_obsidian: vault/demo/architecture/project-graph.md',
   ]);
+});
+
+test('resolveGraphSyncPlan prefers team mode when a team server is configured', () => {
+  assert.deepEqual(resolveGraphSyncPlan({
+    projectName: 'Demo App',
+    config: { version: 1, mode: 'local', dataDir: '.mindstrate', vaultPath: 'vault' },
+    teamServerUrl: 'http://team.example',
+  }), {
+    mode: 'team',
+    teamServerUrl: 'http://team.example',
+    obsidianFile: undefined,
+  });
+});
+
+test('resolveGraphSyncPlan finds the local Obsidian project graph file', () => {
+  assert.deepEqual(resolveGraphSyncPlan({
+    projectName: 'Demo App',
+    config: { version: 1, mode: 'local', dataDir: '.mindstrate', vaultPath: 'vault' },
+  }), {
+    mode: 'local',
+    teamServerUrl: undefined,
+    obsidianFile: path.join('vault', 'demo-app', 'architecture', 'project-graph.md'),
+  });
+});
+
+test('extractProjectGraphUserNotes returns only the editable preserve block', () => {
+  const notes = extractProjectGraphUserNotes([
+    '<!-- mindstrate:project-graph:generated:start -->',
+    'generated',
+    '<!-- mindstrate:project-graph:generated:end -->',
+    '## User Notes',
+    '<!-- mindstrate:project-graph:user-notes:start -->',
+    '- src/App.tsx is intentionally thin.',
+    '<!-- mindstrate:project-graph:user-notes:end -->',
+  ].join('\n'));
+
+  assert.equal(notes, '- src/App.tsx is intentionally thin.');
 });
 
 test('buildGraphOverlayLines renders editable project graph overlays', () => {
