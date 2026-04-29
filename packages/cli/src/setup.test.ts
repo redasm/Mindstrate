@@ -6,9 +6,10 @@ import * as path from 'node:path';
 import { detectProject } from '@mindstrate/server';
 import { initializeLocalProject } from './commands/setup.js';
 
-test('initializeLocalProject indexes the project graph for local setup', async () => {
+test('initializeLocalProject writes the project graph to Obsidian when a vault is configured', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-'));
   const dataDir = path.join(root, '.mindstrate');
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-vault-'));
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
     name: 'setup-graph-demo',
     dependencies: { react: '^19.0.0' },
@@ -22,8 +23,8 @@ test('initializeLocalProject indexes the project graph for local setup', async (
   const project = detectProject(root);
   assert.ok(project);
 
-  await initializeLocalProject(project, dataDir);
+  await initializeLocalProject(project, dataDir, { vaultPath: vaultDir });
 
-  assert.equal(fs.existsSync(path.join(root, 'PROJECT_GRAPH.md')), true);
+  assert.equal(fs.existsSync(path.join(vaultDir, 'setup-graph-demo', 'architecture', 'project-graph.md')), true);
   assert.equal(fs.existsSync(path.join(root, '.mindstrate', 'project-graph.json')), true);
 });

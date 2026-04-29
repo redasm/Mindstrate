@@ -99,7 +99,9 @@ export const setupCommand = new Command('setup')
       });
 
       if (mode === 'local') {
-        await initializeLocalProject(project, plan.dataDir);
+        await initializeLocalProject(project, plan.dataDir, {
+          vaultPath: vaultPath ? path.resolve(vaultPath) : undefined,
+        });
       }
 
       const mcp = writeMcpConfig({
@@ -132,14 +134,20 @@ export const setupCommand = new Command('setup')
     }
   });
 
-export async function initializeLocalProject(project: NonNullable<ReturnType<typeof detectProject>>, dataDir: string): Promise<void> {
+export async function initializeLocalProject(
+  project: NonNullable<ReturnType<typeof detectProject>>,
+  dataDir: string,
+  options: { vaultPath?: string } = {},
+): Promise<void> {
   const memory = new Mindstrate({ dataDir });
   await memory.init();
   const previousMeta = loadProjectMeta(project.root);
   const now = new Date().toISOString();
   const result = await memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-setup' });
   const graph = memory.context.indexProjectGraph(project);
-  const artifacts = memory.context.writeProjectGraphArtifacts(project);
+  const artifacts = options.vaultPath
+    ? memory.context.writeProjectGraphObsidianProjection(project, options.vaultPath)
+    : memory.context.writeProjectGraphArtifacts(project);
   saveProjectMeta(project.root, {
     version: 1,
     name: project.name,

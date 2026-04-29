@@ -23,6 +23,7 @@ import {
   metaPath,
   type DetectedProject,
   type ProjectMeta,
+  type ProjectGraphArtifactResult,
 } from '@mindstrate/server';
 import { writeMcpConfig } from './setup-mcp.js';
 import { writeProjectCliConfig } from '../cli-config.js';
@@ -132,7 +133,7 @@ export const initCommand = new Command('init')
         console.log(`  Files: ${graph.filesScanned}`);
         console.log(`  Nodes: ${graph.nodesCreated} created, ${graph.nodesUpdated} updated`);
         console.log(`  Edges: ${graph.edgesCreated} created, ${graph.edgesSkipped} unchanged`);
-        const artifacts = memory.context.writeProjectGraphArtifacts(project);
+        const artifacts = writeLocalProjectGraphArtifacts(memory, project, options.withVault);
         console.log(`  Report: ${artifacts.reportPath}`);
         console.log(`  Stats:  ${artifacts.statsPath}`);
       }
@@ -184,6 +185,16 @@ export const initCommand = new Command('init')
       process.exit(1);
     }
   });
+
+export function writeLocalProjectGraphArtifacts(
+  memory: Mindstrate,
+  project: DetectedProject,
+  vaultPath?: string,
+): ProjectGraphArtifactResult {
+  return vaultPath
+    ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath))
+    : memory.context.writeProjectGraphArtifacts(project);
+}
 
 function printDetected(p: DetectedProject): void {
   console.log('Detected project:');
