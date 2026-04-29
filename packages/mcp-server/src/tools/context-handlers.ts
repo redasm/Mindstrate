@@ -1,4 +1,10 @@
-import type { ContextDomainType, ContextEventType, ContextNodeStatus } from '@mindstrate/protocol';
+import {
+  ContextDomainType,
+  type ContextEdge,
+  type ContextEventType,
+  type ContextNode,
+  type ContextNodeStatus,
+} from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
 import { appendGraphContextSections } from './memory-handlers.js';
 
@@ -203,3 +209,126 @@ export async function handleContextInternalize(
 
   return { content: [{ type: 'text', text }] };
 }
+
+export async function handleProjectGraphQuery(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  const nodes = projectGraphNodes(await api.queryContextGraph({
+    query: input.query,
+    project: input.project,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: input.limit ?? 10,
+  }));
+
+  if (nodes.length === 0) {
+    return { content: [{ type: 'text', text: 'No project graph nodes matched the query.' }] };
+  }
+
+  return { content: [{ type: 'text', text: formatProjectGraphNodes(nodes) }] };
+}
+
+export async function handleProjectGraphGetNode(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  const node = await findProjectGraphNode(api, input.id, input.project);
+  if (!node) return { content: [{ type: 'text', text: 'Project graph node not found.' }], isError: true };
+  return { content: [{ type: 'text', text: formatProjectGraphNodes([node]) }] };
+}
+
+export async function handleProjectGraphGetNeighbors(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  const node = await findProjectGraphNode(api, input.id, input.project);
+  if (!node) return { content: [{ type: 'text', text: 'Project graph node not found.' }], isError: true };
+  const limit = input.limit ?? 20;
+  const outgoing = projectGraphEdges(await api.listContextEdges({ sourceId: node.id, limit }));
+  const incoming = projectGraphEdges(await api.listContextEdges({ targetId: node.id, limit }));
+  const text = [
+    formatProjectGraphNodes([node]),
+    '',
+    '### Outgoing Edges',
+    formatProjectGraphEdges(outgoing),
+    '',
+    '### Incoming Edges',
+    formatProjectGraphEdges(incoming),
+    '',
+    'Suggested next queries:',
+    `- explain_project_graph_node id="${node.id}"`,
+    '- query_project_graph query="entry points"',
+  ].join('\n');
+  return { content: [{ type: 'text', text }] };
+}
+
+export async function handleProjectGraphExplainNode(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  const node = await findProjectGraphNode(api, input.id, input.project);
+  if (!node) return { content: [{ type: 'text', text: 'Project graph node not found.' }], isError: true };
+  const outgoing = projectGraphEdges(await api.listContextEdges({ sourceId: node.id, limit: 20 }));
+  const incoming = projectGraphEdges(await api.listContextEdges({ targetId: node.id, limit: 20 }));
+  const text = [
+    `### ${node.title}`,
+    `Kind: ${node.metadata?.['kind'] ?? 'unknown'}`,
+    `Provenance: ${node.metadata?.['provenance'] ?? 'unknown'}`,
+    `Evidence: ${evidencePaths(node).join(', ') || '(none)'}`,
+    `Incoming project graph edges: ${incoming.length}`,
+    `Outgoing project graph edges: ${outgoing.length}`,
+    '',
+    'Suggested next queries:',
+    `- get_project_graph_neighbors id="${node.id}"`,
+    `- query_project_graph query="${node.title}"`,
+  ].join('\n');
+  return { content: [{ type: 'text', text }] };
+}
+
+const findProjectGraphNode = async (
+  api: McpApi,
+  id: string,
+  project?: string,
+): Promise<ContextNode | null> => {
+  const nodes = projectGraphNodes(await api.queryContextGraph({
+    project,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: 100000,
+  }));
+  return nodes.find((node) => node.id === id || node.title === id) ?? null;
+};
+
+const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
+  nodes.filter((node) => node.metadata?.['projectGraph'] === true);
+
+const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
+  edges.filter((edge) => edge.evidence?.['projectGraph'] === true);
+
+const formatProjectGraphNodes = (nodes: ContextNode[]): string => [
+  `Found ${nodes.length} project graph node(s).`,
+  '',
+  ...nodes.map((node, index) => [
+    `### ${index + 1}. ${node.title}`,
+    `ID: ${node.id}`,
+    `Kind: ${node.metadata?.['kind'] ?? 'unknown'}`,
+    `Provenance: ${node.metadata?.['provenance'] ?? 'unknown'}`,
+    `Evidence: ${evidencePaths(node).join(', ') || '(none)'}`,
+  ].join('\n')),
+  '',
+  'Suggested next queries:',
+  '- get_project_graph_neighbors id="<node id>"',
+  '- explain_project_graph_node id="<node id>"',
+].join('\n');
+
+const formatProjectGraphEdges = (edges: ContextEdge[]): string =>
+  edges.length === 0
+    ? '- None'
+    : edges.map((edge) => `- ${edge.evidence?.['kind'] ?? edge.relationType}: ${edge.sourceId} -> ${edge.targetId}`).join('\n');
+
+const evidencePaths = (node: ContextNode): string[] => {
+  const evidence = node.metadata?.['evidence'];
+  return Array.isArray(evidence)
+    ? evidence.map((entry) => typeof entry === 'object' && entry && 'path' in entry ? String(entry.path) : '')
+      .filter(Boolean)
+    : [];
+};

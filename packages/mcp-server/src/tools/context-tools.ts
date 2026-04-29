@@ -7,6 +7,10 @@ import {
   handleContextIngestEvent,
   handleContextInternalize,
   handleContextQueryGraph,
+  handleProjectGraphExplainNode,
+  handleProjectGraphGetNeighbors,
+  handleProjectGraphGetNode,
+  handleProjectGraphQuery,
 } from './handlers.js';
 import {
   ContextAssembleSchema,
@@ -17,6 +21,9 @@ import {
   ContextIngestEventSchema,
   ContextInternalizeSchema,
   ContextQueryGraphSchema,
+  ProjectGraphNeighborsSchema,
+  ProjectGraphNodeSchema,
+  ProjectGraphQuerySchema,
 } from './tool-schemas.js';
 import { defineTool } from './tool-types.js';
 
@@ -68,5 +75,29 @@ export const contextTools = [
     description: 'Generate or accept internalization suggestions from stable ECS knowledge.',
     schema: ContextInternalizeSchema,
     handler: (api, input) => handleContextInternalize(api, input),
+  }),
+  defineTool({
+    name: 'query_project_graph',
+    description: 'Search Mindstrate project graph nodes and return bounded evidence-backed context.',
+    schema: ProjectGraphQuerySchema,
+    handler: (api, input) => handleProjectGraphQuery(api, input),
+  }),
+  defineTool({
+    name: 'get_project_graph_node',
+    description: 'Retrieve one project graph node with provenance and evidence.',
+    schema: ProjectGraphNodeSchema,
+    handler: (api, input) => handleProjectGraphGetNode(api, input),
+  }),
+  defineTool({
+    name: 'get_project_graph_neighbors',
+    description: 'Return bounded incoming and outgoing project graph edges around one node.',
+    schema: ProjectGraphNeighborsSchema,
+    handler: (api, input) => handleProjectGraphGetNeighbors(api, input),
+  }),
+  defineTool({
+    name: 'explain_project_graph_node',
+    description: 'Explain why a project graph node matters using stored evidence and local graph edges.',
+    schema: ProjectGraphNodeSchema,
+    handler: (api, input) => handleProjectGraphExplainNode(api, input),
   }),
 ];

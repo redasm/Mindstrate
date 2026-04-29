@@ -43,6 +43,23 @@ export const ContextEdgesSchema = z.object({
   limit: z.number().int().min(1).max(200).optional(),
 });
 
+export const ProjectGraphQuerySchema = z.object({
+  query: z.string().min(1, 'query is required'),
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(50).optional(),
+});
+
+export const ProjectGraphNodeSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  project: z.string().optional(),
+});
+
+export const ProjectGraphNeighborsSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
 export const ContextConflictsSchema = z.object({
   project: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),
