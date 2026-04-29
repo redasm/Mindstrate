@@ -40,5 +40,42 @@
       "Use route directories and layout/page files as primary navigation entry points.",
       "Prefer framework data-loading and routing conventions over ad hoc browser navigation."
     ]
-  }
+  },
+  "parserAdapters": [
+    "tree-sitter-source",
+    "package-manifest"
+  ],
+  "queryPacks": [
+    "typescript",
+    "tsx",
+    "javascript",
+    "jsx",
+    "react"
+  ],
+  "conventionExtractors": [
+    "next-routes",
+    "react-components"
+  ],
+  "sourceRoots": [
+    "app",
+    "pages",
+    "src"
+  ],
+  "generatedRoots": [
+    ".next",
+    "out"
+  ],
+  "ignore": [
+    "node_modules",
+    ".next",
+    "out"
+  ],
+  "manifests": [
+    "package.json",
+    "next.config.*",
+    "tsconfig.json"
+  ],
+  "riskHints": [
+    "Respect server/client component boundaries before editing route files."
+  ]
 }

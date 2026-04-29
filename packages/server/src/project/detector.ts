@@ -19,6 +19,7 @@ import { rustProjectDetector } from './detectors/rust-project-detector.js';
 import { goProjectDetector } from './detectors/go-project-detector.js';
 import type { ProjectDetector } from './detectors/project-detector.js';
 import { detectProjectByRules, type ProjectDetectionRuleMatch } from './project-detection-rules.js';
+import type { ProjectLayer } from '@mindstrate/protocol/models';
 
 export interface DetectedDependency {
   name: string;
@@ -74,6 +75,20 @@ export interface DetectedProject {
     invariants?: string[];
     conventions?: string[];
   };
+  /** Rule-provided project graph routing hints. */
+  graphHints?: ProjectGraphHints;
+}
+
+export interface ProjectGraphHints {
+  parserAdapters?: string[];
+  queryPacks?: string[];
+  conventionExtractors?: string[];
+  sourceRoots?: string[];
+  generatedRoots?: string[];
+  ignore?: string[];
+  manifests?: string[];
+  riskHints?: string[];
+  layers?: ProjectLayer[];
 }
 
 const PROJECT_DETECTORS: ProjectDetector[] = [
@@ -170,6 +185,7 @@ const mergeRuleDetection = (
     detectionRule: ruleDetected.detectionRule,
     topDirDescriptions: ruleDetected.topDirDescriptions,
     snapshotHints: ruleDetected.snapshotHints,
+    graphHints: ruleDetected.graphHints ?? baseDetected.graphHints,
   };
 };
 

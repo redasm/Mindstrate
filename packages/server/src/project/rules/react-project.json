@@ -39,5 +39,42 @@
       "Treat src/main.* or src/index.* as the browser entry point when present.",
       "Use framework/router conventions if this React app is also using Next, Remix, or another meta-framework."
     ]
-  }
+  },
+  "parserAdapters": [
+    "tree-sitter-source",
+    "package-manifest"
+  ],
+  "queryPacks": [
+    "typescript",
+    "tsx",
+    "javascript",
+    "jsx",
+    "react"
+  ],
+  "conventionExtractors": [
+    "react-components"
+  ],
+  "sourceRoots": [
+    "src",
+    "components"
+  ],
+  "generatedRoots": [
+    "dist",
+    "build",
+    ".next"
+  ],
+  "ignore": [
+    "node_modules",
+    "dist",
+    "build",
+    ".next"
+  ],
+  "manifests": [
+    "package.json",
+    "tsconfig.json",
+    "vite.config.*"
+  ],
+  "riskHints": [
+    "Do not edit generated build output or dependency directories."
+  ]
 }

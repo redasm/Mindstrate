@@ -37,5 +37,38 @@
       "Treat vite.config.* as build/dev-server configuration.",
       "Use import.meta.env only for intentionally client-exposed configuration."
     ]
-  }
+  },
+  "parserAdapters": [
+    "tree-sitter-source",
+    "package-manifest"
+  ],
+  "queryPacks": [
+    "typescript",
+    "tsx",
+    "javascript",
+    "jsx"
+  ],
+  "conventionExtractors": [
+    "vite-entry"
+  ],
+  "sourceRoots": [
+    "src"
+  ],
+  "generatedRoots": [
+    "dist",
+    "build"
+  ],
+  "ignore": [
+    "node_modules",
+    "dist",
+    "build"
+  ],
+  "manifests": [
+    "package.json",
+    "vite.config.*",
+    "tsconfig.json"
+  ],
+  "riskHints": [
+    "Do not put secrets in client-exposed Vite environment variables."
+  ]
 }

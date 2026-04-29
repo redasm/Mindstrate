@@ -73,6 +73,10 @@ describe('detectProject', () => {
     expect(reactProject.scripts.dev).toBe('vite --host 0.0.0.0');
     expect(reactProject.dependencies.find((d) => d.name === 'vite')?.kind).toBe('dev');
     expect(reactProject.entryPoints).toContain('src/main.tsx');
+    expect(reactProject.graphHints?.parserAdapters).toContain('tree-sitter-source');
+    expect(reactProject.graphHints?.queryPacks).toEqual(expect.arrayContaining(['typescript', 'tsx', 'react']));
+    expect(reactProject.graphHints?.conventionExtractors).toContain('react-components');
+    expect(reactProject.graphHints?.sourceRoots).toContain('src');
 
     removeTempDir(root);
     root = createTempDir('mindstrate-detect-');
@@ -87,6 +91,8 @@ describe('detectProject', () => {
     expect(vueProject.framework).toBe('vue');
     expect(vueProject.detectionRule?.id).toBe('vue-project');
     expect(vueProject.entryPoints).toContain('src/App.vue');
+    expect(vueProject.graphHints?.parserAdapters).toEqual(expect.arrayContaining(['vue-sfc', 'tree-sitter-source']));
+    expect(vueProject.graphHints?.queryPacks).toContain('vue');
 
     removeTempDir(root);
     root = createTempDir('mindstrate-detect-');
@@ -156,6 +162,10 @@ describe('detectProject', () => {
     expect(p.detectionRule?.id).toBe('unreal-project');
     expect(p.topDirDescriptions?.['Intermediate']).toContain('Generated build intermediates');
     expect(p.snapshotHints?.invariants).toContain('Do not edit Binaries, Intermediate, Saved, or DerivedDataCache unless explicitly requested.');
+    expect(p.graphHints?.parserAdapters).toEqual(expect.arrayContaining(['unreal-manifest', 'unreal-build', 'unreal-config']));
+    expect(p.graphHints?.queryPacks).toEqual(expect.arrayContaining(['cpp-light', 'csharp-build-light']));
+    expect(p.graphHints?.generatedRoots).toEqual(expect.arrayContaining(['Binaries', 'Intermediate', 'Saved', 'DerivedDataCache']));
+    expect(p.graphHints?.layers?.map((layer) => layer.id)).toEqual(expect.arrayContaining(['gameplay-cpp', 'content-assets', 'config', 'generated']));
   });
 
   it('loads project-local detection rules before built-ins', () => {
@@ -177,6 +187,11 @@ describe('detectProject', () => {
         overview: 'This is a custom engine project.',
         invariants: ['Do not edit generated custom-engine output.'],
       },
+      parserAdapters: ['tree-sitter-source'],
+      queryPacks: ['cpp-light'],
+      sourceRoots: ['GameSource'],
+      generatedRoots: ['Generated'],
+      riskHints: ['Generated output is not source.'],
     }));
     fs.mkdirSync(path.join(root, 'GameSource'), { recursive: true });
     write(root, 'GameSource/Main.cpp', 'int main() { return 0; }');
@@ -186,6 +201,8 @@ describe('detectProject', () => {
     expect(p.framework).toBe('custom-engine');
     expect(p.detectionRule?.source).toBe('project');
     expect(p.snapshotHints?.overview).toBe('This is a custom engine project.');
+    expect(p.graphHints?.sourceRoots).toEqual(['GameSource']);
+    expect(p.graphHints?.riskHints).toEqual(['Generated output is not source.']);
   });
 
   it('ignores invalid project-local detection rule files', () => {

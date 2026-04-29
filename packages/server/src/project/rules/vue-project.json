@@ -39,5 +39,39 @@
       "Treat src/main.* as the application bootstrap entry point when present.",
       "Use .vue single-file components for component-local template, script, and style."
     ]
-  }
+  },
+  "parserAdapters": [
+    "vue-sfc",
+    "tree-sitter-source",
+    "package-manifest"
+  ],
+  "queryPacks": [
+    "typescript",
+    "javascript",
+    "vue"
+  ],
+  "conventionExtractors": [
+    "vue-components",
+    "vue-router"
+  ],
+  "sourceRoots": [
+    "src",
+    "components",
+    "views"
+  ],
+  "generatedRoots": [
+    "dist"
+  ],
+  "ignore": [
+    "node_modules",
+    "dist"
+  ],
+  "manifests": [
+    "package.json",
+    "vite.config.*",
+    "tsconfig.json"
+  ],
+  "riskHints": [
+    "Respect Vue Router and component reactivity boundaries."
+  ]
 }

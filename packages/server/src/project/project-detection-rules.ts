@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { ChangeSource, type ProjectLayer } from '@mindstrate/protocol/models';
 import type { DetectedProject } from './detector.js';
 import { safeJson } from './detection-support.js';
 
@@ -37,6 +38,27 @@ interface ProjectDetectionRule {
     invariants?: string[];
     conventions?: string[];
   };
+  parserAdapters?: string[];
+  queryPacks?: string[];
+  conventionExtractors?: string[];
+  sourceRoots?: string[];
+  generatedRoots?: string[];
+  ignore?: string[];
+  manifests?: string[];
+  riskHints?: string[];
+  layers?: RuleProjectLayer[];
+}
+
+interface RuleProjectLayer {
+    id: string;
+    label: string;
+    roots: string[];
+    language?: string;
+    parserAdapters: string[];
+    queryPacks?: string[];
+    conventionExtractors?: string[];
+    changeAdapters?: Array<'git' | 'p4' | 'filesystem' | 'manual'>;
+    generated?: boolean;
 }
 
 export interface ProjectDetectionRuleMatch {
@@ -78,7 +100,31 @@ export const detectProjectByRules = (root: string): DetectedProject | null => {
     },
     topDirDescriptions: rule.detect?.topDirs,
     snapshotHints: rule.snapshot,
+    graphHints: {
+      parserAdapters: rule.parserAdapters,
+      queryPacks: rule.queryPacks,
+      conventionExtractors: rule.conventionExtractors,
+      sourceRoots: rule.sourceRoots,
+      generatedRoots: rule.generatedRoots,
+      ignore: rule.ignore,
+      manifests: rule.manifests,
+      riskHints: rule.riskHints,
+      layers: normalizeLayers(rule.layers),
+    },
   };
+};
+
+const normalizeLayers = (layers?: RuleProjectLayer[]): ProjectLayer[] | undefined =>
+  layers?.map((layer) => ({
+    ...layer,
+    changeAdapters: layer.changeAdapters?.map(toChangeSource),
+  }));
+
+const toChangeSource = (source: 'git' | 'p4' | 'filesystem' | 'manual'): ChangeSource => {
+  if (source === 'git') return ChangeSource.GIT;
+  if (source === 'p4') return ChangeSource.P4;
+  if (source === 'filesystem') return ChangeSource.FILESYSTEM;
+  return ChangeSource.MANUAL;
 };
 
 const loadRules = (root: string): Array<{ rule: ProjectDetectionRule; source: RuleSource }> => [

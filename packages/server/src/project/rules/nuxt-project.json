@@ -39,5 +39,45 @@
       "Treat nuxt.config.* as framework configuration.",
       "Use pages/, layouts/, server/, and plugins/ according to Nuxt conventions."
     ]
-  }
+  },
+  "parserAdapters": [
+    "vue-sfc",
+    "tree-sitter-source",
+    "package-manifest"
+  ],
+  "queryPacks": [
+    "typescript",
+    "javascript",
+    "vue"
+  ],
+  "conventionExtractors": [
+    "nuxt-routes",
+    "vue-components"
+  ],
+  "sourceRoots": [
+    "pages",
+    "components",
+    "layouts",
+    "server",
+    "plugins"
+  ],
+  "generatedRoots": [
+    ".nuxt",
+    ".output",
+    "dist"
+  ],
+  "ignore": [
+    "node_modules",
+    ".nuxt",
+    ".output",
+    "dist"
+  ],
+  "manifests": [
+    "package.json",
+    "nuxt.config.*",
+    "tsconfig.json"
+  ],
+  "riskHints": [
+    "Respect Nuxt server/client execution boundaries before editing shared code."
+  ]
 }

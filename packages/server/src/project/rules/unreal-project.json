@@ -45,5 +45,73 @@
       "Treat .uproject as the project manifest.",
       "Treat *.Build.cs and *.Target.cs as module/build entry points."
     ]
-  }
+  },
+  "parserAdapters": [
+    "unreal-manifest",
+    "unreal-build",
+    "unreal-config"
+  ],
+  "queryPacks": [
+    "cpp-light",
+    "csharp-build-light"
+  ],
+  "conventionExtractors": [
+    "unreal-modules"
+  ],
+  "sourceRoots": [
+    "Source",
+    "Plugins"
+  ],
+  "generatedRoots": [
+    "Binaries",
+    "Intermediate",
+    "Saved",
+    "DerivedDataCache"
+  ],
+  "ignore": [
+    "Binaries",
+    "Intermediate",
+    "Saved",
+    "DerivedDataCache"
+  ],
+  "manifests": [
+    "*.uproject",
+    "Source/**/*.Build.cs",
+    "Source/**/*.Target.cs"
+  ],
+  "riskHints": [
+    "Do not edit generated Unreal output unless explicitly requested."
+  ],
+  "layers": [
+    {
+      "id": "gameplay-cpp",
+      "label": "Gameplay C++",
+      "roots": ["Source", "Plugins"],
+      "language": "cpp",
+      "parserAdapters": ["tree-sitter-source", "unreal-build"],
+      "queryPacks": ["cpp-light", "csharp-build-light"],
+      "changeAdapters": ["git", "p4"]
+    },
+    {
+      "id": "content-assets",
+      "label": "Content Assets",
+      "roots": ["Content"],
+      "parserAdapters": ["unreal-asset-metadata"],
+      "changeAdapters": ["p4", "filesystem"]
+    },
+    {
+      "id": "config",
+      "label": "Unreal Config",
+      "roots": ["Config"],
+      "parserAdapters": ["unreal-config"],
+      "changeAdapters": ["git", "p4"]
+    },
+    {
+      "id": "generated",
+      "label": "Generated Output",
+      "roots": ["Binaries", "Intermediate", "Saved", "DerivedDataCache"],
+      "parserAdapters": [],
+      "generated": true
+    }
+  ]
 }
