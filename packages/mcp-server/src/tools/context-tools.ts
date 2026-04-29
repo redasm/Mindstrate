@@ -7,6 +7,7 @@ import {
   handleContextIngestEvent,
   handleContextInternalize,
   handleContextQueryGraph,
+  handleProjectGraphAddOverlay,
   handleProjectGraphExplainNode,
   handleProjectGraphBlastRadius,
   handleProjectGraphGetNeighbors,
@@ -26,6 +27,7 @@ import {
   ProjectGraphNeighborsSchema,
   ProjectGraphNodeSchema,
   ProjectGraphBlastRadiusSchema,
+  ProjectGraphOverlaySchema,
   ProjectGraphPathSchema,
   ProjectGraphQuerySchema,
 } from './tool-schemas.js';
@@ -115,5 +117,11 @@ export const contextTools = [
     description: 'Estimate local blast radius around a project graph node before editing.',
     schema: ProjectGraphBlastRadiusSchema,
     handler: (api, input) => handleProjectGraphBlastRadius(api, input),
+  }),
+  defineTool({
+    name: 'add_project_graph_overlay',
+    description: 'Attach an editable user/team note, correction, confirmation, rejection, risk, or convention to a project graph node or edge without mutating extracted graph facts.',
+    schema: ProjectGraphOverlaySchema,
+    handler: (api, input) => handleProjectGraphAddOverlay(api, input),
   }),
 ];

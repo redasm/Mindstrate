@@ -1,9 +1,11 @@
 import {
   ContextDomainType,
+  ProjectGraphOverlaySource,
   type ContextEdge,
   type ContextEventType,
   type ContextNode,
   type ContextNodeStatus,
+  type ProjectGraphOverlayKind,
 } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
 import { appendGraphContextSections } from './memory-handlers.js';
@@ -335,6 +337,36 @@ export async function handleProjectGraphBlastRadius(
     formatProjectGraphEdges(affected.edges),
   ].join('\n');
   return { content: [{ type: 'text', text }] };
+}
+
+export async function handleProjectGraphAddOverlay(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  const overlay = await api.createProjectGraphOverlay({
+    project: input.project,
+    targetNodeId: input.targetNodeId,
+    targetEdgeId: input.targetEdgeId,
+    kind: input.kind as ProjectGraphOverlayKind,
+    content: input.content,
+    author: input.author,
+    source: input.source ?? ProjectGraphOverlaySource.MCP,
+  });
+
+  return {
+    content: [{
+      type: 'text',
+      text: [
+        'Project graph overlay added.',
+        `ID: ${overlay.id}`,
+        `Project: ${overlay.project}`,
+        overlay.targetNodeId ? `Target node: ${overlay.targetNodeId}` : null,
+        overlay.targetEdgeId ? `Target edge: ${overlay.targetEdgeId}` : null,
+        `Kind: ${overlay.kind}`,
+        `Source: ${overlay.source}`,
+      ].filter(Boolean).join('\n'),
+    }],
+  };
 }
 
 const findProjectGraphNode = async (

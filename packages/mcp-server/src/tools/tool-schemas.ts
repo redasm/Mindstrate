@@ -74,6 +74,18 @@ export const ProjectGraphBlastRadiusSchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
 });
 
+export const ProjectGraphOverlaySchema = z.object({
+  project: z.string().min(1, 'project is required'),
+  targetNodeId: z.string().optional(),
+  targetEdgeId: z.string().optional(),
+  kind: z.enum(['note', 'confirmation', 'correction', 'rejection', 'risk', 'convention']),
+  content: z.string().min(1, 'content is required'),
+  author: z.string().optional(),
+  source: z.enum(['obsidian', 'web', 'mcp', 'cli']).optional(),
+}).refine((value) => value.targetNodeId || value.targetEdgeId, {
+  message: 'targetNodeId or targetEdgeId is required',
+});
+
 export const ContextConflictsSchema = z.object({
   project: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),

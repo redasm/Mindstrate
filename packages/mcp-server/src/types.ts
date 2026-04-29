@@ -34,6 +34,9 @@ import type {
   InstallBundleResult,
   InternalizationSuggestions,
   PortableContextBundle,
+  ProjectGraphOverlay,
+  ProjectGraphOverlayKind,
+  ProjectGraphOverlaySource,
   PublishBundleOptions,
   PublishBundleResult,
 } from '@mindstrate/protocol';
@@ -83,6 +86,23 @@ export interface ContextEdgeQueryOptions {
   limit?: number;
 }
 
+export interface ProjectGraphOverlayInput {
+  project: string;
+  targetNodeId?: string;
+  targetEdgeId?: string;
+  kind: ProjectGraphOverlayKind;
+  content: string;
+  author?: string;
+  source: ProjectGraphOverlaySource;
+}
+
+export interface ProjectGraphOverlayQueryOptions {
+  project?: string;
+  targetNodeId?: string;
+  targetEdgeId?: string;
+  limit?: number;
+}
+
 // ============================================================
 // Local-mode subdomain shapes
 //
@@ -110,6 +130,8 @@ export interface LocalContextSubApi {
   queryContextGraph(options?: ContextGraphQueryOptions): ContextNode[];
   listContextEdges(options?: ContextEdgeQueryOptions): ContextEdge[];
   listConflictRecords(project?: string, limit?: number): ConflictRecord[];
+  createProjectGraphOverlay(input: ProjectGraphOverlayInput): ProjectGraphOverlay;
+  listProjectGraphOverlays(options?: ProjectGraphOverlayQueryOptions): ProjectGraphOverlay[];
   recordFeedback(retrievalId: string, signal: FeedbackEvent['signal'], context?: string): void;
 }
 
@@ -207,6 +229,8 @@ export interface ContextGraphApi {
   queryContextGraph(options?: ContextGraphQueryOptions): Promise<ContextNode[]>;
   listContextEdges(options?: ContextEdgeQueryOptions): Promise<ContextEdge[]>;
   listContextConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]>;
+  createProjectGraphOverlay(input: ProjectGraphOverlayInput): Promise<ProjectGraphOverlay>;
+  listProjectGraphOverlays(options?: ProjectGraphOverlayQueryOptions): Promise<ProjectGraphOverlay[]>;
   acceptConflictCandidate(input: { conflictId: string; candidateNodeId: string; resolution: string }): Promise<{ resolved: ConflictRecord | null }>;
   rejectConflictCandidate(input: { conflictId: string; candidateNodeId: string; reason: string }): Promise<{ rejected: boolean } | { rejectedNode: unknown }>;
 }

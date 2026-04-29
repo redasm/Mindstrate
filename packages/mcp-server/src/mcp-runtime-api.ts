@@ -165,6 +165,16 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       return memory!.context.listConflictRecords(queryOptions?.project, queryOptions?.limit);
     },
 
+    async createProjectGraphOverlay(input) {
+      if (teamClient) return teamClient.context.createProjectGraphOverlay(input);
+      return memory!.context.createProjectGraphOverlay(input);
+    },
+
+    async listProjectGraphOverlays(queryOptions) {
+      if (teamClient) return teamClient.context.listProjectGraphOverlays(queryOptions);
+      return memory!.context.listProjectGraphOverlays(queryOptions);
+    },
+
     async acceptConflictCandidate(input) {
       if (teamClient) return teamClient.context.acceptConflictCandidate(input);
       return memory!.metabolism.acceptConflictCandidate(input);
