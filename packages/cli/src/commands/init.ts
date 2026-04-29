@@ -136,6 +136,10 @@ export const initCommand = new Command('init')
         const artifacts = writeLocalProjectGraphArtifacts(memory, project, options.withVault);
         console.log(`  Report: ${artifacts.reportPath}`);
         console.log(`  Stats:  ${artifacts.statsPath}`);
+        if (process.env['TEAM_SERVER_URL']) {
+          const publish = await publishProjectGraphToTeamServer(memory, project, await createTeamClientFromEnv());
+          console.log(`  Team:   ${publish.installedNodes} installed, ${publish.updatedNodes} updated`);
+        }
       }
 
       // 6) Write project meta file (always, for ownership + fingerprint cache)
@@ -194,6 +198,52 @@ export function writeLocalProjectGraphArtifacts(
   return vaultPath
     ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath))
     : memory.context.writeProjectGraphArtifacts(project);
+}
+
+export interface ProjectGraphTeamClient {
+  context: {
+    publishProjectGraph(input: {
+      bundle: ReturnType<Mindstrate['bundles']['createBundle']>;
+      repoId: string;
+    }): Promise<{
+      installedNodes: number;
+      updatedNodes: number;
+      installedEdges: number;
+      skippedEdges: number;
+    }>;
+  };
+}
+
+export async function publishProjectGraphToTeamServer(
+  memory: Mindstrate,
+  project: DetectedProject,
+  client: ProjectGraphTeamClient,
+): Promise<{
+  installedNodes: number;
+  updatedNodes: number;
+  installedEdges: number;
+  skippedEdges: number;
+}> {
+  const bundle = memory.bundles.createBundle({
+    name: `${project.name} project graph`,
+    project: project.name,
+    includeRelatedEdges: true,
+  });
+  return client.context.publishProjectGraph({
+    bundle,
+    repoId: project.name,
+  });
+}
+
+async function createTeamClientFromEnv(): Promise<ProjectGraphTeamClient> {
+  const serverUrl = process.env['TEAM_SERVER_URL'];
+  if (!serverUrl) throw new Error('TEAM_SERVER_URL is required for team project graph publish.');
+  const clientPackage = '@mindstrate/client';
+  const { TeamClient } = await import(clientPackage);
+  return new TeamClient({
+    serverUrl,
+    apiKey: process.env['TEAM_API_KEY'],
+  });
 }
 
 function printDetected(p: DetectedProject): void {
