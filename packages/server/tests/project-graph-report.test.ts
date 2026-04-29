@@ -65,4 +65,32 @@ describe('project graph report export', () => {
     });
     expect(records[0].targetRef).toBe(result.reportPath);
   });
+
+  it('writes an editable Obsidian project graph projection', () => {
+    write(root, 'package.json', JSON.stringify({
+      name: 'demo-report',
+      dependencies: { react: '^19.0.0' },
+    }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    const vaultRoot = createTempDir('mindstrate-project-graph-vault-');
+
+    try {
+      const project = detectProject(root)!;
+      memory.context.indexProjectGraph(project);
+      const result = memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+
+      expect(result.reportPath).toBe(path.join(vaultRoot, 'demo-report', 'architecture', 'project-graph.md'));
+      const report = fs.readFileSync(result.reportPath, 'utf8');
+      expect(report).toContain('<!-- mindstrate:project-graph:generated:start -->');
+      expect(report).toContain('<!-- mindstrate:project-graph:user-notes:start -->');
+      expect(report).toContain('User Notes');
+      const records = memory.projections.listProjectionRecords({
+        target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
+        limit: 10,
+      });
+      expect(records[0].targetRef).toBe(result.reportPath);
+    } finally {
+      removeTempDir(vaultRoot);
+    }
+  });
 });

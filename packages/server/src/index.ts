@@ -204,6 +204,7 @@ export {
   collectProjectGraphStats,
   indexProjectGraph,
   writeProjectGraphArtifacts,
+  writeProjectGraphObsidianProjection,
   writeProjectGraphExtraction,
   type ArchiveProjectGraphFileFactsInput,
   type ProjectGraphArtifactResult,

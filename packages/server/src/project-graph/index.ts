@@ -40,6 +40,7 @@ export {
 export {
   collectProjectGraphStats,
   writeProjectGraphArtifacts,
+  writeProjectGraphObsidianProjection,
   type ProjectGraphArtifactResult,
   type ProjectGraphStatsExport,
 } from './project-graph-report.js';

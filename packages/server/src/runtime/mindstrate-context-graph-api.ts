@@ -18,7 +18,11 @@ import type { ProjectedKnowledgeSearchOptions } from '../context-graph/projected
 import { computeGraphNodeMatchScore } from '../context-graph/graph-match-score.js';
 import { ingestUserFeedback } from '../events/index.js';
 import { indexProjectGraph, type ProjectGraphIndexResult } from '../project-graph/index.js';
-import { writeProjectGraphArtifacts, type ProjectGraphArtifactResult } from '../project-graph/index.js';
+import {
+  writeProjectGraphArtifacts,
+  writeProjectGraphObsidianProjection,
+  type ProjectGraphArtifactResult,
+} from '../project-graph/index.js';
 import type { DetectedProject } from '../project/index.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
@@ -153,6 +157,10 @@ export class MindstrateContextGraphApi {
 
   writeProjectGraphArtifacts(project: DetectedProject): ProjectGraphArtifactResult {
     return writeProjectGraphArtifacts(this.services.contextGraphStore, project);
+  }
+
+  writeProjectGraphObsidianProjection(project: DetectedProject, vaultRoot: string): ProjectGraphArtifactResult {
+    return writeProjectGraphObsidianProjection(this.services.contextGraphStore, project, vaultRoot);
   }
 
   private tryIngestDerivedEvent(work: () => void): void {

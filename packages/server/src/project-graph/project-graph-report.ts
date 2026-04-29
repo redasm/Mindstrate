@@ -53,6 +53,42 @@ export const writeProjectGraphArtifacts = (
   };
 };
 
+export const writeProjectGraphObsidianProjection = (
+  store: ContextGraphStore,
+  project: DetectedProject,
+  vaultRoot: string,
+): ProjectGraphArtifactResult => {
+  const stats = collectProjectGraphStats(store, project);
+  const generated = renderProjectGraphReport(project, stats);
+  const projectSlug = slugify(project.name);
+  const reportPath = path.join(vaultRoot, projectSlug, 'architecture', 'project-graph.md');
+  const statsPath = path.join(project.root, '.mindstrate', 'project-graph.json');
+  const existing = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
+  const report = renderEditableObsidianProjection(generated, existing);
+
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.mkdirSync(path.dirname(statsPath), { recursive: true });
+  fs.writeFileSync(reportPath, report, 'utf8');
+  fs.writeFileSync(statsPath, `${JSON.stringify(stats, null, 2)}\n`, 'utf8');
+  if (stats.projectionNodeId) {
+    store.upsertProjectionRecord({
+      id: `projection:${ProjectionTarget.PROJECT_GRAPH_OBSIDIAN}:${project.name}`,
+      nodeId: stats.projectionNodeId,
+      target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
+      targetRef: reportPath,
+      version: 1,
+      projectedAt: stats.generatedAt,
+    });
+  }
+
+  return {
+    reportPath,
+    statsPath,
+    nodes: stats.nodes,
+    edges: stats.edges,
+  };
+};
+
 export const collectProjectGraphStats = (
   store: ContextGraphStore,
   project: DetectedProject,
@@ -117,6 +153,31 @@ const renderProjectGraphReport = (
 
 const listOrFallback = (items: string[]): string[] =>
   items.length > 0 ? items.map((item) => `- ${item}`) : ['- None detected yet.'];
+
+const renderEditableObsidianProjection = (generated: string, existing: string): string => [
+  '<!-- mindstrate:project-graph:generated:start -->',
+  generated,
+  '<!-- mindstrate:project-graph:generated:end -->',
+  '',
+  '## User Notes',
+  '',
+  '<!-- mindstrate:project-graph:user-notes:start -->',
+  preserveBlock(existing, 'user-notes') || '- Add architecture notes, confirmations, corrections, or risks here.',
+  '<!-- mindstrate:project-graph:user-notes:end -->',
+  '',
+].join('\n');
+
+const preserveBlock = (text: string, name: string): string => {
+  const start = `<!-- mindstrate:project-graph:${name}:start -->`;
+  const end = `<!-- mindstrate:project-graph:${name}:end -->`;
+  const startIndex = text.indexOf(start);
+  const endIndex = text.indexOf(end);
+  if (startIndex < 0 || endIndex < 0 || endIndex < startIndex) return '';
+  return text.slice(startIndex + start.length, endIndex).trim();
+};
+
+const slugify = (value: string): string =>
+  value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 
 const countBy = <T>(items: T[], keyFor: (item: T) => string): Record<string, number> => {
   const counts: Record<string, number> = {};
