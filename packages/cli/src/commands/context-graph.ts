@@ -9,8 +9,10 @@ import { Command } from 'commander';
 import {
   ChangeSource,
   ContextDomainType,
+  ProjectionTarget,
   type ContextEdge,
   type ContextNode,
+  type ProjectionRecord,
 } from '@mindstrate/server';
 import {
   detectProject,
@@ -68,6 +70,39 @@ contextGraphCommand
       printCounts('Provenance', countBy(nodes, (node) => String(node.metadata?.['provenance'] ?? 'unknown')));
     } catch (error) {
       fail('Graph stats failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
+contextGraphCommand
+  .command('status')
+  .description('Show canonical project graph location and projection status')
+  .option('-p, --project <project>', 'Project scope')
+  .action(async (options) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const nodes = projectGraphNodes(memory.context.listContextNodes({
+        project: options.project,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: 100000,
+      }));
+      const edges = projectGraphEdges(memory.context.listContextEdges({ limit: 100000 }));
+      const projections = memory.projections.listProjectionRecords({
+        target: undefined,
+        limit: 100,
+      }).filter((record) => projectGraphProjectionTargets.has(record.target));
+      const lines = buildGraphStatusLines({
+        mode: process.env['TEAM_SERVER_URL'] ? 'team' : 'local',
+        project: options.project ?? '(all)',
+        nodes: nodes.length,
+        edges: edges.length,
+        projections,
+      });
+      for (const line of lines) console.log(line);
+    } catch (error) {
+      fail('Graph status failed', error);
     } finally {
       memory.close();
     }
@@ -234,6 +269,30 @@ const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
 
 const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
   edges.filter((edge) => edge.evidence?.['projectGraph'] === true);
+
+const projectGraphProjectionTargets = new Set<ProjectionTarget>([
+  ProjectionTarget.PROJECT_GRAPH_REPO_ENTRY,
+  ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
+  ProjectionTarget.PROJECT_GRAPH_TEAM_SERVER,
+]);
+
+export const buildGraphStatusLines = (input: {
+  mode: 'local' | 'team';
+  project: string;
+  nodes: number;
+  edges: number;
+  projections: ProjectionRecord[];
+}): string[] => [
+  'Project graph status',
+  `  Project: ${input.project}`,
+  `  Canonical: ${input.mode === 'team' ? 'Team Server shared graph' : 'local ECS graph'}`,
+  `  Nodes: ${input.nodes}`,
+  `  Edges: ${input.edges}`,
+  '  Projections:',
+  ...(input.projections.length > 0
+    ? input.projections.map((record) => `    - ${record.target}: ${record.targetRef}`)
+    : ['    - none']),
+];
 
 const printNodes = (nodes: ContextNode[], verbose: boolean): void => {
   if (nodes.length === 0) {
