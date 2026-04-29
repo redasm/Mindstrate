@@ -24,6 +24,11 @@ export interface ProjectGraphStatsExport {
     provenance: string;
     evidencePaths: string[];
   }>;
+  openQuestions: Array<{
+    title: string;
+    summary: string;
+    evidencePaths: string[];
+  }>;
   provenanceCounts: Record<string, number>;
   nodeKindCounts: Record<string, number>;
 }
@@ -122,12 +127,20 @@ export const collectProjectGraphStats = (
     inferredSummaries: nodes
       .filter((node) => {
         const provenance = String(node.metadata?.['provenance'] ?? '');
-        return provenance === 'INFERRED' || provenance === 'AMBIGUOUS';
+        return provenance === 'INFERRED';
       })
       .map((node) => ({
         title: node.title,
         summary: typeof node.metadata?.['summary'] === 'string' ? node.metadata['summary'] : node.content,
         provenance: String(node.metadata?.['provenance'] ?? 'unknown'),
+        evidencePaths: evidencePathsForNode(node),
+      }))
+      .slice(0, 12),
+    openQuestions: nodes
+      .filter((node) => String(node.metadata?.['provenance'] ?? '') === 'AMBIGUOUS')
+      .map((node) => ({
+        title: node.title,
+        summary: typeof node.metadata?.['summary'] === 'string' ? node.metadata['summary'] : node.content,
         evidencePaths: evidencePathsForNode(node),
       }))
       .slice(0, 12),
@@ -165,6 +178,10 @@ const renderProjectGraphReport = (
   '',
   ...inferredSummaryLines(stats.inferredSummaries),
   '',
+  '## Open Questions',
+  '',
+  ...openQuestionLines(stats.openQuestions),
+  '',
   '## Suggested Graph Queries',
   '',
   '- mindstrate graph query "entry points"',
@@ -189,6 +206,7 @@ const renderProjectGraphRepoEntry = (
   `- Nodes: ${stats.nodes}`,
   `- Edges: ${stats.edges}`,
   `- Inferred summaries: ${stats.inferredSummaries.length}`,
+  `- Open questions: ${stats.openQuestions.length}`,
   `- Stats: .mindstrate/project-graph.json`,
   '',
   '## Useful Commands',
@@ -211,6 +229,15 @@ const inferredSummaryLines = (summaries: ProjectGraphStatsExport['inferredSummar
       `  - Evidence: ${summary.evidencePaths.join(', ') || '(none)'}`,
     ])
     : ['- None generated yet.'];
+
+const openQuestionLines = (questions: ProjectGraphStatsExport['openQuestions']): string[] =>
+  questions.length > 0
+    ? questions.flatMap((question) => [
+      `- ${question.title}`,
+      `  - ${question.summary}`,
+      `  - Evidence: ${question.evidencePaths.join(', ') || '(none)'}`,
+    ])
+    : ['- None raised yet.'];
 
 const renderEditableObsidianProjection = (generated: string, existing: string): string => [
   '<!-- mindstrate:project-graph:generated:start -->',

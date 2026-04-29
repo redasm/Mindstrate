@@ -101,6 +101,22 @@ describe('project graph report export', () => {
           evidence: [{ path: 'src/App.tsx', extractorId: 'llm-enrichment' }],
         },
       });
+      memory.context.createContextNode({
+        id: 'pg:demo-report:concept:routing-question',
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: 'Routing ownership unclear',
+        content: 'concept: Routing ownership unclear',
+        project: 'demo-report',
+        status: ContextNodeStatus.ACTIVE,
+        metadata: {
+          projectGraph: true,
+          kind: ProjectGraphNodeKind.CONCEPT,
+          provenance: ProjectGraphProvenance.AMBIGUOUS,
+          summary: 'Confirm whether App.tsx or a nested route owns routing decisions.',
+          evidence: [{ path: 'src/App.tsx', extractorId: 'llm-enrichment' }],
+        },
+      });
       const result = memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
 
       expect(result.reportPath).toBe(path.join(vaultRoot, 'demo-report', 'architecture', 'project-graph.md'));
@@ -111,6 +127,9 @@ describe('project graph report export', () => {
       expect(report).toContain('## Inferred Summaries');
       expect(report).toContain('Application shell');
       expect(report).toContain('App.tsx composes the user-facing shell.');
+      expect(report).toContain('## Open Questions');
+      expect(report).toContain('Routing ownership unclear');
+      expect(report).toContain('Confirm whether App.tsx or a nested route owns routing decisions.');
       const records = memory.projections.listProjectionRecords({
         target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
         limit: 10,
