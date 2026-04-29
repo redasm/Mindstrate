@@ -49,6 +49,7 @@ export {
   type ProjectGraphStatsExport,
 } from './project-graph-report.js';
 export {
+  detectProjectGraphChangeSet,
   detectProjectGraphChanges,
   type ProjectGraphChangeDetectionInput,
   type ProjectGraphChangeDetectionResult,

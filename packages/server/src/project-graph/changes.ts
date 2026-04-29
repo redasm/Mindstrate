@@ -29,6 +29,18 @@ export const detectProjectGraphChanges = (
   input: ProjectGraphChangeDetectionInput,
 ): ProjectGraphChangeDetectionResult => {
   const changedFiles = input.files.map((file) => toChangedFile(project, file));
+  return detectProjectGraphChangeSet(store, project, {
+    source: input.source,
+    files: changedFiles,
+  });
+};
+
+export const detectProjectGraphChangeSet = (
+  store: ProjectGraphChangeStore,
+  project: DetectedProject,
+  changeSet: ChangeSet,
+): ProjectGraphChangeDetectionResult => {
+  const changedFiles = changeSet.files.map(normalizeChangedFile);
   const nodes = store.listContextNodes({ project: project.name, limit: 100000 })
     .filter((node) => node.metadata?.['projectGraph'] === true);
   const affectedNodeIds = nodes
@@ -41,7 +53,7 @@ export const detectProjectGraphChanges = (
 
   return {
     changeSet: {
-      source: input.source,
+      ...changeSet,
       files: changedFiles,
     },
     affectedNodeIds,
@@ -55,6 +67,12 @@ const toChangedFile = (project: DetectedProject, filePath: string): ChangedFile 
   path: normalizePath(filePath),
   status: 'modified',
   layerId: layerForPath(project, filePath),
+});
+
+const normalizeChangedFile = (file: ChangedFile): ChangedFile => ({
+  ...file,
+  path: normalizePath(file.path),
+  oldPath: file.oldPath ? normalizePath(file.oldPath) : undefined,
 });
 
 const nodeMatchesFile = (node: ContextNode, filePath: string): boolean =>

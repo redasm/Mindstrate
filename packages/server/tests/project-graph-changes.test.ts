@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ChangeSource } from '@mindstrate/protocol/models';
 import { Mindstrate, detectProject } from '../src/index.js';
-import { detectProjectGraphChanges } from '../src/project-graph/changes.js';
+import { detectProjectGraphChanges, detectProjectGraphChangeSet } from '../src/project-graph/changes.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 const write = (root: string, rel: string, content: string): void => {
@@ -49,5 +49,47 @@ describe('project graph change detection', () => {
     expect(result.affectedNodeIds.length).toBeGreaterThan(0);
     expect(result.affectedLayers).toEqual(expect.arrayContaining(['gameplay-cpp', 'generated']));
     expect(result.riskHints).toContain('Do not edit generated Unreal output unless explicitly requested.');
+  });
+
+  it('preserves external collector changeset metadata while mapping affected graph context', () => {
+    write(root, 'Client.uproject', JSON.stringify({ FileVersion: 3 }));
+    fs.mkdirSync(path.join(root, 'Content'));
+    fs.mkdirSync(path.join(root, 'Config'));
+    write(root, 'Source/Client/Client.Build.cs', 'public class Client {}');
+
+    const project = detectProject(root)!;
+    memory.context.indexProjectGraph(project);
+
+    const result = detectProjectGraphChangeSet(memory.context, project, {
+      source: ChangeSource.P4,
+      base: '123',
+      head: '124',
+      files: [
+        {
+          path: 'Source\\Client\\Client.Build.cs',
+          oldPath: 'Source\\OldClient\\Client.Build.cs',
+          status: 'renamed',
+          language: 'csharp',
+          layerId: 'custom-gameplay',
+        },
+      ],
+    });
+
+    expect(result.changeSet).toEqual({
+      source: ChangeSource.P4,
+      base: '123',
+      head: '124',
+      files: [
+        {
+          path: 'Source/Client/Client.Build.cs',
+          oldPath: 'Source/OldClient/Client.Build.cs',
+          status: 'renamed',
+          language: 'csharp',
+          layerId: 'custom-gameplay',
+        },
+      ],
+    });
+    expect(result.affectedNodeIds.length).toBeGreaterThan(0);
+    expect(result.affectedLayers).toEqual(['custom-gameplay']);
   });
 });
