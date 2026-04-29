@@ -16,23 +16,24 @@ Project Detection Rules make project understanding extensible:
 - Snapshot generation can include domain-specific guidance without changing
   Mindstrate core code.
 
-## Loading Order
+## Current Loading Order
 
-Rules should be loaded in priority order, with more specific sources overriding
-generic built-ins:
+Rules are loaded in priority order, with project-local rules overriding generic
+built-ins when priorities are equal:
 
 1. Project-local rules: `.mindstrate/rules/*.json`
-2. User-global rules: `~/.mindstrate/rules/project-detection/*.json`
-3. Team-provided rules, when running in team mode
-4. Built-in rules packaged with Mindstrate under `packages/server/src/project/rules/*.json`
+2. Built-in rules packaged with Mindstrate under `packages/server/src/project/rules/*.json`
 
 When multiple rules match, the highest `priority` wins. If priorities are equal,
-project-local rules win over global/team/built-in rules.
+project-local rules win over built-in rules.
+
+User-global and Team Server distributed rules are not implemented yet. Prefer
+committing project-local rules when a repository needs custom detection.
 
 ## Rule Format
 
-MVP rules should be declarative JSON only. Do not execute user JavaScript or
-TypeScript in the first version.
+Rules are declarative JSON only. Mindstrate does not execute user JavaScript or
+TypeScript during project detection.
 
 Example Unreal rule:
 
@@ -143,16 +144,10 @@ untrusted repositories.
 
 ## CLI UX
 
-Possible commands:
+`mindstrate setup` and `mindstrate init` use matching rules automatically. A
+future dedicated `mindstrate rules` command can expose validation and listing.
 
-```bash
-mindstrate rules list
-mindstrate rules validate .mindstrate/rules/unreal.json
-mindstrate rules doctor
-mindstrate setup
-```
-
-`mindstrate setup` should show which rule matched:
+Setup output should make the detected project clear:
 
 ```text
 Project detection:
@@ -161,26 +156,11 @@ Project detection:
   Manifest:     MyGame.uproject
 ```
 
-## MVP Implementation Plan
-
-1. Add `ProjectDetectionRule` types and validation.
-2. Add a shared JSON rule loader for project-local and built-in rules.
-3. Add built-in `unreal-project` as `packages/server/src/project/rules/unreal-project.json`.
-4. Update `detectProject()` to run rule detectors before generic fallback.
-5. Extend `DetectedProject` with rule-derived descriptions and snapshot hints.
-6. Update snapshot renderer to include rule-derived overview, directory notes,
-   invariants, and conventions.
-7. Add tests for:
-   - Unreal rule matching.
-   - Project-local rule priority over built-ins.
-   - Invalid rule rejection.
-   - Snapshot preserve blocks surviving rule re-runs.
-
-## Non-Goals For MVP
+## Non-Goals
 
 - Full AST/code graph extraction.
 - LLM-generated architecture summaries.
 - Running user-provided detector code.
 - Team Server rule distribution.
 
-Those can come later after declarative rule loading is stable.
+For user-facing configuration examples, see [Project Configuration](project-configuration.md).
