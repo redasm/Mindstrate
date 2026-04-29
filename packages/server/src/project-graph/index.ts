@@ -49,3 +49,8 @@ export {
   type ProjectGraphChangeDetectionResult,
   type ProjectGraphChangeStore,
 } from './changes.js';
+export {
+  enrichProjectGraph,
+  type ProjectGraphEnrichmentInput,
+  type ProjectGraphEnrichmentResult,
+} from './enrichment.js';
