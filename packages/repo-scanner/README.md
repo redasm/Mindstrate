@@ -14,7 +14,8 @@ mindstrate-scan source add-git --name repo --project my-project --repo-path .
 mindstrate-scan daemon
 ```
 
-详细文档：
+详细文档 / Documentation:
 
-- [数据采集指南](../../docs/data-collection.md)
+- [数据采集指南](../../docs/data-collection.zh-CN.md)
+- [Data Collection Guide](../../docs/data-collection.en.md)
 - [Repo Scanner 设计](../../docs/repo-scanner-design.md)
