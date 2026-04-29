@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
-import { ProjectGraphOverlayKind, ProjectGraphOverlaySource, ProjectionTarget } from '@mindstrate/server';
+import { ChangeSource, ProjectGraphOverlayKind, ProjectGraphOverlaySource, ProjectionTarget } from '@mindstrate/server';
 import {
   buildGraphOverlayLines,
+  buildGraphChangeResultLines,
   buildGraphStatusLines,
   extractProjectGraphUserNotes,
+  parseExternalChangeSetJson,
   resolveGraphSyncPlan,
 } from './commands/context-graph.js';
 
@@ -94,5 +96,63 @@ test('buildGraphOverlayLines renders editable project graph overlays', () => {
     'Overlays: 1',
     '  - [correction] This is a route shell, not a domain component.',
     '    Source: obsidian | Author: yangfan | ID: overlay-1',
+  ]);
+});
+
+test('parseExternalChangeSetJson normalizes collector changeset payloads', () => {
+  const changeSet = parseExternalChangeSetJson(JSON.stringify({
+    source: ChangeSource.P4,
+    base: '100',
+    head: '101',
+    files: [
+      {
+        path: 'Source\\Client\\Client.Build.cs',
+        status: 'renamed',
+        oldPath: 'Source\\OldClient\\Client.Build.cs',
+        language: 'csharp',
+        layerId: 'gameplay-cpp',
+      },
+    ],
+  }));
+
+  assert.deepEqual(changeSet, {
+    source: ChangeSource.P4,
+    base: '100',
+    head: '101',
+    files: [
+      {
+        path: 'Source/Client/Client.Build.cs',
+        status: 'renamed',
+        oldPath: 'Source/OldClient/Client.Build.cs',
+        language: 'csharp',
+        layerId: 'gameplay-cpp',
+      },
+    ],
+  });
+});
+
+test('buildGraphChangeResultLines renders external changeset analysis', () => {
+  const lines = buildGraphChangeResultLines({
+    changeSet: {
+      source: ChangeSource.P4,
+      files: [{ path: 'src/App.tsx', status: 'modified', layerId: 'ui' }],
+    },
+    affectedNodeIds: ['node-1'],
+    affectedLayers: ['ui'],
+    riskHints: ['Review generated files.'],
+    suggestedQueries: ['mindstrate graph context src/App.tsx'],
+  });
+
+  assert.deepEqual(lines, [
+    'Source: p4',
+    'Files: 1',
+    'Affected nodes: 1',
+    'Affected layers: ui',
+    '',
+    'Risk hints:',
+    '  - Review generated files.',
+    '',
+    'Suggested queries:',
+    '  - mindstrate graph context src/App.tsx',
   ]);
 });

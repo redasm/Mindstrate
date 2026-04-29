@@ -16,6 +16,8 @@ import {
   ProjectionTarget,
   type ContextEdge,
   type ContextNode,
+  type ChangeSet,
+  type ChangedFileStatus,
   type ProjectGraphOverlay,
   type ProjectionRecord,
 } from '@mindstrate/server';
@@ -296,6 +298,27 @@ contextGraphCommand
   });
 
 contextGraphCommand
+  .command('ingest')
+  .description('Ingest external project graph input from repo-scanner or a custom collector')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
+  .requiredOption('--changes <file>', 'Path to a ChangeSet JSON file, or - for stdin')
+  .action(async (options) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const project = detectProject(options.cwd ?? process.cwd());
+      if (!project) throw new Error('Could not detect project.');
+      const changeSet = parseExternalChangeSetJson(readTextInput(options.changes));
+      const result = memory.context.ingestProjectGraphChangeSet(project, changeSet);
+      for (const line of buildGraphChangeResultLines(result)) console.log(line);
+    } catch (error) {
+      fail('Graph ingest failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
+contextGraphCommand
   .command('changes')
   .description('Map workspace or manual file changes onto project graph nodes and risk hints')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
@@ -312,16 +335,7 @@ contextGraphCommand
         ? gitChangedFiles(project.root)
         : options.files ?? [];
       const result = detectProjectGraphChanges(memory.context, project, { source, files });
-      console.log(`Source: ${result.changeSet.source}`);
-      console.log(`Files: ${result.changeSet.files.length}`);
-      console.log(`Affected nodes: ${result.affectedNodeIds.length}`);
-      console.log(`Affected layers: ${result.affectedLayers.join(', ') || '(none)'}`);
-      if (result.riskHints.length > 0) {
-        console.log('\nRisk hints:');
-        for (const hint of result.riskHints) console.log(`  - ${hint}`);
-      }
-      console.log('\nSuggested queries:');
-      for (const query of result.suggestedQueries) console.log(`  - ${query}`);
+      for (const line of buildGraphChangeResultLines(result)) console.log(line);
     } catch (error) {
       fail('Graph changes failed', error);
     } finally {
@@ -368,6 +382,39 @@ export const buildGraphOverlayLines = (overlays: ProjectGraphOverlay[]): string[
     ])
     : ['  - none']),
 ];
+
+export const buildGraphChangeResultLines = (result: {
+  changeSet: ChangeSet;
+  affectedNodeIds: string[];
+  affectedLayers: string[];
+  riskHints: string[];
+  suggestedQueries: string[];
+}): string[] => [
+  `Source: ${result.changeSet.source}`,
+  `Files: ${result.changeSet.files.length}`,
+  `Affected nodes: ${result.affectedNodeIds.length}`,
+  `Affected layers: ${result.affectedLayers.join(', ') || '(none)'}`,
+  ...(result.riskHints.length > 0
+    ? ['', 'Risk hints:', ...result.riskHints.map((hint) => `  - ${hint}`)]
+    : []),
+  '',
+  'Suggested queries:',
+  ...result.suggestedQueries.map((query) => `  - ${query}`),
+];
+
+export const parseExternalChangeSetJson = (text: string): ChangeSet => {
+  const value = JSON.parse(text) as unknown;
+  if (!isRecord(value)) throw new Error('ChangeSet JSON must be an object.');
+  if (!isChangeSource(value.source)) throw new Error('ChangeSet source is required.');
+  if (!Array.isArray(value.files)) throw new Error('ChangeSet files must be an array.');
+
+  return {
+    source: value.source,
+    base: optionalString(value.base, 'base'),
+    head: optionalString(value.head, 'head'),
+    files: value.files.map(parseExternalChangedFile),
+  };
+};
 
 export const resolveGraphSyncPlan = (input: {
   projectName: string;
@@ -508,6 +555,43 @@ const parseChangeSource = (value: string): ChangeSource => {
   if (value === ChangeSource.GIT) return ChangeSource.GIT;
   if (value === ChangeSource.MANUAL) return ChangeSource.MANUAL;
   throw new Error(`Unsupported graph changes source: ${value}`);
+};
+
+const parseExternalChangedFile = (value: unknown): ChangeSet['files'][number] => {
+  if (!isRecord(value)) throw new Error('Changed file entries must be objects.');
+  const filePath = requiredString(value.path, 'path').replace(/\\/g, '/');
+  const status = value.status;
+  if (!isChangedFileStatus(status)) throw new Error(`Unsupported changed file status: ${String(status)}`);
+  return {
+    path: filePath,
+    status,
+    oldPath: optionalString(value.oldPath, 'oldPath')?.replace(/\\/g, '/'),
+    language: optionalString(value.language, 'language'),
+    layerId: optionalString(value.layerId, 'layerId'),
+  };
+};
+
+const readTextInput = (inputPath: string): string =>
+  inputPath === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(path.resolve(inputPath), 'utf8');
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isChangeSource = (value: unknown): value is ChangeSource =>
+  Object.values(ChangeSource).includes(value as ChangeSource);
+
+const isChangedFileStatus = (value: unknown): value is ChangedFileStatus =>
+  value === 'added' || value === 'modified' || value === 'deleted' || value === 'renamed' || value === 'moved';
+
+const requiredString = (value: unknown, field: string): string => {
+  if (typeof value === 'string' && value.length > 0) return value;
+  throw new Error(`Changed file ${field} is required.`);
+};
+
+const optionalString = (value: unknown, field: string): string | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value === 'string') return value;
+  throw new Error(`ChangeSet ${field} must be a string when provided.`);
 };
 
 const gitChangedFiles = (cwd: string): string[] => {
