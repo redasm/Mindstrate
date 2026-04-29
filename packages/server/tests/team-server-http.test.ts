@@ -8,6 +8,7 @@ import {
   ContextNodeStatus,
   Mindstrate,
   KnowledgeType,
+  ProjectionTarget,
   SubstrateType,
 } from '../src/index.js';
 import { createApp } from '../../team-server/src/app.js';
@@ -319,6 +320,48 @@ describe('team-server HTTP integration', () => {
 
     expect(result.files).toHaveLength(1);
     expect(fs.readFileSync(result.files[0], 'utf8')).toContain('Team API should write verified ECS rules');
+  });
+
+  it('publishes project graph bundles as team canonical graph data', async () => {
+    const { client, memory } = await startTeamServer();
+
+    const result = await client.context.publishProjectGraph({
+      bundle: {
+        id: 'project-graph-demo',
+        name: 'Project graph demo',
+        version: '1.0.0',
+        projectScoped: true,
+        nodeIds: ['pg:demo:file:src/App.tsx'],
+        edgeIds: [],
+        exportedAt: new Date().toISOString(),
+        nodes: [{
+          id: 'pg:demo:file:src/App.tsx',
+          substrateType: SubstrateType.SNAPSHOT,
+          domainType: ContextDomainType.ARCHITECTURE,
+          title: 'src/App.tsx',
+          content: 'Project graph file node',
+          tags: ['project-graph', 'file'],
+          project: 'demo',
+          compressionLevel: 1,
+          confidence: 1,
+          qualityScore: 90,
+          status: ContextNodeStatus.ACTIVE,
+          sourceRef: 'src/App.tsx',
+          metadata: { projectGraph: true, kind: 'file', provenance: 'EXTRACTED' },
+        }],
+        edges: [],
+      },
+      repoId: 'demo',
+    });
+
+    expect(result.installedNodes + result.updatedNodes).toBeGreaterThan(0);
+    expect(memory.context.listContextNodes({ project: 'demo', limit: 10 })
+      .some((node) => node.id === 'pg:demo:file:src/App.tsx')).toBe(true);
+    const records = memory.projections.listProjectionRecords({
+      target: ProjectionTarget.PROJECT_GRAPH_TEAM_SERVER,
+      limit: 10,
+    });
+    expect(records[0].targetRef).toBe('demo');
   });
 });
 

@@ -3,6 +3,7 @@ import {
   type ContextDomainType,
   type ContextEventType,
   type ContextNodeStatus,
+  type InstallBundleResult,
   type PortableContextBundle,
   type PublishBundleOptions,
   type SubstrateType,
@@ -196,6 +197,22 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     }
 
     res.json(memory.projections.importObsidianProjectionFile(filePath));
+  }));
+
+  app.post('/api/context/project-graph/publish', withInitializedMemory(memory, async (req, res) => {
+    const bundle = req.body.bundle as PortableContextBundle | undefined;
+    const repoId = typeof req.body.repoId === 'string' ? req.body.repoId : undefined;
+    if (!bundle || !repoId) {
+      res.status(400).json({ error: 'bundle and repoId are required' });
+      return;
+    }
+
+    const result = memory.bundles.installBundle(bundle) as InstallBundleResult;
+    const nodeId = bundle.nodeIds[0] ?? bundle.nodes?.[0]?.id;
+    if (nodeId) {
+      memory.projections.recordProjectGraphTeamProjection({ nodeId, repoId });
+    }
+    res.json(result);
   }));
 
   app.post('/api/evolve', withInitializedMemory(memory, async (req, res) => {

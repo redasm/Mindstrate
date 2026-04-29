@@ -9,6 +9,8 @@ import type {
   CuratedContext,
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
+  InstallBundleResult,
+  PortableContextBundle,
   ProjectionRecord,
 } from '@mindstrate/protocol';
 import { TeamDomainClient } from './team-domain-client.js';
@@ -174,5 +176,12 @@ export class ContextClient extends TeamDomainClient {
 
   async importObsidianProjectionFile(filePath: string): Promise<ObsidianProjectionImportResult> {
     return this.post('/api/context/obsidian-projection/import', { filePath });
+  }
+
+  async publishProjectGraph(input: {
+    bundle: PortableContextBundle;
+    repoId: string;
+  }): Promise<InstallBundleResult> {
+    return this.post('/api/context/project-graph/publish', input);
   }
 }

@@ -5,7 +5,7 @@ import type {
   InternalizationSuggestions,
 } from '../context-graph/context-internalizer.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
-import type { ProjectionRecord } from '@mindstrate/protocol/models';
+import { ProjectionTarget, type ProjectionRecord } from '@mindstrate/protocol/models';
 
 export class MindstrateProjectionApi {
   constructor(private readonly services: MindstrateRuntime) {}
@@ -41,5 +41,14 @@ export class MindstrateProjectionApi {
   listProjectionRecords(options?: { nodeId?: string; target?: string; limit?: number }): ProjectionRecord[] {
     return this.services.contextGraphStore.listProjectionRecords(options);
   }
-}
 
+  recordProjectGraphTeamProjection(input: { nodeId: string; repoId: string }): ProjectionRecord {
+    return this.services.contextGraphStore.upsertProjectionRecord({
+      id: `projection:${ProjectionTarget.PROJECT_GRAPH_TEAM_SERVER}:${input.repoId}`,
+      nodeId: input.nodeId,
+      target: ProjectionTarget.PROJECT_GRAPH_TEAM_SERVER,
+      targetRef: input.repoId,
+      version: 1,
+    });
+  }
+}
