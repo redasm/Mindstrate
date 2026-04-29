@@ -151,6 +151,7 @@ export async function initializeLocalProject(
     ...scope,
   })) console.log(`  ${line}`);
   const graph = memory.context.indexProjectGraph(project);
+  const enrichment = await memory.context.enrichProjectGraph(project);
   const artifacts = options.vaultPath
     ? memory.context.writeProjectGraphObsidianProjection(project, options.vaultPath)
     : memory.context.writeProjectGraphArtifacts(project);
@@ -170,6 +171,7 @@ export async function initializeLocalProject(
     }),
   });
   console.log(`  Project snapshot: ${result.changed ? 'updated' : 'up-to-date'} (${result.view.id})`);
+  console.log(`  Project graph enrichment: ${enrichment.status}`);
   console.log(`  Project graph: ${graph.filesScanned} files, ${graph.nodesCreated + graph.nodesUpdated} nodes (${artifacts.reportPath})`);
   console.log(`  Meta: ${metaPath(project.root)}`);
   memory.close();

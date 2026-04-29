@@ -137,7 +137,10 @@ export const initCommand = new Command('init')
         })) console.log(line);
         console.log('  [1/3] Extracting deterministic parser/config facts');
         const graph = memory.context.indexProjectGraph(project);
-        console.log('  [2/3] Writing graph projections');
+        console.log('  [2/3] Running optional LLM enrichment');
+        const enrichment = await memory.context.enrichProjectGraph(project);
+        console.log(`  Enrichment: ${formatProjectGraphEnrichment(enrichment)}`);
+        console.log('  [3/3] Writing graph projections');
         console.log(`  Files: ${graph.filesScanned}`);
         console.log(`  Nodes: ${graph.nodesCreated} created, ${graph.nodesUpdated} updated`);
         console.log(`  Edges: ${graph.edgesCreated} created, ${graph.edgesSkipped} unchanged`);
@@ -145,11 +148,11 @@ export const initCommand = new Command('init')
         console.log(`  Report: ${artifacts.reportPath}`);
         console.log(`  Stats:  ${artifacts.statsPath}`);
         if (process.env['TEAM_SERVER_URL']) {
-          console.log('  [3/3] Publishing graph to Team Server');
+          console.log('  Publishing graph to Team Server');
           const publish = await publishProjectGraphToTeamServer(memory, project, await createTeamClientFromEnv());
           console.log(`  Team:   ${publish.installedNodes} installed, ${publish.updatedNodes} updated`);
         } else {
-          console.log('  [3/3] Team publish skipped');
+          console.log('  Team publish skipped');
         }
       }
 
@@ -236,6 +239,17 @@ const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatProjectGraphEnrichment = (
+  enrichment: Awaited<ReturnType<Mindstrate['context']['enrichProjectGraph']>>,
+): string => {
+  if (enrichment.status === 'skipped') {
+    return enrichment.reason === 'llm_not_configured'
+      ? 'skipped (no LLM provider configured)'
+      : 'skipped (LLM client unavailable)';
+  }
+  return `${enrichment.nodesCreated} inferred nodes created, ${enrichment.nodesUpdated} updated`;
 };
 
 export interface ProjectGraphTeamClient {

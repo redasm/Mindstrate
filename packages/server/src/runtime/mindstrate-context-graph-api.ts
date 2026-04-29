@@ -21,6 +21,7 @@ import {
   enrichProjectGraph,
   estimateProjectGraphScanScope,
   indexProjectGraph,
+  summarizeProjectGraphWithLlm,
   type ProjectGraphEnrichmentInput,
   type ProjectGraphEnrichmentResult,
   type ProjectGraphIndexResult,
@@ -40,6 +41,7 @@ import {
 import type { ProjectGraphOverlay } from '@mindstrate/protocol/models';
 import type { DetectedProject } from '../project/index.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
+import { getOpenAIClient } from '../openai-client.js';
 
 export class MindstrateContextGraphApi {
   constructor(private readonly services: MindstrateRuntime) {}
@@ -170,14 +172,15 @@ export class MindstrateContextGraphApi {
     return indexProjectGraph(this.services.contextGraphStore, project);
   }
 
-  enrichProjectGraph(
+  async enrichProjectGraph(
     project: DetectedProject,
     options?: Pick<ProjectGraphEnrichmentInput, 'summarize'>,
   ): Promise<ProjectGraphEnrichmentResult> {
+    const summarize = options?.summarize ?? await this.createProjectGraphSummarizer(project);
     return enrichProjectGraph(this.services.contextGraphStore, {
       project: project.name,
       llmConfigured: this.services.config.openaiApiKey.length > 0,
-      summarize: options?.summarize,
+      summarize,
     });
   }
 
@@ -213,6 +216,24 @@ export class MindstrateContextGraphApi {
         `[Mindstrate] derived event ingestion failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+
+  private async createProjectGraphSummarizer(
+    project: DetectedProject,
+  ): Promise<ProjectGraphEnrichmentInput['summarize'] | undefined> {
+    if (!this.services.config.openaiApiKey) return undefined;
+    const client = await getOpenAIClient(this.services.config.openaiApiKey, this.services.config.openaiBaseUrl);
+    if (!client) return undefined;
+    return () => summarizeProjectGraphWithLlm({
+      client,
+      model: this.services.config.llmModel,
+      project: project.name,
+      extractedNodes: this.services.contextGraphStore.listNodes({
+        project: project.name,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: 100000,
+      }),
+    });
   }
 }
 

@@ -117,6 +117,23 @@ describe('project graph LLM enrichment boundary', () => {
     }
   });
 
+  it('skips context API enrichment when no provider is configured', async () => {
+    const memory = new Mindstrate({ dataDir: tempDir, openaiApiKey: '' });
+    await memory.init();
+    try {
+      const result = await memory.context.enrichProjectGraph({
+        name: 'demo',
+        root: tempDir,
+        dependencies: [],
+        entryPoints: [],
+      } as never);
+
+      expect(result).toEqual({ status: 'skipped', reason: 'llm_not_configured', nodesCreated: 0 });
+    } finally {
+      memory.close();
+    }
+  });
+
   it('turns LLM summaries into cited inferred project graph nodes', async () => {
     const client = fakeChatClient(JSON.stringify({
       summaries: [
