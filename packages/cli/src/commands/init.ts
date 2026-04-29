@@ -24,6 +24,7 @@ import {
   type DetectedProject,
   type ProjectMeta,
   type ProjectGraphArtifactResult,
+  type ProjectGraphScanScope,
 } from '@mindstrate/server';
 import { writeMcpConfig } from './setup-mcp.js';
 import { writeProjectCliConfig } from '../cli-config.js';
@@ -128,8 +129,15 @@ export const initCommand = new Command('init')
         console.log('\nProject graph:');
         console.log('  (skipped: --no-graph)');
       } else {
+        const scope = memory.context.estimateProjectGraphScanScope(project);
+        console.log('');
+        for (const line of buildProjectGraphAnalysisLines({
+          projectName: project.name,
+          ...scope,
+        })) console.log(line);
+        console.log('  [1/3] Extracting deterministic parser/config facts');
         const graph = memory.context.indexProjectGraph(project);
-        console.log('\nProject graph:');
+        console.log('  [2/3] Writing graph projections');
         console.log(`  Files: ${graph.filesScanned}`);
         console.log(`  Nodes: ${graph.nodesCreated} created, ${graph.nodesUpdated} updated`);
         console.log(`  Edges: ${graph.edgesCreated} created, ${graph.edgesSkipped} unchanged`);
@@ -137,8 +145,11 @@ export const initCommand = new Command('init')
         console.log(`  Report: ${artifacts.reportPath}`);
         console.log(`  Stats:  ${artifacts.statsPath}`);
         if (process.env['TEAM_SERVER_URL']) {
+          console.log('  [3/3] Publishing graph to Team Server');
           const publish = await publishProjectGraphToTeamServer(memory, project, await createTeamClientFromEnv());
           console.log(`  Team:   ${publish.installedNodes} installed, ${publish.updatedNodes} updated`);
+        } else {
+          console.log('  [3/3] Team publish skipped');
         }
       }
 
@@ -199,6 +210,33 @@ export function writeLocalProjectGraphArtifacts(
     ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath))
     : memory.context.writeProjectGraphArtifacts(project);
 }
+
+export const buildProjectGraphAnalysisLines = (
+  scope: ProjectGraphScanScope & { projectName: string },
+): string[] => [
+  'Analyzing project graph:',
+  `  Project: ${scope.projectName}`,
+  `  Files to scan: ${scope.filesToScan}`,
+  `  Estimated size: ${formatBytes(scope.totalBytes)}`,
+  `  Languages: ${formatLanguageCounts(scope.languages)}`,
+  `  Ignored: ${scope.ignoredDirectories.slice().sort().join(', ') || '(none)'}`,
+  scope.llmEnrichment === 'enabled'
+    ? '  LLM enrichment: enabled after deterministic extraction'
+    : '  LLM enrichment: skipped (deterministic parser/config extraction only)',
+  '  Privacy: full source files are not sent to LLM providers by default',
+];
+
+const formatLanguageCounts = (languages: Record<string, number>): string =>
+  Object.entries(languages)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([language, count]) => `${language} ${count}`)
+    .join(', ') || '(none)';
+
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 export interface ProjectGraphTeamClient {
   context: {

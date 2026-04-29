@@ -15,6 +15,7 @@ import {
 import { SyncManager, VaultLayout } from '@mindstrate/obsidian-sync';
 import { buildSetupPlan, writeProjectCliConfig, type SetupMode, type SetupTool } from '../cli-config.js';
 import { askOptional, chooseOption } from '../cli-wizard.js';
+import { buildProjectGraphAnalysisLines } from './init.js';
 import { writeMcpConfig } from './setup-mcp.js';
 
 type SetupExperience = 'local' | 'team-client' | 'team-deploy';
@@ -144,6 +145,11 @@ export async function initializeLocalProject(
   const previousMeta = loadProjectMeta(project.root);
   const now = new Date().toISOString();
   const result = await memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-setup' });
+  const scope = memory.context.estimateProjectGraphScanScope(project);
+  for (const line of buildProjectGraphAnalysisLines({
+    projectName: project.name,
+    ...scope,
+  })) console.log(`  ${line}`);
   const graph = memory.context.indexProjectGraph(project);
   const artifacts = options.vaultPath
     ? memory.context.writeProjectGraphObsidianProjection(project, options.vaultPath)

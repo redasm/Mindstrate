@@ -4,7 +4,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Mindstrate, detectProject } from '@mindstrate/server';
-import { publishProjectGraphToTeamServer, writeLocalProjectGraphArtifacts } from './commands/init.js';
+import {
+  buildProjectGraphAnalysisLines,
+  publishProjectGraphToTeamServer,
+  writeLocalProjectGraphArtifacts,
+} from './commands/init.js';
 
 test('writeLocalProjectGraphArtifacts prefers Obsidian output when vault is configured', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-init-'));
@@ -58,4 +62,27 @@ test('publishProjectGraphToTeamServer sends a project-scoped graph bundle', asyn
   } finally {
     memory.close();
   }
+});
+
+test('buildProjectGraphAnalysisLines explains scan scope and LLM enrichment', () => {
+  const lines = buildProjectGraphAnalysisLines({
+    projectName: 'demo',
+    filesToScan: 12,
+    totalBytes: 1536,
+    languages: { typescript: 8, markdown: 4 },
+    ignoredDirectories: ['node_modules', 'dist'],
+    generatedRoots: ['dist'],
+    llmEnrichment: 'skipped',
+  });
+
+  assert.deepEqual(lines, [
+    'Analyzing project graph:',
+    '  Project: demo',
+    '  Files to scan: 12',
+    '  Estimated size: 1.5 KB',
+    '  Languages: markdown 4, typescript 8',
+    '  Ignored: dist, node_modules',
+    '  LLM enrichment: skipped (deterministic parser/config extraction only)',
+    '  Privacy: full source files are not sent to LLM providers by default',
+  ]);
 });
