@@ -63,3 +63,9 @@ export {
   type ProjectGraphPathInput,
   type ProjectGraphPathResult,
 } from './analysis.js';
+export {
+  createProjectGraphOverlay,
+  listProjectGraphOverlays,
+  type CreateProjectGraphOverlayInput,
+  type ListProjectGraphOverlayInput,
+} from './overlay.js';

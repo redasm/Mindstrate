@@ -199,6 +199,8 @@ export {
   enrichProjectGraph,
   estimateProjectGraphBlastRadius,
   findProjectGraphPath,
+  createProjectGraphOverlay,
+  listProjectGraphOverlays,
   scanProjectFiles,
   archiveProjectGraphFileFacts,
   collectProjectGraphStats,
@@ -219,6 +221,8 @@ export {
   type ProjectGraphIndexResult,
   type ProjectGraphPathInput,
   type ProjectGraphPathResult,
+  type CreateProjectGraphOverlayInput,
+  type ListProjectGraphOverlayInput,
   type ProjectGraphStatsExport,
   type ProjectGraphWriteResult,
 } from './project-graph/index.js';

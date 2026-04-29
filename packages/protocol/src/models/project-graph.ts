@@ -47,6 +47,35 @@ export enum ChangeSource {
   MANUAL = 'manual',
 }
 
+export enum ProjectGraphOverlayKind {
+  NOTE = 'note',
+  CONFIRMATION = 'confirmation',
+  CORRECTION = 'correction',
+  REJECTION = 'rejection',
+  RISK = 'risk',
+  CONVENTION = 'convention',
+}
+
+export enum ProjectGraphOverlaySource {
+  OBSIDIAN = 'obsidian',
+  WEB = 'web',
+  MCP = 'mcp',
+  CLI = 'cli',
+}
+
+export interface ProjectGraphOverlay {
+  id: string;
+  project: string;
+  targetNodeId?: string;
+  targetEdgeId?: string;
+  kind: ProjectGraphOverlayKind;
+  content: string;
+  author?: string;
+  source: ProjectGraphOverlaySource;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ChangedFileStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'moved';
 
 export interface EvidenceRef {
