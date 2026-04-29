@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node dist/cli-config.test.js && node dist/cli-wizard.test.js",
+    "test": "npm run build && node dist/cli-config.test.js && node dist/cli-wizard.test.js && node dist/setup.test.js",
     "dev": "tsc --watch",
     "clean": "rimraf dist"
   },

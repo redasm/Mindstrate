@@ -132,12 +132,14 @@ export const setupCommand = new Command('setup')
     }
   });
 
-async function initializeLocalProject(project: NonNullable<ReturnType<typeof detectProject>>, dataDir: string): Promise<void> {
+export async function initializeLocalProject(project: NonNullable<ReturnType<typeof detectProject>>, dataDir: string): Promise<void> {
   const memory = new Mindstrate({ dataDir });
   await memory.init();
   const previousMeta = loadProjectMeta(project.root);
   const now = new Date().toISOString();
   const result = await memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-setup' });
+  const graph = memory.context.indexProjectGraph(project);
+  const artifacts = memory.context.writeProjectGraphArtifacts(project);
   saveProjectMeta(project.root, {
     version: 1,
     name: project.name,
@@ -154,6 +156,7 @@ async function initializeLocalProject(project: NonNullable<ReturnType<typeof det
     }),
   });
   console.log(`  Project snapshot: ${result.changed ? 'updated' : 'up-to-date'} (${result.view.id})`);
+  console.log(`  Project graph: ${graph.filesScanned} files, ${graph.nodesCreated + graph.nodesUpdated} nodes (${artifacts.reportPath})`);
   console.log(`  Meta: ${metaPath(project.root)}`);
   memory.close();
 }
