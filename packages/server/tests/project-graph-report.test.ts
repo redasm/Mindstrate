@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ProjectionTarget } from '@mindstrate/protocol/models';
+import {
+  ContextDomainType,
+  ContextNodeStatus,
+  ProjectGraphNodeKind,
+  ProjectGraphProvenance,
+  ProjectionTarget,
+  SubstrateType,
+} from '@mindstrate/protocol/models';
 import { Mindstrate, detectProject, writeProjectGraphTextFileAtomically } from '../src/index.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
@@ -78,6 +85,22 @@ describe('project graph report export', () => {
     try {
       const project = detectProject(root)!;
       memory.context.indexProjectGraph(project);
+      memory.context.createContextNode({
+        id: 'pg:demo-report:concept:app-shell',
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: 'Application shell',
+        content: 'concept: Application shell',
+        project: 'demo-report',
+        status: ContextNodeStatus.ACTIVE,
+        metadata: {
+          projectGraph: true,
+          kind: ProjectGraphNodeKind.CONCEPT,
+          provenance: ProjectGraphProvenance.INFERRED,
+          summary: 'App.tsx composes the user-facing shell.',
+          evidence: [{ path: 'src/App.tsx', extractorId: 'llm-enrichment' }],
+        },
+      });
       const result = memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
 
       expect(result.reportPath).toBe(path.join(vaultRoot, 'demo-report', 'architecture', 'project-graph.md'));
@@ -85,6 +108,9 @@ describe('project graph report export', () => {
       expect(report).toContain('<!-- mindstrate:project-graph:generated:start -->');
       expect(report).toContain('<!-- mindstrate:project-graph:user-notes:start -->');
       expect(report).toContain('User Notes');
+      expect(report).toContain('## Inferred Summaries');
+      expect(report).toContain('Application shell');
+      expect(report).toContain('App.tsx composes the user-facing shell.');
       const records = memory.projections.listProjectionRecords({
         target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
         limit: 10,

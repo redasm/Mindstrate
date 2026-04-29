@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ContextDomainType, ProjectionTarget } from '@mindstrate/protocol/models';
+import { ContextDomainType, ProjectionTarget, type ContextNode } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
 
@@ -18,6 +18,12 @@ export interface ProjectGraphStatsExport {
   edges: number;
   projectionNodeId?: string;
   firstFiles: string[];
+  inferredSummaries: Array<{
+    title: string;
+    summary: string;
+    provenance: string;
+    evidencePaths: string[];
+  }>;
   provenanceCounts: Record<string, number>;
   nodeKindCounts: Record<string, number>;
 }
@@ -113,6 +119,18 @@ export const collectProjectGraphStats = (
     edges: edges.length,
     projectionNodeId: nodes[0]?.id,
     firstFiles,
+    inferredSummaries: nodes
+      .filter((node) => {
+        const provenance = String(node.metadata?.['provenance'] ?? '');
+        return provenance === 'INFERRED' || provenance === 'AMBIGUOUS';
+      })
+      .map((node) => ({
+        title: node.title,
+        summary: typeof node.metadata?.['summary'] === 'string' ? node.metadata['summary'] : node.content,
+        provenance: String(node.metadata?.['provenance'] ?? 'unknown'),
+        evidencePaths: evidencePathsForNode(node),
+      }))
+      .slice(0, 12),
     provenanceCounts: countBy(nodes, (node) => String(node.metadata?.['provenance'] ?? 'unknown')),
     nodeKindCounts: countBy(nodes, (node) => String(node.metadata?.['kind'] ?? 'unknown')),
   };
@@ -143,6 +161,10 @@ const renderProjectGraphReport = (
   '',
   ...Object.entries(stats.provenanceCounts).map(([name, count]) => `- ${name}: ${count}`),
   '',
+  '## Inferred Summaries',
+  '',
+  ...inferredSummaryLines(stats.inferredSummaries),
+  '',
   '## Suggested Graph Queries',
   '',
   '- mindstrate graph query "entry points"',
@@ -166,6 +188,7 @@ const renderProjectGraphRepoEntry = (
   `- Project: ${project.name}`,
   `- Nodes: ${stats.nodes}`,
   `- Edges: ${stats.edges}`,
+  `- Inferred summaries: ${stats.inferredSummaries.length}`,
   `- Stats: .mindstrate/project-graph.json`,
   '',
   '## Useful Commands',
@@ -179,6 +202,15 @@ const renderProjectGraphRepoEntry = (
 
 const listOrFallback = (items: string[]): string[] =>
   items.length > 0 ? items.map((item) => `- ${item}`) : ['- None detected yet.'];
+
+const inferredSummaryLines = (summaries: ProjectGraphStatsExport['inferredSummaries']): string[] =>
+  summaries.length > 0
+    ? summaries.flatMap((summary) => [
+      `- ${summary.title} (${summary.provenance})`,
+      `  - ${summary.summary}`,
+      `  - Evidence: ${summary.evidencePaths.join(', ') || '(none)'}`,
+    ])
+    : ['- None generated yet.'];
 
 const renderEditableObsidianProjection = (generated: string, existing: string): string => [
   '<!-- mindstrate:project-graph:generated:start -->',
@@ -204,6 +236,15 @@ const preserveBlock = (text: string, name: string): string => {
 
 const slugify = (value: string): string =>
   value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
+
+const evidencePathsForNode = (node: ContextNode): string[] => {
+  const evidence = node.metadata?.['evidence'];
+  return Array.isArray(evidence)
+    ? evidence
+      .map((entry) => typeof entry === 'object' && entry && 'path' in entry ? String(entry.path) : '')
+      .filter(Boolean)
+    : [];
+};
 
 export const writeProjectGraphTextFileAtomically = (filePath: string, content: string): void => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
