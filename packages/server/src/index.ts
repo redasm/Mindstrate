@@ -177,3 +177,9 @@ export {
   type SnapshotOptions,
   type ProjectMeta,
 } from './project/index.js';
+export {
+  createProjectGraphEdgeId,
+  createProjectGraphNodeId,
+  type CreateProjectGraphEdgeIdInput,
+  type CreateProjectGraphNodeIdInput,
+} from './project-graph/index.js';
