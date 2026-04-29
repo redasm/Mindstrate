@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ProjectionTarget } from '@mindstrate/server';
-import { buildGraphStatusLines } from './commands/context-graph.js';
+import { ProjectGraphOverlayKind, ProjectGraphOverlaySource, ProjectionTarget } from '@mindstrate/server';
+import { buildGraphOverlayLines, buildGraphStatusLines } from './commands/context-graph.js';
 
 test('buildGraphStatusLines shows local canonical graph and projection targets', () => {
   const lines = buildGraphStatusLines({
@@ -29,5 +29,27 @@ test('buildGraphStatusLines shows local canonical graph and projection targets',
     '  Edges: 2',
     '  Projections:',
     '    - project_graph_obsidian: vault/demo/architecture/project-graph.md',
+  ]);
+});
+
+test('buildGraphOverlayLines renders editable project graph overlays', () => {
+  const lines = buildGraphOverlayLines([
+    {
+      id: 'overlay-1',
+      project: 'demo',
+      targetNodeId: 'pg:demo:file:src/App.tsx',
+      kind: ProjectGraphOverlayKind.CORRECTION,
+      content: 'This is a route shell, not a domain component.',
+      author: 'yangfan',
+      source: ProjectGraphOverlaySource.OBSIDIAN,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]);
+
+  assert.deepEqual(lines, [
+    'Overlays: 1',
+    '  - [correction] This is a route shell, not a domain component.',
+    '    Source: obsidian | Author: yangfan | ID: overlay-1',
   ]);
 });

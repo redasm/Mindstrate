@@ -5,6 +5,7 @@ import {
   type ContextEventType,
   type ContextNode,
   type ContextNodeStatus,
+  type ProjectGraphOverlay,
   type ProjectGraphOverlayKind,
 } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
@@ -272,6 +273,7 @@ export async function handleProjectGraphExplainNode(
   if (!node) return { content: [{ type: 'text', text: 'Project graph node not found.' }], isError: true };
   const outgoing = projectGraphEdges(await api.listContextEdges({ sourceId: node.id, limit: 20 }));
   const incoming = projectGraphEdges(await api.listContextEdges({ targetId: node.id, limit: 20 }));
+  const overlays = await api.listProjectGraphOverlays({ project: node.project, targetNodeId: node.id, limit: 20 });
   const text = [
     `### ${node.title}`,
     `Kind: ${node.metadata?.['kind'] ?? 'unknown'}`,
@@ -279,6 +281,9 @@ export async function handleProjectGraphExplainNode(
     `Evidence: ${evidencePaths(node).join(', ') || '(none)'}`,
     `Incoming project graph edges: ${incoming.length}`,
     `Outgoing project graph edges: ${outgoing.length}`,
+    '',
+    '### Overlays',
+    formatProjectGraphOverlays(overlays),
     '',
     'Suggested next queries:',
     `- get_project_graph_neighbors id="${node.id}"`,
@@ -484,6 +489,14 @@ const formatProjectGraphEdges = (edges: ContextEdge[]): string =>
   edges.length === 0
     ? '- None'
     : edges.map((edge) => `- ${edge.evidence?.['kind'] ?? edge.relationType}: ${edge.sourceId} -> ${edge.targetId}`).join('\n');
+
+const formatProjectGraphOverlays = (overlays: ProjectGraphOverlay[]): string =>
+  overlays.length === 0
+    ? '- None'
+    : overlays.map((overlay) => [
+      `- [${overlay.kind}] ${overlay.content}`,
+      `  Source: ${overlay.source} | Author: ${overlay.author ?? '(unknown)'} | ID: ${overlay.id}`,
+    ].join('\n')).join('\n');
 
 const evidencePaths = (node: ContextNode): string[] => {
   const evidence = node.metadata?.['evidence'];

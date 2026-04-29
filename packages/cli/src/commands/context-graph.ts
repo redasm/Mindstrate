@@ -12,6 +12,7 @@ import {
   ProjectionTarget,
   type ContextEdge,
   type ContextNode,
+  type ProjectGraphOverlay,
   type ProjectionRecord,
 } from '@mindstrate/server';
 import {
@@ -148,7 +149,12 @@ contextGraphCommand
       const limit = parseInt(options.limit, 10);
       const outgoing = memory.context.listContextEdges({ sourceId: node.id, limit });
       const incoming = memory.context.listContextEdges({ targetId: node.id, limit });
+      const overlays = memory.context.listProjectGraphOverlays({
+        project: node.project,
+        targetNodeId: node.id,
+      });
       printNodes([node], true);
+      printOverlays(overlays);
       printEdges('Outgoing', outgoing);
       printEdges('Incoming', incoming);
     } catch (error) {
@@ -294,6 +300,16 @@ export const buildGraphStatusLines = (input: {
     : ['    - none']),
 ];
 
+export const buildGraphOverlayLines = (overlays: ProjectGraphOverlay[]): string[] => [
+  `Overlays: ${overlays.length}`,
+  ...(overlays.length > 0
+    ? overlays.flatMap((overlay) => [
+      `  - [${overlay.kind}] ${overlay.content}`,
+      `    Source: ${overlay.source} | Author: ${overlay.author ?? '(unknown)'} | ID: ${overlay.id}`,
+    ])
+    : ['  - none']),
+];
+
 const printNodes = (nodes: ContextNode[], verbose: boolean): void => {
   if (nodes.length === 0) {
     console.log('No project graph nodes matched.');
@@ -307,6 +323,11 @@ const printNodes = (nodes: ContextNode[], verbose: boolean): void => {
     console.log(`  Content: ${verbose ? node.content : truncate(node.content, 120)}`);
     console.log('');
   }
+};
+
+const printOverlays = (overlays: ProjectGraphOverlay[]): void => {
+  for (const line of buildGraphOverlayLines(overlays)) console.log(line);
+  console.log('');
 };
 
 const printEdges = (label: string, edges: ContextEdge[]): void => {
