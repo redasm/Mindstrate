@@ -963,15 +963,23 @@ Validation:
 
 Deliver:
 
-- open test projects for React, Vue, Next, Node service, Unreal-style fixture
-- expected graph shape assertions
-- before/after AI task evaluation prompts
-- metrics: task success, files opened, wrong edits avoided, time-to-answer
+- built-in fixture definitions for React, Vue, Next, Node service, and
+  Unreal-style projects
+- fixture materialization API for reproducible local evaluation projects
+- expected graph shape assertions for files, nodes, edges, and required graph
+  node titles
+- before/after AI task prompts comparing legacy snapshot-only guidance with
+  project graph guided work
+- metrics: task success, files opened, wrong files opened, time-to-answer
+- Markdown dataset report renderer
+- `mindstrate graph eval-dataset --out <dir>` to export the report and fixture
+  projects
 
 Validation:
 
 - compare legacy metadata snapshot versus graph init.
 - publish dataset and reports so users can inspect claims.
+- fixture graph shape tests run deterministically without LLM calls.
 
 ## Success Criteria
 
