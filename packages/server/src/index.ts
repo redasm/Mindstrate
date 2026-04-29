@@ -208,6 +208,7 @@ export {
   archiveProjectGraphFileFacts,
   collectProjectGraphStats,
   indexProjectGraph,
+  writeProjectGraphTextFileAtomically,
   writeProjectGraphArtifacts,
   writeProjectGraphObsidianProjection,
   writeProjectGraphExtraction,

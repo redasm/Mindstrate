@@ -42,6 +42,7 @@ export {
 } from './project-graph-service.js';
 export {
   collectProjectGraphStats,
+  writeProjectGraphTextFileAtomically,
   writeProjectGraphArtifacts,
   writeProjectGraphObsidianProjection,
   type ProjectGraphArtifactResult,

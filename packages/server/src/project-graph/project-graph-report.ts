@@ -32,8 +32,8 @@ export const writeProjectGraphArtifacts = (
   const statsPath = path.join(project.root, '.mindstrate', 'project-graph.json');
 
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
-  fs.writeFileSync(reportPath, report, 'utf8');
-  fs.writeFileSync(statsPath, `${JSON.stringify(stats, null, 2)}\n`, 'utf8');
+  writeProjectGraphTextFileAtomically(reportPath, report);
+  writeProjectGraphTextFileAtomically(statsPath, `${JSON.stringify(stats, null, 2)}\n`);
   if (stats.projectionNodeId) {
     store.upsertProjectionRecord({
       id: `projection:${ProjectionTarget.PROJECT_GRAPH_REPO_ENTRY}:${project.name}`,
@@ -68,8 +68,8 @@ export const writeProjectGraphObsidianProjection = (
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
-  fs.writeFileSync(reportPath, report, 'utf8');
-  fs.writeFileSync(statsPath, `${JSON.stringify(stats, null, 2)}\n`, 'utf8');
+  writeProjectGraphTextFileAtomically(reportPath, report);
+  writeProjectGraphTextFileAtomically(statsPath, `${JSON.stringify(stats, null, 2)}\n`);
   if (stats.projectionNodeId) {
     store.upsertProjectionRecord({
       id: `projection:${ProjectionTarget.PROJECT_GRAPH_OBSIDIAN}:${project.name}`,
@@ -204,6 +204,16 @@ const preserveBlock = (text: string, name: string): string => {
 
 const slugify = (value: string): string =>
   value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
+
+export const writeProjectGraphTextFileAtomically = (filePath: string, content: string): void => {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const tempPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.tmp-${process.pid}-${Date.now()}`,
+  );
+  fs.writeFileSync(tempPath, content, 'utf8');
+  fs.renameSync(tempPath, filePath);
+};
 
 const countBy = <T>(items: T[], keyFor: (item: T) => string): Record<string, number> => {
   const counts: Record<string, number> = {};

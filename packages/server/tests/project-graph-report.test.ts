@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ProjectionTarget } from '@mindstrate/protocol/models';
-import { Mindstrate, detectProject } from '../src/index.js';
+import { Mindstrate, detectProject, writeProjectGraphTextFileAtomically } from '../src/index.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 const write = (root: string, rel: string, content: string): void => {
@@ -93,5 +93,15 @@ describe('project graph report export', () => {
     } finally {
       removeTempDir(vaultRoot);
     }
+  });
+
+  it('writes project graph files atomically through a temporary sibling file', () => {
+    const target = path.join(root, 'PROJECT_GRAPH.md');
+
+    writeProjectGraphTextFileAtomically(target, 'first');
+    writeProjectGraphTextFileAtomically(target, 'second');
+
+    expect(fs.readFileSync(target, 'utf8')).toBe('second');
+    expect(fs.readdirSync(root).filter((name) => name.includes('.tmp-'))).toEqual([]);
   });
 });
