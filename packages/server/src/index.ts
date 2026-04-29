@@ -190,5 +190,10 @@ export {
   type ParserInput,
   type ParserResult,
   type QueryPack,
+  type ProjectFileInventoryEntry,
+  type ProjectGraphCacheDiff,
+  type ScanProjectFilesOptions,
   type SourceLanguage,
+  diffProjectGraphCache,
+  scanProjectFiles,
 } from './project-graph/index.js';

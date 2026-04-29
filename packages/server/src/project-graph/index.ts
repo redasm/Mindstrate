@@ -19,3 +19,10 @@ export {
   queryPacksForLanguage,
   type QueryPack,
 } from './query-pack.js';
+export {
+  diffProjectGraphCache,
+  scanProjectFiles,
+  type ProjectFileInventoryEntry,
+  type ProjectGraphCacheDiff,
+  type ScanProjectFilesOptions,
+} from './scanner.js';
