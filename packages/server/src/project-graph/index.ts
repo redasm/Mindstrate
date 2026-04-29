@@ -43,3 +43,9 @@ export {
   type ProjectGraphArtifactResult,
   type ProjectGraphStatsExport,
 } from './project-graph-report.js';
+export {
+  detectProjectGraphChanges,
+  type ProjectGraphChangeDetectionInput,
+  type ProjectGraphChangeDetectionResult,
+  type ProjectGraphChangeStore,
+} from './changes.js';

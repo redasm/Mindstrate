@@ -7,11 +7,13 @@
 
 import { Command } from 'commander';
 import {
+  ChangeSource,
   ContextDomainType,
   type ContextEdge,
   type ContextNode,
 } from '@mindstrate/server';
-import { detectProject, errorMessage, truncateText as truncate } from '@mindstrate/server';
+import { detectProject, detectProjectGraphChanges, errorMessage, truncateText as truncate } from '@mindstrate/server';
+import { execSync } from 'node:child_process';
 import { createMemory } from '../memory-factory.js';
 
 export const contextGraphCommand = new Command('graph')
@@ -114,6 +116,40 @@ contextGraphCommand
     }
   });
 
+contextGraphCommand
+  .command('changes')
+  .description('Map workspace or manual file changes onto project graph nodes and risk hints')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
+  .option('--source <source>', 'Change source: manual or git', 'manual')
+  .option('--files <files...>', 'Explicit changed files for manual source')
+  .action(async (options) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const project = detectProject(options.cwd ?? process.cwd());
+      if (!project) throw new Error('Could not detect project.');
+      const source = parseChangeSource(options.source);
+      const files = source === ChangeSource.GIT
+        ? gitChangedFiles(project.root)
+        : options.files ?? [];
+      const result = detectProjectGraphChanges(memory.context, project, { source, files });
+      console.log(`Source: ${result.changeSet.source}`);
+      console.log(`Files: ${result.changeSet.files.length}`);
+      console.log(`Affected nodes: ${result.affectedNodeIds.length}`);
+      console.log(`Affected layers: ${result.affectedLayers.join(', ') || '(none)'}`);
+      if (result.riskHints.length > 0) {
+        console.log('\nRisk hints:');
+        for (const hint of result.riskHints) console.log(`  - ${hint}`);
+      }
+      console.log('\nSuggested queries:');
+      for (const query of result.suggestedQueries) console.log(`  - ${query}`);
+    } catch (error) {
+      fail('Graph changes failed', error);
+    } finally {
+      memory.close();
+    }
+  });
+
 const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
   nodes.filter((node) => node.metadata?.['projectGraph'] === true);
 
@@ -164,6 +200,21 @@ const countBy = <T>(items: T[], keyFor: (item: T) => string): Record<string, num
     counts[key] = (counts[key] ?? 0) + 1;
   }
   return counts;
+};
+
+const parseChangeSource = (value: string): ChangeSource => {
+  if (value === ChangeSource.GIT) return ChangeSource.GIT;
+  if (value === ChangeSource.MANUAL) return ChangeSource.MANUAL;
+  throw new Error(`Unsupported graph changes source: ${value}`);
+};
+
+const gitChangedFiles = (cwd: string): string[] => {
+  const output = execSync('git status --porcelain', { cwd, encoding: 'utf8' });
+  return output.split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.slice(3).trim())
+    .filter(Boolean);
 };
 
 const fail = (prefix: string, error: unknown): never => {
