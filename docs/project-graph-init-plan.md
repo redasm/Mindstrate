@@ -932,28 +932,32 @@ Validation:
 - deterministic facts remain unchanged if LLM output changes.
 - LLM summaries cite extracted evidence nodes or file paths.
 
-### Phase 5: Watch, Hooks, And Team Sharing
+### Phase 5: External Change Integration And Team Sharing
 
 Deliver:
 
-- `mindstrate watch`
-- optional git hook installation through setup
-- stale graph warning
-- workspace change detection
-- multi-repository registry
-- Team Server graph publish/sync path
+- server `memory.context.ingestProjectGraphChangeSet(project, changeSet)` API
+- CLI `mindstrate graph ingest --changes <file|->` for external collectors
+- repo-scanner source adapter contract for custom data collectors
+- standard external input shapes: event, project graph `ChangeSet`, portable bundle
+- repo-scanner ownership of Git / Perforce / hook / daemon / cursor / retry logic
+- Team Server graph publish/sync path remains the shared team output
 - repository guidance for what to commit versus ignore
 - AI tool guidance installation
 - generated repo-specific context bundles/skills
 
 Validation:
 
-- source-only edits refresh affected parser facts without rerunning full project.
-- docs edits can trigger semantic report refresh when an LLM provider exists.
+- external collectors can submit changed files without the server reading Git,
+  Perforce, hooks, or filesystem watcher state directly.
+- source-only edits map to affected parser facts without rerunning full project.
+- docs edits can submit semantic refresh inputs when an LLM provider exists.
 - agent guidance is installed without overwriting user-authored instructions.
-- one MCP server can query multiple registered repositories safely.
+- one MCP server can query multiple registered repositories safely through
+  explicit project-scoped inputs.
 - change impact analysis identifies affected nodes, communities, layers, and
-  risk hints across Git, Perforce, filesystem, or manual file lists.
+  risk hints across standardized Git, Perforce, filesystem, custom collector,
+  or manual `ChangeSet` inputs.
 
 ### Phase 6: Evaluation Dataset
 
