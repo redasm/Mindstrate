@@ -196,4 +196,9 @@ export {
   type SourceLanguage,
   diffProjectGraphCache,
   scanProjectFiles,
+  archiveProjectGraphFileFacts,
+  writeProjectGraphExtraction,
+  type ArchiveProjectGraphFileFactsInput,
+  type ProjectGraphExtractionResult,
+  type ProjectGraphWriteResult,
 } from './project-graph/index.js';

@@ -26,3 +26,10 @@ export {
   type ProjectGraphCacheDiff,
   type ScanProjectFilesOptions,
 } from './scanner.js';
+export {
+  archiveProjectGraphFileFacts,
+  writeProjectGraphExtraction,
+  type ArchiveProjectGraphFileFactsInput,
+  type ProjectGraphExtractionResult,
+  type ProjectGraphWriteResult,
+} from './graph-writer.js';
