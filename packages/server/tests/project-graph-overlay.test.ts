@@ -8,6 +8,7 @@ import {
   SubstrateType,
 } from '@mindstrate/protocol/models';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
+import { Mindstrate } from '../src/index.js';
 import { createProjectGraphOverlay, listProjectGraphOverlays } from '../src/project-graph/overlay.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
@@ -50,5 +51,28 @@ describe('project graph overlays', () => {
     expect(overlay.targetNodeId).toBe(extracted.id);
     expect(overlay.kind).toBe(ProjectGraphOverlayKind.CONFIRMATION);
     expect(listProjectGraphOverlays(store, { project: 'demo', targetNodeId: extracted.id })).toEqual([overlay]);
+  });
+
+  it('exposes overlays through the context subdomain API', async () => {
+    const dataDir = createTempDir('mindstrate-project-graph-overlay-runtime-');
+    const memory = new Mindstrate({ dataDir });
+    await memory.init();
+    try {
+      const overlay = memory.context.createProjectGraphOverlay({
+        project: 'demo',
+        targetNodeId: 'pg:demo:file:src/App.tsx',
+        kind: ProjectGraphOverlayKind.NOTE,
+        content: 'Read this first.',
+        source: ProjectGraphOverlaySource.CLI,
+      });
+
+      expect(memory.context.listProjectGraphOverlays({
+        project: 'demo',
+        targetNodeId: 'pg:demo:file:src/App.tsx',
+      })).toEqual([overlay]);
+    } finally {
+      memory.close();
+      removeTempDir(dataDir);
+    }
   });
 });

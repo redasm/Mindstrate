@@ -23,6 +23,13 @@ import {
   writeProjectGraphObsidianProjection,
   type ProjectGraphArtifactResult,
 } from '../project-graph/index.js';
+import {
+  createProjectGraphOverlay,
+  listProjectGraphOverlays,
+  type CreateProjectGraphOverlayInput,
+  type ListProjectGraphOverlayInput,
+} from '../project-graph/index.js';
+import type { ProjectGraphOverlay } from '@mindstrate/protocol/models';
 import type { DetectedProject } from '../project/index.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
@@ -161,6 +168,14 @@ export class MindstrateContextGraphApi {
 
   writeProjectGraphObsidianProjection(project: DetectedProject, vaultRoot: string): ProjectGraphArtifactResult {
     return writeProjectGraphObsidianProjection(this.services.contextGraphStore, project, vaultRoot);
+  }
+
+  createProjectGraphOverlay(input: CreateProjectGraphOverlayInput): ProjectGraphOverlay {
+    return createProjectGraphOverlay(this.services.contextGraphStore, input);
+  }
+
+  listProjectGraphOverlays(input?: ListProjectGraphOverlayInput): ProjectGraphOverlay[] {
+    return listProjectGraphOverlays(this.services.contextGraphStore, input);
   }
 
   private tryIngestDerivedEvent(work: () => void): void {
