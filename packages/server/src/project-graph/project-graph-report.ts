@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ContextDomainType } from '@mindstrate/protocol/models';
+import { ContextDomainType, ProjectionTarget } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
 
@@ -16,6 +16,7 @@ export interface ProjectGraphStatsExport {
   generatedAt: string;
   nodes: number;
   edges: number;
+  projectionNodeId?: string;
   firstFiles: string[];
   provenanceCounts: Record<string, number>;
   nodeKindCounts: Record<string, number>;
@@ -33,6 +34,16 @@ export const writeProjectGraphArtifacts = (
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
   fs.writeFileSync(reportPath, report, 'utf8');
   fs.writeFileSync(statsPath, `${JSON.stringify(stats, null, 2)}\n`, 'utf8');
+  if (stats.projectionNodeId) {
+    store.upsertProjectionRecord({
+      id: `projection:${ProjectionTarget.PROJECT_GRAPH_REPO_ENTRY}:${project.name}`,
+      nodeId: stats.projectionNodeId,
+      target: ProjectionTarget.PROJECT_GRAPH_REPO_ENTRY,
+      targetRef: reportPath,
+      version: 1,
+      projectedAt: stats.generatedAt,
+    });
+  }
 
   return {
     reportPath,
@@ -64,6 +75,7 @@ export const collectProjectGraphStats = (
     generatedAt: new Date().toISOString(),
     nodes: nodes.length,
     edges: edges.length,
+    projectionNodeId: nodes[0]?.id,
     firstFiles,
     provenanceCounts: countBy(nodes, (node) => String(node.metadata?.['provenance'] ?? 'unknown')),
     nodeKindCounts: countBy(nodes, (node) => String(node.metadata?.['kind'] ?? 'unknown')),

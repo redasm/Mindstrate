@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { ProjectionTarget } from '@mindstrate/protocol/models';
 import { Mindstrate, detectProject } from '../src/index.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
@@ -58,5 +59,10 @@ describe('project graph report export', () => {
     expect(stats.edges).toBeGreaterThan(0);
     expect(stats.firstFiles).toContain('src/App.tsx');
     expect(stats.provenanceCounts.EXTRACTED).toBeGreaterThan(0);
+    const records = memory.projections.listProjectionRecords({
+      target: ProjectionTarget.PROJECT_GRAPH_REPO_ENTRY,
+      limit: 10,
+    });
+    expect(records[0].targetRef).toBe(result.reportPath);
   });
 });

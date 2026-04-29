@@ -47,6 +47,9 @@ export interface ConflictRecord {
 
 export enum ProjectionTarget {
   GRAPH_KNOWLEDGE = 'graph_knowledge',
+  PROJECT_GRAPH_REPO_ENTRY = 'project_graph_repo_entry',
+  PROJECT_GRAPH_OBSIDIAN = 'project_graph_obsidian',
+  PROJECT_GRAPH_TEAM_SERVER = 'project_graph_team_server',
   SESSION_SUMMARY = 'session_summary',
   PROJECT_SNAPSHOT = 'project_snapshot',
   OBSIDIAN_DOCUMENT = 'obsidian_document',
