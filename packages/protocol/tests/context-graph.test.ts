@@ -105,6 +105,9 @@ describe('ECS enum stability', () => {
     ]);
     expect(Object.values(ProjectionTarget)).toEqual([
       'graph_knowledge',
+      'project_graph_repo_entry',
+      'project_graph_obsidian',
+      'project_graph_team_server',
       'session_summary',
       'project_snapshot',
       'obsidian_document',
