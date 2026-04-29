@@ -56,8 +56,10 @@ export {
 } from './changes.js';
 export {
   enrichProjectGraph,
+  summarizeProjectGraphWithLlm,
   type ProjectGraphEnrichmentInput,
   type ProjectGraphEnrichmentResult,
+  type SummarizeProjectGraphWithLlmInput,
 } from './enrichment.js';
 export {
   estimateProjectGraphBlastRadius,
