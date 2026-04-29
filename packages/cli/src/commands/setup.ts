@@ -6,6 +6,7 @@ import { Command } from 'commander';
 import {
   Mindstrate,
   detectProject,
+  errorMessage,
   loadProjectMeta,
   saveProjectMeta,
   dependencyFingerprint,
@@ -14,7 +15,6 @@ import {
 import { SyncManager, VaultLayout } from '@mindstrate/obsidian-sync';
 import { buildSetupPlan, writeProjectCliConfig, type SetupMode, type SetupTool } from '../cli-config.js';
 import { askOptional, chooseOption } from '../cli-wizard.js';
-import { errorMessage } from '../helpers.js';
 import { writeMcpConfig } from './setup-mcp.js';
 
 type SetupExperience = 'local' | 'team-client' | 'team-deploy';

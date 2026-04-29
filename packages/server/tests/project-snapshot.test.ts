@@ -15,7 +15,7 @@ import {
   saveProjectMeta,
   dependencyFingerprint,
 } from '../src/index.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 function writePackageJson(root: string, body: any): void {
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify(body), 'utf8');

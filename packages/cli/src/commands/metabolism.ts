@@ -5,7 +5,8 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, errorMessage } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 
 export const metabolismCommand = new Command('gc')
   .description('Run ECS garbage collection and compaction')

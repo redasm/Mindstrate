@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { VectorStore } from '../src/storage/vector-store.js';
 import type { VectorDocument } from '../src/storage/vector-store-interface.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 function makeDoc(id: string, values: number[]): VectorDocument {
   return {

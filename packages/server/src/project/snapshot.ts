@@ -32,11 +32,7 @@ import {
   snapshotSolutionsEqual,
   snapshotTitle,
 } from './snapshot-renderer.js';
-import {
-  PRESERVE_CLOSE,
-  PRESERVE_OPEN,
-  extractPreserveBlocks,
-} from './snapshot-preserve.js';
+import { extractPreserveBlocks } from './snapshot-preserve.js';
 
 export { PRESERVE_CLOSE, PRESERVE_OPEN, extractPreserveBlocks } from './snapshot-preserve.js';
 export { projectSnapshotId } from './snapshot-id.js';

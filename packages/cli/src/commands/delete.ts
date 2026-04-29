@@ -3,7 +3,9 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, errorMessage, findGraphKnowledge } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
+import { findGraphKnowledge } from '../graph-knowledge-lookup.js';
 
 export const deleteCommand = new Command('delete')
   .description('Delete a knowledge entry')

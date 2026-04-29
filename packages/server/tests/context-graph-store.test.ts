@@ -8,7 +8,7 @@ import {
   SubstrateType,
 } from '@mindstrate/protocol/models';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('ContextGraphStore', () => {
   let tempDir: string;

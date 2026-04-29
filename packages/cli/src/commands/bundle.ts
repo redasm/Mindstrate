@@ -8,7 +8,8 @@ import { Command } from 'commander';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { PortableContextBundle } from '@mindstrate/protocol/models';
-import { createMemory, errorMessage } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 
 export const bundleCommand = new Command('bundle')
   .description('Create, install, validate, and publish portable ECS context bundles');

@@ -16,7 +16,7 @@ import { RuleCompressor } from '../src/context-graph/rule-compressor.js';
 import { SummaryCompressor } from '../src/context-graph/summary-compressor.js';
 import { Assimilator, DigestEngine, MetabolicCompressor, Reflector } from '../src/metabolism/index.js';
 import { Embedder } from '../src/processing/embedder.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('metabolism stage modules', () => {
   let tempDir: string;

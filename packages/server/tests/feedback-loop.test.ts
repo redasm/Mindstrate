@@ -10,7 +10,7 @@ import { FeedbackLoop } from '../src/quality/feedback-loop.js';
 import { DatabaseStore } from '../src/storage/database-store.js';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { ContextDomainType, SubstrateType } from '@mindstrate/protocol/models';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('FeedbackLoop', () => {
   let tempDir: string;

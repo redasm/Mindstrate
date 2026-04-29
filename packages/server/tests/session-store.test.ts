@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { SessionStore } from '../src/storage/session-store.js';
 import { DatabaseStore } from '../src/storage/database-store.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('SessionStore', () => {
   let tempDir: string;

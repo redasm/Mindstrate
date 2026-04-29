@@ -15,9 +15,7 @@ import {
 import type { CreateContextNodeInput, UpdateContextNodeInput } from '../context-graph/context-graph-store.js';
 import type { GraphKnowledgeProjectionOptions } from '../context-graph/knowledge-projector.js';
 import type { ProjectedKnowledgeSearchOptions } from '../context-graph/projected-knowledge-search.js';
-import {
-  computeGraphNodeMatchScore,
-} from '../mindstrate-graph-helpers.js';
+import { computeGraphNodeMatchScore } from '../context-graph/graph-match-score.js';
 import { ingestUserFeedback } from '../events/index.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 

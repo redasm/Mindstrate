@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Mindstrate } from '../src/mindstrate.js';
 import { KnowledgeType } from '@mindstrate/protocol';
 import { ContextDomainType, ContextNodeStatus, MetabolismRunStatus, ProjectionTarget, SubstrateType } from '@mindstrate/protocol/models';
-import { createTempDir, removeTempDir, makeKnowledgeInput } from './helpers.js';
+import { createTempDir, removeTempDir, makeKnowledgeInput } from './test-support.js';
 import type { DetectedProject } from '../src/project/detector.js';
 
 describe('Mindstrate', () => {

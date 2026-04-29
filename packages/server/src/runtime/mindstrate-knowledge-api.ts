@@ -5,10 +5,8 @@ import type {
 import { ContextEventType, type ContextNode } from '@mindstrate/protocol/models';
 import { toGraphKnowledgeView } from '../context-graph/knowledge-projector.js';
 import { digestKnowledgeInput } from '../context-graph/knowledge-digest.js';
-import {
-  getStringMetadata,
-  knowledgeTypeToContextDomain,
-} from '../mindstrate-graph-helpers.js';
+import { getStringMetadata } from '../context-graph/context-node-metadata.js';
+import { knowledgeTypeToContextDomain } from '../context-graph/knowledge-type-mapping.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateKnowledgeApi {

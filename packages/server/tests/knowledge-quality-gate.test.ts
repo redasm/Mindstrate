@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { KnowledgeType } from '@mindstrate/protocol';
 import { KnowledgeQualityGate } from '../src/processing/knowledge-quality-gate.js';
-import { makeKnowledgeInput } from './helpers.js';
+import { makeKnowledgeInput } from './test-support.js';
 
 describe('KnowledgeQualityGate', () => {
   let qualityGate: KnowledgeQualityGate;

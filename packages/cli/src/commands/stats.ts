@@ -3,7 +3,9 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, errorMessage, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
+import { TYPE_LABELS, STATUS_LABELS } from '../i18n-zh.js';
 
 export const statsCommand = new Command('stats')
   .description('Show knowledge base statistics')

@@ -5,7 +5,8 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, errorMessage, truncate } from '../helpers.js';
+import { errorMessage, truncateText as truncate } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 
 export const contextGraphCommand = new Command('graph')
   .description('Query ECS context graph nodes')

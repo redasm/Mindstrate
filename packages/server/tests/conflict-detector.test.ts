@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { ConflictDetector } from '../src/context-graph/conflict-detector.js';
 import { Embedder } from '../src/processing/embedder.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 import {
   ContextDomainType,
   ContextNodeStatus,

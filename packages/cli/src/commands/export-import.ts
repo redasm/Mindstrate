@@ -6,7 +6,8 @@
 
 import { Command } from 'commander';
 import * as fs from 'node:fs';
-import { createMemory, errorMessage } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 
 export const exportCommand = new Command('export')
   .description('Export ECS graph knowledge views to a JSON file')

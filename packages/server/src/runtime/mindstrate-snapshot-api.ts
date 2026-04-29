@@ -3,7 +3,7 @@ import { ContextDomainType, ContextEventType, SubstrateType, type ContextNode, t
 import { buildProjectSnapshot, type DetectedProject } from '../project/index.js';
 import type { CreateContextNodeInput } from '../context-graph/context-graph-store.js';
 import { toGraphKnowledgeView } from '../context-graph/knowledge-projector.js';
-import { getStringMetadata } from '../mindstrate-graph-helpers.js';
+import { getStringMetadata } from '../context-graph/context-node-metadata.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateSnapshotApi {

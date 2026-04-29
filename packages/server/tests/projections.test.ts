@@ -13,7 +13,7 @@ import {
   ProjectSnapshotProjectionMaterializer,
   SessionProjectionMaterializer,
 } from '../src/projections/index.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('ECS projections', () => {
   let tempDir: string;

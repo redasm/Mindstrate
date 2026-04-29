@@ -6,7 +6,8 @@
 
 import { Command } from 'commander';
 import * as fs from 'node:fs';
-import { createMemory, errorMessage } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 
 export const terminalOutputCommand = new Command('terminal')
   .description('Ingest terminal or command output into the ECS event stream')

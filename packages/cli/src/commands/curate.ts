@@ -5,7 +5,7 @@
  */
 
 import { Command } from 'commander';
-import { createMemory } from '../helpers.js';
+import { createMemory } from '../memory-factory.js';
 
 export function registerCurateCommand(program: Command): void {
   program

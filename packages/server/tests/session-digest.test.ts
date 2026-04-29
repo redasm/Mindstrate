@@ -10,7 +10,7 @@ import {
   sessionObservationToDomainType,
   sessionObservationToEventType,
 } from '../src/context-graph/session-digest.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('session digest helpers', () => {
   it('maps observation types to ECS event types', () => {

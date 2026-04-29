@@ -12,7 +12,7 @@ import {
 } from '../src/index.js';
 import { createApp } from '../../team-server/src/app.js';
 import { TeamClient } from '../../client/src/team-client.js';
-import { createTempDir, makeKnowledgeInput, removeTempDir } from './helpers.js';
+import { createTempDir, makeKnowledgeInput, removeTempDir } from './test-support.js';
 
 interface RunningTeamServer {
   close: () => Promise<void>;

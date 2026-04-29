@@ -11,7 +11,7 @@ import { KnowledgeProjectionMaterializer } from '../src/projections/knowledge-pr
 import { MetabolismEngine } from '../src/metabolism/metabolism-engine.js';
 import { Pruner } from '../src/metabolism/pruner.js';
 import { Embedder } from '../src/processing/embedder.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 import {
   ContextDomainType,
   ContextNodeStatus,

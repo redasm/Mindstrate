@@ -16,6 +16,7 @@ import * as fs from 'node:fs';
 import {
   Mindstrate,
   detectProject,
+  errorMessage,
   loadProjectMeta,
   saveProjectMeta,
   dependencyFingerprint,
@@ -23,7 +24,6 @@ import {
   type DetectedProject,
   type ProjectMeta,
 } from '@mindstrate/server';
-import { errorMessage } from '../helpers.js';
 import { writeMcpConfig } from './setup-mcp.js';
 import { writeProjectCliConfig } from '../cli-config.js';
 

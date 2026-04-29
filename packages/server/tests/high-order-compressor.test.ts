@@ -9,7 +9,7 @@ import {
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { HighOrderCompressor } from '../src/context-graph/high-order-compressor.js';
 import { Embedder } from '../src/processing/embedder.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('HighOrderCompressor', () => {
   let tempDir: string;

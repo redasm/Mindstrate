@@ -6,7 +6,8 @@
 
 import * as path from 'node:path';
 import { Command } from 'commander';
-import { createMemory, errorMessage } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 import type { ProjectionRecord } from '@mindstrate/protocol/models';
 
 export const projectionCommand = new Command('projection')

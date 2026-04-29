@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'node:path';
 import { RetrievalEvaluator } from '../src/quality/eval.js';
 import { DatabaseStore } from '../src/storage/database-store.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('RetrievalEvaluator', () => {
   let tempDir: string;

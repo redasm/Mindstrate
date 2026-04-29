@@ -3,7 +3,9 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, errorMessage, truncate, TYPE_LABELS, STATUS_LABELS } from '../helpers.js';
+import { errorMessage, truncateText as truncate } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
+import { TYPE_LABELS, STATUS_LABELS } from '../i18n-zh.js';
 
 export const searchCommand = new Command('search')
   .description('Search the knowledge base')

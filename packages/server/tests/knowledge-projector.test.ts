@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { GraphKnowledgeProjector } from '../src/context-graph/knowledge-projector.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 import {
   ContextDomainType,
   ContextNodeStatus,

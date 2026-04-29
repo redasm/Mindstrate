@@ -1,4 +1,4 @@
-import { getGraphStats } from '../mindstrate-graph-helpers.js';
+import { getGraphStats } from '../context-graph/graph-stats.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateMaintenanceApi {

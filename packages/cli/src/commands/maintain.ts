@@ -3,7 +3,8 @@
  */
 
 import { Command } from 'commander';
-import { createMemory, errorMessage } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 
 export const maintainCommand = new Command('doctor')
   .description('Run maintenance and health checks')

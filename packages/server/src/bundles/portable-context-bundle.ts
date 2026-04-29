@@ -6,7 +6,6 @@ import {
   type PortableContextBundleNode,
 } from '@mindstrate/protocol/models';
 import type {
-  BundlePublicationManifest,
   InstallBundleResult,
   PublishBundleOptions,
   PublishBundleResult,

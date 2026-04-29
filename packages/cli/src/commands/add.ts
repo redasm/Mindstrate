@@ -8,7 +8,8 @@
 
 import { Command } from 'commander';
 import { KnowledgeType, CaptureSource } from '@mindstrate/server';
-import { createMemory, errorMessage, TYPE_LABELS } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 
 export const addCommand = new Command('add')
   .description('Add a new knowledge entry')

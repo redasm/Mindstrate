@@ -6,7 +6,8 @@
 
 import { Command } from 'commander';
 import * as fs from 'node:fs';
-import { createMemory, errorMessage } from '../helpers.js';
+import { errorMessage } from '@mindstrate/server';
+import { createMemory } from '../memory-factory.js';
 
 export const testResultCommand = new Command('test')
   .description('Ingest a test result summary into the ECS event stream')

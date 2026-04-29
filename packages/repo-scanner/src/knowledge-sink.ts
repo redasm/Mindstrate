@@ -2,7 +2,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { TeamClient } from '@mindstrate/client';
 import {
-  CaptureSource,
   ContextDomainType,
   ContextEventType,
   Mindstrate,

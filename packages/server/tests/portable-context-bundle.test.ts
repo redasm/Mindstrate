@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { PortableContextBundleManager } from '../src/bundles/portable-context-bundle.js';
-import { createTempDir, removeTempDir } from './helpers.js';
+import { createTempDir, removeTempDir } from './test-support.js';
 import { ContextDomainType, ContextRelationType, ContextNodeStatus, SubstrateType } from '@mindstrate/protocol/models';
 
 describe('PortableContextBundleManager', () => {

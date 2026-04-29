@@ -6,7 +6,7 @@ import type {
 } from '@mindstrate/protocol';
 import { ContextDomainType, SubstrateType, type ConflictRecord, type ContextNode } from '@mindstrate/protocol/models';
 import { runContextAssemblyDag } from '../context-graph/context-assembly-dag.js';
-import { generateGraphCurationSummary } from '../mindstrate-graph-helpers.js';
+import { generateGraphCurationSummary } from '../context-graph/graph-curation-summary.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateContextAssemblyApi {
@@ -21,7 +21,7 @@ export class MindstrateContextAssemblyApi {
   async curateContext(
     taskDescription: string,
     context?: RetrievalContext,
-    sessionId?: string,
+    _sessionId?: string,
   ): Promise<CuratedContext> {
     await this.ensureInit();
     const project = context?.project;
