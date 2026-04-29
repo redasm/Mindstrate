@@ -180,6 +180,15 @@ export {
 export {
   createProjectGraphEdgeId,
   createProjectGraphNodeId,
+  createTreeSitterSourceParser,
+  BUILTIN_TREE_SITTER_QUERY_PACKS,
+  queryPacksForLanguage,
   type CreateProjectGraphEdgeIdInput,
   type CreateProjectGraphNodeIdInput,
+  type ParserAdapter,
+  type ParserCapture,
+  type ParserInput,
+  type ParserResult,
+  type QueryPack,
+  type SourceLanguage,
 } from './project-graph/index.js';
