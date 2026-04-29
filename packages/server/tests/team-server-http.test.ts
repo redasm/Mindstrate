@@ -8,6 +8,8 @@ import {
   ContextNodeStatus,
   Mindstrate,
   KnowledgeType,
+  ProjectGraphOverlayKind,
+  ProjectGraphOverlaySource,
   ProjectionTarget,
   SubstrateType,
 } from '../src/index.js';
@@ -362,6 +364,44 @@ describe('team-server HTTP integration', () => {
       limit: 10,
     });
     expect(records[0].targetRef).toBe('demo');
+  });
+
+  it('creates project graph overlays through the team HTTP API', async () => {
+    const { client, memory } = await startTeamServer();
+
+    memory.context.createContextNode({
+      id: 'pg:demo:file:src/App.tsx',
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'src/App.tsx',
+      content: 'Project graph file node',
+      project: 'demo',
+      status: ContextNodeStatus.ACTIVE,
+      metadata: { projectGraph: true, kind: 'file', provenance: 'EXTRACTED' },
+    });
+
+    const overlay = await client.context.createProjectGraphOverlay({
+      project: 'demo',
+      targetNodeId: 'pg:demo:file:src/App.tsx',
+      kind: ProjectGraphOverlayKind.NOTE,
+      content: 'This file owns the app shell.',
+      author: 'team',
+      source: ProjectGraphOverlaySource.WEB,
+    });
+
+    expect(overlay.targetNodeId).toBe('pg:demo:file:src/App.tsx');
+    expect(overlay.content).toBe('This file owns the app shell.');
+
+    const overlays = await client.context.listProjectGraphOverlays({
+      project: 'demo',
+      targetNodeId: 'pg:demo:file:src/App.tsx',
+    });
+    expect(overlays).toHaveLength(1);
+    expect(overlays[0].id).toBe(overlay.id);
+
+    const extracted = memory.context.listContextNodes({ project: 'demo', limit: 20 })
+      .find((node) => node.id === 'pg:demo:file:src/App.tsx');
+    expect(extracted?.metadata?.['provenance']).toBe('EXTRACTED');
   });
 });
 

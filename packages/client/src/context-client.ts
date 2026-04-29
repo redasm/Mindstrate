@@ -12,6 +12,9 @@ import type {
   InstallBundleResult,
   PortableContextBundle,
   ProjectionRecord,
+  ProjectGraphOverlay,
+  ProjectGraphOverlayKind,
+  ProjectGraphOverlaySource,
 } from '@mindstrate/protocol';
 import { TeamDomainClient } from './team-domain-client.js';
 
@@ -183,5 +186,35 @@ export class ContextClient extends TeamDomainClient {
     repoId: string;
   }): Promise<InstallBundleResult> {
     return this.post('/api/context/project-graph/publish', input);
+  }
+
+  async createProjectGraphOverlay(input: {
+    project: string;
+    targetNodeId?: string;
+    targetEdgeId?: string;
+    kind: ProjectGraphOverlayKind;
+    content: string;
+    author?: string;
+    source: ProjectGraphOverlaySource;
+  }): Promise<ProjectGraphOverlay> {
+    return this.post('/api/context/project-graph/overlays', input);
+  }
+
+  async listProjectGraphOverlays(options?: {
+    project?: string;
+    targetNodeId?: string;
+    targetEdgeId?: string;
+    limit?: number;
+  }): Promise<ProjectGraphOverlay[]> {
+    const params = new URLSearchParams();
+    if (options?.project) params.set('project', options.project);
+    if (options?.targetNodeId) params.set('targetNodeId', options.targetNodeId);
+    if (options?.targetEdgeId) params.set('targetEdgeId', options.targetEdgeId);
+    if (options?.limit) params.set('limit', String(options.limit));
+
+    const data = await this.fetch<{ overlays?: ProjectGraphOverlay[] }>(
+      `/api/context/project-graph/overlays?${params}`,
+    );
+    return data.overlays ?? [];
   }
 }

@@ -215,6 +215,35 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json(result);
   }));
 
+  app.post('/api/context/project-graph/overlays', withInitializedMemory(memory, async (req, res) => {
+    const { project, targetNodeId, targetEdgeId, kind, content, author, source } = req.body;
+    if (!project || !kind || !content || !source) {
+      res.status(400).json({ error: 'project, kind, content, and source are required' });
+      return;
+    }
+
+    res.status(201).json(memory.context.createProjectGraphOverlay({
+      project,
+      targetNodeId,
+      targetEdgeId,
+      kind,
+      content,
+      author,
+      source,
+    }));
+  }));
+
+  app.get('/api/context/project-graph/overlays', withInitializedMemory(memory, async (req, res) => {
+    const overlays = memory.context.listProjectGraphOverlays({
+      project: typeof req.query.project === 'string' ? req.query.project : undefined,
+      targetNodeId: typeof req.query.targetNodeId === 'string' ? req.query.targetNodeId : undefined,
+      targetEdgeId: typeof req.query.targetEdgeId === 'string' ? req.query.targetEdgeId : undefined,
+      limit: parseLimit(req.query.limit, 200),
+    });
+
+    res.json({ overlays, total: overlays.length });
+  }));
+
   app.post('/api/evolve', withInitializedMemory(memory, async (req, res) => {
     const { autoApply, maxItems, mode } = req.body;
     res.json(await memory.metabolism.runEvolution({ autoApply, maxItems, mode }));
