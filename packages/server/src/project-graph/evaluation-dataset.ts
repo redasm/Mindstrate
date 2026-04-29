@@ -46,6 +46,48 @@ export interface ProjectGraphFixtureMetrics {
   projectGraphEdges: number;
 }
 
+export type ProjectGraphEvaluationMode = 'legacy_snapshot' | 'project_graph';
+
+export interface ProjectGraphEvaluationTask {
+  id: string;
+  fixtureId: ProjectGraphEvaluationFixtureId;
+  mode: 'compare_legacy_snapshot_to_project_graph';
+  title: string;
+  legacyPrompt: string;
+  graphPrompt: string;
+  expectedFiles: string[];
+  avoidFiles: string[];
+  successCriteria: string[];
+}
+
+export interface ProjectGraphEvaluationRun {
+  taskId: string;
+  mode: ProjectGraphEvaluationMode;
+  success: boolean;
+  filesOpened: string[];
+  elapsedMs: number;
+  notes?: string;
+}
+
+export interface ProjectGraphEvaluationModeMetrics {
+  runs: number;
+  successRate: number;
+  averageFilesOpened: number;
+  wrongFilesOpened: number;
+  averageTimeToAnswerMs: number;
+}
+
+export interface ProjectGraphEvaluationRunSummary {
+  totalRuns: number;
+  byMode: Record<ProjectGraphEvaluationMode, ProjectGraphEvaluationModeMetrics>;
+  comparison: {
+    successRateDelta: number;
+    averageFilesOpenedDelta: number;
+    wrongFilesOpenedDelta: number;
+    averageTimeToAnswerMsDelta: number;
+  };
+}
+
 const FIXTURES: ProjectGraphEvaluationFixture[] = [
   {
     id: 'react-vite',
@@ -201,6 +243,44 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
   },
 ];
 
+const TASKS: ProjectGraphEvaluationTask[] = [
+  task({
+    id: 'react-vite-add-counter-reset',
+    fixtureId: 'react-vite',
+    title: 'Add a reset action to the React counter.',
+    expectedFiles: ['src/App.tsx'],
+    avoidFiles: ['dist/main.js', 'node_modules/react/index.js'],
+  }),
+  task({
+    id: 'vue-vite-change-mounted-title',
+    fixtureId: 'vue-vite',
+    title: 'Change the Vue dashboard title shown by the app component.',
+    expectedFiles: ['src/App.vue'],
+    avoidFiles: ['dist/assets/index.js', 'node_modules/vue/index.js'],
+  }),
+  task({
+    id: 'next-app-add-settings-link',
+    fixtureId: 'next-app',
+    title: 'Add a settings navigation link to the Next.js home route.',
+    expectedFiles: ['app/page.tsx'],
+    avoidFiles: ['app/layout.tsx', '.next/server/app/page.js'],
+  }),
+  task({
+    id: 'node-service-add-readiness-route',
+    fixtureId: 'node-service',
+    title: 'Add a readiness route to the Node service.',
+    expectedFiles: ['src/server.ts'],
+    avoidFiles: ['dist/server.js', 'node_modules/express/index.js'],
+  }),
+  task({
+    id: 'unreal-game-adjust-default-map',
+    fixtureId: 'unreal-game',
+    title: 'Change the Unreal default map setting.',
+    expectedFiles: ['Config/DefaultEngine.ini'],
+    avoidFiles: ['Intermediate/Build/Manifest.xml', 'Binaries/Win64/EvalGame.exe'],
+  }),
+];
+
 export const listProjectGraphEvaluationFixtures = (): ProjectGraphEvaluationFixture[] =>
   FIXTURES.map((fixture) => ({
     ...fixture,
@@ -218,6 +298,14 @@ export const getProjectGraphEvaluationFixture = (
   if (!fixture) throw new Error(`Unknown project graph evaluation fixture: ${id}`);
   return fixture;
 };
+
+export const listProjectGraphEvaluationTasks = (): ProjectGraphEvaluationTask[] =>
+  TASKS.map((entry) => ({
+    ...entry,
+    expectedFiles: [...entry.expectedFiles],
+    avoidFiles: [...entry.avoidFiles],
+    successCriteria: [...entry.successCriteria],
+  }));
 
 export const materializeProjectGraphEvaluationFixture = (
   id: ProjectGraphEvaluationFixtureId,
@@ -260,8 +348,90 @@ export const evaluateProjectGraphFixture = (
   };
 };
 
+export const summarizeProjectGraphEvaluationRuns = (
+  tasks: ProjectGraphEvaluationTask[],
+  runs: ProjectGraphEvaluationRun[],
+): ProjectGraphEvaluationRunSummary => {
+  const taskById = new Map(tasks.map((entry) => [entry.id, entry]));
+  const byMode = {
+    legacy_snapshot: summarizeMode(taskById, runs.filter((run) => run.mode === 'legacy_snapshot')),
+    project_graph: summarizeMode(taskById, runs.filter((run) => run.mode === 'project_graph')),
+  };
+  return {
+    totalRuns: runs.length,
+    byMode,
+    comparison: {
+      successRateDelta: byMode.project_graph.successRate - byMode.legacy_snapshot.successRate,
+      averageFilesOpenedDelta: byMode.project_graph.averageFilesOpened - byMode.legacy_snapshot.averageFilesOpened,
+      wrongFilesOpenedDelta: byMode.project_graph.wrongFilesOpened - byMode.legacy_snapshot.wrongFilesOpened,
+      averageTimeToAnswerMsDelta: byMode.project_graph.averageTimeToAnswerMs - byMode.legacy_snapshot.averageTimeToAnswerMs,
+    },
+  };
+};
+
 const minFailure = (label: string, actual: number, expected: number): string[] =>
   actual >= expected ? [] : [`${label}: expected at least ${expected}, got ${actual}`];
+
+const summarizeMode = (
+  taskById: Map<string, ProjectGraphEvaluationTask>,
+  runs: ProjectGraphEvaluationRun[],
+): ProjectGraphEvaluationModeMetrics => {
+  if (runs.length === 0) {
+    return {
+      runs: 0,
+      successRate: 0,
+      averageFilesOpened: 0,
+      wrongFilesOpened: 0,
+      averageTimeToAnswerMs: 0,
+    };
+  }
+
+  const wrongFilesOpened = runs.reduce((sum, run) => {
+    const task = taskById.get(run.taskId);
+    if (!task) return sum;
+    const opened = new Set(run.filesOpened);
+    return sum + task.avoidFiles.filter((file) => opened.has(file)).length;
+  }, 0);
+
+  return {
+    runs: runs.length,
+    successRate: runs.filter((run) => run.success).length / runs.length,
+    averageFilesOpened: average(runs.map((run) => run.filesOpened.length)),
+    wrongFilesOpened,
+    averageTimeToAnswerMs: average(runs.map((run) => run.elapsedMs)),
+  };
+};
+
+const average = (values: number[]): number =>
+  values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
+
+function task(input: {
+  id: string;
+  fixtureId: ProjectGraphEvaluationFixtureId;
+  title: string;
+  expectedFiles: string[];
+  avoidFiles: string[];
+}): ProjectGraphEvaluationTask {
+  return {
+    ...input,
+    mode: 'compare_legacy_snapshot_to_project_graph',
+    legacyPrompt: [
+      'Use only the legacy project snapshot and repository tree.',
+      input.title,
+      'Record files opened, final edited files, elapsed time, and whether the task succeeded.',
+    ].join('\n'),
+    graphPrompt: [
+      'Query the project graph first, then inspect only the evidence-backed files needed for the task.',
+      input.title,
+      'Record files opened, final edited files, elapsed time, and whether the task succeeded.',
+    ].join('\n'),
+    successCriteria: [
+      'Task behavior is implemented in the expected source file.',
+      'Generated output and dependency directories are not edited.',
+      'The answer cites the project graph node or evidence path used to choose files.',
+    ],
+  };
+}
 
 function json(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
