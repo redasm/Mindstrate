@@ -76,3 +76,15 @@ export {
   type CreateProjectGraphOverlayInput,
   type ListProjectGraphOverlayInput,
 } from './overlay.js';
+export {
+  evaluateProjectGraphFixture,
+  getProjectGraphEvaluationFixture,
+  listProjectGraphEvaluationFixtures,
+  materializeProjectGraphEvaluationFixture,
+  type ProjectGraphEvaluationFixture,
+  type ProjectGraphEvaluationFixtureId,
+  type ProjectGraphFixtureEvaluationInput,
+  type ProjectGraphFixtureEvaluationResult,
+  type ProjectGraphFixtureExpectations,
+  type ProjectGraphFixtureMetrics,
+} from './evaluation-dataset.js';
