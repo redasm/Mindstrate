@@ -27,6 +27,10 @@ import {
   errorMessage,
   estimateProjectGraphBlastRadius,
   findProjectGraphPath,
+  listProjectGraphEvaluationFixtures,
+  listProjectGraphEvaluationTasks,
+  materializeProjectGraphEvaluationFixture,
+  renderProjectGraphEvaluationDatasetMarkdown,
   truncateText as truncate,
 } from '@mindstrate/server';
 import { execSync } from 'node:child_process';
@@ -298,6 +302,35 @@ contextGraphCommand
   });
 
 contextGraphCommand
+  .command('eval-dataset')
+  .description('Export the project graph evaluation dataset report and fixtures')
+  .requiredOption('--out <dir>', 'Output directory for the report and fixtures')
+  .action((options) => {
+    try {
+      const outDir = path.resolve(options.out);
+      const fixturesDir = path.join(outDir, 'fixtures');
+      const fixtures = listProjectGraphEvaluationFixtures();
+      const tasks = listProjectGraphEvaluationTasks();
+      fs.mkdirSync(fixturesDir, { recursive: true });
+      for (const fixture of fixtures) {
+        materializeProjectGraphEvaluationFixture(fixture.id, path.join(fixturesDir, fixture.id));
+      }
+      const reportPath = path.join(outDir, 'project-graph-evaluation-dataset.md');
+      fs.writeFileSync(reportPath, renderProjectGraphEvaluationDatasetMarkdown({ fixtures, tasks }), 'utf8');
+      for (const line of buildGraphEvaluationDatasetExportLines({
+        reportPath,
+        fixturesDir,
+        fixtureCount: fixtures.length,
+        taskCount: tasks.length,
+      })) {
+        console.log(line);
+      }
+    } catch (error) {
+      fail('Graph evaluation dataset export failed', error);
+    }
+  });
+
+contextGraphCommand
   .command('ingest')
   .description('Ingest external project graph input from repo-scanner or a custom collector')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
@@ -400,6 +433,19 @@ export const buildGraphChangeResultLines = (result: {
   '',
   'Suggested queries:',
   ...result.suggestedQueries.map((query) => `  - ${query}`),
+];
+
+export const buildGraphEvaluationDatasetExportLines = (input: {
+  reportPath: string;
+  fixturesDir: string;
+  fixtureCount: number;
+  taskCount: number;
+}): string[] => [
+  'Project graph evaluation dataset exported',
+  `  Report: ${input.reportPath}`,
+  `  Fixtures: ${input.fixturesDir}`,
+  `  Fixture count: ${input.fixtureCount}`,
+  `  Task count: ${input.taskCount}`,
 ];
 
 export const parseExternalChangeSetJson = (text: string): ChangeSet => {

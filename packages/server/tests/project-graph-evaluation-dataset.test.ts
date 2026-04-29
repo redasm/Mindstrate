@@ -7,6 +7,7 @@ import {
   listProjectGraphEvaluationFixtures,
   listProjectGraphEvaluationTasks,
   materializeProjectGraphEvaluationFixture,
+  renderProjectGraphEvaluationDatasetMarkdown,
   summarizeProjectGraphEvaluationRuns,
 } from '../src/project-graph/evaluation-dataset.js';
 import { createTempDir, removeTempDir } from './test-support.js';
@@ -126,5 +127,23 @@ describe('project graph evaluation dataset', () => {
       wrongFilesOpenedDelta: -task.avoidFiles.length,
       averageTimeToAnswerMsDelta: -75000,
     });
+  });
+
+  it('renders an inspectable markdown report for published fixtures and tasks', () => {
+    const markdown = renderProjectGraphEvaluationDatasetMarkdown({
+      fixtures: listProjectGraphEvaluationFixtures(),
+      tasks: listProjectGraphEvaluationTasks(),
+    });
+
+    expect(markdown).toContain('# Project Graph Evaluation Dataset');
+    expect(markdown).toContain('## Fixtures');
+    expect(markdown).toContain('### React Vite App');
+    expect(markdown).toContain('Required nodes: package.json, src/App.tsx');
+    expect(markdown).toContain('## AI Task Prompts');
+    expect(markdown).toContain('Legacy snapshot prompt');
+    expect(markdown).toContain('Project graph prompt');
+    expect(markdown).toContain('## Metrics');
+    expect(markdown).toContain('task success');
+    expect(markdown).toContain('wrong files opened');
   });
 });

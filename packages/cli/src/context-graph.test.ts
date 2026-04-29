@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { ChangeSource, ProjectGraphOverlayKind, ProjectGraphOverlaySource, ProjectionTarget } from '@mindstrate/server';
 import {
+  buildGraphEvaluationDatasetExportLines,
   buildGraphOverlayLines,
   buildGraphChangeResultLines,
   buildGraphStatusLines,
@@ -154,5 +155,22 @@ test('buildGraphChangeResultLines renders external changeset analysis', () => {
     '',
     'Suggested queries:',
     '  - mindstrate graph context src/App.tsx',
+  ]);
+});
+
+test('buildGraphEvaluationDatasetExportLines renders published dataset locations', () => {
+  const lines = buildGraphEvaluationDatasetExportLines({
+    reportPath: path.join('out', 'project-graph-evaluation-dataset.md'),
+    fixturesDir: path.join('out', 'fixtures'),
+    fixtureCount: 5,
+    taskCount: 5,
+  });
+
+  assert.deepEqual(lines, [
+    'Project graph evaluation dataset exported',
+    `  Report: ${path.join('out', 'project-graph-evaluation-dataset.md')}`,
+    `  Fixtures: ${path.join('out', 'fixtures')}`,
+    '  Fixture count: 5',
+    '  Task count: 5',
   ]);
 });

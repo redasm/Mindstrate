@@ -88,6 +88,12 @@ export interface ProjectGraphEvaluationRunSummary {
   };
 }
 
+export interface RenderProjectGraphEvaluationDatasetInput {
+  fixtures: ProjectGraphEvaluationFixture[];
+  tasks: ProjectGraphEvaluationTask[];
+  summary?: ProjectGraphEvaluationRunSummary;
+}
+
 const FIXTURES: ProjectGraphEvaluationFixture[] = [
   {
     id: 'react-vite',
@@ -369,6 +375,29 @@ export const summarizeProjectGraphEvaluationRuns = (
   };
 };
 
+export const renderProjectGraphEvaluationDatasetMarkdown = (
+  input: RenderProjectGraphEvaluationDatasetInput,
+): string => [
+  '# Project Graph Evaluation Dataset',
+  '',
+  'This dataset compares legacy project snapshot guidance with project graph guided work.',
+  '',
+  '## Fixtures',
+  '',
+  ...input.fixtures.flatMap(renderFixtureMarkdown),
+  '## AI Task Prompts',
+  '',
+  ...input.tasks.flatMap(renderTaskMarkdown),
+  '## Metrics',
+  '',
+  '- task success',
+  '- files opened',
+  '- wrong files opened',
+  '- time-to-answer',
+  '',
+  ...(input.summary ? renderSummaryMarkdown(input.summary) : []),
+].join('\n');
+
 const minFailure = (label: string, actual: number, expected: number): string[] =>
   actual >= expected ? [] : [`${label}: expected at least ${expected}, got ${actual}`];
 
@@ -404,6 +433,55 @@ const summarizeMode = (
 
 const average = (values: number[]): number =>
   values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length;
+
+const renderFixtureMarkdown = (fixture: ProjectGraphEvaluationFixture): string[] => [
+  `### ${fixture.label}`,
+  '',
+  `- ID: ${fixture.id}`,
+  `- Project: ${fixture.projectName}`,
+  `- Framework: ${fixture.expected.framework ?? '(none)'}`,
+  `- Files: ${Object.keys(fixture.files).join(', ')}`,
+  `- Required nodes: ${fixture.expected.requiredNodeTitles.join(', ')}`,
+  `- Minimum files scanned: ${fixture.expected.minFilesScanned}`,
+  `- Minimum graph nodes: ${fixture.expected.minProjectGraphNodes}`,
+  `- Minimum graph edges: ${fixture.expected.minProjectGraphEdges}`,
+  '',
+  fixture.description,
+  '',
+];
+
+const renderTaskMarkdown = (task: ProjectGraphEvaluationTask): string[] => [
+  `### ${task.title}`,
+  '',
+  `- ID: ${task.id}`,
+  `- Fixture: ${task.fixtureId}`,
+  `- Expected files: ${task.expectedFiles.join(', ')}`,
+  `- Avoid files: ${task.avoidFiles.join(', ')}`,
+  '',
+  'Legacy snapshot prompt',
+  '',
+  '```text',
+  task.legacyPrompt,
+  '```',
+  '',
+  'Project graph prompt',
+  '',
+  '```text',
+  task.graphPrompt,
+  '```',
+  '',
+];
+
+const renderSummaryMarkdown = (summary: ProjectGraphEvaluationRunSummary): string[] => [
+  '## Latest Run Summary',
+  '',
+  `- Total runs: ${summary.totalRuns}`,
+  `- Success rate delta: ${summary.comparison.successRateDelta}`,
+  `- Average files opened delta: ${summary.comparison.averageFilesOpenedDelta}`,
+  `- Wrong files opened delta: ${summary.comparison.wrongFilesOpenedDelta}`,
+  `- Time-to-answer delta ms: ${summary.comparison.averageTimeToAnswerMsDelta}`,
+  '',
+];
 
 function task(input: {
   id: string;
