@@ -31,6 +31,7 @@ interface InitOptions {
   dataDir?: string;
   cwd?: string;
   noSnapshot?: boolean;
+  noGraph?: boolean;
   force?: boolean;
   withVault?: string;
   tool?: 'cursor' | 'opencode' | 'claude-desktop' | 'all';
@@ -42,6 +43,7 @@ export const initCommand = new Command('init')
   .option('-d, --data-dir <path>', 'Custom data directory')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('--no-snapshot', 'Skip generating the project snapshot KU')
+  .option('--no-graph', 'Skip deterministic project graph indexing')
   .option('--force', 'Force-rebuild snapshot even if no changes detected')
   .option('--with-vault <path>', 'Also initialize an Obsidian vault at this path')
   .option('--tool <tool>', 'Also generate MCP config for: cursor, opencode, claude-desktop, all')
@@ -120,7 +122,19 @@ export const initCommand = new Command('init')
       console.log('\nProject snapshot:');
       console.log(snapshotSummary);
 
-      // 5) Write project meta file (always, for ownership + fingerprint cache)
+      // 5) Deterministic project graph
+      if (options.noGraph) {
+        console.log('\nProject graph:');
+        console.log('  (skipped: --no-graph)');
+      } else {
+        const graph = memory.context.indexProjectGraph(project);
+        console.log('\nProject graph:');
+        console.log(`  Files: ${graph.filesScanned}`);
+        console.log(`  Nodes: ${graph.nodesCreated} created, ${graph.nodesUpdated} updated`);
+        console.log(`  Edges: ${graph.edgesCreated} created, ${graph.edgesSkipped} unchanged`);
+      }
+
+      // 6) Write project meta file (always, for ownership + fingerprint cache)
       saveProjectMeta(project.root, meta);
       writeProjectCliConfig(project.root, {
         mode: process.env['TEAM_SERVER_URL'] ? 'team' : 'local',
@@ -130,12 +144,12 @@ export const initCommand = new Command('init')
       });
       console.log(`  Meta:    ${metaPath(project.root)}`);
 
-      // 6) Optional: Obsidian vault
+      // 7) Optional: Obsidian vault
       if (options.withVault) {
         await initVault(memory, options.withVault, project);
       }
 
-      // 7) Optional: MCP config
+      // 8) Optional: MCP config
       if (options.tool) {
         try {
           const { generated, serverPath } = writeMcpConfig({
@@ -151,10 +165,10 @@ export const initCommand = new Command('init')
         }
       }
 
-      // 8) Mode hints
+      // 9) Mode hints
       printModeHints(project, options);
 
-      // 9) OPENAI_API_KEY warning
+      // 10) OPENAI_API_KEY warning
       if (!config.openaiApiKey) {
         console.log('\n  Note: OPENAI_API_KEY not set — falling back to local hash-based embeddings.');
         console.log('  Set it in your environment for higher-quality semantic search.');

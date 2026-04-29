@@ -197,8 +197,10 @@ export {
   diffProjectGraphCache,
   scanProjectFiles,
   archiveProjectGraphFileFacts,
+  indexProjectGraph,
   writeProjectGraphExtraction,
   type ArchiveProjectGraphFileFactsInput,
   type ProjectGraphExtractionResult,
+  type ProjectGraphIndexResult,
   type ProjectGraphWriteResult,
 } from './project-graph/index.js';

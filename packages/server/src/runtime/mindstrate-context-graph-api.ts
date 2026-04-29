@@ -17,6 +17,8 @@ import type { GraphKnowledgeProjectionOptions } from '../context-graph/knowledge
 import type { ProjectedKnowledgeSearchOptions } from '../context-graph/projected-knowledge-search.js';
 import { computeGraphNodeMatchScore } from '../context-graph/graph-match-score.js';
 import { ingestUserFeedback } from '../events/index.js';
+import { indexProjectGraph, type ProjectGraphIndexResult } from '../project-graph/index.js';
+import type { DetectedProject } from '../project/index.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateContextGraphApi {
@@ -142,6 +144,10 @@ export class MindstrateContextGraphApi {
         options?.sessionId,
       ),
     }));
+  }
+
+  indexProjectGraph(project: DetectedProject): ProjectGraphIndexResult {
+    return indexProjectGraph(this.services.contextGraphStore, project);
   }
 
   private tryIngestDerivedEvent(work: () => void): void {

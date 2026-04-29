@@ -33,3 +33,7 @@ export {
   type ProjectGraphExtractionResult,
   type ProjectGraphWriteResult,
 } from './graph-writer.js';
+export {
+  indexProjectGraph,
+  type ProjectGraphIndexResult,
+} from './project-graph-service.js';
