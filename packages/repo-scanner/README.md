@@ -102,6 +102,43 @@ mindstrate-scan daemon --tick-ms 30000
 
 daemon 会定期轮询已启用 source，并执行增量扫描。
 
+## 自定义数据采集器
+
+自定义采集器接入 repo-scanner，而不是接入 `packages/server` 的内部采集逻辑。采集器需要实现
+`RepoScannerSourceAdapter<TItem>`：
+
+```ts
+import { ChangeSource, type ChangeSet } from '@mindstrate/server';
+import type { RepoScannerSourceAdapter } from '@mindstrate/repo-scanner';
+
+export const customAdapter: RepoScannerSourceAdapter<{ id: string; files: string[] }> = {
+  id: 'custom-p4',
+  kind: 'custom',
+  async discover({ sourceId, cursor }) {
+    return {
+      cursor: '101',
+      items: [{ id: '101', files: ['Source/Client/Client.Build.cs'] }],
+    };
+  },
+  async toMindstrateInput(item) {
+    const changeSet: ChangeSet = {
+      source: ChangeSource.P4,
+      head: item.id,
+      files: item.files.map((file) => ({ path: file, status: 'modified' })),
+    };
+    return { type: 'changeset', project: 'my-project', changeSet };
+  },
+};
+```
+
+`toMindstrateInput` 只能返回三类标准输入：
+
+- `event`：调用框架事件注入接口。
+- `changeset`：交给 `mindstrate graph ingest --changes <file|->` 或 `memory.context.ingestProjectGraphChangeSet(...)` 分析。
+- `bundle`：交给 portable bundle 安装/发布流程。
+
+Git / P4 / hook / daemon / cursor / retry 都属于 repo-scanner 或采集器职责；框架只负责接收这些标准输入并解析、合并、查询、投影。
+
 ## 失败项处理
 
 如果某次扫描中某个 commit 处理失败，它会被记录到失败项表中。

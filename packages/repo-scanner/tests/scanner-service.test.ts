@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execSync } from 'node:child_process';
-import { Mindstrate } from '@mindstrate/server';
+import { ChangeSource, Mindstrate, type ChangeSet } from '@mindstrate/server';
 import { RepoScannerService } from '../src/scanner-service.js';
+import type { RepoScannerMindstrateInput, RepoScannerSourceAdapter } from '../src/types.js';
 import { createTempDir, removeTempDir } from '../../../tests/support/index.js';
 
 function initRepo(repoPath: string): void {
@@ -140,5 +141,40 @@ describe('RepoScannerService', () => {
     expect(status.source.id).toBe(source.id);
     expect(status.recentRuns).toHaveLength(1);
     expect(status.failedItems).toHaveLength(0);
+  });
+
+  it('defines a custom source adapter contract that emits standard Mindstrate inputs', async () => {
+    const adapter: RepoScannerSourceAdapter<{ id: string; files: string[] }> = {
+      id: 'custom-p4',
+      kind: 'custom',
+      async discover() {
+        return {
+          cursor: '101',
+          items: [{ id: '101', files: ['Source/Client/Client.Build.cs'] }],
+        };
+      },
+      async toMindstrateInput(item) {
+        const changeSet: ChangeSet = {
+          source: ChangeSource.P4,
+          head: item.id,
+          files: item.files.map((file) => ({ path: file, status: 'modified' })),
+        };
+        return { type: 'changeset', project: 'proj', changeSet };
+      },
+    };
+
+    const discovered = await adapter.discover({ sourceId: 'source-1' });
+    const input: RepoScannerMindstrateInput = await adapter.toMindstrateInput(discovered.items[0]);
+
+    expect(discovered.cursor).toBe('101');
+    expect(input).toEqual({
+      type: 'changeset',
+      project: 'proj',
+      changeSet: {
+        source: ChangeSource.P4,
+        head: '101',
+        files: [{ path: 'Source/Client/Client.Build.cs', status: 'modified' }],
+      },
+    });
   });
 });
