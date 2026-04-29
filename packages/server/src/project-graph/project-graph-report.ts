@@ -1,0 +1,116 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { ContextDomainType } from '@mindstrate/protocol/models';
+import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
+import type { DetectedProject } from '../project/index.js';
+
+export interface ProjectGraphArtifactResult {
+  reportPath: string;
+  statsPath: string;
+  nodes: number;
+  edges: number;
+}
+
+export interface ProjectGraphStatsExport {
+  project: string;
+  generatedAt: string;
+  nodes: number;
+  edges: number;
+  firstFiles: string[];
+  provenanceCounts: Record<string, number>;
+  nodeKindCounts: Record<string, number>;
+}
+
+export const writeProjectGraphArtifacts = (
+  store: ContextGraphStore,
+  project: DetectedProject,
+): ProjectGraphArtifactResult => {
+  const stats = collectProjectGraphStats(store, project);
+  const report = renderProjectGraphReport(project, stats);
+  const reportPath = path.join(project.root, 'PROJECT_GRAPH.md');
+  const statsPath = path.join(project.root, '.mindstrate', 'project-graph.json');
+
+  fs.mkdirSync(path.dirname(statsPath), { recursive: true });
+  fs.writeFileSync(reportPath, report, 'utf8');
+  fs.writeFileSync(statsPath, `${JSON.stringify(stats, null, 2)}\n`, 'utf8');
+
+  return {
+    reportPath,
+    statsPath,
+    nodes: stats.nodes,
+    edges: stats.edges,
+  };
+};
+
+export const collectProjectGraphStats = (
+  store: ContextGraphStore,
+  project: DetectedProject,
+): ProjectGraphStatsExport => {
+  const nodes = store.listNodes({
+    project: project.name,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: 100000,
+  }).filter((node) => node.metadata?.['projectGraph'] === true);
+  const edges = store.listEdges({ limit: 100000 })
+    .filter((edge) => edge.evidence?.['projectGraph'] === true);
+  const firstFiles = nodes
+    .filter((node) => node.metadata?.['kind'] === 'file')
+    .map((node) => node.title)
+    .sort()
+    .slice(0, 12);
+
+  return {
+    project: project.name,
+    generatedAt: new Date().toISOString(),
+    nodes: nodes.length,
+    edges: edges.length,
+    firstFiles,
+    provenanceCounts: countBy(nodes, (node) => String(node.metadata?.['provenance'] ?? 'unknown')),
+    nodeKindCounts: countBy(nodes, (node) => String(node.metadata?.['kind'] ?? 'unknown')),
+  };
+};
+
+const renderProjectGraphReport = (
+  project: DetectedProject,
+  stats: ProjectGraphStatsExport,
+): string => [
+  `# Project Graph: ${project.name}`,
+  '',
+  '## Summary',
+  '',
+  `- Framework: ${project.framework ?? 'unknown'}`,
+  `- Language: ${project.language ?? 'unknown'}`,
+  `- Nodes: ${stats.nodes}`,
+  `- Edges: ${stats.edges}`,
+  '',
+  '## First Files To Read',
+  '',
+  ...listOrFallback(stats.firstFiles),
+  '',
+  '## Generated Or Do-Not-Edit Areas',
+  '',
+  ...listOrFallback(project.graphHints?.generatedRoots ?? []),
+  '',
+  '## Provenance',
+  '',
+  ...Object.entries(stats.provenanceCounts).map(([name, count]) => `- ${name}: ${count}`),
+  '',
+  '## Suggested Graph Queries',
+  '',
+  '- mindstrate graph query "entry points"',
+  '- mindstrate graph query "high impact files"',
+  '- mindstrate graph context src/App.tsx',
+  '',
+].join('\n');
+
+const listOrFallback = (items: string[]): string[] =>
+  items.length > 0 ? items.map((item) => `- ${item}`) : ['- None detected yet.'];
+
+const countBy = <T>(items: T[], keyFor: (item: T) => string): Record<string, number> => {
+  const counts: Record<string, number> = {};
+  for (const item of items) {
+    const key = keyFor(item);
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+};

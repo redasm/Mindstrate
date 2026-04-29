@@ -132,6 +132,9 @@ export const initCommand = new Command('init')
         console.log(`  Files: ${graph.filesScanned}`);
         console.log(`  Nodes: ${graph.nodesCreated} created, ${graph.nodesUpdated} updated`);
         console.log(`  Edges: ${graph.edgesCreated} created, ${graph.edgesSkipped} unchanged`);
+        const artifacts = memory.context.writeProjectGraphArtifacts(project);
+        console.log(`  Report: ${artifacts.reportPath}`);
+        console.log(`  Stats:  ${artifacts.statsPath}`);
       }
 
       // 6) Write project meta file (always, for ownership + fingerprint cache)

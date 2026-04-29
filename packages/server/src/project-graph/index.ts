@@ -37,3 +37,9 @@ export {
   indexProjectGraph,
   type ProjectGraphIndexResult,
 } from './project-graph-service.js';
+export {
+  collectProjectGraphStats,
+  writeProjectGraphArtifacts,
+  type ProjectGraphArtifactResult,
+  type ProjectGraphStatsExport,
+} from './project-graph-report.js';
