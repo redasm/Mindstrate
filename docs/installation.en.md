@@ -124,7 +124,74 @@ curl http://127.0.0.1:3388/health
 # Web UI: http://<server>:3377
 ```
 
-For backup, restore, port conflicts, and upgrades, see [deploy/README.md](../deploy/README.md).
+### Deployment Files
+
+```text
+deploy/
+├── docker-compose.deploy.yml
+├── .env.deploy.example
+├── team-server.Dockerfile
+├── web-ui.Dockerfile
+├── preflight.sh
+├── export-data-volume.sh
+└── restore.sh
+```
+
+The Docker deployment uses its own compose project, network, and volume. It does not touch existing containers, networks, or volumes on the host. Team Server and Web UI must share the same SQLite data directory; do not point them at different volumes.
+
+### Operations
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy logs -f
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy restart
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d --build
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy down
+```
+
+### Backup And Restore
+
+```bash
+bash deploy/export-data-volume.sh
+EXPORT_DIR=/srv/mindstrate-data-exports bash deploy/export-data-volume.sh
+
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy stop
+bash deploy/restore.sh ./data-exports/mindstrate-20260420-101500.tgz
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d
+```
+
+Example cron backup:
+
+```cron
+0 3 * * * cd /opt/Mindstrate && EXPORT_DIR=/srv/mindstrate-data-exports bash deploy/export-data-volume.sh >> /var/log/mindstrate-data-export.log 2>&1
+```
+
+### Ports, Bind Address, And OpenAI
+
+If `preflight.sh` reports a port conflict, edit `deploy/.env.deploy`:
+
+```env
+TEAM_PORT=4388
+WEB_UI_PORT=4377
+```
+
+To expose services only to a local reverse proxy:
+
+```env
+TEAM_BIND=127.0.0.1
+WEB_UI_BIND=127.0.0.1
+```
+
+Without `OPENAI_API_KEY`, the service uses offline hash embeddings and deterministic extraction. When an OpenAI-compatible key is configured, embedding and LLM extraction are enabled.
+
+### Deployment Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| `TEAM_API_KEY must be set` | Check `deploy/.env.deploy` and make sure compose receives `--env-file` |
+| Web UI is empty | Confirm Team Server and Web UI mount the same data volume |
+| Client gets 401 Unauthorized | Match client `TEAM_API_KEY` with the server key |
+| Healthcheck stays unhealthy | Check `docker logs mindstrate-team-server` |
+| Web UI returns 502 after upgrade | Wait for Next.js startup or inspect `docker compose ... logs web-ui` |
 
 ## Team Member Setup
 
@@ -156,7 +223,31 @@ Admins can build a single-file MCP installer so members do not need to clone the
 bash install/build-installer.sh
 ```
 
-Publish `install/dist/` on an internal HTTP server.
+Build output:
+
+```text
+install/dist/
+  mindstrate-mcp.js
+  install.sh
+  install.ps1
+  manifest.json
+```
+
+Before publishing, change the download URL in `install/install.sh` and `install/install.ps1` to your internal HTTP address, for example:
+
+```text
+http://internal.company.com/mindstrate
+```
+
+Then publish and verify:
+
+```bash
+bash install/build-installer.sh
+rsync -avz install/dist/ user@nginx:/var/www/share/mindstrate/
+curl http://internal.company.com/mindstrate/manifest.json
+```
+
+Member install commands:
 
 Linux / macOS:
 
@@ -177,7 +268,47 @@ $env:TOOL = "opencode"
 iwr http://<host>/mindstrate/install.ps1 -UseBasicParsing | iex
 ```
 
-See [install/README.md](../install/README.md) for publishing, upgrades, and uninstall.
+Default install location:
+
+| OS | Path |
+| --- | --- |
+| Linux / macOS | `~/.mindstrate-mcp/mindstrate-mcp.js` |
+| Windows | `%USERPROFILE%\\.mindstrate-mcp\\mindstrate-mcp.js` |
+
+The installer merges the `mindstrate` MCP entry into existing tool config and does not overwrite the whole config file.
+
+Verify:
+
+```bash
+TEAM_SERVER_URL=http://<server>:3388 \
+TEAM_API_KEY=<key> \
+node ~/.mindstrate-mcp/mindstrate-mcp.js
+```
+
+Upgrade by running the installer again. It fetches the latest `manifest.json`, downloads `mindstrate-mcp.js`, checks SHA256, and keeps existing MCP config.
+
+Uninstall by deleting the local install directory and removing `mindstrate` from the AI tool MCP config:
+
+```bash
+rm -rf ~/.mindstrate-mcp
+```
+
+Windows:
+
+```powershell
+Remove-Item -Recurse $env:USERPROFILE\.mindstrate-mcp
+```
+
+The installer only installs the single-file MCP server and connects it to Team Server. Git, Perforce, hooks, daemon polling, and custom collectors are provided by `packages/repo-scanner`.
+
+Common issues:
+
+| Symptom | Fix |
+| --- | --- |
+| `Cannot fetch manifest.json` | Check the internal HTTP URL, uploaded files, and member network access |
+| `401 Unauthorized` | Check `TEAM_API_KEY` |
+| `Team Server is not reachable` | Check `TEAM_SERVER_URL`, VPN, server status, and port access |
+| Install succeeds but tools are missing | Restart the AI tool and confirm config was written to the expected path |
 
 ## MCP Configuration
 

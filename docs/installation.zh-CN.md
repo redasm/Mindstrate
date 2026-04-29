@@ -130,7 +130,74 @@ curl http://127.0.0.1:3388/health
 # Web UI: http://<server>:3377
 ```
 
-备份、恢复、端口冲突、升级回滚等运维细节见 [deploy/README.md](../deploy/README.md)。
+### 部署文件
+
+```text
+deploy/
+├── docker-compose.deploy.yml
+├── .env.deploy.example
+├── team-server.Dockerfile
+├── web-ui.Dockerfile
+├── preflight.sh
+├── export-data-volume.sh
+└── restore.sh
+```
+
+Docker 部署使用独立 compose project、独立 network 和独立 volume，不会接触服务器上已有的容器、网络或 volume。Team Server 和 Web UI 必须共享同一个 SQLite 数据目录，不要把两个容器指向不同 volume。
+
+### 日常运维
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy logs -f
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy restart
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d --build
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy down
+```
+
+### 备份与恢复
+
+```bash
+bash deploy/export-data-volume.sh
+EXPORT_DIR=/srv/mindstrate-data-exports bash deploy/export-data-volume.sh
+
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy stop
+bash deploy/restore.sh ./data-exports/mindstrate-20260420-101500.tgz
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d
+```
+
+定期备份可以放到 cron：
+
+```cron
+0 3 * * * cd /opt/Mindstrate && EXPORT_DIR=/srv/mindstrate-data-exports bash deploy/export-data-volume.sh >> /var/log/mindstrate-data-export.log 2>&1
+```
+
+### 端口、访问范围和 OpenAI
+
+如果 `preflight.sh` 报端口占用，修改 `deploy/.env.deploy`：
+
+```env
+TEAM_PORT=4388
+WEB_UI_PORT=4377
+```
+
+如果只允许本机反向代理访问：
+
+```env
+TEAM_BIND=127.0.0.1
+WEB_UI_BIND=127.0.0.1
+```
+
+不设置 `OPENAI_API_KEY` 时，服务使用离线 hash embedding 和确定性提取；设置后会启用 OpenAI 兼容 embedding 和 LLM 抽取能力。
+
+### 部署故障排查
+
+| 现象 | 处理 |
+| --- | --- |
+| `TEAM_API_KEY must be set` | 检查 `deploy/.env.deploy`，并确认 compose 命令传入了 `--env-file` |
+| Web UI 显示空 | 检查 Team Server 和 Web UI 是否挂载同一个数据 volume |
+| 客户端 401 Unauthorized | 确认客户端 `TEAM_API_KEY` 与服务端一致 |
+| Healthcheck 一直 unhealthy | 查看 `docker logs mindstrate-team-server` |
+| 升级后 Web UI 报 502 | 等待 Next.js 启动，或查看 `docker compose ... logs web-ui` |
 
 ## 团队成员接入
 
@@ -162,7 +229,31 @@ TEAM_API_KEY=<key>
 bash install/build-installer.sh
 ```
 
-把 `install/dist/` 发布到内网 HTTP 服务后，成员一行安装：
+构建产物：
+
+```text
+install/dist/
+  mindstrate-mcp.js
+  install.sh
+  install.ps1
+  manifest.json
+```
+
+发布前，把 `install/install.sh` 和 `install/install.ps1` 里的下载地址改成团队内网 HTTP 地址，例如：
+
+```text
+http://internal.company.com/mindstrate
+```
+
+然后发布并验证：
+
+```bash
+bash install/build-installer.sh
+rsync -avz install/dist/ user@nginx:/var/www/share/mindstrate/
+curl http://internal.company.com/mindstrate/manifest.json
+```
+
+成员一行安装：
 
 Linux / macOS：
 
@@ -183,7 +274,47 @@ $env:TOOL = "opencode"
 iwr http://<host>/mindstrate/install.ps1 -UseBasicParsing | iex
 ```
 
-安装包发布、升级、卸载见 [install/README.md](../install/README.md)。
+默认安装位置：
+
+| OS | 路径 |
+| --- | --- |
+| Linux / macOS | `~/.mindstrate-mcp/mindstrate-mcp.js` |
+| Windows | `%USERPROFILE%\\.mindstrate-mcp\\mindstrate-mcp.js` |
+
+安装器会合并 MCP 配置中的 `mindstrate` 项，不会覆盖整个配置文件。
+
+验证安装：
+
+```bash
+TEAM_SERVER_URL=http://<server>:3388 \
+TEAM_API_KEY=<key> \
+node ~/.mindstrate-mcp/mindstrate-mcp.js
+```
+
+升级方式是重新运行安装脚本。安装器会拉取最新 `manifest.json`、下载 `mindstrate-mcp.js`、校验 SHA256，并保留现有 MCP 配置。
+
+卸载时删除本地安装目录，然后从 AI 工具的 MCP 配置中移除 `mindstrate`：
+
+```bash
+rm -rf ~/.mindstrate-mcp
+```
+
+Windows：
+
+```powershell
+Remove-Item -Recurse $env:USERPROFILE\.mindstrate-mcp
+```
+
+安装包只负责安装单文件 MCP 并连接 Team Server；Git、Perforce、hook、daemon 和自定义采集器由 `packages/repo-scanner` 提供。
+
+常见问题：
+
+| 现象 | 处理 |
+| --- | --- |
+| `Cannot fetch manifest.json` | 检查内网 HTTP 地址、文件是否上传、成员机器是否可访问 |
+| `401 Unauthorized` | 检查 `TEAM_API_KEY` |
+| `Team Server is not reachable` | 检查 `TEAM_SERVER_URL`、VPN、服务器状态和端口 |
+| 安装成功但 AI 工具里看不到工具 | 重启 AI 工具，确认配置写入了正确位置 |
 
 ## MCP 配置
 
