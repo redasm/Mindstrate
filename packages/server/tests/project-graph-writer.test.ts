@@ -51,6 +51,8 @@ describe('project graph ECS writer', () => {
     expect(nodes).toHaveLength(2);
     expect(edges).toHaveLength(1);
     expect(fileNode.status).toBe(ContextNodeStatus.ACTIVE);
+    expect(fileNode.confidence).toBeGreaterThanOrEqual(0.85);
+    expect(fileNode.qualityScore).toBeGreaterThanOrEqual(60);
     expect(fileNode.metadata).toMatchObject({
       projectGraph: true,
       kind: ProjectGraphNodeKind.FILE,
@@ -62,6 +64,27 @@ describe('project graph ECS writer', () => {
       kind: ProjectGraphEdgeKind.DEFINES,
       provenance: ProjectGraphProvenance.EXTRACTED,
     });
+  });
+
+  it('scores ambiguous inferred facts lower than exact parser facts', () => {
+    writeProjectGraphExtraction(store, {
+      project: 'demo',
+      nodes: [
+        {
+          id: 'pg:demo:concept:unclear',
+          kind: ProjectGraphNodeKind.CONCEPT,
+          label: 'Unclear ownership',
+          project: 'demo',
+          provenance: ProjectGraphProvenance.AMBIGUOUS,
+          evidence: [{ path: 'src/App.tsx', extractorId: 'llm-enrichment' }],
+        },
+      ],
+      edges: [],
+    });
+
+    const node = store.getNodeById('pg:demo:concept:unclear')!;
+    expect(node.confidence).toBeLessThan(0.7);
+    expect(node.qualityScore).toBeLessThan(70);
   });
 
   it('archives facts owned by a deleted file', () => {

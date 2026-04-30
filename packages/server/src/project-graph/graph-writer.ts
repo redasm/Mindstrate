@@ -5,6 +5,7 @@ import {
   PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   PROJECT_GRAPH_METADATA_KEYS,
   ProjectGraphEdgeKind,
+  ProjectGraphProvenance,
   type ProjectGraphEdgeDto,
   type ProjectGraphNodeDto,
   SubstrateType,
@@ -100,8 +101,8 @@ const toContextNodeCreate = (node: ProjectGraphNodeDto) => ({
   tags: ['project-graph', node.kind],
   project: node.project,
   compressionLevel: 1,
-  confidence: 1,
-  qualityScore: 80,
+  confidence: confidenceForProjectGraphNode(node),
+  qualityScore: qualityScoreForProjectGraphNode(node),
   status: ContextNodeStatus.ACTIVE,
   sourceRef: node.evidence[0]?.path,
   metadata: projectGraphNodeMetadata(node),
@@ -112,8 +113,8 @@ const toContextNodeUpdate = (node: ProjectGraphNodeDto) => ({
   content: `${node.kind}: ${node.label}`,
   tags: ['project-graph', node.kind],
   project: node.project,
-  confidence: 1,
-  qualityScore: 80,
+  confidence: confidenceForProjectGraphNode(node),
+  qualityScore: qualityScoreForProjectGraphNode(node),
   status: ContextNodeStatus.ACTIVE,
   sourceRef: node.evidence[0]?.path,
   metadata: projectGraphNodeMetadata(node),
@@ -127,6 +128,18 @@ const projectGraphNodeMetadata = (node: ProjectGraphNodeDto): Record<string, unk
   [PROJECT_GRAPH_METADATA_KEYS.evidence]: node.evidence,
   [PROJECT_GRAPH_METADATA_KEYS.ownedByFile]: node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.ownedByFile] ?? node.evidence[0]?.path,
 });
+
+const confidenceForProjectGraphNode = (node: ProjectGraphNodeDto): number => {
+  if (node.provenance === ProjectGraphProvenance.AMBIGUOUS) return 0.45;
+  if (node.provenance === ProjectGraphProvenance.INFERRED) return 0.65;
+  const extractorIds = node.evidence.map((entry) => entry.extractorId);
+  if (extractorIds.some((id) => id.includes('tree-sitter') || id.includes('unreal-asset-registry'))) return 0.95;
+  if (extractorIds.some((id) => id.includes('unreal') || id.includes('script'))) return 0.85;
+  return 0.8;
+};
+
+const qualityScoreForProjectGraphNode = (node: ProjectGraphNodeDto): number =>
+  Math.round(confidenceForProjectGraphNode(node) * 100);
 
 const relationForProjectGraphEdge = (kind: ProjectGraphEdgeKind): ContextRelationType => {
   if (kind === ProjectGraphEdgeKind.IMPORTS || kind === ProjectGraphEdgeKind.DEPENDS_ON) {
