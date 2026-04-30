@@ -16,7 +16,12 @@ import {
   createProjectGraphNodeId,
 } from './node-id.js';
 import type { ParserCapture } from './parser-adapter.js';
-import { scanProjectFiles, type ProjectGraphScanProgress } from './scanner.js';
+import {
+  buildProjectGraphScanPlan,
+  scanProjectFiles,
+  type ProjectGraphScanPlan,
+  type ProjectGraphScanProgress,
+} from './scanner.js';
 import { createTreeSitterSourceParser } from './tree-sitter-source-parser.js';
 import {
   writeProjectGraphExtraction,
@@ -57,7 +62,7 @@ const buildProjectGraphExtraction = (
   project: DetectedProject,
   options: ProjectGraphIndexOptions,
 ): ProjectGraphExtractionWithStats => {
-  const files = scanProjectFiles(project.root, {
+  const scanOptions = {
     sourceRoots: project.graphHints?.sourceRoots,
     ignore: project.graphHints?.ignore,
     generatedRoots: project.graphHints?.generatedRoots,
@@ -66,13 +71,17 @@ const buildProjectGraphExtraction = (
       .flatMap((layer) => layer.roots),
     manifests: project.graphHints?.manifests,
     onProgress: options.onScanProgress,
-  });
+  };
+  const scanPlan = buildProjectGraphScanPlan(project.root, scanOptions);
+  const files = scanProjectFiles(project.root, scanOptions);
   const nodes = new Map<string, ProjectGraphNodeDto>();
   const edges = new Map<string, ProjectGraphEdgeDto>();
   const sourceParser = createTreeSitterSourceParser();
 
+  addScanPlanFacts(project, scanPlan, nodes, edges);
   for (const file of files) {
     addNode(nodes, makeFileNode(project, file.path));
+    addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
     if (file.path === 'package.json') {
       addPackageFacts(project, file.path, nodes, edges);
     }
@@ -94,6 +103,53 @@ const buildProjectGraphExtraction = (
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
+};
+
+const addScanPlanFacts = (
+  project: DetectedProject,
+  scanPlan: ProjectGraphScanPlan,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  const projectNode = makeNode(project, ProjectGraphNodeKind.PROJECT, project.name, project.name, evidence(project.manifestPath ?? '.'), {
+    scanMode: 'project',
+  });
+  addNode(nodes, projectNode);
+  for (const root of scanPlan.deepRoots) addDirectoryFact(project, root, 'deep', projectNode.id, nodes, edges);
+  for (const root of scanPlan.metadataOnlyRoots) addDirectoryFact(project, root, 'metadata-only', projectNode.id, nodes, edges);
+  for (const root of scanPlan.generatedRoots) addDirectoryFact(project, root, 'generated', projectNode.id, nodes, edges);
+  for (const manifest of scanPlan.manifestFiles) {
+    const manifestNode = makeFileNode(project, manifest);
+    addNode(nodes, manifestNode);
+    addEdge(edges, makeEdge(projectNode.id, manifestNode.id, ProjectGraphEdgeKind.CONTAINS, evidence(manifest)));
+  }
+};
+
+const addDirectoryFact = (
+  project: DetectedProject,
+  root: string,
+  scanMode: 'deep' | 'metadata-only' | 'generated',
+  parentId: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  const node = makeNode(project, ProjectGraphNodeKind.DIRECTORY, root, root, evidence(root), { scanMode });
+  addNode(nodes, node);
+  addEdge(edges, makeEdge(parentId, node.id, ProjectGraphEdgeKind.CONTAINS, evidence(root)));
+};
+
+const addFileContainmentFact = (
+  project: DetectedProject,
+  filePath: string,
+  scanPlan: ProjectGraphScanPlan,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  const parentRoot = longestMatchingRoot(filePath, scanPlan.deepRoots);
+  const parentId = parentRoot
+    ? createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.DIRECTORY, key: parentRoot })
+    : createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.PROJECT, key: project.name });
+  addEdge(edges, makeEdge(parentId, fileNodeId(project, filePath), ProjectGraphEdgeKind.CONTAINS, evidence(filePath)));
 };
 
 const readSourceFile = (absolutePath: string): string | null => {
@@ -212,6 +268,11 @@ const addNode = (nodes: Map<string, ProjectGraphNodeDto>, node: ProjectGraphNode
 const addEdge = (edges: Map<string, ProjectGraphEdgeDto>, edge: ProjectGraphEdgeDto): void => {
   edges.set(edge.id, edge);
 };
+
+const longestMatchingRoot = (filePath: string, roots: string[]): string | undefined =>
+  roots
+    .filter((root) => filePath === root || filePath.startsWith(`${root}/`))
+    .sort((left, right) => right.length - left.length)[0];
 
 const evidence = (filePath: string, capture?: ParserCapture): EvidenceRef[] => [{
   path: filePath,

@@ -1,8 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { ContextDomainType } from '@mindstrate/protocol/models';
-import { Mindstrate, detectProject } from '../src/index.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  PROJECT_GRAPH_METADATA_KEYS,
+  ProjectGraphEdgeKind,
+  ProjectGraphNodeKind,
+} from '@mindstrate/protocol/models';
+import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
+import { detectProject } from '../src/project/detector.js';
+import { indexProjectGraph } from '../src/project-graph/project-graph-service.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 const write = (root: string, rel: string, content: string): void => {
@@ -11,55 +17,45 @@ const write = (root: string, rel: string, content: string): void => {
   fs.writeFileSync(abs, content, 'utf8');
 };
 
-describe('project graph indexing service', () => {
+describe('project graph service', () => {
   let root: string;
-  let dataDir: string;
-  let memory: Mindstrate;
+  let store: ContextGraphStore;
 
-  beforeEach(async () => {
-    root = createTempDir('mindstrate-project-graph-fixture-');
-    dataDir = createTempDir('mindstrate-project-graph-data-');
-    memory = new Mindstrate({ dataDir });
-    await memory.init();
+  beforeEach(() => {
+    root = createTempDir('mindstrate-project-graph-service-');
+    store = new ContextGraphStore(path.join(root, '.mindstrate', 'context-graph.db'));
   });
 
   afterEach(() => {
-    memory.close();
+    store.close();
     removeTempDir(root);
-    removeTempDir(dataDir);
   });
 
-  it('indexes deterministic project graph facts through the context subdomain', () => {
-    write(root, 'package.json', JSON.stringify({
-      name: 'demo-react',
-      dependencies: { react: '^19.0.0' },
-    }));
-    write(root, 'src/App.tsx', [
-      'import React, { useState } from "react";',
-      'export function App() {',
-      '  const [count] = useState(0);',
-      '  return <main>{count}</main>;',
-      '}',
-    ].join('\n'));
+  it('records scan-plan structure for deep, metadata-only, and generated roots', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'Source/Game/Player.cpp', 'void Fire() {}');
+    write(root, 'Config/DefaultGame.ini', '[/Script/EngineSettings.GeneralProjectSettings]');
+    write(root, 'Content/UI/WBP_MainMenu.uasset', 'binary');
+    write(root, 'TypeScript/Typing/ue/generated/Script/Engine/Actor.d.ts', 'declare class Actor {}');
 
-    const project = detectProject(root)!;
-    const result = memory.context.indexProjectGraph(project);
-    const nodes = memory.context.listContextNodes({
-      project: 'demo-react',
-      domainType: ContextDomainType.ARCHITECTURE,
-      limit: 100,
-    });
-    const edges = memory.context.listContextEdges({ limit: 100 });
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
 
-    expect(result.filesScanned).toBe(2);
-    expect(result.nodesCreated).toBeGreaterThanOrEqual(4);
-    expect(result.edgesCreated).toBeGreaterThanOrEqual(3);
-    expect(nodes.some((node) => node.metadata?.['projectGraph'] === true)).toBe(true);
-    expect(nodes.map((node) => node.title)).toEqual(expect.arrayContaining([
-      'src/App.tsx',
-      'App',
-      'react',
-    ]));
-    expect(edges.some((edge) => edge.evidence?.['projectGraph'] === true)).toBe(true);
+    const nodes = store.listNodes({ project: 'Client', limit: 100 });
+    const projectNode = nodes.find((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.PROJECT);
+    const sourceNode = nodes.find((node) => node.title === 'Source');
+    const contentNode = nodes.find((node) => node.title === 'Content');
+    const generatedNode = nodes.find((node) => node.title === 'TypeScript/Typing/ue/generated');
+    const generatedFile = nodes.find((node) => node.title.endsWith('Actor.d.ts'));
+
+    expect(projectNode).toBeDefined();
+    expect(sourceNode?.metadata).toMatchObject({ scanMode: 'deep' });
+    expect(contentNode?.metadata).toMatchObject({ scanMode: 'metadata-only' });
+    expect(generatedNode?.metadata).toMatchObject({ scanMode: 'generated' });
+    expect(generatedFile).toBeUndefined();
+    expect(store.listEdges({ limit: 100 }).filter((edge) =>
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CONTAINS
+    ).length).toBeGreaterThanOrEqual(3);
   });
 });
