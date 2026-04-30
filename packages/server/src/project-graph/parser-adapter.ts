@@ -1,4 +1,12 @@
-export type SourceLanguage = 'typescript' | 'tsx' | 'javascript' | 'jsx';
+export type SourceLanguage =
+  | 'typescript'
+  | 'tsx'
+  | 'javascript'
+  | 'jsx'
+  | 'cpp'
+  | 'csharp'
+  | 'python'
+  | 'lua';
 
 export interface ParserInput {
   path: string;
@@ -12,6 +20,7 @@ export interface ParserCapture {
   startLine: number;
   endLine: number;
   path: string;
+  extractorId?: string;
 }
 
 export interface ParserResult {

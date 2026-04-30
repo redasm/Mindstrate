@@ -31,6 +31,7 @@ class TreeSitterSourceParser implements ParserAdapter {
         startLine: node.startPosition.row + 1,
         endLine: node.endPosition.row + 1,
         path: input.path,
+        extractorId: this.id,
       }));
     });
 

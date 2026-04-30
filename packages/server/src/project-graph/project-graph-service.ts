@@ -24,6 +24,7 @@ import {
   type ProjectGraphScanProgress,
 } from './scanner.js';
 import { createTreeSitterSourceParser } from './tree-sitter-source-parser.js';
+import { createUnrealCppParserAdapter } from './unreal-cpp-parser-adapter.js';
 import {
   writeProjectGraphExtraction,
   type ProjectGraphExtractionResult,
@@ -31,7 +32,6 @@ import {
 } from './graph-writer.js';
 import {
   extractUnrealBuildModuleDependencies,
-  extractUnrealSourceCaptures,
 } from './unreal-extractor.js';
 import { extractScriptCaptures } from './script-extractor.js';
 import { readUnrealAssetRegistryExport } from './unreal-asset-registry-importer.js';
@@ -105,7 +105,10 @@ const buildProjectGraphExtraction = (
   const files = scanProjectFiles(project.root, scanOptions);
   const nodes = new Map<string, ProjectGraphNodeDto>();
   const edges = new Map<string, ProjectGraphEdgeDto>();
-  const sourceParser = createTreeSitterSourceParser();
+  const parserAdapters = [
+    createTreeSitterSourceParser(),
+    createUnrealCppParserAdapter(),
+  ];
   const previousCache = readProjectGraphExtractionCache(project.root);
   const nextCache: ProjectGraphFileExtractionCache = { version: 1, files: {} };
 
@@ -113,7 +116,7 @@ const buildProjectGraphExtraction = (
   files.forEach((file, index) => {
     addNode(nodes, makeFileNode(project, file.path, scanPlan));
     addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
-    const fileExtraction = extractFileFacts(project, file, sourceParser, previousCache);
+    const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache);
     nextCache.files[file.path] = {
       path: file.path,
       hash: file.hash,
@@ -153,7 +156,7 @@ const emitIndexProgress = (
 const extractFileFacts = (
   project: DetectedProject,
   file: ProjectFileInventoryEntry,
-  sourceParser: ReturnType<typeof createTreeSitterSourceParser>,
+  parserAdapters: Array<ReturnType<typeof createTreeSitterSourceParser>>,
   previousCache: ProjectGraphFileExtractionCache,
 ): ProjectGraphExtractionResult => {
   const cached = previousCache.files[file.path];
@@ -173,20 +176,20 @@ const extractFileFacts = (
     const content = readSourceFile(file.absolutePath);
     if (content !== null) addUnrealBuildFacts(project, file.path, content, nodes, edges);
   }
-  if (file.language === 'cpp') {
-    const content = readSourceFile(file.absolutePath);
-    if (content !== null) addUnrealSourceFacts(project, file.path, content, nodes, edges);
-  }
   if (file.language) {
     const content = readSourceFile(file.absolutePath);
     if (content !== null) addScriptFacts(project, file.path, file.language, content, nodes, edges);
   }
-  if (file.language && sourceParser.languages.includes(file.language as never)) {
+  const matchingParsers = file.language
+    ? parserAdapters.filter((parser) => parser.languages.includes(file.language as never))
+    : [];
+  if (matchingParsers.length > 0) {
     const content = readSourceFile(file.absolutePath);
-    if (content !== null) {
-      const parsed = sourceParser.parse({
+    for (const parser of matchingParsers) {
+      if (content === null) continue;
+      const parsed = parser.parse({
         path: file.path,
-        language: file.language,
+        language: file.language ?? '',
         content,
       });
       addSourceFacts(project, file.path, parsed.captures, nodes, edges);
@@ -262,26 +265,6 @@ const addScriptFacts = (
       addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
     } else if (capture.name === 'script.ue-call') {
       addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
-    }
-  }
-};
-
-const addUnrealSourceFacts = (
-  project: DetectedProject,
-  filePath: string,
-  content: string,
-  nodes: Map<string, ProjectGraphNodeDto>,
-  edges: Map<string, ProjectGraphEdgeDto>,
-): void => {
-  for (const capture of extractUnrealSourceCaptures({ path: filePath, content })) {
-    if (capture.name === 'unreal.class') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
-    } else if (capture.name === 'unreal.struct' || capture.name === 'unreal.enum') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.TYPE, nodes, edges, capture);
-    } else if (capture.name === 'unreal.function') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
-    } else if (capture.name === 'unreal.property') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CONFIG, nodes, edges, capture);
     }
   }
 };
@@ -385,6 +368,14 @@ const addSourceFacts = (
       addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
     } else if (capture.name === 'react.component') {
       addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.COMPONENT, nodes, edges, capture);
+    } else if (capture.name === 'unreal.class') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
+    } else if (capture.name === 'unreal.struct' || capture.name === 'unreal.enum') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.TYPE, nodes, edges, capture);
+    } else if (capture.name === 'unreal.function') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
+    } else if (capture.name === 'unreal.property') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CONFIG, nodes, edges, capture);
     }
   }
 };
@@ -489,9 +480,9 @@ const evidence = (filePath: string, capture?: ParserCapture): EvidenceRef[] => [
   path: filePath,
   startLine: capture?.startLine,
   endLine: capture?.endLine,
-  extractorId: capture ? 'tree-sitter-source' : 'project-graph-scanner',
   captureName: capture?.name,
   locationUnavailable: capture ? false : true,
+  extractorId: capture?.extractorId ?? (capture ? 'tree-sitter-source' : 'project-graph-scanner'),
 }];
 
 const fileNodeId = (project: DetectedProject, filePath: string): string =>

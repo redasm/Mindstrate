@@ -63,6 +63,12 @@ describe('project graph views', () => {
       assets: ['/Game/UI/WBP_MainMenu'],
       bindings: expect.arrayContaining([{ native: 'InventoryComponent', script: 'InventoryComponent' }]),
     });
+    expect(store.listNodes({ project: 'Client', limit: 1000 })
+      .find((node) => node.title === 'InventoryComponent' && node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'class')?.metadata?.[
+      PROJECT_GRAPH_METADATA_KEYS.evidence
+    ]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ extractorId: 'unreal-cpp-reflection' }),
+    ]));
     expect(store.listEdges({ limit: 1000 }).map((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind])).toEqual(
       expect.arrayContaining([ProjectGraphEdgeKind.BINDS_TO, ProjectGraphEdgeKind.REFERENCES_ASSET]),
     );

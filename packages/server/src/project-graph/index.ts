@@ -7,6 +7,9 @@ export {
 export {
   createTreeSitterSourceParser,
 } from './tree-sitter-source-parser.js';
+export {
+  createUnrealCppParserAdapter,
+} from './unreal-cpp-parser-adapter.js';
 export type {
   ParserAdapter,
   ParserCapture,
