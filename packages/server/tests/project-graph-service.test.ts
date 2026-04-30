@@ -258,4 +258,26 @@ describe('project graph service', () => {
       edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.RELATED_TO
     )).toBe(true);
   });
+
+  it('writes a file extraction cache for unchanged files', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'cached-demo', dependencies: { react: '^19.0.0' } }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
+    const cachePath = path.join(root, '.mindstrate', 'project-graph-extract-cache.json');
+    const firstCache = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+      files: Record<string, { hash: string; nodes: unknown[]; edges: unknown[] }>;
+    };
+
+    expect(firstCache.files['src/App.tsx']?.nodes.length).toBeGreaterThan(0);
+    indexProjectGraph(store, project!);
+    const secondCache = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+      files: Record<string, { hash: string; nodes: unknown[]; edges: unknown[] }>;
+    };
+
+    expect(secondCache.files['src/App.tsx']?.hash).toBe(firstCache.files['src/App.tsx']?.hash);
+    expect(secondCache.files['src/App.tsx']?.nodes).toEqual(firstCache.files['src/App.tsx']?.nodes);
+  });
 });

@@ -34,6 +34,11 @@ import {
 } from './unreal-extractor.js';
 import { extractScriptCaptures } from './script-extractor.js';
 import { readUnrealAssetRegistryExport } from './unreal-asset-registry-importer.js';
+import {
+  readProjectGraphExtractionCache,
+  writeProjectGraphExtractionCache,
+  type ProjectGraphFileExtractionCache,
+} from './extraction-cache.js';
 
 export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
   filesScanned: number;
@@ -83,29 +88,66 @@ const buildProjectGraphExtraction = (
   const nodes = new Map<string, ProjectGraphNodeDto>();
   const edges = new Map<string, ProjectGraphEdgeDto>();
   const sourceParser = createTreeSitterSourceParser();
+  const previousCache = readProjectGraphExtractionCache(project.root);
+  const nextCache: ProjectGraphFileExtractionCache = { version: 1, files: {} };
 
   addScanPlanFacts(project, scanPlan, nodes, edges);
   for (const file of files) {
     addNode(nodes, makeFileNode(project, file.path));
     addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
-    if (file.path === 'package.json') {
-      addPackageFacts(project, file.path, nodes, edges);
-    }
-    if (isUnrealBuildFile(file.path)) {
-      const content = readSourceFile(file.absolutePath);
-      if (content !== null) addUnrealBuildFacts(project, file.path, content, nodes, edges);
-    }
-    if (file.language === 'cpp') {
-      const content = readSourceFile(file.absolutePath);
-      if (content !== null) addUnrealSourceFacts(project, file.path, content, nodes, edges);
-    }
-    if (file.language) {
-      const content = readSourceFile(file.absolutePath);
-      if (content !== null) addScriptFacts(project, file.path, file.language, content, nodes, edges);
-    }
-    if (file.language && sourceParser.languages.includes(file.language as never)) {
-      const content = readSourceFile(file.absolutePath);
-      if (content === null) continue;
+    const fileExtraction = extractFileFacts(project, file, sourceParser, previousCache);
+    nextCache.files[file.path] = {
+      path: file.path,
+      hash: file.hash,
+      nodes: fileExtraction.nodes,
+      edges: fileExtraction.edges,
+    };
+    for (const node of fileExtraction.nodes) addNode(nodes, node);
+    for (const edge of fileExtraction.edges) addEdge(edges, edge);
+  }
+  addUnrealAssetRegistryFacts(project, nodes, edges);
+  addBindingFacts(nodes, edges);
+  writeProjectGraphExtractionCache(project.root, nextCache);
+
+  return {
+    project: project.name,
+    filesScanned: files.length,
+    nodes: Array.from(nodes.values()),
+    edges: Array.from(edges.values()),
+  };
+};
+
+const extractFileFacts = (
+  project: DetectedProject,
+  file: { path: string; absolutePath: string; hash: string; language?: string },
+  sourceParser: ReturnType<typeof createTreeSitterSourceParser>,
+  previousCache: ProjectGraphFileExtractionCache,
+): ProjectGraphExtractionResult => {
+  const cached = previousCache.files[file.path];
+  if (cached?.hash === file.hash) {
+    return { project: project.name, nodes: cached.nodes, edges: cached.edges };
+  }
+
+  const nodes = new Map<string, ProjectGraphNodeDto>();
+  const edges = new Map<string, ProjectGraphEdgeDto>();
+  if (file.path === 'package.json') {
+    addPackageFacts(project, file.path, nodes, edges);
+  }
+  if (isUnrealBuildFile(file.path)) {
+    const content = readSourceFile(file.absolutePath);
+    if (content !== null) addUnrealBuildFacts(project, file.path, content, nodes, edges);
+  }
+  if (file.language === 'cpp') {
+    const content = readSourceFile(file.absolutePath);
+    if (content !== null) addUnrealSourceFacts(project, file.path, content, nodes, edges);
+  }
+  if (file.language) {
+    const content = readSourceFile(file.absolutePath);
+    if (content !== null) addScriptFacts(project, file.path, file.language, content, nodes, edges);
+  }
+  if (file.language && sourceParser.languages.includes(file.language as never)) {
+    const content = readSourceFile(file.absolutePath);
+    if (content !== null) {
       const parsed = sourceParser.parse({
         path: file.path,
         language: file.language,
@@ -114,15 +156,7 @@ const buildProjectGraphExtraction = (
       addSourceFacts(project, file.path, parsed.captures, nodes, edges);
     }
   }
-  addUnrealAssetRegistryFacts(project, nodes, edges);
-  addBindingFacts(nodes, edges);
-
-  return {
-    project: project.name,
-    filesScanned: files.length,
-    nodes: Array.from(nodes.values()),
-    edges: Array.from(edges.values()),
-  };
+  return { project: project.name, nodes: Array.from(nodes.values()), edges: Array.from(edges.values()) };
 };
 
 const addUnrealAssetRegistryFacts = (

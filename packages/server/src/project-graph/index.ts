@@ -51,6 +51,12 @@ export {
   type UnrealAssetRegistryImport,
 } from './unreal-asset-registry-importer.js';
 export {
+  readProjectGraphExtractionCache,
+  writeProjectGraphExtractionCache,
+  type ProjectGraphFileExtractionCache,
+  type ProjectGraphFileExtractionCacheEntry,
+} from './extraction-cache.js';
+export {
   collectProjectGraphStats,
   writeProjectGraphTextFileAtomically,
   writeProjectGraphArtifacts,
