@@ -37,6 +37,7 @@ describe('project graph evaluation dataset', () => {
       'next-app',
       'node-service',
       'unreal-game',
+      'unreal-mixed-bindings',
     ]);
   });
 
@@ -138,6 +139,7 @@ describe('project graph evaluation dataset', () => {
     expect(markdown).toContain('# Project Graph Evaluation Dataset');
     expect(markdown).toContain('## Fixtures');
     expect(markdown).toContain('### React Vite App');
+    expect(markdown).toContain('### Unreal Mixed Bindings');
     expect(markdown).toContain('Required nodes: package.json, src/App.tsx');
     expect(markdown).toContain('## AI Task Prompts');
     expect(markdown).toContain('Legacy snapshot prompt');

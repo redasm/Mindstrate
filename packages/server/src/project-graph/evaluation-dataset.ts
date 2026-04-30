@@ -8,7 +8,8 @@ export type ProjectGraphEvaluationFixtureId =
   | 'vue-vite'
   | 'next-app'
   | 'node-service'
-  | 'unreal-game';
+  | 'unreal-game'
+  | 'unreal-mixed-bindings';
 
 export interface ProjectGraphEvaluationFixture {
   id: ProjectGraphEvaluationFixtureId;
@@ -229,6 +230,15 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
     description: 'Small Unreal-style fixture with source, config, and content roots.',
     files: {
       'EvalGame.uproject': json({ FileVersion: 3, Modules: [{ Name: 'EvalGame', Type: 'Runtime' }] }),
+      '.mindstrate/rules/eval-game.json': json({
+        id: 'eval-game',
+        name: 'Eval Game',
+        priority: 200,
+        match: { all: [{ glob: '*.uproject' }] },
+        detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+        sourceRoots: ['Source', 'Config', 'Content'],
+        manifests: ['*.uproject'],
+      }),
       'Source/EvalGame/EvalGame.Build.cs': 'public class EvalGame : ModuleRules {}',
       'Source/EvalGame/EvalGame.cpp': 'void StartEvalGame() {}',
       'Config/DefaultEngine.ini': '[/Script/EngineSettings.GameMapsSettings]\nGameDefaultMap=/Game/Maps/Main',
@@ -236,7 +246,7 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
     },
     expected: {
       framework: 'unreal-engine',
-      minFilesScanned: 5,
+      minFilesScanned: 4,
       minProjectGraphNodes: 5,
       minProjectGraphEdges: 1,
       requiredNodeTitles: [
@@ -244,6 +254,55 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
         'Source/EvalGame/EvalGame.Build.cs',
         'Source/EvalGame/EvalGame.cpp',
         'Config/DefaultEngine.ini',
+      ],
+    },
+  },
+  {
+    id: 'unreal-mixed-bindings',
+    label: 'Unreal Mixed Bindings',
+    projectName: 'MixedBindings',
+    description: 'UE-style mixed project with C++ reflection, script calls, generated TypeScript bindings, and Asset Registry metadata.',
+    files: {
+      'MixedBindings.uproject': json({ FileVersion: 3, Modules: [{ Name: 'MixedBindings', Type: 'Runtime' }] }),
+      '.mindstrate/rules/mixed-bindings.json': json({
+        id: 'mixed-bindings',
+        name: 'Mixed Bindings',
+        priority: 200,
+        match: { all: [{ glob: '*.uproject' }] },
+        detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+        sourceRoots: ['Source', 'Scripts', 'TypeScript/Typing', 'Content'],
+        generatedRoots: ['TypeScript/Typing'],
+        manifests: ['*.uproject'],
+        layers: [{ id: 'assets', label: 'Assets', roots: ['Content'], parserAdapters: ['unreal-asset-metadata'] }],
+      }),
+      'Source/MixedBindings/Public/InventoryComponent.h': [
+        '#pragma once',
+        'UCLASS()',
+        'class MIXEDBINDINGS_API UInventoryComponent : public UObject {',
+        '  GENERATED_BODY()',
+        '  UFUNCTION(BlueprintCallable)',
+        '  void AddItem();',
+        '};',
+      ].join('\n'),
+      'Scripts/inventory.lua': 'function GiveItem()\n  UE.InventoryComponent()\nend',
+      'TypeScript/Typing/UInventoryComponent.ts': 'export declare class UInventoryComponent {}',
+      '.mindstrate/unreal-asset-registry.json': json({
+        assets: [{ path: '/Game/UI/WBP_Inventory', class: 'WidgetBlueprint', references: ['/Game/Characters/BP_Player'] }],
+      }),
+      'Content/UI/WBP_Inventory.uasset': '',
+    },
+    expected: {
+      framework: 'unreal-engine',
+      minFilesScanned: 4,
+      minProjectGraphNodes: 10,
+      minProjectGraphEdges: 7,
+      requiredNodeTitles: [
+        'MixedBindings.uproject',
+        'Source/MixedBindings/Public/InventoryComponent.h',
+        'Scripts/inventory.lua',
+        'TypeScript/Typing/UInventoryComponent.ts',
+        'InventoryComponent',
+        '/Game/UI/WBP_Inventory',
       ],
     },
   },
@@ -284,6 +343,13 @@ const TASKS: ProjectGraphEvaluationTask[] = [
     title: 'Change the Unreal default map setting.',
     expectedFiles: ['Config/DefaultEngine.ini'],
     avoidFiles: ['Intermediate/Build/Manifest.xml', 'Binaries/Win64/EvalGame.exe'],
+  }),
+  task({
+    id: 'unreal-mixed-bindings-update-inventory-api',
+    fixtureId: 'unreal-mixed-bindings',
+    title: 'Trace the inventory API from script usage back to the native C++ declaration.',
+    expectedFiles: ['Scripts/inventory.lua', 'Source/MixedBindings/Public/InventoryComponent.h'],
+    avoidFiles: ['TypeScript/Typing/UInventoryComponent.ts', 'Intermediate/Build/MixedBindings.generated.cpp'],
   }),
 ];
 
