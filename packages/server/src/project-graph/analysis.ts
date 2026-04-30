@@ -63,6 +63,9 @@ export interface ProjectGraphTaskQueryItem {
 export interface ProjectGraphTaskQueryResult {
   task: ProjectGraphTaskQuery;
   query?: string;
+  summary: string;
+  markdown: string;
+  evidence: string[];
   items: ProjectGraphTaskQueryItem[];
   suggestedNextQueries: string[];
 }
@@ -156,11 +159,16 @@ export const queryProjectGraphTask = (
   const query = input.query?.toLowerCase();
   const matchingNodes = nodes.filter((node) => !query || node.title.toLowerCase().includes(query) || node.id.toLowerCase().includes(query));
   const selected = selectTaskNodes(input.task, matchingNodes, edges).slice(0, limit);
+  const items = selected.map(toTaskItem);
+  const evidence = Array.from(new Set(items.flatMap((item) => item.evidence))).slice(0, limit);
 
   return {
     task: input.task,
     query: input.query,
-    items: selected.map(toTaskItem),
+    summary: `${input.task}: ${items.length} item(s)`,
+    markdown: renderTaskMarkdown(input.task, items),
+    evidence,
+    items,
     suggestedNextQueries: selected.slice(0, 3).map((node) => `impact ${node.title}`),
   };
 };
@@ -210,3 +218,14 @@ const evidenceForNode = (node: ContextNode): string[] => {
     .map((entry) => entry && typeof entry === 'object' && 'path' in entry ? String((entry as Record<string, unknown>).path) : '')
     .filter(Boolean);
 };
+
+const renderTaskMarkdown = (
+  task: ProjectGraphTaskQuery,
+  items: ProjectGraphTaskQueryItem[],
+): string => [
+  `### ${task}`,
+  '',
+  ...(items.length > 0
+    ? items.map((item) => `- ${item.label} (${item.kind})`)
+    : ['- No matching graph items.']),
+].join('\n');

@@ -78,6 +78,11 @@ describe('project graph analysis queries', () => {
       evidence: expect.arrayContaining(['NativeExport']),
     });
     expect(queryProjectGraphTask({ nodes, edges, task: 'asset-references', query: 'BP_Player' }).items[0].label).toBe('/Game/Characters/BP_Player');
+    const compact = queryProjectGraphTask({ nodes, edges, task: 'entry-points', limit: 1 });
+    expect(compact.summary).toContain('entry-points');
+    expect(compact.markdown).toContain('- src/App.tsx');
+    expect(compact.evidence.length).toBeLessThanOrEqual(1);
+    expect(compact.items).toHaveLength(1);
   });
 });
 
