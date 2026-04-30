@@ -4,6 +4,7 @@ import {
   ContextDomainType,
   PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   PROJECT_GRAPH_METADATA_KEYS,
+  ProjectGraphOverlayKind,
   ProjectionTarget,
   isProjectGraphEdge,
   isProjectGraphNode,
@@ -12,10 +13,12 @@ import {
   type ProjectGraphArtifact,
   type ProjectGraphArtifactEdge,
   type ProjectGraphArtifactNode,
+  type ProjectGraphOverlay,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
 import { collectProjectGraphModules, type ProjectGraphModule } from './clustering.js';
+import { listProjectGraphOverlays } from './overlay.js';
 
 export interface ProjectGraphArtifactResult {
   reportPath: string;
@@ -37,6 +40,7 @@ export interface ProjectGraphStatsExport {
   coreModules: ProjectGraphReportItem[];
   assetSurfaces: ProjectGraphReportItem[];
   bindingSurfaces: ProjectGraphReportItem[];
+  overlays: ProjectGraphOverlay[];
   inferredSummaries: Array<{
     title: string;
     summary: string;
@@ -160,12 +164,12 @@ export const collectProjectGraphArtifact = (
       language: project.language,
     },
     nodes: nodes
-      .map(toArtifactNode)
+      .map((node) => toArtifactNode(node, stats.overlays))
       .sort((left, right) => left.id.localeCompare(right.id)),
     edges: edges
       .map(toArtifactEdge)
       .sort((left, right) => left.id.localeCompare(right.id)),
-    overlays: [],
+    overlays: listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }),
     stats: {
       nodes: stats.nodes,
       edges: stats.edges,
@@ -209,6 +213,7 @@ export const collectProjectGraphStats = (
     .map((node) => ({ label: node.title, evidencePaths: evidencePathsForNode(node) }))
     .sort((left, right) => left.label.localeCompare(right.label))
     .slice(0, 8);
+  const overlays = listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
 
   return {
     project: project.name,
@@ -221,6 +226,7 @@ export const collectProjectGraphStats = (
     coreModules,
     assetSurfaces,
     bindingSurfaces,
+    overlays,
     inferredSummaries: nodes
       .filter((node) => {
         const provenance = String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? '');
@@ -295,6 +301,8 @@ const renderProjectGraphReport = (
   '',
   ...openQuestionLines(stats.openQuestions),
   '',
+  ...overlaySections(stats.overlays),
+  '',
   '## Suggested Graph Queries',
   '',
   '- mindstrate graph query "entry points"',
@@ -337,6 +345,8 @@ const renderProjectGraphRepoEntry = (
   '## Asset And Blueprint Surfaces',
   '',
   ...reportItemLines(stats.assetSurfaces),
+  '',
+  ...overlaySections(stats.overlays),
   '',
   '## Useful Commands',
   '',
@@ -418,12 +428,17 @@ const writeObsidianModulePages = (
       `${slugify(module.label)}.md`,
     );
     const existing = fs.existsSync(modulePath) ? fs.readFileSync(modulePath, 'utf8') : '';
-    writeProjectGraphTextFileAtomically(modulePath, renderEditableModulePage(module, existing));
+    const overlays = listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
+    writeProjectGraphTextFileAtomically(modulePath, renderEditableModulePage(module, overlays, existing));
     return modulePath;
   });
 };
 
-const renderEditableModulePage = (module: ProjectGraphModule, existing: string): string => [
+const renderEditableModulePage = (
+  module: ProjectGraphModule,
+  overlays: ProjectGraphOverlay[],
+  existing: string,
+): string => [
   '<!-- mindstrate:project-graph:module-generated:start -->',
   `# Module: ${module.label}`,
   '',
@@ -434,6 +449,8 @@ const renderEditableModulePage = (module: ProjectGraphModule, existing: string):
   `## Graph Nodes`,
   '',
   `- ${module.nodes.length}`,
+  '',
+  ...overlaySections(moduleOverlays(module, overlays)),
   '<!-- mindstrate:project-graph:module-generated:end -->',
   '',
   '## Module Notes',
@@ -443,6 +460,37 @@ const renderEditableModulePage = (module: ProjectGraphModule, existing: string):
   '<!-- mindstrate:project-graph:module-notes:end -->',
   '',
 ].join('\n');
+
+const overlaySections = (overlays: ProjectGraphOverlay[]): string[] => [
+  ...overlayLines('User Corrections', overlays, ProjectGraphOverlayKind.CORRECTION),
+  ...overlayLines('User Risks', overlays, ProjectGraphOverlayKind.RISK),
+  ...overlayLines('User Conventions', overlays, ProjectGraphOverlayKind.CONVENTION),
+  ...overlayLines('User Confirmations', overlays, ProjectGraphOverlayKind.CONFIRMATION),
+].filter((line, index, lines) => line.length > 0 || lines[index - 1]?.startsWith('## '));
+
+const overlayLines = (
+  title: string,
+  overlays: ProjectGraphOverlay[],
+  kind: ProjectGraphOverlayKind,
+): string[] => {
+  const matching = overlays.filter((overlay) => overlay.kind === kind);
+  if (matching.length === 0) return [];
+  return [
+    `## ${title}`,
+    '',
+    ...matching.flatMap((overlay) => [
+      `- ${overlay.content}`,
+      ...(overlay.targetNodeId ? [`  - Target node: ${overlay.targetNodeId}`] : []),
+      ...(overlay.targetEdgeId ? [`  - Target edge: ${overlay.targetEdgeId}`] : []),
+    ]),
+    '',
+  ];
+};
+
+const moduleOverlays = (module: ProjectGraphModule, overlays: ProjectGraphOverlay[]): ProjectGraphOverlay[] => {
+  const nodeIds = new Set(module.nodes);
+  return overlays.filter((overlay) => !overlay.targetNodeId || nodeIds.has(overlay.targetNodeId));
+};
 
 const preserveBlock = (text: string, name: string): string => {
   const start = `<!-- mindstrate:project-graph:${name}:start -->`;
@@ -476,9 +524,11 @@ const formatEvidenceLocation = (entry: unknown): string => {
   return `${evidencePath}:${record.startLine}`;
 };
 
-const toArtifactNode = (node: ContextNode): ProjectGraphArtifactNode => {
+const toArtifactNode = (node: ContextNode, overlays: ProjectGraphOverlay[] = []): ProjectGraphArtifactNode => {
   const metadata = node.metadata ?? {};
   const evidence = normalizeEvidence(metadata[PROJECT_GRAPH_METADATA_KEYS.evidence]);
+  const hasConfirmation = overlays.some((overlay) =>
+    overlay.kind === ProjectGraphOverlayKind.CONFIRMATION && overlay.targetNodeId === node.id);
   return {
     id: node.id,
     kind: String(metadata[PROJECT_GRAPH_METADATA_KEYS.kind] ?? 'unknown'),
@@ -487,8 +537,8 @@ const toArtifactNode = (node: ContextNode): ProjectGraphArtifactNode => {
     path: evidence[0]?.path,
     sourceRef: node.sourceRef,
     provenance: String(metadata[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? 'unknown'),
-    confidence: node.confidence,
-    salience: node.qualityScore,
+    confidence: hasConfirmation ? Math.max(node.confidence, 0.99) : node.confidence,
+    salience: hasConfirmation ? Math.max(node.qualityScore, 99) : node.qualityScore,
     evidence,
     metadata,
   };

@@ -5,6 +5,8 @@ import {
   ContextDomainType,
   ContextNodeStatus,
   ProjectGraphNodeKind,
+  ProjectGraphOverlayKind,
+  ProjectGraphOverlaySource,
   ProjectGraphProvenance,
   ProjectionTarget,
   SubstrateType,
@@ -322,6 +324,76 @@ describe('project graph report export', () => {
       memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
 
       expect(fs.readFileSync(modulePath, 'utf8')).toContain('- This module owns the application shell.');
+    } finally {
+      removeTempDir(vaultRoot);
+    }
+  });
+
+  it('renders user overlays in project and module projections without mutating raw facts', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'overlay-report-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    const vaultRoot = createTempDir('mindstrate-project-graph-overlay-vault-');
+
+    try {
+      const project = detectProject(root)!;
+      memory.context.indexProjectGraph(project);
+      const appNode = memory.context.listContextNodes({ project: 'overlay-report-demo', limit: 100 })
+        .find((node) => node.title === 'src/App.tsx')!;
+
+      memory.context.createProjectGraphOverlay({
+        project: 'overlay-report-demo',
+        targetNodeId: appNode.id,
+        kind: ProjectGraphOverlayKind.CORRECTION,
+        content: 'App.tsx owns the runtime shell, not only a React component.',
+        source: ProjectGraphOverlaySource.OBSIDIAN,
+      });
+      memory.context.createProjectGraphOverlay({
+        project: 'overlay-report-demo',
+        targetNodeId: appNode.id,
+        kind: ProjectGraphOverlayKind.CONFIRMATION,
+        content: 'Human confirmed App.tsx as an entry point.',
+        source: ProjectGraphOverlaySource.OBSIDIAN,
+      });
+      memory.context.createProjectGraphOverlay({
+        project: 'overlay-report-demo',
+        kind: ProjectGraphOverlayKind.RISK,
+        content: 'Generated binding folders must stay metadata-only in reports.',
+        source: ProjectGraphOverlaySource.OBSIDIAN,
+      });
+      memory.context.createProjectGraphOverlay({
+        project: 'overlay-report-demo',
+        kind: ProjectGraphOverlayKind.CONVENTION,
+        content: 'Module pages should describe ownership before file lists.',
+        source: ProjectGraphOverlaySource.OBSIDIAN,
+      });
+
+      const result = memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+      const report = fs.readFileSync(result.reportPath, 'utf8');
+      const modulePage = fs.readFileSync(
+        path.join(vaultRoot, 'overlay-report-demo', 'architecture', 'modules', 'src-app.md'),
+        'utf8',
+      );
+      const graph = JSON.parse(fs.readFileSync(result.graphPath, 'utf8')) as {
+        nodes: Array<{ id: string; confidence: number; salience: number }>;
+        overlays: Array<{ content: string }>;
+      };
+
+      expect(memory.context.getContextNode(appNode.id)?.title).toBe('src/App.tsx');
+      expect(graph.nodes.find((node) => node.id === appNode.id)).toMatchObject({
+        confidence: 0.99,
+        salience: 99,
+      });
+      expect(graph.overlays).toEqual(expect.arrayContaining([
+        expect.objectContaining({ content: 'Human confirmed App.tsx as an entry point.' }),
+      ]));
+      expect(report).toContain('## User Corrections');
+      expect(report).toContain('App.tsx owns the runtime shell, not only a React component.');
+      expect(report).toContain('## User Risks');
+      expect(report).toContain('Generated binding folders must stay metadata-only in reports.');
+      expect(report).toContain('## User Conventions');
+      expect(report).toContain('Module pages should describe ownership before file lists.');
+      expect(modulePage).toContain('## User Corrections');
+      expect(modulePage).toContain('App.tsx owns the runtime shell, not only a React component.');
     } finally {
       removeTempDir(vaultRoot);
     }
