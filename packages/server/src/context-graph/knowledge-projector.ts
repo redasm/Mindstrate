@@ -3,6 +3,7 @@ import {
   ContextNodeStatus,
   SubstrateType,
   type ContextNode,
+  isProjectGraphNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from './context-graph-store.js';
 
@@ -21,6 +22,7 @@ export interface GraphKnowledgeProjectionOptions {
   project?: string;
   limit?: number;
   includeStatuses?: ContextNodeStatus[];
+  includeProjectGraphNodes?: boolean;
 }
 
 export class GraphKnowledgeProjector {
@@ -43,7 +45,8 @@ export class GraphKnowledgeProjector {
       limit: 500,
     }).filter((node) =>
       includeStatuses.includes(node.status) &&
-      isProjectable(node.substrateType),
+      isProjectable(node.substrateType) &&
+      (options.includeProjectGraphNodes === true || !isProjectGraphNode(node)),
     );
 
     return nodes

@@ -6,6 +6,7 @@ import { createTempDir, removeTempDir } from './test-support.js';
 import {
   ContextDomainType,
   ContextNodeStatus,
+  PROJECT_GRAPH_METADATA_KEYS,
   SubstrateType,
 } from '@mindstrate/protocol/models';
 
@@ -84,5 +85,29 @@ describe('GraphKnowledgeProjector', () => {
 
     const projected = projector.project({ project: 'mindstrate', limit: 10 });
     expect(projected).toEqual([]);
+  });
+
+  it('does not project low-level project graph facts by default', () => {
+    const node = graphStore.createNode({
+      id: 'pg:mindstrate:function:add-tag',
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'AddTag',
+      content: 'function: AddTag',
+      tags: ['project-graph', 'function'],
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      metadata: {
+        [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true,
+        [PROJECT_GRAPH_METADATA_KEYS.kind]: 'function',
+      },
+    });
+
+    expect(projector.project({ project: 'mindstrate', limit: 10 })).toEqual([]);
+    expect(projector.project({
+      project: 'mindstrate',
+      limit: 10,
+      includeProjectGraphNodes: true,
+    })[0].id).toBe(node.id);
   });
 });
