@@ -211,6 +211,7 @@ export {
   scanProjectFiles,
   archiveProjectGraphFileFacts,
   collectProjectGraphStats,
+  collectProjectGraphArtifact,
   indexProjectGraph,
   writeProjectGraphTextFileAtomically,
   writeProjectGraphArtifacts,

@@ -120,6 +120,51 @@ export interface ProjectGraphEdgeDto {
   metadata?: Record<string, unknown>;
 }
 
+export interface ProjectGraphArtifactNode {
+  id: string;
+  kind: string;
+  label: string;
+  project: string;
+  path?: string;
+  sourceRef?: string;
+  provenance: string;
+  confidence: number;
+  salience: number;
+  evidence: EvidenceRef[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ProjectGraphArtifactEdge {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  kind: string;
+  relationType: string;
+  confidence: number;
+  evidence: EvidenceRef[];
+  metadata: Record<string, unknown>;
+}
+
+export interface ProjectGraphArtifact {
+  schemaVersion: 1;
+  project: string;
+  generatedAt: string;
+  scan: {
+    root: string;
+    framework?: string;
+    language?: string;
+  };
+  nodes: ProjectGraphArtifactNode[];
+  edges: ProjectGraphArtifactEdge[];
+  overlays: ProjectGraphOverlay[];
+  stats: {
+    nodes: number;
+    edges: number;
+    provenanceCounts: Record<string, number>;
+    nodeKindCounts: Record<string, number>;
+  };
+}
+
 export interface ProjectLayer {
   id: string;
   label: string;

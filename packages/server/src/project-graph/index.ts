@@ -62,6 +62,7 @@ export {
   type ProjectGraphViews,
 } from './views.js';
 export {
+  collectProjectGraphArtifact,
   collectProjectGraphStats,
   writeProjectGraphTextFileAtomically,
   writeProjectGraphArtifacts,

@@ -55,6 +55,29 @@ describe('project graph report export', () => {
       firstFiles: string[];
       provenanceCounts: Record<string, number>;
     };
+    const graph = JSON.parse(fs.readFileSync(path.join(root, '.mindstrate', 'project-graph.graph.json'), 'utf8')) as {
+      schemaVersion: number;
+      project: string;
+      nodes: Array<{
+        id: string;
+        kind: string;
+        label: string;
+        project: string;
+        confidence: number;
+        salience: number;
+        evidence: Array<{ path: string; extractorId: string }>;
+      }>;
+      edges: Array<{
+        id: string;
+        sourceId: string;
+        targetId: string;
+        kind: string;
+        relationType: string;
+        confidence: number;
+        evidence: Array<{ path: string; extractorId: string }>;
+      }>;
+      stats: { nodes: number; edges: number };
+    };
 
     expect(result.reportPath).toBe(path.join(root, 'PROJECT_GRAPH.md'));
     expect(report).toContain('# PROJECT_GRAPH.md');
@@ -67,6 +90,29 @@ describe('project graph report export', () => {
     expect(stats.edges).toBeGreaterThan(0);
     expect(stats.firstFiles).toContain('src/App.tsx');
     expect(stats.provenanceCounts.EXTRACTED).toBeGreaterThan(0);
+    expect(graph.schemaVersion).toBe(1);
+    expect(graph.project).toBe('demo-report');
+    expect(graph.stats.nodes).toBe(stats.nodes);
+    expect(graph.stats.edges).toBe(stats.edges);
+    expect(graph.nodes.length).toBe(stats.nodes);
+    expect(graph.edges.length).toBe(stats.edges);
+    expect(graph.nodes.find((node) => node.label === 'src/App.tsx')).toEqual(expect.objectContaining({
+      kind: ProjectGraphNodeKind.FILE,
+      project: 'demo-report',
+      confidence: expect.any(Number),
+      salience: expect.any(Number),
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ path: 'src/App.tsx' }),
+      ]),
+    }));
+    expect(graph.edges[0]).toEqual(expect.objectContaining({
+      sourceId: expect.any(String),
+      targetId: expect.any(String),
+      kind: expect.any(String),
+      relationType: expect.any(String),
+      confidence: expect.any(Number),
+      evidence: expect.any(Array),
+    }));
     const records = memory.projections.listProjectionRecords({
       target: ProjectionTarget.PROJECT_GRAPH_REPO_ENTRY,
       limit: 10,
