@@ -46,6 +46,15 @@ export enum ProjectGraphEdgeKind {
   CONSTRAINS = 'constrains',
   RATIONALE_FOR = 'rationale_for',
   RELATED_TO = 'related_to',
+  GENERATED_FROM = 'generated_from',
+  BINDS_TO = 'binds_to',
+  OWNS_ASSET = 'owns_asset',
+  IMPLEMENTS = 'implements',
+  ENTRYPOINT_TO = 'entrypoint_to',
+  REFLECTS = 'reflects',
+  REFERENCES_ASSET = 'references_asset',
+  DECLARES_MODULE = 'declares_module',
+  LOADS_MODULE = 'loads_module',
 }
 
 export enum ProjectGraphProvenance {

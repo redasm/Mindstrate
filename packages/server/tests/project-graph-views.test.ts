@@ -7,6 +7,7 @@ import { indexProjectGraph } from '../src/project-graph/project-graph-service.js
 import { collectProjectGraphModules } from '../src/project-graph/clustering.js';
 import { collectProjectGraphViews } from '../src/project-graph/views.js';
 import { createTempDir, removeTempDir } from './test-support.js';
+import { PROJECT_GRAPH_METADATA_KEYS, ProjectGraphEdgeKind } from '@mindstrate/protocol/models';
 
 const write = (root: string, rel: string, content: string): void => {
   const abs = path.join(root, rel);
@@ -50,7 +51,7 @@ describe('project graph views', () => {
     `);
     write(root, 'TypeScript/src/inventory.ts', 'ue.InventoryComponent();');
     write(root, '.mindstrate/unreal-asset-registry.json', JSON.stringify({
-      assets: [{ path: '/Game/UI/WBP_MainMenu', class: 'WidgetBlueprint', references: [] }],
+      assets: [{ path: '/Game/UI/WBP_MainMenu', class: 'WidgetBlueprint', references: ['/Game/Characters/BP_Player'] }],
     }));
 
     const project = detectProject(root);
@@ -62,6 +63,9 @@ describe('project graph views', () => {
       assets: ['/Game/UI/WBP_MainMenu'],
       bindings: expect.arrayContaining([{ native: 'InventoryComponent', script: 'InventoryComponent' }]),
     });
+    expect(store.listEdges({ limit: 1000 }).map((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind])).toEqual(
+      expect.arrayContaining([ProjectGraphEdgeKind.BINDS_TO, ProjectGraphEdgeKind.REFERENCES_ASSET]),
+    );
   });
 
   it('clusters project graph facts into stable modules', () => {

@@ -44,6 +44,15 @@ describe('project graph protocol model', () => {
       'constrains',
       'rationale_for',
       'related_to',
+      'generated_from',
+      'binds_to',
+      'owns_asset',
+      'implements',
+      'entrypoint_to',
+      'reflects',
+      'references_asset',
+      'declares_module',
+      'loads_module',
     ]);
     expect(Object.values(ProjectGraphProvenance)).toEqual([
       'EXTRACTED',

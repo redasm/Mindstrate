@@ -35,7 +35,9 @@ export const collectProjectGraphViews = (
       .filter((node) => node.metadata?.['scanMode'] === 'metadata-only' && typeof node.metadata?.['assetClass'] === 'string')
       .map((node) => node.title)),
     bindings: edges
-      .filter((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.EXPORTS)
+      .filter((edge) =>
+        edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.BINDS_TO
+        || edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.EXPORTS)
       .map((edge) => ({
         native: nodeById.get(edge.sourceId)?.title ?? edge.sourceId,
         script: nodeById.get(edge.targetId)?.title ?? edge.targetId,

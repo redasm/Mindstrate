@@ -132,6 +132,8 @@ const relationForProjectGraphEdge = (kind: ProjectGraphEdgeKind): ContextRelatio
   if (kind === ProjectGraphEdgeKind.IMPORTS || kind === ProjectGraphEdgeKind.DEPENDS_ON) {
     return ContextRelationType.DEPENDS_ON;
   }
+  if (kind === ProjectGraphEdgeKind.BINDS_TO || kind === ProjectGraphEdgeKind.REFLECTS) return ContextRelationType.APPLIES_TO;
+  if (kind === ProjectGraphEdgeKind.REFERENCES_ASSET || kind === ProjectGraphEdgeKind.OWNS_ASSET) return ContextRelationType.OBSERVED_IN;
   if (kind === ProjectGraphEdgeKind.DOCUMENTS) return ContextRelationType.OBSERVED_IN;
   if (kind === ProjectGraphEdgeKind.RELATED_TO) return ContextRelationType.SUPPORTS;
   return ContextRelationType.APPLIES_TO;

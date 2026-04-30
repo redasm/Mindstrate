@@ -216,7 +216,7 @@ const addUnrealAssetRegistryFacts = (
         scanMode: 'metadata-only',
       });
       addNode(nodes, referenceNode);
-      addEdge(edges, makeEdge(assetNode.id, referenceNode.id, ProjectGraphEdgeKind.RELATED_TO, evidence(asset.path)));
+      addEdge(edges, makeEdge(assetNode.id, referenceNode.id, ProjectGraphEdgeKind.REFERENCES_ASSET, evidence(asset.path)));
     }
   }
 };
@@ -236,7 +236,7 @@ const addBindingFacts = (
   }
   for (const native of nativeSymbols) {
     for (const scriptCall of scriptCallsByLabel.get(native.label) ?? []) {
-      addEdge(edges, makeEdge(native.id, scriptCall.id, ProjectGraphEdgeKind.EXPORTS, native.evidence));
+      addEdge(edges, makeEdge(native.id, scriptCall.id, ProjectGraphEdgeKind.BINDS_TO, native.evidence));
     }
   }
 };
