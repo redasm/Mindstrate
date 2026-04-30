@@ -169,7 +169,7 @@ describe('detectProject', () => {
       'Intermediate',
       'Saved',
       'DerivedDataCache',
-      'TypeScript/Typing/ue/generated',
+      'TypeScript/Typing',
     ]));
     expect(p.graphHints?.layers?.map((layer) => layer.id)).toEqual(expect.arrayContaining(['gameplay-cpp', 'content-assets', 'config', 'generated']));
   });

@@ -41,9 +41,10 @@ describe('project graph scanner', () => {
     write(root, '.vs/Client/FileContentIndex/index.vsidx', 'locked by Visual Studio');
     write(root, 'Generated/out.ts', 'nope');
     write(root, 'TypeScript/Typing/ue/generated/Script/Engine/Actor.d.ts', 'declare class Actor {}');
+    write(root, 'TypeScript/Typing/Game/Foo.d.ts', 'declare class Foo {}');
 
     const entries = scanProjectFiles(root, {
-      ignore: ['Generated', 'TypeScript/Typing/ue/generated'],
+      ignore: ['Generated', 'TypeScript/Typing'],
       generatedRoots: ['Intermediate'],
     });
     const paths = entries.map((entry) => entry.path).sort();
@@ -96,19 +97,20 @@ describe('project graph scanner', () => {
     write(root, 'Scripts/Lua/inventory.lua', 'return {}');
     write(root, 'Content/UI/WBP_MainMenu.uasset', 'binary');
     write(root, 'TypeScript/Typing/ue/generated/Script/Engine/Actor.d.ts', 'declare class Actor {}');
+    write(root, 'TypeScript/Typing/Game/Foo.d.ts', 'declare class Foo {}');
     write(root, 'Plugins/ThirdParty/SDK/generated.h', 'nope');
 
     const entries = scanProjectFiles(root, {
       sourceRoots: ['Source', 'Config', 'Scripts'],
       manifests: ['*.uproject'],
-      generatedRoots: ['TypeScript/Typing/ue/generated'],
+      generatedRoots: ['TypeScript/Typing'],
       ignore: ['Plugins/ThirdParty'],
       metadataOnlyRoots: ['Content'],
     });
     const plan = buildProjectGraphScanPlan(root, {
       sourceRoots: ['Source', 'Config', 'Scripts'],
       manifests: ['*.uproject'],
-      generatedRoots: ['TypeScript/Typing/ue/generated'],
+      generatedRoots: ['TypeScript/Typing'],
       ignore: ['Plugins/ThirdParty'],
       metadataOnlyRoots: ['Content'],
     });
@@ -121,7 +123,7 @@ describe('project graph scanner', () => {
     ]);
     expect(plan.deepRoots).toEqual(['Config', 'Scripts', 'Source']);
     expect(plan.metadataOnlyRoots).toEqual(['Content']);
-    expect(plan.generatedRoots).toContain('TypeScript/Typing/ue/generated');
+    expect(plan.generatedRoots).toContain('TypeScript/Typing');
   });
 
   it('detects added, changed, unchanged, and deleted cache entries', () => {

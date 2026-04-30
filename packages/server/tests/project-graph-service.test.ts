@@ -37,6 +37,7 @@ describe('project graph service', () => {
     write(root, 'Config/DefaultGame.ini', '[/Script/EngineSettings.GeneralProjectSettings]');
     write(root, 'Content/UI/WBP_MainMenu.uasset', 'binary');
     write(root, 'TypeScript/Typing/ue/generated/Script/Engine/Actor.d.ts', 'declare class Actor {}');
+    write(root, 'TypeScript/Typing/Game/Foo.d.ts', 'declare class Foo {}');
 
     const project = detectProject(root);
     expect(project).not.toBeNull();
@@ -46,14 +47,16 @@ describe('project graph service', () => {
     const projectNode = nodes.find((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.PROJECT);
     const sourceNode = nodes.find((node) => node.title === 'Source');
     const contentNode = nodes.find((node) => node.title === 'Content');
-    const generatedNode = nodes.find((node) => node.title === 'TypeScript/Typing/ue/generated');
+    const generatedNode = nodes.find((node) => node.title === 'TypeScript/Typing');
     const generatedFile = nodes.find((node) => node.title.endsWith('Actor.d.ts'));
+    const siblingGeneratedFile = nodes.find((node) => node.title.endsWith('Foo.d.ts'));
 
     expect(projectNode).toBeDefined();
     expect(sourceNode?.metadata).toMatchObject({ scanMode: 'deep' });
     expect(contentNode?.metadata).toMatchObject({ scanMode: 'metadata-only' });
     expect(generatedNode?.metadata).toMatchObject({ scanMode: 'generated' });
     expect(generatedFile).toBeUndefined();
+    expect(siblingGeneratedFile).toBeUndefined();
     expect(store.listEdges({ limit: 100 }).filter((edge) =>
       edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CONTAINS
     ).length).toBeGreaterThanOrEqual(3);
