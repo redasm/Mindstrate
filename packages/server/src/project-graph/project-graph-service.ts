@@ -28,6 +28,10 @@ import {
   type ProjectGraphExtractionResult,
   type ProjectGraphWriteResult,
 } from './graph-writer.js';
+import {
+  extractUnrealBuildModuleDependencies,
+  extractUnrealSourceCaptures,
+} from './unreal-extractor.js';
 
 export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
   filesScanned: number;
@@ -85,6 +89,14 @@ const buildProjectGraphExtraction = (
     if (file.path === 'package.json') {
       addPackageFacts(project, file.path, nodes, edges);
     }
+    if (isUnrealBuildFile(file.path)) {
+      const content = readSourceFile(file.absolutePath);
+      if (content !== null) addUnrealBuildFacts(project, file.path, content, nodes, edges);
+    }
+    if (file.language === 'cpp') {
+      const content = readSourceFile(file.absolutePath);
+      if (content !== null) addUnrealSourceFacts(project, file.path, content, nodes, edges);
+    }
     if (file.language && sourceParser.languages.includes(file.language as never)) {
       const content = readSourceFile(file.absolutePath);
       if (content === null) continue;
@@ -103,6 +115,38 @@ const buildProjectGraphExtraction = (
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
+};
+
+const addUnrealSourceFacts = (
+  project: DetectedProject,
+  filePath: string,
+  content: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  for (const capture of extractUnrealSourceCaptures({ path: filePath, content })) {
+    if (capture.name === 'unreal.class') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
+    } else if (capture.name === 'unreal.struct' || capture.name === 'unreal.enum') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.TYPE, nodes, edges, capture);
+    } else if (capture.name === 'unreal.function') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
+    } else if (capture.name === 'unreal.property') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CONFIG, nodes, edges, capture);
+    }
+  }
+};
+
+const addUnrealBuildFacts = (
+  project: DetectedProject,
+  filePath: string,
+  content: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  for (const capture of extractUnrealBuildModuleDependencies({ path: filePath, content })) {
+    addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.DEPENDS_ON, capture);
+  }
 };
 
 const addScanPlanFacts = (
@@ -284,5 +328,8 @@ const evidence = (filePath: string, capture?: ParserCapture): EvidenceRef[] => [
 
 const fileNodeId = (project: DetectedProject, filePath: string): string =>
   createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.FILE, key: filePath });
+
+const isUnrealBuildFile = (filePath: string): boolean =>
+  filePath.endsWith('.Build.cs') || filePath.endsWith('.Target.cs');
 
 const stripQuotes = (value: string): string => value.replace(/^['"]|['"]$/g, '');

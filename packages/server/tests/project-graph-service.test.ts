@@ -61,4 +61,55 @@ describe('project graph service', () => {
       edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CONTAINS
     ).length).toBeGreaterThanOrEqual(3);
   });
+
+  it('extracts Unreal C++ reflection symbols and Build.cs module dependencies', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'Config/DefaultGame.ini', '[/Script/EngineSettings.GeneralProjectSettings]');
+    fs.mkdirSync(path.join(root, 'Content'), { recursive: true });
+    write(root, 'Source/Client/Client.Build.cs', `
+      public class Client : ModuleRules {
+        public Client(ReadOnlyTargetRules Target) : base(Target) {
+          PublicDependencyModuleNames.AddRange(new string[] { "Core", "Engine", "UMG" });
+        }
+      }
+    `);
+    write(root, 'Source/Client/PlayerCharacter.h', `
+      UCLASS(Blueprintable)
+      class CLIENT_API APlayerCharacter : public ACharacter {
+        GENERATED_BODY()
+      public:
+        UFUNCTION(BlueprintCallable)
+        void FireWeapon();
+
+        UPROPERTY(EditAnywhere)
+        int32 Health;
+      };
+    `);
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 100 });
+    const edges = store.listEdges({ limit: 100 });
+
+    expect(nodes.find((node) => node.title === 'APlayerCharacter')?.metadata).toMatchObject({
+      kind: ProjectGraphNodeKind.CLASS,
+    });
+    expect(nodes.find((node) => node.title === 'FireWeapon')?.metadata).toMatchObject({
+      kind: ProjectGraphNodeKind.FUNCTION,
+    });
+    expect(nodes.find((node) => node.title === 'Health')?.metadata).toMatchObject({
+      kind: ProjectGraphNodeKind.CONFIG,
+    });
+    expect(nodes.find((node) => node.title === 'Engine')?.metadata).toMatchObject({
+      kind: ProjectGraphNodeKind.DEPENDENCY,
+    });
+    expect(edges.some((edge) =>
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.DEFINES
+    )).toBe(true);
+    expect(edges.some((edge) =>
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.DEPENDS_ON
+    )).toBe(true);
+  });
 });
