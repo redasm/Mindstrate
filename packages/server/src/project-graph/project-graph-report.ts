@@ -175,7 +175,7 @@ export const collectProjectGraphStats = (
   const firstFiles = nodes
     .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'file')
     .map((node) => node.title)
-    .sort()
+    .sort((left, right) => scoreFirstFile(right) - scoreFirstFile(left) || left.localeCompare(right))
     .slice(0, 12);
 
   return {
@@ -247,7 +247,7 @@ const renderProjectGraphReport = (
   '',
   '- mindstrate graph query "entry points"',
   '- mindstrate graph query "high impact files"',
-  '- mindstrate graph context src/App.tsx',
+  `- mindstrate graph context ${stats.firstFiles[0] ?? '<file path>'}`,
   '',
 ].join('\n');
 
@@ -274,13 +274,26 @@ const renderProjectGraphRepoEntry = (
   '',
   '- mindstrate graph status',
   '- mindstrate graph query "entry points"',
-  '- mindstrate graph context <node id>',
+  `- mindstrate graph context ${stats.firstFiles[0] ?? '<file path>'}`,
   '- mindstrate graph sync',
   '',
 ].join('\n');
 
 const listOrFallback = (items: string[]): string[] =>
   items.length > 0 ? items.map((item) => `- ${item}`) : ['- None detected yet.'];
+
+const scoreFirstFile = (filePath: string): number => {
+  const normalized = filePath.replace(/\\/g, '/').toLowerCase();
+  let score = 0;
+  if (normalized.includes('/index.')) score += 60;
+  if (normalized.includes('/main.')) score += 55;
+  if (normalized.includes('/app.')) score += 50;
+  if (normalized.startsWith('src/')) score += 40;
+  if (normalized.endsWith('package.json') || normalized.endsWith('.uproject') || normalized.endsWith('.uplugin')) score += 30;
+  if (normalized.endsWith('.build.cs') || normalized.endsWith('.target.cs')) score += 25;
+  if (normalized.endsWith('readme.md')) score -= 20;
+  return score;
+};
 
 const inferredSummaryLines = (summaries: ProjectGraphStatsExport['inferredSummaries']): string[] =>
   summaries.length > 0

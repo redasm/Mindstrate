@@ -83,7 +83,7 @@ describe('project graph report export', () => {
     expect(report).toContain('# PROJECT_GRAPH.md');
     expect(report).toContain('Canonical project graph facts live in Mindstrate ECS.');
     expect(report).not.toContain('## User Notes');
-    expect(report).not.toContain('src/App.tsx');
+    expect(report).toContain('mindstrate graph context src/App.tsx');
     expect(report).toContain('mindstrate graph query "entry points"');
     expect(stats.project).toBe('demo-report');
     expect(stats.nodes).toBeGreaterThan(0);
@@ -123,6 +123,25 @@ describe('project graph report export', () => {
       limit: 10,
     });
     expect(records[0].targetRef).toBe(result.reportPath);
+  });
+
+  it('ranks entry and source files before incidental root files', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'ranking-demo' }));
+    write(root, 'README.md', '# Ranking demo');
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    write(root, 'src/index.tsx', 'import { App } from "./App";\nexport function bootstrap() { return App; }');
+
+    const project = detectProject(root)!;
+    memory.context.indexProjectGraph(project);
+    memory.context.writeProjectGraphArtifacts(project);
+
+    const stats = JSON.parse(fs.readFileSync(path.join(root, '.mindstrate', 'project-graph.json'), 'utf8')) as {
+      firstFiles: string[];
+    };
+    const report = fs.readFileSync(path.join(root, 'PROJECT_GRAPH.md'), 'utf8');
+
+    expect(stats.firstFiles.slice(0, 3)).toEqual(['src/index.tsx', 'src/App.tsx', 'package.json']);
+    expect(report).toContain('- mindstrate graph context src/index.tsx');
   });
 
   it('writes an editable Obsidian project graph projection', () => {
