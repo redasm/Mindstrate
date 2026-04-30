@@ -262,6 +262,38 @@ describe('project graph report export', () => {
     }
   });
 
+  it('writes editable Obsidian module pages', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'module-pages-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    const vaultRoot = createTempDir('mindstrate-project-graph-module-vault-');
+
+    try {
+      const project = detectProject(root)!;
+      memory.context.indexProjectGraph(project);
+
+      const result = memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+      const modulePath = path.join(vaultRoot, 'module-pages-demo', 'architecture', 'modules', 'src-app.md');
+      expect(fs.existsSync(modulePath)).toBe(true);
+      expect(result.modulePaths).toContain(modulePath);
+
+      let modulePage = fs.readFileSync(modulePath, 'utf8');
+      expect(modulePage).toContain('# Module: src/App');
+      expect(modulePage).toContain('src/App.tsx');
+      expect(modulePage).toContain('<!-- mindstrate:project-graph:module-notes:start -->');
+
+      modulePage = modulePage.replace(
+        '- Add module notes, confirmations, corrections, or risks here.',
+        '- This module owns the application shell.',
+      );
+      fs.writeFileSync(modulePath, modulePage, 'utf8');
+      memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+
+      expect(fs.readFileSync(modulePath, 'utf8')).toContain('- This module owns the application shell.');
+    } finally {
+      removeTempDir(vaultRoot);
+    }
+  });
+
   it('writes project graph files atomically through a temporary sibling file', () => {
     const target = path.join(root, 'PROJECT_GRAPH.md');
 

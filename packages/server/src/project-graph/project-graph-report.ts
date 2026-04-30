@@ -15,11 +15,13 @@ import {
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
+import { collectProjectGraphModules, type ProjectGraphModule } from './clustering.js';
 
 export interface ProjectGraphArtifactResult {
   reportPath: string;
   statsPath: string;
   graphPath: string;
+  modulePaths: string[];
   nodes: number;
   edges: number;
 }
@@ -85,6 +87,7 @@ export const writeProjectGraphArtifacts = (
     reportPath,
     statsPath,
     graphPath,
+    modulePaths: [],
     nodes: stats.nodes,
     edges: stats.edges,
   };
@@ -104,6 +107,7 @@ export const writeProjectGraphObsidianProjection = (
   const existing = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
   const report = renderEditableObsidianProjection(generated, existing);
   const graph = collectProjectGraphArtifact(store, project, stats);
+  const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
@@ -125,6 +129,7 @@ export const writeProjectGraphObsidianProjection = (
     reportPath,
     statsPath,
     graphPath,
+    modulePaths,
     nodes: stats.nodes,
     edges: stats.edges,
   };
@@ -393,6 +398,48 @@ const renderEditableObsidianProjection = (generated: string, existing: string): 
   '<!-- mindstrate:project-graph:user-notes:start -->',
   preserveBlock(existing, 'user-notes') || '- Add architecture notes, confirmations, corrections, or risks here.',
   '<!-- mindstrate:project-graph:user-notes:end -->',
+  '',
+].join('\n');
+
+const writeObsidianModulePages = (
+  store: ContextGraphStore,
+  project: DetectedProject,
+  vaultRoot: string,
+  projectSlug: string,
+): string[] => {
+  const modules = collectProjectGraphModules(store, project.name);
+  return modules.map((module) => {
+    const modulePath = path.join(
+      vaultRoot,
+      projectSlug,
+      'architecture',
+      'modules',
+      `${slugify(module.label)}.md`,
+    );
+    const existing = fs.existsSync(modulePath) ? fs.readFileSync(modulePath, 'utf8') : '';
+    writeProjectGraphTextFileAtomically(modulePath, renderEditableModulePage(module, existing));
+    return modulePath;
+  });
+};
+
+const renderEditableModulePage = (module: ProjectGraphModule, existing: string): string => [
+  '<!-- mindstrate:project-graph:module-generated:start -->',
+  `# Module: ${module.label}`,
+  '',
+  '## Files',
+  '',
+  ...listOrFallback(module.files),
+  '',
+  `## Graph Nodes`,
+  '',
+  `- ${module.nodes.length}`,
+  '<!-- mindstrate:project-graph:module-generated:end -->',
+  '',
+  '## Module Notes',
+  '',
+  '<!-- mindstrate:project-graph:module-notes:start -->',
+  preserveBlock(existing, 'module-notes') || '- Add module notes, confirmations, corrections, or risks here.',
+  '<!-- mindstrate:project-graph:module-notes:end -->',
   '',
 ].join('\n');
 

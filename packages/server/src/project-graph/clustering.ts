@@ -72,7 +72,8 @@ const moduleRootForPath = (filePath: string): string | undefined => {
     return parts.slice(0, 2).join('/');
   }
   if (parts[0] === 'src' && parts.length >= 2) {
-    return parts.slice(0, 2).join('/');
+    const area = parts[1].includes('.') ? parts[1].replace(/\.[^.]+$/, '') : parts[1];
+    return ['src', area].join('/');
   }
   return parts[0];
 };
