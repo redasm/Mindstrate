@@ -280,4 +280,18 @@ describe('project graph service', () => {
     expect(secondCache.files['src/App.tsx']?.hash).toBe(firstCache.files['src/App.tsx']?.hash);
     expect(secondCache.files['src/App.tsx']?.nodes).toEqual(firstCache.files['src/App.tsx']?.nodes);
   });
+
+  it('reports extraction, binding, cache, and writing progress', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'progress-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    const phases: string[] = [];
+    indexProjectGraph(store, project!, {
+      onIndexProgress: (event) => phases.push(event.phase),
+    });
+
+    expect(phases).toEqual(expect.arrayContaining(['extracting', 'binding', 'cache', 'writing']));
+  });
 });

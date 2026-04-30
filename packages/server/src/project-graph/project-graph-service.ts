@@ -48,6 +48,16 @@ export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
 
 export interface ProjectGraphIndexOptions {
   onScanProgress?: (event: ProjectGraphScanProgress) => void;
+  onIndexProgress?: (event: ProjectGraphIndexProgress) => void;
+}
+
+export interface ProjectGraphIndexProgress {
+  phase: 'extracting' | 'binding' | 'cache' | 'writing';
+  filesProcessed: number;
+  filesTotal: number;
+  nodes: number;
+  edges: number;
+  path?: string;
 }
 
 export const indexProjectGraph = (
@@ -56,6 +66,13 @@ export const indexProjectGraph = (
   options: ProjectGraphIndexOptions = {},
 ): ProjectGraphIndexResult => {
   const extraction = buildProjectGraphExtraction(project, options);
+  options.onIndexProgress?.({
+    phase: 'writing',
+    filesProcessed: extraction.filesScanned,
+    filesTotal: extraction.filesScanned,
+    nodes: extraction.nodes.length,
+    edges: extraction.edges.length,
+  });
   const writeResult = writeProjectGraphExtraction(store, extraction);
   return {
     filesScanned: extraction.filesScanned,
@@ -92,7 +109,7 @@ const buildProjectGraphExtraction = (
   const nextCache: ProjectGraphFileExtractionCache = { version: 1, files: {} };
 
   addScanPlanFacts(project, scanPlan, nodes, edges);
-  for (const file of files) {
+  files.forEach((file, index) => {
     addNode(nodes, makeFileNode(project, file.path));
     addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
     const fileExtraction = extractFileFacts(project, file, sourceParser, previousCache);
@@ -104,9 +121,12 @@ const buildProjectGraphExtraction = (
     };
     for (const node of fileExtraction.nodes) addNode(nodes, node);
     for (const edge of fileExtraction.edges) addEdge(edges, edge);
-  }
+    emitIndexProgress(options.onIndexProgress, 'extracting', index + 1, files.length, nodes.size, edges.size, file.path);
+  });
   addUnrealAssetRegistryFacts(project, nodes, edges);
+  emitIndexProgress(options.onIndexProgress, 'binding', files.length, files.length, nodes.size, edges.size);
   addBindingFacts(nodes, edges);
+  emitIndexProgress(options.onIndexProgress, 'cache', files.length, files.length, nodes.size, edges.size);
   writeProjectGraphExtractionCache(project.root, nextCache);
 
   return {
@@ -115,6 +135,18 @@ const buildProjectGraphExtraction = (
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
+};
+
+const emitIndexProgress = (
+  onIndexProgress: ProjectGraphIndexOptions['onIndexProgress'],
+  phase: ProjectGraphIndexProgress['phase'],
+  filesProcessed: number,
+  filesTotal: number,
+  nodes: number,
+  edges: number,
+  path?: string,
+): void => {
+  onIndexProgress?.({ phase, filesProcessed, filesTotal, nodes, edges, path });
 };
 
 const extractFileFacts = (
@@ -195,11 +227,15 @@ const addBindingFacts = (
 ): void => {
   const nativeSymbols = Array.from(nodes.values())
     .filter((node) => node.kind === ProjectGraphNodeKind.CLASS || node.kind === ProjectGraphNodeKind.FUNCTION);
-  const scriptCalls = Array.from(nodes.values())
-    .filter((node) => node.kind === ProjectGraphNodeKind.DEPENDENCY);
+  const scriptCallsByLabel = new Map<string, ProjectGraphNodeDto[]>();
+  for (const node of nodes.values()) {
+    if (node.kind !== ProjectGraphNodeKind.DEPENDENCY) continue;
+    const current = scriptCallsByLabel.get(node.label) ?? [];
+    current.push(node);
+    scriptCallsByLabel.set(node.label, current);
+  }
   for (const native of nativeSymbols) {
-    for (const scriptCall of scriptCalls) {
-      if (native.label !== scriptCall.label) continue;
+    for (const scriptCall of scriptCallsByLabel.get(native.label) ?? []) {
       addEdge(edges, makeEdge(native.id, scriptCall.id, ProjectGraphEdgeKind.EXPORTS, native.evidence));
     }
   }

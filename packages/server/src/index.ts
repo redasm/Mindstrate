@@ -235,6 +235,7 @@ export {
   type ProjectGraphExtractionResult,
   type ProjectGraphIndexResult,
   type ProjectGraphIndexOptions,
+  type ProjectGraphIndexProgress,
   type ProjectGraphPathInput,
   type ProjectGraphPathResult,
   type CreateProjectGraphOverlayInput,

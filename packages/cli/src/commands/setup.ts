@@ -11,6 +11,7 @@ import {
   saveProjectMeta,
   dependencyFingerprint,
   metaPath,
+  type ProjectGraphIndexProgress,
   type ProjectGraphScanProgress,
 } from '@mindstrate/server';
 import { SyncManager, VaultLayout } from '@mindstrate/obsidian-sync';
@@ -36,6 +37,7 @@ interface SetupOptions {
 
 type SetupProgress = (message: string) => void;
 type ScanProgress = (event: ProjectGraphScanProgress) => void;
+type IndexProgress = (event: ProjectGraphIndexProgress) => void;
 
 export const setupCommand = new Command('setup')
   .description('Step-by-step setup wizard for local personal use or team deployment')
@@ -165,10 +167,13 @@ export async function initializeLocalProject(
   })) console.log(`  ${line}`);
   options.onProgress?.('Indexing project graph');
   const indexProgress = printScanProgress('Index graph');
+  const extractionProgress = printIndexProgress('Index graph');
   const graph = memory.context.indexProjectGraph(project, {
     onScanProgress: indexProgress,
+    onIndexProgress: extractionProgress,
   });
   indexProgress.flush();
+  extractionProgress.flush();
   options.onProgress?.('Running optional LLM enrichment');
   const enrichment = await memory.context.enrichProjectGraph(project);
   options.onProgress?.('Writing project graph artifacts');
@@ -377,6 +382,26 @@ function printScanProgress(prefix: string): ScanProgress & { flush: () => void }
     console.log(`      ${prefix}: ${event.files} files, ${event.directories} dirs, ${event.phase} ${pathLabel}`);
   };
   const progress = ((event: ProjectGraphScanProgress) => print(event)) as ScanProgress & { flush: () => void };
+  progress.flush = () => {
+    if (lastEvent) print(lastEvent, true);
+  };
+  return progress;
+}
+
+function printIndexProgress(prefix: string): IndexProgress & { flush: () => void } {
+  let lastOutputAt = 0;
+  let lastEvent: ProjectGraphIndexProgress | undefined;
+  const print = (event: ProjectGraphIndexProgress, force = false): void => {
+    lastEvent = event;
+    const now = Date.now();
+    if (!force && now - lastOutputAt < 1000 && event.filesProcessed % 200 !== 0) return;
+    lastOutputAt = now;
+    const pathLabel = event.path ? ` ${event.path.length > 80 ? `...${event.path.slice(-77)}` : event.path}` : '';
+    console.log(
+      `      ${prefix}: ${event.phase} ${event.filesProcessed}/${event.filesTotal} files, ${event.nodes} nodes, ${event.edges} edges${pathLabel}`,
+    );
+  };
+  const progress = ((event: ProjectGraphIndexProgress) => print(event)) as IndexProgress & { flush: () => void };
   progress.flush = () => {
     if (lastEvent) print(lastEvent, true);
   };

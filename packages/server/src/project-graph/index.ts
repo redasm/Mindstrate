@@ -42,6 +42,7 @@ export {
 export {
   indexProjectGraph,
   type ProjectGraphIndexOptions,
+  type ProjectGraphIndexProgress,
   type ProjectGraphIndexResult,
 } from './project-graph-service.js';
 export {
