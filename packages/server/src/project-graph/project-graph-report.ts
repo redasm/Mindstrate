@@ -5,6 +5,7 @@ import {
   PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   PROJECT_GRAPH_METADATA_KEYS,
   ProjectGraphOverlayKind,
+  ProjectGraphOverlaySource,
   ProjectionTarget,
   isProjectGraphEdge,
   isProjectGraphNode,
@@ -18,7 +19,12 @@ import {
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
 import { collectProjectGraphModules, type ProjectGraphModule } from './clustering.js';
-import { listProjectGraphOverlays } from './overlay.js';
+import {
+  createProjectGraphOverlay,
+  listProjectGraphOverlays,
+  parseProjectGraphOverlayBlock,
+  renderProjectGraphOverlayBlock,
+} from './overlay.js';
 
 export interface ProjectGraphArtifactResult {
   reportPath: string;
@@ -109,7 +115,9 @@ export const writeProjectGraphObsidianProjection = (
   const statsPath = path.join(project.root, '.mindstrate', 'project-graph.json');
   const graphPath = path.join(project.root, '.mindstrate', 'project-graph.graph.json');
   const existing = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
-  const report = renderEditableObsidianProjection(generated, existing);
+  importOverlayBlock(store, project.name, existing);
+  const overlays = listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
+  const report = renderEditableObsidianProjection(generated, existing, overlays);
   const graph = collectProjectGraphArtifact(store, project, stats);
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
 
@@ -399,7 +407,11 @@ const openQuestionLines = (questions: ProjectGraphStatsExport['openQuestions']):
     ])
     : ['- None raised yet.'];
 
-const renderEditableObsidianProjection = (generated: string, existing: string): string => [
+const renderEditableObsidianProjection = (
+  generated: string,
+  existing: string,
+  overlays: ProjectGraphOverlay[],
+): string => [
   '<!-- mindstrate:project-graph:generated:start -->',
   generated,
   '<!-- mindstrate:project-graph:generated:end -->',
@@ -410,7 +422,37 @@ const renderEditableObsidianProjection = (generated: string, existing: string): 
   preserveBlock(existing, 'user-notes') || '- Add architecture notes, confirmations, corrections, or risks here.',
   '<!-- mindstrate:project-graph:user-notes:end -->',
   '',
+  '## Structured Overlays',
+  '',
+  renderProjectGraphOverlayBlock(overlays),
+  '',
 ].join('\n');
+
+const importOverlayBlock = (
+  store: ContextGraphStore,
+  project: string,
+  text: string,
+): void => {
+  const parsed = parseProjectGraphOverlayBlock(text);
+  if (parsed.length === 0) return;
+  const existing = listProjectGraphOverlays(store, { project, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
+  for (const overlay of parsed) {
+    const alreadyStored = existing.some((entry) =>
+      entry.kind === overlay.kind
+      && entry.content === overlay.content
+      && entry.targetNodeId === overlay.targetNodeId
+      && entry.targetEdgeId === overlay.targetEdgeId);
+    if (alreadyStored) continue;
+    createProjectGraphOverlay(store, {
+      project,
+      targetNodeId: overlay.targetNodeId,
+      targetEdgeId: overlay.targetEdgeId,
+      kind: overlay.kind,
+      content: overlay.content,
+      source: ProjectGraphOverlaySource.OBSIDIAN,
+    });
+  }
+};
 
 const writeObsidianModulePages = (
   store: ContextGraphStore,

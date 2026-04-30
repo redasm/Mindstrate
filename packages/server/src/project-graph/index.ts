@@ -104,8 +104,11 @@ export {
 export {
   createProjectGraphOverlay,
   listProjectGraphOverlays,
+  parseProjectGraphOverlayBlock,
+  renderProjectGraphOverlayBlock,
   type CreateProjectGraphOverlayInput,
   type ListProjectGraphOverlayInput,
+  type ParsedProjectGraphOverlay,
 } from './overlay.js';
 export {
   evaluateProjectGraphFixture,

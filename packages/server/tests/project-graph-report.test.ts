@@ -399,6 +399,42 @@ describe('project graph report export', () => {
     }
   });
 
+  it('imports structured Obsidian overlay blocks before re-rendering projections', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'overlay-import-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    const vaultRoot = createTempDir('mindstrate-project-graph-overlay-import-vault-');
+
+    try {
+      const project = detectProject(root)!;
+      memory.context.indexProjectGraph(project);
+      const reportPath = path.join(vaultRoot, 'overlay-import-demo', 'architecture', 'project-graph.md');
+      fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+      fs.writeFileSync(reportPath, [
+        '<!-- mindstrate:project-graph:overlay:start -->',
+        '- kind: correction',
+        '  target: node:pg:overlay-import-demo:file:src/App.tsx',
+        '  content: Imported correction from Obsidian.',
+        '<!-- mindstrate:project-graph:overlay:end -->',
+      ].join('\n'), 'utf8');
+
+      memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+      const overlays = memory.context.listProjectGraphOverlays({ project: 'overlay-import-demo' });
+      const report = fs.readFileSync(reportPath, 'utf8');
+
+      expect(overlays).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: ProjectGraphOverlayKind.CORRECTION,
+          targetNodeId: 'pg:overlay-import-demo:file:src/App.tsx',
+          content: 'Imported correction from Obsidian.',
+        }),
+      ]));
+      expect(report).toContain('<!-- mindstrate:project-graph:overlay:start -->');
+      expect(report).toContain('Imported correction from Obsidian.');
+    } finally {
+      removeTempDir(vaultRoot);
+    }
+  });
+
   it('writes project graph files atomically through a temporary sibling file', () => {
     const target = path.join(root, 'PROJECT_GRAPH.md');
 

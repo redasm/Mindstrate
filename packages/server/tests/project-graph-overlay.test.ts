@@ -9,7 +9,12 @@ import {
 } from '@mindstrate/protocol/models';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { Mindstrate } from '../src/index.js';
-import { createProjectGraphOverlay, listProjectGraphOverlays } from '../src/project-graph/overlay.js';
+import {
+  createProjectGraphOverlay,
+  listProjectGraphOverlays,
+  parseProjectGraphOverlayBlock,
+  renderProjectGraphOverlayBlock,
+} from '../src/project-graph/overlay.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('project graph overlays', () => {
@@ -74,5 +79,57 @@ describe('project graph overlays', () => {
       memory.close();
       removeTempDir(dataDir);
     }
+  });
+
+  it('parses structured Obsidian overlay blocks', () => {
+    const overlays = parseProjectGraphOverlayBlock(`
+<!-- mindstrate:project-graph:overlay:start -->
+- kind: correction
+  target: node:pg:demo:file:src/App.tsx
+  content: This file owns the app shell.
+- kind: risk
+  target: path:TypeScript/Typing
+  content: Generated bindings should stay metadata-only.
+<!-- mindstrate:project-graph:overlay:end -->
+`);
+
+    expect(overlays).toEqual([
+      {
+        kind: ProjectGraphOverlayKind.CORRECTION,
+        target: 'node:pg:demo:file:src/App.tsx',
+        targetNodeId: 'pg:demo:file:src/App.tsx',
+        content: 'This file owns the app shell.',
+      },
+      {
+        kind: ProjectGraphOverlayKind.RISK,
+        target: 'path:TypeScript/Typing',
+        content: 'Generated bindings should stay metadata-only.',
+      },
+    ]);
+  });
+
+  it('rejects invalid structured overlay entries', () => {
+    expect(parseProjectGraphOverlayBlock(`
+<!-- mindstrate:project-graph:overlay:start -->
+- kind: unsupported
+  content: Nope.
+- kind: note
+<!-- mindstrate:project-graph:overlay:end -->
+`)).toEqual([]);
+  });
+
+  it('renders overlays back to a structured editable block', () => {
+    expect(renderProjectGraphOverlayBlock([
+      {
+        id: 'overlay-1',
+        project: 'demo',
+        targetNodeId: 'pg:demo:file:src/App.tsx',
+        kind: ProjectGraphOverlayKind.CONFIRMATION,
+        content: 'Human confirmed this entry point.',
+        source: ProjectGraphOverlaySource.OBSIDIAN,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ])).toContain('target: node:pg:demo:file:src/App.tsx');
   });
 });
