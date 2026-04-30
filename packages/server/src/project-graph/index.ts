@@ -10,6 +10,9 @@ export {
 export {
   createUnrealCppParserAdapter,
 } from './unreal-cpp-parser-adapter.js';
+export {
+  createScriptRegexParserAdapter,
+} from './script-parser-adapter.js';
 export type {
   ParserAdapter,
   ParserCapture,
