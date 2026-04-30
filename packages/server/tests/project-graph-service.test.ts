@@ -117,6 +117,7 @@ describe('project graph service', () => {
     write(root, 'Client.uproject', '{"FileVersion":3}');
     fs.mkdirSync(path.join(root, 'Content'), { recursive: true });
     fs.mkdirSync(path.join(root, 'Config'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Source'), { recursive: true });
     write(root, '.mindstrate/rules/client-scripts.json', JSON.stringify({
       id: 'client-scripts',
       name: 'Client Scripts',
@@ -210,5 +211,51 @@ describe('project graph service', () => {
         ['OpenInventory', 'OpenInventory'],
       ]),
     );
+  });
+
+  it('imports Unreal Asset Registry exports as metadata-only asset relationships', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    fs.mkdirSync(path.join(root, 'Content'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Config'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Source'), { recursive: true });
+    write(root, '.mindstrate/unreal-asset-registry.json', JSON.stringify({
+      assets: [
+        {
+          path: '/Game/UI/WBP_MainMenu',
+          class: 'WidgetBlueprint',
+          parent: 'UUserWidget',
+          references: ['/Game/Data/DA_MenuTheme'],
+        },
+        {
+          path: '/Game/Data/DA_MenuTheme',
+          class: 'DataAsset',
+          references: [],
+        },
+      ],
+    }));
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 200 });
+    const edges = store.listEdges({ limit: 200 });
+    const menu = nodes.find((node) => node.title === '/Game/UI/WBP_MainMenu');
+    const parent = nodes.find((node) => node.title === 'UUserWidget');
+    const theme = nodes.find((node) => node.title === '/Game/Data/DA_MenuTheme');
+
+    expect(menu?.metadata).toMatchObject({ assetClass: 'WidgetBlueprint', scanMode: 'metadata-only' });
+    expect(parent?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.CLASS });
+    expect(theme?.metadata).toMatchObject({ assetClass: 'DataAsset', scanMode: 'metadata-only' });
+    expect(edges.some((edge) =>
+      edge.sourceId === menu?.id &&
+      edge.targetId === parent?.id &&
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.DEPENDS_ON
+    )).toBe(true);
+    expect(edges.some((edge) =>
+      edge.sourceId === menu?.id &&
+      edge.targetId === theme?.id &&
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.RELATED_TO
+    )).toBe(true);
   });
 });

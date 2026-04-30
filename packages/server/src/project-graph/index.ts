@@ -45,6 +45,12 @@ export {
   type ProjectGraphIndexResult,
 } from './project-graph-service.js';
 export {
+  UNREAL_ASSET_REGISTRY_EXPORT,
+  readUnrealAssetRegistryExport,
+  type UnrealAssetRegistryAsset,
+  type UnrealAssetRegistryImport,
+} from './unreal-asset-registry-importer.js';
+export {
   collectProjectGraphStats,
   writeProjectGraphTextFileAtomically,
   writeProjectGraphArtifacts,

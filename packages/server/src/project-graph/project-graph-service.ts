@@ -33,6 +33,7 @@ import {
   extractUnrealSourceCaptures,
 } from './unreal-extractor.js';
 import { extractScriptCaptures } from './script-extractor.js';
+import { readUnrealAssetRegistryExport } from './unreal-asset-registry-importer.js';
 
 export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
   filesScanned: number;
@@ -113,6 +114,7 @@ const buildProjectGraphExtraction = (
       addSourceFacts(project, file.path, parsed.captures, nodes, edges);
     }
   }
+  addUnrealAssetRegistryFacts(project, nodes, edges);
   addBindingFacts(nodes, edges);
 
   return {
@@ -121,6 +123,36 @@ const buildProjectGraphExtraction = (
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
+};
+
+const addUnrealAssetRegistryFacts = (
+  project: DetectedProject,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  const registry = readUnrealAssetRegistryExport(project.root);
+  if (!registry) return;
+  for (const asset of registry.assets) {
+    const assetNode = makeNode(project, ProjectGraphNodeKind.COMPONENT, asset.path, asset.path, evidence(asset.path), {
+      assetClass: asset.class,
+      scanMode: 'metadata-only',
+    });
+    addNode(nodes, assetNode);
+    if (asset.parent) {
+      const parentNode = makeNode(project, ProjectGraphNodeKind.CLASS, asset.parent, asset.parent, evidence(asset.path), {
+        assetParent: true,
+      });
+      addNode(nodes, parentNode);
+      addEdge(edges, makeEdge(assetNode.id, parentNode.id, ProjectGraphEdgeKind.DEPENDS_ON, evidence(asset.path)));
+    }
+    for (const reference of asset.references ?? []) {
+      const referenceNode = makeNode(project, ProjectGraphNodeKind.COMPONENT, reference, reference, evidence(asset.path), {
+        scanMode: 'metadata-only',
+      });
+      addNode(nodes, referenceNode);
+      addEdge(edges, makeEdge(assetNode.id, referenceNode.id, ProjectGraphEdgeKind.RELATED_TO, evidence(asset.path)));
+    }
+  }
 };
 
 const addBindingFacts = (
