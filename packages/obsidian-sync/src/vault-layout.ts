@@ -188,12 +188,6 @@ export function idMatchesSuffix(id: string, suffix: string): boolean {
     || hashIdSuffix(id).startsWith(normalizedSuffix);
 }
 
-export function isLegacyUnsafeIdSuffixFilename(name: string): boolean {
-  const base = name.replace(/\.md$/i, '');
-  const m = base.match(/--(.+)$/);
-  return Boolean(m && !/^[a-f0-9]{6,}$/i.test(m[1]));
-}
-
 function hashIdSuffix(id: string): string {
   return createHash('sha256').update(id).digest('hex').slice(0, 12);
 }

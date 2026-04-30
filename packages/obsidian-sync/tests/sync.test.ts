@@ -95,7 +95,7 @@ describe('SyncManager (integration)', () => {
     expect(fs.statSync(path.join(vaultDir, 'website', 'architecture', files[0])).size).toBeGreaterThan(0);
   });
 
-  it('uses safe filenames for project graph ids and removes legacy empty --pg files', async () => {
+  it('uses safe filenames for project graph ids', async () => {
     await memory.snapshots.upsertProjectSnapshot({
       name: 'client',
       root: path.join(dataDir, 'client'),
@@ -108,9 +108,6 @@ describe('SyncManager (integration)', () => {
     });
 
     const architectureDir = path.join(vaultDir, 'client', 'architecture');
-    fs.mkdirSync(architectureDir, { recursive: true });
-    fs.writeFileSync(path.join(architectureDir, 'project-snapshot-client--pg-client.md'), '', 'utf8');
-
     const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
     const out = await sync.exportAll();
     expect(out.errors).toHaveLength(0);

@@ -13,7 +13,6 @@
  */
 
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import {
   type GraphKnowledgeView,
   type Mindstrate,
@@ -24,11 +23,7 @@ import {
   computeBodyHash,
 } from './markdown.js';
 import { errorMessage, readTextIfExists } from './file-io.js';
-import {
-  isLegacyUnsafeIdSuffixFilename,
-  VaultLayout,
-  type VaultIndex,
-} from './vault-layout.js';
+import { VaultLayout, type VaultIndex } from './vault-layout.js';
 
 export interface ExportResult {
   written: number;
@@ -196,7 +191,6 @@ export class VaultExporter {
     this.layout.ensureDirFor(rel);
     writeFileAtomically(absNew, out);
     this.removeMovedSource(oldRel, rel);
-    this.removeLegacyEmptyProjectGraphFile(rel);
     return moved ?? 'written';
   }
 
@@ -205,27 +199,6 @@ export class VaultExporter {
     const absOld = this.layout.absolutePath(oldRel);
     if (fs.existsSync(absOld)) {
       fs.unlinkSync(absOld);
-    }
-  }
-
-  private removeLegacyEmptyProjectGraphFile(rel: string): void {
-    const dir = path.dirname(this.layout.absolutePath(rel));
-    const filename = path.basename(rel);
-    const legacyPrefix = filename.replace(/--[a-f0-9]{12}\.md$/i, '--pg');
-    if (legacyPrefix === filename || !fs.existsSync(dir)) return;
-
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
-      if (!entry.name.startsWith(legacyPrefix)) continue;
-      if (!isLegacyUnsafeIdSuffixFilename(entry.name)) continue;
-      const abs = path.join(dir, entry.name);
-      try {
-        if (fs.statSync(abs).size === 0) {
-          fs.unlinkSync(abs);
-        }
-      } catch {
-        /* ignore stale files */
-      }
     }
   }
 }
