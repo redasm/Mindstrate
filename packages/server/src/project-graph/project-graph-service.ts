@@ -113,6 +113,7 @@ const buildProjectGraphExtraction = (
       addSourceFacts(project, file.path, parsed.captures, nodes, edges);
     }
   }
+  addBindingFacts(nodes, edges);
 
   return {
     project: project.name,
@@ -120,6 +121,22 @@ const buildProjectGraphExtraction = (
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
+};
+
+const addBindingFacts = (
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  const nativeSymbols = Array.from(nodes.values())
+    .filter((node) => node.kind === ProjectGraphNodeKind.CLASS || node.kind === ProjectGraphNodeKind.FUNCTION);
+  const scriptCalls = Array.from(nodes.values())
+    .filter((node) => node.kind === ProjectGraphNodeKind.DEPENDENCY);
+  for (const native of nativeSymbols) {
+    for (const scriptCall of scriptCalls) {
+      if (native.label !== scriptCall.label) continue;
+      addEdge(edges, makeEdge(native.id, scriptCall.id, ProjectGraphEdgeKind.EXPORTS, native.evidence));
+    }
+  }
 };
 
 const addScriptFacts = (

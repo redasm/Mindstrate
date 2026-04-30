@@ -166,4 +166,49 @@ describe('project graph service', () => {
     expect(nodes.some((node) => node.metadata?.kind === ProjectGraphNodeKind.DEPENDENCY)).toBe(true);
     expect(typingFile).toBeUndefined();
   });
+
+  it('links native Unreal symbols to script-side UE calls', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    fs.mkdirSync(path.join(root, 'Content'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Config'), { recursive: true });
+    write(root, '.mindstrate/rules/client-bindings.json', JSON.stringify({
+      id: 'client-bindings',
+      name: 'Client Bindings',
+      priority: 200,
+      match: { all: [{ glob: '*.uproject' }] },
+      detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+      sourceRoots: ['Source', 'Lua', 'TypeScript/src'],
+      generatedRoots: ['TypeScript/Typing'],
+      layers: [],
+      manifests: ['*.uproject'],
+    }));
+    write(root, 'Source/Client/InventoryComponent.h', `
+      UCLASS(Blueprintable)
+      class CLIENT_API InventoryComponent : public UObject {
+        GENERATED_BODY()
+      public:
+        UFUNCTION(BlueprintCallable)
+        void OpenInventory();
+      };
+    `);
+    write(root, 'Lua/inventory.lua', 'UE.InventoryComponent()');
+    write(root, 'TypeScript/src/inventory.ts', 'ue.OpenInventory();');
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 200 });
+    const exportsEdges = store.listEdges({ limit: 200 }).filter((edge) =>
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.EXPORTS
+    );
+    const labelsById = new Map(nodes.map((node) => [node.id, node.title]));
+
+    expect(exportsEdges.map((edge) => [labelsById.get(edge.sourceId), labelsById.get(edge.targetId)])).toEqual(
+      expect.arrayContaining([
+        ['InventoryComponent', 'InventoryComponent'],
+        ['OpenInventory', 'OpenInventory'],
+      ]),
+    );
+  });
 });
