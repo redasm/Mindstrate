@@ -112,4 +112,58 @@ describe('project graph service', () => {
       edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.DEPENDS_ON
     )).toBe(true);
   });
+
+  it('extracts script imports, symbols, and UE calls across gameplay languages', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    fs.mkdirSync(path.join(root, 'Content'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Config'), { recursive: true });
+    write(root, '.mindstrate/rules/client-scripts.json', JSON.stringify({
+      id: 'client-scripts',
+      name: 'Client Scripts',
+      priority: 200,
+      match: { all: [{ glob: '*.uproject' }] },
+      detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+      sourceRoots: ['Source', 'Lua', 'Python', 'CSharp', 'TypeScript/src'],
+      generatedRoots: ['TypeScript/Typing'],
+      layers: [],
+      manifests: ['*.uproject'],
+    }));
+    write(root, 'Lua/inventory.lua', `
+      local Inventory = require("game.inventory")
+      function Inventory.Open()
+        UE.InventoryComponent()
+      end
+    `);
+    write(root, 'Python/tools.py', `
+      import unreal
+      class ImportTool:
+        def run(self):
+          unreal.EditorAssetLibrary()
+    `);
+    write(root, 'CSharp/Game/Weapon.cs', `
+      using Game.Inventory;
+      public class Weapon {
+        public void Fire() { UE.FireWeapon(); }
+      }
+    `);
+    write(root, 'TypeScript/src/ui.ts', `
+      import { Inventory } from "./inventory";
+      ue.InventoryComponent();
+    `);
+    write(root, 'TypeScript/Typing/Game/Foo.d.ts', 'declare class Foo {}');
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 200 });
+    const typingFile = nodes.find((node) => node.title.endsWith('Foo.d.ts'));
+
+    expect(nodes.find((node) => node.title === 'game.inventory')).toBeDefined();
+    expect(nodes.find((node) => node.title === 'ImportTool')?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.CLASS });
+    expect(nodes.find((node) => node.title === 'Fire')?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.FUNCTION });
+    expect(nodes.find((node) => node.title === 'InventoryComponent')).toBeDefined();
+    expect(nodes.some((node) => node.metadata?.kind === ProjectGraphNodeKind.DEPENDENCY)).toBe(true);
+    expect(typingFile).toBeUndefined();
+  });
 });

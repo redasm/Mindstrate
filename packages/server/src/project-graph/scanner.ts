@@ -422,6 +422,8 @@ const languageForExtension = (extension: string): string | undefined => {
   if (extension === '.cpp' || extension === '.cc' || extension === '.cxx') return 'cpp';
   if (extension === '.h' || extension === '.hpp') return 'cpp';
   if (extension === '.cs') return 'csharp';
+  if (extension === '.py') return 'python';
+  if (extension === '.lua') return 'lua';
   return undefined;
 };
 

@@ -32,6 +32,7 @@ import {
   extractUnrealBuildModuleDependencies,
   extractUnrealSourceCaptures,
 } from './unreal-extractor.js';
+import { extractScriptCaptures } from './script-extractor.js';
 
 export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
   filesScanned: number;
@@ -97,6 +98,10 @@ const buildProjectGraphExtraction = (
       const content = readSourceFile(file.absolutePath);
       if (content !== null) addUnrealSourceFacts(project, file.path, content, nodes, edges);
     }
+    if (file.language) {
+      const content = readSourceFile(file.absolutePath);
+      if (content !== null) addScriptFacts(project, file.path, file.language, content, nodes, edges);
+    }
     if (file.language && sourceParser.languages.includes(file.language as never)) {
       const content = readSourceFile(file.absolutePath);
       if (content === null) continue;
@@ -115,6 +120,27 @@ const buildProjectGraphExtraction = (
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
+};
+
+const addScriptFacts = (
+  project: DetectedProject,
+  filePath: string,
+  language: string,
+  content: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  for (const capture of extractScriptCaptures({ path: filePath, language, content })) {
+    if (capture.name === 'script.import') {
+      addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.IMPORTS, capture);
+    } else if (capture.name === 'script.class') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
+    } else if (capture.name === 'script.function') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
+    } else if (capture.name === 'script.ue-call') {
+      addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
+    }
+  }
 };
 
 const addUnrealSourceFacts = (
