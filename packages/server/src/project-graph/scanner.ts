@@ -37,6 +37,9 @@ export interface ProjectGraphScanProgress {
   path: string;
   files: number;
   directories: number;
+  generatedFiles: number;
+  metadataOnlyFiles: number;
+  skippedFiles: number;
 }
 
 export interface ProjectGraphCacheDiff {
@@ -151,6 +154,9 @@ export const scanProjectFiles = (
     path: '',
     files: 0,
     directories: 0,
+    generatedFiles: 0,
+    metadataOnlyFiles: 0,
+    skippedFiles: 0,
   };
 
   const readFile = options.readFile ?? fs.readFileSync;
@@ -158,6 +164,7 @@ export const scanProjectFiles = (
     root: resolvedRoot,
     ignoreRules,
     generatedRoots: options.generatedRoots ?? [],
+    metadataOnlyRoots: options.metadataOnlyRoots ?? [],
     entries,
     seen,
     readFile,
@@ -172,6 +179,7 @@ export const scanProjectFiles = (
       root: resolvedRoot,
       rel: manifest,
       generatedRoots: options.generatedRoots ?? [],
+      metadataOnlyRoots: options.metadataOnlyRoots ?? [],
       entries,
       seen,
       readFile,
@@ -216,6 +224,7 @@ interface WalkProjectInput {
   relDir: string;
   ignoreRules: IgnoreRule[];
   generatedRoots: string[];
+  metadataOnlyRoots: string[];
   entries: ProjectFileInventoryEntry[];
   seen: Set<string>;
   readFile: (absolutePath: string) => Buffer;
@@ -224,7 +233,7 @@ interface WalkProjectInput {
 }
 
 const walkProject = (input: WalkProjectInput): void => {
-  const { root, relDir, ignoreRules, generatedRoots, entries, seen, readFile, progress, onProgress } = input;
+  const { root, relDir, ignoreRules, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress } = input;
   const absDir = path.join(root, relDir);
   progress.directories += 1;
   emitProgress(onProgress, progress, 'directory', relDir || '.');
@@ -232,6 +241,7 @@ const walkProject = (input: WalkProjectInput): void => {
   try {
     dirents = fs.readdirSync(absDir, { withFileTypes: true });
   } catch {
+    progress.skippedFiles += 1;
     emitProgress(onProgress, progress, 'skipped', relDir || '.');
     return;
   }
@@ -247,7 +257,7 @@ const walkProject = (input: WalkProjectInput): void => {
     }
     if (!dirent.isFile()) continue;
 
-    addFileEntry({ root, rel, generatedRoots, entries, seen, readFile, progress, onProgress });
+    addFileEntry({ root, rel, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress });
   }
 };
 
@@ -255,6 +265,7 @@ interface AddFileEntryInput {
   root: string;
   rel: string;
   generatedRoots: string[];
+  metadataOnlyRoots: string[];
   entries: ProjectFileInventoryEntry[];
   seen: Set<string>;
   readFile: (absolutePath: string) => Buffer;
@@ -263,7 +274,7 @@ interface AddFileEntryInput {
 }
 
 const addFileEntry = (input: AddFileEntryInput): void => {
-  const { root, rel, generatedRoots, entries, seen, readFile, progress, onProgress } = input;
+  const { root, rel, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress } = input;
   const normalizedRel = normalizePath(rel);
   if (seen.has(normalizedRel)) return;
   seen.add(normalizedRel);
@@ -272,10 +283,13 @@ const addFileEntry = (input: AddFileEntryInput): void => {
   const stat = statFile(abs);
   const content = readFileContent(abs, readFile);
   if (!stat || !content) {
+    progress.skippedFiles += 1;
     emitProgress(onProgress, progress, 'skipped', normalizedRel);
     return;
   }
   progress.files += 1;
+  if (isUnderAnyRoot(normalizedRel, generatedRoots)) progress.generatedFiles += 1;
+  if (isUnderAnyRoot(normalizedRel, metadataOnlyRoots)) progress.metadataOnlyFiles += 1;
   emitProgress(onProgress, progress, 'file', normalizedRel);
   const extension = path.extname(normalizedRel);
   entries.push({

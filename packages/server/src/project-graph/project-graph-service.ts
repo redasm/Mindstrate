@@ -59,6 +59,9 @@ export interface ProjectGraphIndexProgress {
   nodes: number;
   edges: number;
   path?: string;
+  generatedFiles: number;
+  metadataOnlyRoots: number;
+  skippedFiles: number;
 }
 
 export const indexProjectGraph = (
@@ -73,6 +76,9 @@ export const indexProjectGraph = (
     filesTotal: extraction.filesScanned,
     nodes: extraction.nodes.length,
     edges: extraction.edges.length,
+    generatedFiles: extraction.generatedFiles,
+    metadataOnlyRoots: extraction.metadataOnlyRoots,
+    skippedFiles: extraction.skippedFiles,
   });
   const writeResult = writeProjectGraphExtraction(store, extraction);
   return {
@@ -85,12 +91,16 @@ export const indexProjectGraph = (
 
 interface ProjectGraphExtractionWithStats extends ProjectGraphExtractionResult {
   filesScanned: number;
+  generatedFiles: number;
+  metadataOnlyRoots: number;
+  skippedFiles: number;
 }
 
 const buildProjectGraphExtraction = (
   project: DetectedProject,
   options: ProjectGraphIndexOptions,
 ): ProjectGraphExtractionWithStats => {
+  let skippedFiles = 0;
   const scanOptions = {
     sourceRoots: project.graphHints?.sourceRoots,
     ignore: project.graphHints?.ignore,
@@ -99,10 +109,15 @@ const buildProjectGraphExtraction = (
       ?.filter((layer) => layer.parserAdapters.includes('unreal-asset-metadata'))
       .flatMap((layer) => layer.roots),
     manifests: project.graphHints?.manifests,
-    onProgress: options.onScanProgress,
+    onProgress: (event: ProjectGraphScanProgress) => {
+      skippedFiles = event.skippedFiles;
+      options.onScanProgress?.(event);
+    },
   };
   const scanPlan = buildProjectGraphScanPlan(project.root, scanOptions);
   const files = scanProjectFiles(project.root, scanOptions);
+  const generatedFiles = files.filter((file) => file.generated).length;
+  const metadataOnlyRoots = scanOptions.metadataOnlyRoots?.length ?? 0;
   const nodes = new Map<string, ProjectGraphNodeDto>();
   const edges = new Map<string, ProjectGraphEdgeDto>();
   const parserAdapters = [
@@ -125,17 +140,48 @@ const buildProjectGraphExtraction = (
     };
     for (const node of fileExtraction.nodes) addNode(nodes, node);
     for (const edge of fileExtraction.edges) addEdge(edges, edge);
-    emitIndexProgress(options.onIndexProgress, 'extracting', index + 1, files.length, nodes.size, edges.size, file.path);
+    emitIndexProgress(options.onIndexProgress, {
+      phase: 'extracting',
+      filesProcessed: index + 1,
+      filesTotal: files.length,
+      nodes: nodes.size,
+      edges: edges.size,
+      generatedFiles,
+      metadataOnlyRoots,
+      skippedFiles,
+      path: file.path,
+    });
   });
   addUnrealAssetRegistryFacts(project, nodes, edges);
-  emitIndexProgress(options.onIndexProgress, 'binding', files.length, files.length, nodes.size, edges.size);
+  emitIndexProgress(options.onIndexProgress, {
+    phase: 'binding',
+    filesProcessed: files.length,
+    filesTotal: files.length,
+    nodes: nodes.size,
+    edges: edges.size,
+    generatedFiles,
+    metadataOnlyRoots,
+    skippedFiles,
+  });
   addBindingFacts(nodes, edges);
-  emitIndexProgress(options.onIndexProgress, 'cache', files.length, files.length, nodes.size, edges.size);
+  emitIndexProgress(options.onIndexProgress, {
+    phase: 'cache',
+    filesProcessed: files.length,
+    filesTotal: files.length,
+    nodes: nodes.size,
+    edges: edges.size,
+    generatedFiles,
+    metadataOnlyRoots,
+    skippedFiles,
+  });
   writeProjectGraphExtractionCache(project.root, nextCache);
 
   return {
     project: project.name,
     filesScanned: files.length,
+    generatedFiles,
+    metadataOnlyRoots,
+    skippedFiles,
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
@@ -143,14 +189,9 @@ const buildProjectGraphExtraction = (
 
 const emitIndexProgress = (
   onIndexProgress: ProjectGraphIndexOptions['onIndexProgress'],
-  phase: ProjectGraphIndexProgress['phase'],
-  filesProcessed: number,
-  filesTotal: number,
-  nodes: number,
-  edges: number,
-  path?: string,
+  event: ProjectGraphIndexProgress,
 ): void => {
-  onIndexProgress?.({ phase, filesProcessed, filesTotal, nodes, edges, path });
+  onIndexProgress?.(event);
 };
 
 const extractFileFacts = (

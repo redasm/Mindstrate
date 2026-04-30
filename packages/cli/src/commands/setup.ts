@@ -379,7 +379,11 @@ function printScanProgress(prefix: string): ScanProgress & { flush: () => void }
     if (!force && now - lastOutputAt < 1000 && event.files % 200 !== 0) return;
     lastOutputAt = now;
     const pathLabel = event.path.length > 90 ? `...${event.path.slice(-87)}` : event.path;
-    console.log(`      ${prefix}: ${event.files} files, ${event.directories} dirs, ${event.phase} ${pathLabel}`);
+    console.log(
+      `      ${prefix}: ${event.files} files, ${event.directories} dirs, `
+      + `${event.generatedFiles} generated, ${event.metadataOnlyFiles} metadata-only, `
+      + `${event.skippedFiles} skipped, ${event.phase} ${pathLabel}`,
+    );
   };
   const progress = ((event: ProjectGraphScanProgress) => print(event)) as ScanProgress & { flush: () => void };
   progress.flush = () => {
@@ -398,7 +402,9 @@ function printIndexProgress(prefix: string): IndexProgress & { flush: () => void
     lastOutputAt = now;
     const pathLabel = event.path ? ` ${event.path.length > 80 ? `...${event.path.slice(-77)}` : event.path}` : '';
     console.log(
-      `      ${prefix}: ${event.phase} ${event.filesProcessed}/${event.filesTotal} files, ${event.nodes} nodes, ${event.edges} edges${pathLabel}`,
+      `      ${prefix}: ${event.phase} ${event.filesProcessed}/${event.filesTotal} files, `
+      + `${event.nodes} nodes, ${event.edges} edges, ${event.generatedFiles} generated, `
+      + `${event.metadataOnlyRoots} metadata-only roots, ${event.skippedFiles} skipped${pathLabel}`,
     );
   };
   const progress = ((event: ProjectGraphIndexProgress) => print(event)) as IndexProgress & { flush: () => void };

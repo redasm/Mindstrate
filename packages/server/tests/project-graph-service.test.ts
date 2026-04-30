@@ -200,12 +200,12 @@ describe('project graph service', () => {
     indexProjectGraph(store, project!);
 
     const nodes = store.listNodes({ project: 'Client', limit: 200 });
-    const exportsEdges = store.listEdges({ limit: 200 }).filter((edge) =>
-      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.EXPORTS
+    const bindingEdges = store.listEdges({ limit: 200 }).filter((edge) =>
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.BINDS_TO
     );
     const labelsById = new Map(nodes.map((node) => [node.id, node.title]));
 
-    expect(exportsEdges.map((edge) => [labelsById.get(edge.sourceId), labelsById.get(edge.targetId)])).toEqual(
+    expect(bindingEdges.map((edge) => [labelsById.get(edge.sourceId), labelsById.get(edge.targetId)])).toEqual(
       expect.arrayContaining([
         ['InventoryComponent', 'InventoryComponent'],
         ['OpenInventory', 'OpenInventory'],
@@ -255,7 +255,7 @@ describe('project graph service', () => {
     expect(edges.some((edge) =>
       edge.sourceId === menu?.id &&
       edge.targetId === theme?.id &&
-      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.RELATED_TO
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.REFERENCES_ASSET
     )).toBe(true);
   });
 
@@ -293,5 +293,39 @@ describe('project graph service', () => {
     });
 
     expect(phases).toEqual(expect.arrayContaining(['extracting', 'binding', 'cache', 'writing']));
+  });
+
+  it('reports generated, metadata-only, and skipped files during large scans', () => {
+    write(root, 'Scan.uproject', '{"FileVersion":3}');
+    write(root, '.mindstrate/rules/scan-progress.json', JSON.stringify({
+      id: 'scan-progress',
+      name: 'Scan Progress',
+      priority: 200,
+      match: { all: [{ glob: '*.uproject' }] },
+      detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+      sourceRoots: ['Source', 'TypeScript/Typing', 'Content'],
+      generatedRoots: ['TypeScript/Typing'],
+      layers: [{ id: 'assets', label: 'Assets', roots: ['Content'], parserAdapters: ['unreal-asset-metadata'] }],
+      manifests: ['*.uproject'],
+    }));
+    write(root, 'Source/Game/Game.cpp', 'void StartGame() {}');
+    write(root, 'TypeScript/Typing/UObject.ts', 'export declare class UObject {}');
+    write(root, 'Content/UI/WBP_Menu.uasset', '');
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    const indexProgress: Array<{ generatedFiles?: number; metadataOnlyRoots?: number; skippedFiles?: number }> = [];
+    const scanProgress: Array<{ phase: string; path: string; skippedFiles?: number }> = [];
+    indexProjectGraph(store, project!, {
+      onScanProgress: (event) => scanProgress.push(event),
+      onIndexProgress: (event) => indexProgress.push(event),
+    });
+
+    expect(indexProgress.at(-1)).toMatchObject({
+      generatedFiles: 1,
+      metadataOnlyRoots: 1,
+      skippedFiles: expect.any(Number),
+    });
+    expect(scanProgress.some((event) => event.phase === 'file' && event.path === 'TypeScript/Typing/UObject.ts')).toBe(true);
   });
 });
