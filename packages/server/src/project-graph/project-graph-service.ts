@@ -19,6 +19,7 @@ import type { ParserCapture } from './parser-adapter.js';
 import {
   buildProjectGraphScanPlan,
   scanProjectFiles,
+  type ProjectFileInventoryEntry,
   type ProjectGraphScanPlan,
   type ProjectGraphScanProgress,
 } from './scanner.js';
@@ -110,7 +111,7 @@ const buildProjectGraphExtraction = (
 
   addScanPlanFacts(project, scanPlan, nodes, edges);
   files.forEach((file, index) => {
-    addNode(nodes, makeFileNode(project, file.path));
+    addNode(nodes, makeFileNode(project, file.path, scanPlan));
     addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
     const fileExtraction = extractFileFacts(project, file, sourceParser, previousCache);
     nextCache.files[file.path] = {
@@ -151,7 +152,7 @@ const emitIndexProgress = (
 
 const extractFileFacts = (
   project: DetectedProject,
-  file: { path: string; absolutePath: string; hash: string; language?: string },
+  file: ProjectFileInventoryEntry,
   sourceParser: ReturnType<typeof createTreeSitterSourceParser>,
   previousCache: ProjectGraphFileExtractionCache,
 ): ProjectGraphExtractionResult => {
@@ -162,6 +163,9 @@ const extractFileFacts = (
 
   const nodes = new Map<string, ProjectGraphNodeDto>();
   const edges = new Map<string, ProjectGraphEdgeDto>();
+  if (file.generated) {
+    return { project: project.name, nodes: [], edges: [] };
+  }
   if (file.path === 'package.json') {
     addPackageFacts(project, file.path, nodes, edges);
   }
@@ -308,7 +312,7 @@ const addScanPlanFacts = (
   for (const root of scanPlan.metadataOnlyRoots) addDirectoryFact(project, root, 'metadata-only', projectNode.id, nodes, edges);
   for (const root of scanPlan.generatedRoots) addDirectoryFact(project, root, 'generated', projectNode.id, nodes, edges);
   for (const manifest of scanPlan.manifestFiles) {
-    const manifestNode = makeFileNode(project, manifest);
+    const manifestNode = makeFileNode(project, manifest, scanPlan);
     addNode(nodes, manifestNode);
     addEdge(edges, makeEdge(projectNode.id, manifestNode.id, ProjectGraphEdgeKind.CONTAINS, evidence(manifest)));
   }
@@ -416,8 +420,26 @@ const addSymbolFact = (
   addEdge(edges, makeEdge(fileNodeId(project, filePath), symbol.id, ProjectGraphEdgeKind.DEFINES, evidence(filePath, capture)));
 };
 
-const makeFileNode = (project: DetectedProject, filePath: string): ProjectGraphNodeDto =>
-  makeNode(project, ProjectGraphNodeKind.FILE, filePath, filePath, evidence(filePath), { ownedByFile: filePath });
+const makeFileNode = (
+  project: DetectedProject,
+  filePath: string,
+  scanPlan?: ProjectGraphScanPlan,
+): ProjectGraphNodeDto => makeNode(project, ProjectGraphNodeKind.FILE, filePath, filePath, evidence(filePath), {
+  ownedByFile: filePath,
+  ...generatedFileMetadata(filePath, scanPlan),
+});
+
+const generatedFileMetadata = (
+  filePath: string,
+  scanPlan: ProjectGraphScanPlan | undefined,
+): Record<string, unknown> => {
+  if (!scanPlan?.generatedRoots.some((root) => filePath === root || filePath.startsWith(`${root}/`))) return {};
+  return {
+    generated: true,
+    doNotEdit: true,
+    metadataOnly: true,
+  };
+};
 
 const makeNode = (
   project: DetectedProject,

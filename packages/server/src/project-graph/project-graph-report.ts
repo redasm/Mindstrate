@@ -188,6 +188,7 @@ export const collectProjectGraphStats = (
     .filter(isProjectGraphEdge);
   const firstFiles = nodes
     .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'file')
+    .filter((node) => node.metadata?.['generated'] !== true)
     .map((node) => node.title)
     .sort((left, right) => scoreFirstFile(right) - scoreFirstFile(left) || left.localeCompare(right))
     .slice(0, 12);

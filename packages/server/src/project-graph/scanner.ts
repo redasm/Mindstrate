@@ -98,7 +98,6 @@ export const estimateProjectGraphScanScope = (
     ignoredDirectories: uniqueSorted([
       ...DEFAULT_PROJECT_GRAPH_IGNORES.filter((pattern) => !pattern.includes('.')),
       ...(options.ignore ?? []),
-      ...(options.generatedRoots ?? []),
       ...(options.metadataOnlyRoots ?? []),
     ]),
     generatedRoots: plan.generatedRoots,
@@ -329,7 +328,6 @@ interface IgnoreRule {
 const loadIgnoreRules = (root: string, options: ScanProjectFilesOptions): IgnoreRule[] => [
   ...DEFAULT_PROJECT_GRAPH_IGNORES.map((pattern) => ({ pattern, directoryOnly: false })),
   ...(options.ignore ?? []).map((pattern) => ({ pattern, directoryOnly: false })),
-  ...(options.generatedRoots ?? []).map((pattern) => ({ pattern, directoryOnly: false })),
   ...(options.metadataOnlyRoots ?? []).map((pattern) => ({ pattern, directoryOnly: false })),
   ...readIgnoreFile(path.join(root, '.gitignore')),
   ...readIgnoreFile(path.join(root, '.mindstrateignore')),

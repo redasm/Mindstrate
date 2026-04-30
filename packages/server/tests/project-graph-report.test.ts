@@ -195,6 +195,39 @@ describe('project graph report export', () => {
     expect(report).toContain('src/App.tsx:1');
   });
 
+  it('keeps generated binding artifacts out of high-impact report lists', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'generated-demo' }));
+    write(root, '.mindstrate/rules/generated-demo.json', JSON.stringify({
+      id: 'generated-demo',
+      name: 'Generated Demo',
+      priority: 200,
+      match: { all: [{ glob: 'package.json' }] },
+      detect: { language: 'typescript', framework: 'node', manifest: 'package.json' },
+      sourceRoots: ['src', 'TypeScript/Typing'],
+      generatedRoots: ['TypeScript/Typing'],
+      ignore: [],
+    }));
+    write(root, 'src/App.ts', 'export function App() { return null; }');
+    write(root, 'TypeScript/Typing/UObject.ts', 'export function GeneratedBinding() { return null; }');
+
+    const project = detectProject(root)!;
+    memory.context.indexProjectGraph(project);
+    memory.context.writeProjectGraphArtifacts(project);
+
+    const graph = JSON.parse(fs.readFileSync(path.join(root, '.mindstrate', 'project-graph.graph.json'), 'utf8')) as {
+      nodes: Array<{ label: string; metadata: Record<string, unknown> }>;
+    };
+    const report = fs.readFileSync(path.join(root, 'PROJECT_GRAPH.md'), 'utf8');
+
+    expect(graph.nodes.find((node) => node.label === 'TypeScript/Typing/UObject.ts')?.metadata).toMatchObject({
+      generated: true,
+      doNotEdit: true,
+      metadataOnly: true,
+    });
+    expect(report).toContain('TypeScript/Typing');
+    expect(report).not.toContain('GeneratedBinding');
+  });
+
   it('writes an editable Obsidian project graph projection', () => {
     write(root, 'package.json', JSON.stringify({
       name: 'demo-report',
