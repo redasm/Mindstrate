@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { detectProject } from '../src/project/detector.js';
 import { indexProjectGraph } from '../src/project-graph/project-graph-service.js';
+import { collectProjectGraphModules } from '../src/project-graph/clustering.js';
 import { collectProjectGraphViews } from '../src/project-graph/views.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
@@ -60,6 +61,37 @@ describe('project graph views', () => {
       dependencies: expect.arrayContaining(['InventoryComponent']),
       assets: ['/Game/UI/WBP_MainMenu'],
       bindings: expect.arrayContaining([{ native: 'InventoryComponent', script: 'InventoryComponent' }]),
+    });
+  });
+
+  it('clusters project graph facts into stable modules', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, '.mindstrate/rules/client-modules.json', JSON.stringify({
+      id: 'client-modules',
+      name: 'Client Modules',
+      priority: 200,
+      match: { all: [{ glob: '*.uproject' }] },
+      detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+      sourceRoots: ['Source', 'Plugins/UnrealSharp/Source'],
+      manifests: ['*.uproject'],
+    }));
+    write(root, 'Source/Client/Client.Build.cs', 'public class Client : ModuleRules {}');
+    write(root, 'Source/Client/Private/ClientGameMode.cpp', 'void StartMatch() {}');
+    write(root, 'Plugins/UnrealSharp/Source/UnrealSharpCore/UnrealSharpCore.Build.cs', 'public class UnrealSharpCore : ModuleRules {}');
+    write(root, 'Plugins/UnrealSharp/Source/UnrealSharpCore/Public/UnrealSharpCore.h', 'class UUnrealSharpCore {};');
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
+
+    const modules = collectProjectGraphModules(store, 'Client');
+    expect(modules.map((module) => module.id)).toEqual(expect.arrayContaining([
+      'module:source/client',
+      'module:plugins/unrealsharp/source/unrealsharpcore',
+    ]));
+    expect(modules.find((module) => module.id === 'module:source/client')).toMatchObject({
+      label: 'Source/Client',
+      files: expect.arrayContaining(['Source/Client/Client.Build.cs', 'Source/Client/Private/ClientGameMode.cpp']),
     });
   });
 });

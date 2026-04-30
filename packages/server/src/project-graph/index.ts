@@ -62,6 +62,10 @@ export {
   type ProjectGraphViews,
 } from './views.js';
 export {
+  collectProjectGraphModules,
+  type ProjectGraphModule,
+} from './clustering.js';
+export {
   collectProjectGraphArtifact,
   collectProjectGraphStats,
   writeProjectGraphTextFileAtomically,
