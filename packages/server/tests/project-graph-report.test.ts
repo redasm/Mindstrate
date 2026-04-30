@@ -411,28 +411,41 @@ describe('project graph report export', () => {
     try {
       const project = detectProject(root)!;
       memory.context.indexProjectGraph(project);
+      const appNode = memory.context.listContextNodes({ project: 'overlay-import-demo', limit: 100 })
+        .find((node) => node.title === 'src/App.tsx')!;
       const reportPath = path.join(vaultRoot, 'overlay-import-demo', 'architecture', 'project-graph.md');
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, [
         '<!-- mindstrate:project-graph:overlay:start -->',
         '- kind: correction',
-        '  target: node:pg:overlay-import-demo:file:src/App.tsx',
+        `  target: node:${appNode.id}`,
         '  content: Imported correction from Obsidian.',
+        '- kind: confirmation',
+        `  target: node:${appNode.id}`,
+        '  content: Imported confirmation from Obsidian.',
         '<!-- mindstrate:project-graph:overlay:end -->',
       ].join('\n'), 'utf8');
 
       memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
       const overlays = memory.context.listProjectGraphOverlays({ project: 'overlay-import-demo' });
       const report = fs.readFileSync(reportPath, 'utf8');
+      const graph = JSON.parse(fs.readFileSync(path.join(root, '.mindstrate', 'project-graph.graph.json'), 'utf8')) as {
+        nodes: Array<{ label: string; confidence: number; salience: number }>;
+      };
 
       expect(overlays).toEqual(expect.arrayContaining([
         expect.objectContaining({
           kind: ProjectGraphOverlayKind.CORRECTION,
-          targetNodeId: 'pg:overlay-import-demo:file:src/App.tsx',
+          targetNodeId: appNode.id,
           content: 'Imported correction from Obsidian.',
         }),
       ]));
+      expect(graph.nodes.find((node) => node.label === 'src/App.tsx')).toMatchObject({
+        confidence: 0.99,
+        salience: 99,
+      });
       expect(report).toContain('<!-- mindstrate:project-graph:overlay:start -->');
+      expect(report).toContain('## User Corrections');
       expect(report).toContain('Imported correction from Obsidian.');
     } finally {
       removeTempDir(vaultRoot);

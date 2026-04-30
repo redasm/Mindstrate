@@ -108,14 +108,14 @@ export const writeProjectGraphObsidianProjection = (
   project: DetectedProject,
   vaultRoot: string,
 ): ProjectGraphArtifactResult => {
-  const stats = collectProjectGraphStats(store, project);
-  const generated = renderProjectGraphReport(project, stats);
   const projectSlug = slugify(project.name);
   const reportPath = path.join(vaultRoot, projectSlug, 'architecture', 'project-graph.md');
   const statsPath = path.join(project.root, '.mindstrate', 'project-graph.json');
   const graphPath = path.join(project.root, '.mindstrate', 'project-graph.graph.json');
   const existing = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
   importOverlayBlock(store, project.name, existing);
+  const stats = collectProjectGraphStats(store, project);
+  const generated = renderProjectGraphReport(project, stats);
   const overlays = listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
   const report = renderEditableObsidianProjection(generated, existing, overlays);
   const graph = collectProjectGraphArtifact(store, project, stats);
