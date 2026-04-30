@@ -108,6 +108,61 @@ describe('project graph ECS writer', () => {
     expect(node.confidence).toBeLessThan(0.95);
   });
 
+  it('scores project graph edges by evidence provenance', () => {
+    writeProjectGraphExtraction(store, {
+      project: 'demo',
+      nodes: [
+        {
+          id: 'pg:demo:file:src/App.tsx',
+          kind: ProjectGraphNodeKind.FILE,
+          label: 'src/App.tsx',
+          project: 'demo',
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'src/App.tsx', extractorId: 'tree-sitter-source' }],
+        },
+        {
+          id: 'pg:demo:dependency:react',
+          kind: ProjectGraphNodeKind.DEPENDENCY,
+          label: 'react',
+          project: 'demo',
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'src/App.tsx', extractorId: 'tree-sitter-source' }],
+        },
+        {
+          id: 'pg:demo:dependency:unreal',
+          kind: ProjectGraphNodeKind.DEPENDENCY,
+          label: 'unreal',
+          project: 'demo',
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'Scripts/tool.py', extractorId: 'script-regex' }],
+        },
+      ],
+      edges: [
+        {
+          id: 'pge:imports:file-app:react',
+          sourceId: 'pg:demo:file:src/App.tsx',
+          targetId: 'pg:demo:dependency:react',
+          kind: ProjectGraphEdgeKind.IMPORTS,
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'src/App.tsx', extractorId: 'tree-sitter-source' }],
+        },
+        {
+          id: 'pge:imports:file-app:unreal',
+          sourceId: 'pg:demo:file:src/App.tsx',
+          targetId: 'pg:demo:dependency:unreal',
+          kind: ProjectGraphEdgeKind.IMPORTS,
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'Scripts/tool.py', extractorId: 'script-regex' }],
+        },
+      ],
+    });
+
+    const exact = store.getEdgeById('pge:imports:file-app:react')!;
+    const regex = store.getEdgeById('pge:imports:file-app:unreal')!;
+    expect(exact.strength).toBe(0.95);
+    expect(regex.strength).toBe(0.85);
+  });
+
   it('archives facts owned by a deleted file', () => {
     writeProjectGraphExtraction(store, makeExtraction());
 

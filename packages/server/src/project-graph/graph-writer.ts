@@ -62,7 +62,7 @@ export const writeProjectGraphExtraction = (
       sourceId: edge.sourceId,
       targetId: edge.targetId,
       relationType: relationForProjectGraphEdge(edge.kind),
-      strength: 1,
+      strength: confidenceForProjectGraphEvidence(edge),
       evidence: {
         [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true,
         [PROJECT_GRAPH_METADATA_KEYS.kind]: edge.kind,
@@ -130,9 +130,15 @@ const projectGraphNodeMetadata = (node: ProjectGraphNodeDto): Record<string, unk
 });
 
 const confidenceForProjectGraphNode = (node: ProjectGraphNodeDto): number => {
-  if (node.provenance === ProjectGraphProvenance.AMBIGUOUS) return 0.45;
-  if (node.provenance === ProjectGraphProvenance.INFERRED) return 0.65;
-  const extractorIds = node.evidence.map((entry) => entry.extractorId);
+  return confidenceForProjectGraphEvidence(node);
+};
+
+const confidenceForProjectGraphEvidence = (
+  item: Pick<ProjectGraphNodeDto | ProjectGraphEdgeDto, 'provenance' | 'evidence'>,
+): number => {
+  if (item.provenance === ProjectGraphProvenance.AMBIGUOUS) return 0.45;
+  if (item.provenance === ProjectGraphProvenance.INFERRED) return 0.65;
+  const extractorIds = item.evidence.map((entry) => entry.extractorId);
   if (extractorIds.some((id) => id.includes('tree-sitter') || id.includes('unreal-asset-registry'))) return 0.95;
   if (extractorIds.some((id) => id.includes('unreal') || id.includes('script'))) return 0.85;
   return 0.8;
