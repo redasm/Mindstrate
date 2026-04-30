@@ -81,7 +81,7 @@ export const listProjectGraphOverlays = (
     limit: input.limit ?? 200,
   })
     .filter((node) => node.metadata?.['projectGraphOverlay'] === true)
-    .filter((node) => !input.target || node.metadata?.['target'] === input.target)
+    .filter((node) => !input.target || nodeTarget(node) === input.target)
     .filter((node) => !input.targetNodeId || node.metadata?.['targetNodeId'] === input.targetNodeId)
     .filter((node) => !input.targetEdgeId || node.metadata?.['targetEdgeId'] === input.targetEdgeId)
     .map(nodeToOverlay);
@@ -122,6 +122,16 @@ const nodeToOverlay = (node: ContextNode): ProjectGraphOverlay => ({
 
 const stringOrUndefined = (value: unknown): string | undefined =>
   typeof value === 'string' && value.length > 0 ? value : undefined;
+
+const nodeTarget = (node: ContextNode): string | undefined => {
+  const target = stringOrUndefined(node.metadata?.['target']);
+  if (target) return target;
+  const targetNodeId = stringOrUndefined(node.metadata?.['targetNodeId']);
+  if (targetNodeId) return `node:${targetNodeId}`;
+  const targetEdgeId = stringOrUndefined(node.metadata?.['targetEdgeId']);
+  if (targetEdgeId) return `edge:${targetEdgeId}`;
+  return undefined;
+};
 
 const extractOverlayBlockBody = (text: string): string => {
   const startIndex = text.indexOf(OVERLAY_BLOCK_START);

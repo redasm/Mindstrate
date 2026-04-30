@@ -50,11 +50,10 @@ describe('project graph overlays', () => {
       content: 'This is the app shell.',
       source: ProjectGraphOverlaySource.OBSIDIAN,
       author: 'alice',
-      target: 'node:pg:demo:file:src/App.tsx',
     });
 
     expect(store.getNodeById(extracted.id)?.metadata?.['provenance']).toBe('EXTRACTED');
-    expect(overlay.target).toBe('node:pg:demo:file:src/App.tsx');
+    expect(overlay.target).toBeUndefined();
     expect(overlay.targetNodeId).toBe(extracted.id);
     expect(overlay.kind).toBe(ProjectGraphOverlayKind.CONFIRMATION);
     expect(listProjectGraphOverlays(store, { project: 'demo', targetNodeId: extracted.id })).toEqual([overlay]);

@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const params = request.nextUrl.searchParams;
     const overlays = memory.context.listProjectGraphOverlays({
       project: params.get('project') || undefined,
+      target: params.get('target') || undefined,
       targetNodeId: params.get('targetNodeId') || undefined,
       targetEdgeId: params.get('targetEdgeId') || undefined,
       limit: parseInt(params.get('limit') || '100', 10),
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest) {
 
     const overlay = memory.context.createProjectGraphOverlay({
       project: body.project,
+      target: body.target || undefined,
       targetNodeId: body.targetNodeId || undefined,
       targetEdgeId: body.targetEdgeId || undefined,
       kind: body.kind,
