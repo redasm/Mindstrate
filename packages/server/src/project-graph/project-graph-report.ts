@@ -31,6 +31,10 @@ export interface ProjectGraphStatsExport {
   edges: number;
   projectionNodeId?: string;
   firstFiles: string[];
+  entryPoints: ProjectGraphReportItem[];
+  coreModules: ProjectGraphReportItem[];
+  assetSurfaces: ProjectGraphReportItem[];
+  bindingSurfaces: ProjectGraphReportItem[];
   inferredSummaries: Array<{
     title: string;
     summary: string;
@@ -44,6 +48,11 @@ export interface ProjectGraphStatsExport {
   }>;
   provenanceCounts: Record<string, number>;
   nodeKindCounts: Record<string, number>;
+}
+
+export interface ProjectGraphReportItem {
+  label: string;
+  evidencePaths: string[];
 }
 
 export const writeProjectGraphArtifacts = (
@@ -177,6 +186,23 @@ export const collectProjectGraphStats = (
     .map((node) => node.title)
     .sort((left, right) => scoreFirstFile(right) - scoreFirstFile(left) || left.localeCompare(right))
     .slice(0, 12);
+  const entryPoints = firstFiles.slice(0, 8).map((label) => ({ label, evidencePaths: [label] }));
+  const coreModules = nodes
+    .filter((node) => ['project', 'directory', 'file'].includes(String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? '')))
+    .map((node) => ({ label: node.title, evidencePaths: evidencePathsForNode(node), score: scoreFirstFile(node.title) }))
+    .sort((left, right) => right.score - left.score || left.label.localeCompare(right.label))
+    .slice(0, 8)
+    .map(({ label, evidencePaths }) => ({ label, evidencePaths }));
+  const assetSurfaces = nodes
+    .filter((node) => node.metadata?.['scanMode'] === 'metadata-only' && typeof node.metadata?.['assetClass'] === 'string')
+    .map((node) => ({ label: `${node.title} (${node.metadata?.['assetClass']})`, evidencePaths: evidencePathsForNode(node) }))
+    .sort((left, right) => left.label.localeCompare(right.label))
+    .slice(0, 8);
+  const bindingSurfaces = nodes
+    .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'dependency')
+    .map((node) => ({ label: node.title, evidencePaths: evidencePathsForNode(node) }))
+    .sort((left, right) => left.label.localeCompare(right.label))
+    .slice(0, 8);
 
   return {
     project: project.name,
@@ -185,6 +211,10 @@ export const collectProjectGraphStats = (
     edges: edges.length,
     projectionNodeId: nodes[0]?.id,
     firstFiles,
+    entryPoints,
+    coreModules,
+    assetSurfaces,
+    bindingSurfaces,
     inferredSummaries: nodes
       .filter((node) => {
         const provenance = String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? '');
@@ -223,9 +253,25 @@ const renderProjectGraphReport = (
   `- Nodes: ${stats.nodes}`,
   `- Edges: ${stats.edges}`,
   '',
-  '## First Files To Read',
+  '## Entry Points',
+  '',
+  ...reportItemLines(stats.entryPoints),
+  '',
+  '## Core Modules',
+  '',
+  ...reportItemLines(stats.coreModules),
+  '',
+  '## High Impact Files',
   '',
   ...listOrFallback(stats.firstFiles),
+  '',
+  '## Native To Script Bindings',
+  '',
+  ...reportItemLines(stats.bindingSurfaces),
+  '',
+  '## Asset And Blueprint Surfaces',
+  '',
+  ...reportItemLines(stats.assetSurfaces),
   '',
   '## Generated Or Do-Not-Edit Areas',
   '',
@@ -270,6 +316,22 @@ const renderProjectGraphRepoEntry = (
   `- Open questions: ${stats.openQuestions.length}`,
   `- Stats: .mindstrate/project-graph.json`,
   '',
+  '## Entry Points',
+  '',
+  ...reportItemLines(stats.entryPoints),
+  '',
+  '## Core Modules',
+  '',
+  ...reportItemLines(stats.coreModules),
+  '',
+  '## Native To Script Bindings',
+  '',
+  ...reportItemLines(stats.bindingSurfaces),
+  '',
+  '## Asset And Blueprint Surfaces',
+  '',
+  ...reportItemLines(stats.assetSurfaces),
+  '',
   '## Useful Commands',
   '',
   '- mindstrate graph status',
@@ -281,6 +343,14 @@ const renderProjectGraphRepoEntry = (
 
 const listOrFallback = (items: string[]): string[] =>
   items.length > 0 ? items.map((item) => `- ${item}`) : ['- None detected yet.'];
+
+const reportItemLines = (items: ProjectGraphReportItem[]): string[] =>
+  items.length > 0
+    ? items.flatMap((item) => [
+      `- ${item.label}`,
+      `  - Evidence: ${item.evidencePaths.join(', ') || '(none)'}`,
+    ])
+    : ['- None detected yet.'];
 
 const scoreFirstFile = (filePath: string): number => {
   const normalized = filePath.replace(/\\/g, '/').toLowerCase();

@@ -144,6 +144,57 @@ describe('project graph report export', () => {
     expect(report).toContain('- mindstrate graph context src/index.tsx');
   });
 
+  it('renders evidence-rich project graph sections for humans and agents', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'sections-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+
+    const project = detectProject(root)!;
+    memory.context.indexProjectGraph(project);
+    memory.context.createContextNode({
+      id: 'pg:sections-demo:component:bp-player',
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: '/Game/Characters/BP_Player',
+      content: 'component: /Game/Characters/BP_Player',
+      project: 'sections-demo',
+      status: ContextNodeStatus.ACTIVE,
+      metadata: {
+        projectGraph: true,
+        kind: ProjectGraphNodeKind.COMPONENT,
+        provenance: ProjectGraphProvenance.EXTRACTED,
+        scanMode: 'metadata-only',
+        assetClass: 'Blueprint',
+        evidence: [{ path: '.mindstrate/unreal-asset-registry.json', extractorId: 'unreal-asset-registry' }],
+      },
+    });
+    memory.context.createContextNode({
+      id: 'pg:sections-demo:dependency:native-export',
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'NativeExport',
+      content: 'dependency: NativeExport',
+      project: 'sections-demo',
+      status: ContextNodeStatus.ACTIVE,
+      metadata: {
+        projectGraph: true,
+        kind: ProjectGraphNodeKind.DEPENDENCY,
+        provenance: ProjectGraphProvenance.EXTRACTED,
+        evidence: [{ path: 'src/App.tsx', startLine: 1, extractorId: 'tree-sitter-source' }],
+      },
+    });
+    memory.context.writeProjectGraphArtifacts(project);
+
+    const report = fs.readFileSync(path.join(root, 'PROJECT_GRAPH.md'), 'utf8');
+
+    expect(report).toContain('## Entry Points');
+    expect(report).toContain('## Core Modules');
+    expect(report).toContain('## Asset And Blueprint Surfaces');
+    expect(report).toContain('/Game/Characters/BP_Player');
+    expect(report).toContain('## Native To Script Bindings');
+    expect(report).toContain('NativeExport');
+    expect(report).toContain('src/App.tsx:1');
+  });
+
   it('writes an editable Obsidian project graph projection', () => {
     write(root, 'package.json', JSON.stringify({
       name: 'demo-report',
