@@ -84,6 +84,28 @@ describe('project graph analysis queries', () => {
     expect(compact.evidence.length).toBeLessThanOrEqual(1);
     expect(compact.items).toHaveLength(1);
   });
+
+  it('scopes module, edit, flow, impact, and explain queries to related graph facts', () => {
+    const nodes = [
+      node('pg:demo:file:src/App.tsx', 'src/App.tsx', ProjectGraphNodeKind.FILE),
+      node('pg:demo:function:App', 'App', ProjectGraphNodeKind.FUNCTION),
+      node('pg:demo:dependency:react', 'react', ProjectGraphNodeKind.DEPENDENCY),
+      node('pg:demo:file:src/Admin.tsx', 'src/Admin.tsx', ProjectGraphNodeKind.FILE),
+      node('pg:demo:dependency:unused', 'unused', ProjectGraphNodeKind.DEPENDENCY),
+    ];
+    const edges = [
+      edge('e1', 'pg:demo:file:src/App.tsx', 'pg:demo:function:App', ProjectGraphEdgeKind.DEFINES),
+      edge('e2', 'pg:demo:function:App', 'pg:demo:dependency:react', ProjectGraphEdgeKind.IMPORTS),
+      edge('e3', 'pg:demo:file:src/Admin.tsx', 'pg:demo:dependency:unused', ProjectGraphEdgeKind.IMPORTS),
+    ];
+
+    for (const task of ['module', 'before-edit', 'flow', 'impact', 'explain'] as const) {
+      const result = queryProjectGraphTask({ nodes, edges, task, query: 'App', limit: 10 });
+      expect(result.items.map((item) => item.label)).toEqual(expect.arrayContaining(['src/App.tsx', 'App', 'react']));
+      expect(result.items.map((item) => item.label)).not.toContain('src/Admin.tsx');
+      expect(result.summary).toContain(task);
+    }
+  });
 });
 
 const node = (

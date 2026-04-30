@@ -157,8 +157,8 @@ export const queryProjectGraphTask = (
   const edges = projectGraphEdges(input.edges);
   const limit = Math.max(input.limit ?? 10, 1);
   const query = input.query?.toLowerCase();
-  const matchingNodes = nodes.filter((node) => !query || node.title.toLowerCase().includes(query) || node.id.toLowerCase().includes(query));
-  const selected = selectTaskNodes(input.task, matchingNodes, edges).slice(0, limit);
+  const matchingNodes = nodes.filter((node) => matchesQuery(node, query));
+  const selected = selectTaskNodes(input.task, nodes, edges, matchingNodes).slice(0, limit);
   const items = selected.map(toTaskItem);
   const evidence = Array.from(new Set(items.flatMap((item) => item.evidence))).slice(0, limit);
 
@@ -189,16 +189,50 @@ const selectTaskNodes = (
   task: ProjectGraphTaskQuery,
   nodes: ContextNode[],
   edges: ContextEdge[],
+  matchingNodes: ContextNode[],
 ): ContextNode[] => {
-  if (task === 'entry-points') return nodes.filter((node) => kindOf(node) === ProjectGraphNodeKind.FILE);
-  if (task === 'asset-references') return nodes.filter((node) => kindOf(node) === ProjectGraphNodeKind.COMPONENT);
+  if (task === 'entry-points') return matchingNodes.filter((node) => kindOf(node) === ProjectGraphNodeKind.FILE);
+  if (task === 'asset-references') return matchingNodes.filter((node) => kindOf(node) === ProjectGraphNodeKind.COMPONENT);
   if (task === 'binding') {
     const bindingNodeIds = new Set(edges
       .filter((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.BINDS_TO)
       .flatMap((edge) => [edge.sourceId, edge.targetId]));
-    return nodes.filter((node) => bindingNodeIds.has(node.id));
+    return matchingNodes.filter((node) => bindingNodeIds.has(node.id));
   }
-  return nodes;
+  return relatedNodes(nodes, edges, matchingNodes, taskDepth(task));
+};
+
+const matchesQuery = (node: ContextNode, query: string | undefined): boolean =>
+  !query || node.title.toLowerCase().includes(query) || node.id.toLowerCase().includes(query);
+
+const taskDepth = (task: ProjectGraphTaskQuery): number => {
+  if (task === 'impact' || task === 'flow') return 2;
+  return 1;
+};
+
+const relatedNodes = (
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  seeds: ContextNode[],
+  depth: number,
+): ContextNode[] => {
+  if (seeds.length === 0) return [];
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const selectedIds = new Set(seeds.map((node) => node.id));
+  const queue = seeds.map((node) => ({ id: node.id, depth: 0 }));
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current.depth >= depth) continue;
+    for (const edge of adjacentEdges(edges, current.id)) {
+      const nextId = edge.sourceId === current.id ? edge.targetId : edge.sourceId;
+      if (selectedIds.has(nextId) || !byId.has(nextId)) continue;
+      selectedIds.add(nextId);
+      queue.push({ id: nextId, depth: current.depth + 1 });
+    }
+  }
+
+  return nodes.filter((node) => selectedIds.has(node.id));
 };
 
 const toTaskItem = (node: ContextNode): ProjectGraphTaskQueryItem => ({
