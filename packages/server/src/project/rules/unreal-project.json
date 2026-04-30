@@ -31,6 +31,7 @@
       "Intermediate": "Generated build intermediates; do not edit manually.",
       "Saved": "Local/editor generated state; do not edit manually.",
       "DerivedDataCache": "Generated asset cache; do not edit manually.",
+      "TypeScript/Typing/ue/generated": "Generated Unreal TypeScript declaration output; do not edit manually.",
       "SoundBanks": "Audio middleware generated assets, often Wwise."
     }
   },
@@ -66,13 +67,15 @@
     "Binaries",
     "Intermediate",
     "Saved",
-    "DerivedDataCache"
+    "DerivedDataCache",
+    "TypeScript/Typing/ue/generated"
   ],
   "ignore": [
     "Binaries",
     "Intermediate",
     "Saved",
-    "DerivedDataCache"
+    "DerivedDataCache",
+    "TypeScript/Typing/ue/generated"
   ],
   "manifests": [
     "*.uproject",
@@ -109,7 +112,7 @@
     {
       "id": "generated",
       "label": "Generated Output",
-      "roots": ["Binaries", "Intermediate", "Saved", "DerivedDataCache"],
+      "roots": ["Binaries", "Intermediate", "Saved", "DerivedDataCache", "TypeScript/Typing/ue/generated"],
       "parserAdapters": [],
       "generated": true
     }

@@ -11,6 +11,7 @@ import {
   saveProjectMeta,
   dependencyFingerprint,
   metaPath,
+  type ProjectGraphScanProgress,
 } from '@mindstrate/server';
 import { SyncManager, VaultLayout } from '@mindstrate/obsidian-sync';
 import { buildSetupPlan, writeProjectCliConfig, type SetupMode, type SetupTool } from '../cli-config.js';
@@ -32,6 +33,9 @@ interface SetupOptions {
   embeddingModel?: string;
   yes?: boolean;
 }
+
+type SetupProgress = (message: string) => void;
+type ScanProgress = (event: ProjectGraphScanProgress) => void;
 
 export const setupCommand = new Command('setup')
   .description('Step-by-step setup wizard for local personal use or team deployment')
@@ -100,8 +104,10 @@ export const setupCommand = new Command('setup')
       });
 
       if (mode === 'local') {
+        console.log('\nApplying local setup:');
         await initializeLocalProject(project, plan.dataDir, {
           vaultPath: vaultPath ? path.resolve(vaultPath) : undefined,
+          onProgress: printStepProgress(7),
         });
       }
 
@@ -115,7 +121,7 @@ export const setupCommand = new Command('setup')
       });
 
       if (vaultPath && mode === 'local') {
-        await exportVault(plan.dataDir, vaultPath);
+        await exportVault(plan.dataDir, vaultPath, printStepProgress(2, 'Vault export'));
       }
 
       console.log('\nMindstrate ready:');
@@ -138,23 +144,38 @@ export const setupCommand = new Command('setup')
 export async function initializeLocalProject(
   project: NonNullable<ReturnType<typeof detectProject>>,
   dataDir: string,
-  options: { vaultPath?: string } = {},
+  options: { vaultPath?: string; onProgress?: SetupProgress } = {},
 ): Promise<void> {
+  options.onProgress?.('Opening local memory database');
   const memory = new Mindstrate({ dataDir });
   await memory.init();
+  options.onProgress?.('Writing project snapshot');
   const previousMeta = loadProjectMeta(project.root);
   const now = new Date().toISOString();
   const result = await memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-setup' });
-  const scope = memory.context.estimateProjectGraphScanScope(project);
+  options.onProgress?.('Scanning project graph scope');
+  const scanScopeProgress = printScanProgress('Scan scope');
+  const scope = memory.context.estimateProjectGraphScanScope(project, {
+    onScanProgress: scanScopeProgress,
+  });
+  scanScopeProgress.flush();
   for (const line of buildProjectGraphAnalysisLines({
     projectName: project.name,
     ...scope,
   })) console.log(`  ${line}`);
-  const graph = memory.context.indexProjectGraph(project);
+  options.onProgress?.('Indexing project graph');
+  const indexProgress = printScanProgress('Index graph');
+  const graph = memory.context.indexProjectGraph(project, {
+    onScanProgress: indexProgress,
+  });
+  indexProgress.flush();
+  options.onProgress?.('Running optional LLM enrichment');
   const enrichment = await memory.context.enrichProjectGraph(project);
+  options.onProgress?.('Writing project graph artifacts');
   const artifacts = options.vaultPath
     ? memory.context.writeProjectGraphObsidianProjection(project, options.vaultPath)
     : memory.context.writeProjectGraphArtifacts(project);
+  options.onProgress?.('Saving project metadata');
   saveProjectMeta(project.root, {
     version: 1,
     name: project.name,
@@ -177,12 +198,14 @@ export async function initializeLocalProject(
   memory.close();
 }
 
-async function exportVault(dataDir: string, vaultPath: string): Promise<void> {
+async function exportVault(dataDir: string, vaultPath: string, onProgress?: SetupProgress): Promise<void> {
+  onProgress?.('Opening local memory database');
   const root = path.resolve(vaultPath);
   const layout = new VaultLayout({ vaultRoot: root });
   layout.ensureRoot();
   const memory = new Mindstrate({ dataDir });
   await memory.init();
+  onProgress?.('Exporting vault markdown');
   const sync = new SyncManager(memory, { vaultRoot: root });
   const result = await sync.exportAll();
   console.log(`  Vault export: ${result.written} written, ${result.skipped} skipped`);
@@ -332,4 +355,30 @@ async function runTeamDeployWizard(rl: readline.Interface, options: SetupOptions
 async function confirm(rl: readline.Interface, prompt: string): Promise<boolean> {
   const answer = await rl.question(`${prompt} Y/n: `);
   return answer.trim().toLowerCase() !== 'n';
+}
+
+function printStepProgress(total: number, prefix = 'Setup'): SetupProgress {
+  let current = 0;
+  return (message) => {
+    current += 1;
+    console.log(`  [${current}/${total}] ${prefix}: ${message}...`);
+  };
+}
+
+function printScanProgress(prefix: string): ScanProgress & { flush: () => void } {
+  let lastOutputAt = 0;
+  let lastEvent: ProjectGraphScanProgress | undefined;
+  const print = (event: ProjectGraphScanProgress, force = false): void => {
+    lastEvent = event;
+    const now = Date.now();
+    if (!force && now - lastOutputAt < 1000 && event.files % 200 !== 0) return;
+    lastOutputAt = now;
+    const pathLabel = event.path.length > 90 ? `...${event.path.slice(-87)}` : event.path;
+    console.log(`      ${prefix}: ${event.files} files, ${event.directories} dirs, ${event.phase} ${pathLabel}`);
+  };
+  const progress = ((event: ProjectGraphScanProgress) => print(event)) as ScanProgress & { flush: () => void };
+  progress.flush = () => {
+    if (lastEvent) print(lastEvent, true);
+  };
+  return progress;
 }

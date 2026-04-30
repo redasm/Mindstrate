@@ -28,3 +28,29 @@ test('initializeLocalProject writes the project graph to Obsidian when a vault i
   assert.equal(fs.existsSync(path.join(vaultDir, 'setup-graph-demo', 'architecture', 'project-graph.md')), true);
   assert.equal(fs.existsSync(path.join(root, '.mindstrate', 'project-graph.json')), true);
 });
+
+test('initializeLocalProject reports progress for long setup steps', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-progress-'));
+  const dataDir = path.join(root, '.mindstrate');
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+    name: 'setup-progress-demo',
+  }), 'utf8');
+
+  const project = detectProject(root);
+  assert.ok(project);
+  const steps: string[] = [];
+
+  await initializeLocalProject(project, dataDir, {
+    onProgress: (message) => steps.push(message),
+  });
+
+  assert.deepEqual(steps, [
+    'Opening local memory database',
+    'Writing project snapshot',
+    'Scanning project graph scope',
+    'Indexing project graph',
+    'Running optional LLM enrichment',
+    'Writing project graph artifacts',
+    'Saving project metadata',
+  ]);
+});

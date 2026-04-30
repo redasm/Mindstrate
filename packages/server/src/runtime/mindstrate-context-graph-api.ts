@@ -28,6 +28,7 @@ import {
   summarizeProjectGraphWithLlm,
   type ProjectGraphEnrichmentInput,
   type ProjectGraphEnrichmentResult,
+  type ProjectGraphIndexOptions,
   type ProjectGraphIndexResult,
   type ProjectGraphScanScope,
   type ProjectGraphChangeDetectionResult,
@@ -178,8 +179,8 @@ export class MindstrateContextGraphApi {
     }));
   }
 
-  indexProjectGraph(project: DetectedProject): ProjectGraphIndexResult {
-    return indexProjectGraph(this.services.contextGraphStore, project);
+  indexProjectGraph(project: DetectedProject, options?: ProjectGraphIndexOptions): ProjectGraphIndexResult {
+    return indexProjectGraph(this.services.contextGraphStore, project, options);
   }
 
   detectProjectGraphChanges(
@@ -213,11 +214,20 @@ export class MindstrateContextGraphApi {
     });
   }
 
-  estimateProjectGraphScanScope(project: DetectedProject): ProjectGraphScanScope {
+  estimateProjectGraphScanScope(
+    project: DetectedProject,
+    options?: Pick<ProjectGraphIndexOptions, 'onScanProgress'>,
+  ): ProjectGraphScanScope {
     return estimateProjectGraphScanScope(project.root, {
+      sourceRoots: project.graphHints?.sourceRoots,
       ignore: project.graphHints?.ignore,
       generatedRoots: project.graphHints?.generatedRoots,
+      metadataOnlyRoots: project.graphHints?.layers
+        ?.filter((layer) => layer.parserAdapters.includes('unreal-asset-metadata'))
+        .flatMap((layer) => layer.roots),
+      manifests: project.graphHints?.manifests,
       llmProviderConfigured: this.services.config.openaiApiKey.length > 0,
+      onProgress: options?.onScanProgress,
     });
   }
 

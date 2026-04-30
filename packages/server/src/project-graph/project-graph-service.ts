@@ -16,7 +16,7 @@ import {
   createProjectGraphNodeId,
 } from './node-id.js';
 import type { ParserCapture } from './parser-adapter.js';
-import { scanProjectFiles } from './scanner.js';
+import { scanProjectFiles, type ProjectGraphScanProgress } from './scanner.js';
 import { createTreeSitterSourceParser } from './tree-sitter-source-parser.js';
 import {
   writeProjectGraphExtraction,
@@ -30,11 +30,16 @@ export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
   edgesExtracted: number;
 }
 
+export interface ProjectGraphIndexOptions {
+  onScanProgress?: (event: ProjectGraphScanProgress) => void;
+}
+
 export const indexProjectGraph = (
   store: ContextGraphStore,
   project: DetectedProject,
+  options: ProjectGraphIndexOptions = {},
 ): ProjectGraphIndexResult => {
-  const extraction = buildProjectGraphExtraction(project);
+  const extraction = buildProjectGraphExtraction(project, options);
   const writeResult = writeProjectGraphExtraction(store, extraction);
   return {
     filesScanned: extraction.filesScanned,
@@ -48,10 +53,19 @@ interface ProjectGraphExtractionWithStats extends ProjectGraphExtractionResult {
   filesScanned: number;
 }
 
-const buildProjectGraphExtraction = (project: DetectedProject): ProjectGraphExtractionWithStats => {
+const buildProjectGraphExtraction = (
+  project: DetectedProject,
+  options: ProjectGraphIndexOptions,
+): ProjectGraphExtractionWithStats => {
   const files = scanProjectFiles(project.root, {
+    sourceRoots: project.graphHints?.sourceRoots,
     ignore: project.graphHints?.ignore,
     generatedRoots: project.graphHints?.generatedRoots,
+    metadataOnlyRoots: project.graphHints?.layers
+      ?.filter((layer) => layer.parserAdapters.includes('unreal-asset-metadata'))
+      .flatMap((layer) => layer.roots),
+    manifests: project.graphHints?.manifests,
+    onProgress: options.onScanProgress,
   });
   const nodes = new Map<string, ProjectGraphNodeDto>();
   const edges = new Map<string, ProjectGraphEdgeDto>();
@@ -63,10 +77,12 @@ const buildProjectGraphExtraction = (project: DetectedProject): ProjectGraphExtr
       addPackageFacts(project, file.path, nodes, edges);
     }
     if (file.language && sourceParser.languages.includes(file.language as never)) {
+      const content = readSourceFile(file.absolutePath);
+      if (content === null) continue;
       const parsed = sourceParser.parse({
         path: file.path,
         language: file.language,
-        content: fs.readFileSync(file.absolutePath, 'utf8'),
+        content,
       });
       addSourceFacts(project, file.path, parsed.captures, nodes, edges);
     }
@@ -78,6 +94,14 @@ const buildProjectGraphExtraction = (project: DetectedProject): ProjectGraphExtr
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
+};
+
+const readSourceFile = (absolutePath: string): string | null => {
+  try {
+    return fs.readFileSync(absolutePath, 'utf8');
+  } catch {
+    return null;
+  }
 };
 
 const addPackageFacts = (

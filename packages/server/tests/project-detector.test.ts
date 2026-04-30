@@ -164,7 +164,13 @@ describe('detectProject', () => {
     expect(p.snapshotHints?.invariants).toContain('Do not edit Binaries, Intermediate, Saved, or DerivedDataCache unless explicitly requested.');
     expect(p.graphHints?.parserAdapters).toEqual(expect.arrayContaining(['unreal-manifest', 'unreal-build', 'unreal-config']));
     expect(p.graphHints?.queryPacks).toEqual(expect.arrayContaining(['cpp-light', 'csharp-build-light']));
-    expect(p.graphHints?.generatedRoots).toEqual(expect.arrayContaining(['Binaries', 'Intermediate', 'Saved', 'DerivedDataCache']));
+    expect(p.graphHints?.generatedRoots).toEqual(expect.arrayContaining([
+      'Binaries',
+      'Intermediate',
+      'Saved',
+      'DerivedDataCache',
+      'TypeScript/Typing/ue/generated',
+    ]));
     expect(p.graphHints?.layers?.map((layer) => layer.id)).toEqual(expect.arrayContaining(['gameplay-cpp', 'content-assets', 'config', 'generated']));
   });
 

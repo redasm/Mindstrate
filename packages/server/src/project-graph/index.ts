@@ -20,11 +20,14 @@ export {
   type QueryPack,
 } from './query-pack.js';
 export {
+  buildProjectGraphScanPlan,
   diffProjectGraphCache,
   estimateProjectGraphScanScope,
   scanProjectFiles,
+  type ProjectGraphScanPlan,
   type ProjectGraphScanScope,
   type ProjectGraphScanScopeOptions,
+  type ProjectGraphScanProgress,
   type ProjectFileInventoryEntry,
   type ProjectGraphCacheDiff,
   type ScanProjectFilesOptions,
@@ -38,6 +41,7 @@ export {
 } from './graph-writer.js';
 export {
   indexProjectGraph,
+  type ProjectGraphIndexOptions,
   type ProjectGraphIndexResult,
 } from './project-graph-service.js';
 export {

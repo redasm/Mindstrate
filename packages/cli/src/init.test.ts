@@ -72,6 +72,7 @@ test('buildProjectGraphAnalysisLines explains scan scope and LLM enrichment', ()
     languages: { typescript: 8, markdown: 4 },
     ignoredDirectories: ['node_modules', 'dist'],
     generatedRoots: ['dist'],
+    metadataOnlyRoots: ['Content'],
     llmEnrichment: 'skipped',
   });
 
@@ -82,6 +83,7 @@ test('buildProjectGraphAnalysisLines explains scan scope and LLM enrichment', ()
     '  Estimated size: 1.5 KB',
     '  Languages: markdown 4, typescript 8',
     '  Ignored: dist, node_modules',
+    '  Metadata-only roots: Content',
     '  LLM enrichment: skipped (deterministic parser/config extraction only)',
     '  Privacy: full source files are not sent to LLM providers by default',
   ]);
