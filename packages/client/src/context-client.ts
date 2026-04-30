@@ -190,6 +190,7 @@ export class ContextClient extends TeamDomainClient {
 
   async createProjectGraphOverlay(input: {
     project: string;
+    target?: string;
     targetNodeId?: string;
     targetEdgeId?: string;
     kind: ProjectGraphOverlayKind;

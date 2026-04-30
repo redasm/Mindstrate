@@ -360,6 +360,7 @@ describe('project graph report export', () => {
       });
       memory.context.createProjectGraphOverlay({
         project: 'overlay-report-demo',
+        target: 'path:src',
         kind: ProjectGraphOverlayKind.RISK,
         content: 'Generated binding folders must stay metadata-only in reports.',
         source: ProjectGraphOverlaySource.OBSIDIAN,
@@ -398,6 +399,8 @@ describe('project graph report export', () => {
       expect(report).toContain('Module pages should describe ownership before file lists.');
       expect(modulePage).toContain('## User Corrections');
       expect(modulePage).toContain('App.tsx owns the runtime shell, not only a React component.');
+      expect(modulePage).toContain('Target: path:src');
+      expect(modulePage).toContain('Generated binding folders must stay metadata-only in reports.');
     } finally {
       removeTempDir(vaultRoot);
     }

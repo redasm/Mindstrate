@@ -154,6 +154,7 @@ export async function handleProjectGraphAddOverlay(
 ): Promise<McpToolResponse> {
   const overlay = await api.createProjectGraphOverlay({
     project: input.project,
+    target: input.target,
     targetNodeId: input.targetNodeId,
     targetEdgeId: input.targetEdgeId,
     kind: input.kind as ProjectGraphOverlayKind,

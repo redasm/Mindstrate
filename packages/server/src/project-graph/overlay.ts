@@ -16,6 +16,7 @@ const OVERLAY_BLOCK_END = '<!-- mindstrate:project-graph:overlay:end -->';
 
 export interface CreateProjectGraphOverlayInput {
   project: string;
+  target?: string;
   targetNodeId?: string;
   targetEdgeId?: string;
   kind: ProjectGraphOverlayKind;
@@ -58,6 +59,7 @@ export const createProjectGraphOverlay = (
     qualityScore: 80,
     metadata: {
       projectGraphOverlay: true,
+      target: input.target,
       targetNodeId: input.targetNodeId,
       targetEdgeId: input.targetEdgeId,
       kind: input.kind,
@@ -105,6 +107,7 @@ export const renderProjectGraphOverlayBlock = (overlays: ProjectGraphOverlay[]):
 const nodeToOverlay = (node: ContextNode): ProjectGraphOverlay => ({
   id: node.id,
   project: node.project ?? '',
+  target: stringOrUndefined(node.metadata?.['target']),
   targetNodeId: stringOrUndefined(node.metadata?.['targetNodeId']),
   targetEdgeId: stringOrUndefined(node.metadata?.['targetEdgeId']),
   kind: (node.metadata?.['kind'] as ProjectGraphOverlayKind) ?? ProjectGraphOverlayKind.NOTE,
@@ -172,6 +175,7 @@ const targetId = (target: string | undefined, prefix: 'node' | 'edge'): string |
 };
 
 const overlayTarget = (overlay: ProjectGraphOverlay): string | undefined => {
+  if (overlay.target) return overlay.target;
   if (overlay.targetNodeId) return `node:${overlay.targetNodeId}`;
   if (overlay.targetEdgeId) return `edge:${overlay.targetEdgeId}`;
   return undefined;

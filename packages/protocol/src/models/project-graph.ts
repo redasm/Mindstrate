@@ -89,6 +89,7 @@ export enum ProjectGraphOverlaySource {
 export interface ProjectGraphOverlay {
   id: string;
   project: string;
+  target?: string;
   targetNodeId?: string;
   targetEdgeId?: string;
   kind: ProjectGraphOverlayKind;

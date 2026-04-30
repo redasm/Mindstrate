@@ -216,7 +216,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.post('/api/context/project-graph/overlays', withInitializedMemory(memory, async (req, res) => {
-    const { project, targetNodeId, targetEdgeId, kind, content, author, source } = req.body;
+    const { project, target, targetNodeId, targetEdgeId, kind, content, author, source } = req.body;
     if (!project || !kind || !content || !source) {
       res.status(400).json({ error: 'project, kind, content, and source are required' });
       return;
@@ -224,6 +224,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
 
     res.status(201).json(memory.context.createProjectGraphOverlay({
       project,
+      target,
       targetNodeId,
       targetEdgeId,
       kind,

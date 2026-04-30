@@ -50,9 +50,11 @@ describe('project graph overlays', () => {
       content: 'This is the app shell.',
       source: ProjectGraphOverlaySource.OBSIDIAN,
       author: 'alice',
+      target: 'node:pg:demo:file:src/App.tsx',
     });
 
     expect(store.getNodeById(extracted.id)?.metadata?.['provenance']).toBe('EXTRACTED');
+    expect(overlay.target).toBe('node:pg:demo:file:src/App.tsx');
     expect(overlay.targetNodeId).toBe(extracted.id);
     expect(overlay.kind).toBe(ProjectGraphOverlayKind.CONFIRMATION);
     expect(listProjectGraphOverlays(store, { project: 'demo', targetNodeId: extracted.id })).toEqual([overlay]);
@@ -123,13 +125,13 @@ describe('project graph overlays', () => {
       {
         id: 'overlay-1',
         project: 'demo',
-        targetNodeId: 'pg:demo:file:src/App.tsx',
+        target: 'path:TypeScript/Typing',
         kind: ProjectGraphOverlayKind.CONFIRMATION,
         content: 'Human confirmed this entry point.',
         source: ProjectGraphOverlaySource.OBSIDIAN,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
-    ])).toContain('target: node:pg:demo:file:src/App.tsx');
+    ])).toContain('target: path:TypeScript/Typing');
   });
 });

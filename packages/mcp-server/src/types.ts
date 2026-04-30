@@ -88,6 +88,7 @@ export interface ContextEdgeQueryOptions {
 
 export interface ProjectGraphOverlayInput {
   project: string;
+  target?: string;
   targetNodeId?: string;
   targetEdgeId?: string;
   kind: ProjectGraphOverlayKind;

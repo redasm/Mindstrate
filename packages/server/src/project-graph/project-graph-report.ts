@@ -440,11 +440,13 @@ const importOverlayBlock = (
     const alreadyStored = existing.some((entry) =>
       entry.kind === overlay.kind
       && entry.content === overlay.content
+      && entry.target === overlay.target
       && entry.targetNodeId === overlay.targetNodeId
       && entry.targetEdgeId === overlay.targetEdgeId);
     if (alreadyStored) continue;
     createProjectGraphOverlay(store, {
       project,
+      target: overlay.target,
       targetNodeId: overlay.targetNodeId,
       targetEdgeId: overlay.targetEdgeId,
       kind: overlay.kind,
@@ -522,6 +524,7 @@ const overlayLines = (
     '',
     ...matching.flatMap((overlay) => [
       `- ${overlay.content}`,
+      ...(overlay.target ? [`  - Target: ${overlay.target}`] : []),
       ...(overlay.targetNodeId ? [`  - Target node: ${overlay.targetNodeId}`] : []),
       ...(overlay.targetEdgeId ? [`  - Target edge: ${overlay.targetEdgeId}`] : []),
     ]),
@@ -531,8 +534,23 @@ const overlayLines = (
 
 const moduleOverlays = (module: ProjectGraphModule, overlays: ProjectGraphOverlay[]): ProjectGraphOverlay[] => {
   const nodeIds = new Set(module.nodes);
-  return overlays.filter((overlay) => !overlay.targetNodeId || nodeIds.has(overlay.targetNodeId));
+  return overlays.filter((overlay) => {
+    if (overlay.targetNodeId) return nodeIds.has(overlay.targetNodeId);
+    if (!overlay.target) return true;
+    if (overlay.target.startsWith('node:')) return nodeIds.has(overlay.target.slice('node:'.length));
+    if (overlay.target.startsWith('module:')) return overlay.target.slice('module:'.length) === module.label;
+    if (overlay.target.startsWith('path:')) {
+      const targetPath = normalizeProjectPath(overlay.target.slice('path:'.length));
+      return module.files.some((file) => {
+        const moduleFile = normalizeProjectPath(file);
+        return moduleFile === targetPath || moduleFile.startsWith(`${targetPath}/`);
+      });
+    }
+    return false;
+  });
 };
+
+const normalizeProjectPath = (value: string): string => value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
 
 const preserveBlock = (text: string, name: string): string => {
   const start = `<!-- mindstrate:project-graph:${name}:start -->`;
