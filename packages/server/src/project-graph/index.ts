@@ -57,6 +57,10 @@ export {
   type ProjectGraphFileExtractionCacheEntry,
 } from './extraction-cache.js';
 export {
+  collectProjectGraphViews,
+  type ProjectGraphViews,
+} from './views.js';
+export {
   collectProjectGraphStats,
   writeProjectGraphTextFileAtomically,
   writeProjectGraphArtifacts,
