@@ -469,6 +469,7 @@ const evidence = (filePath: string, capture?: ParserCapture): EvidenceRef[] => [
   endLine: capture?.endLine,
   extractorId: capture ? 'tree-sitter-source' : 'project-graph-scanner',
   captureName: capture?.name,
+  locationUnavailable: capture ? false : true,
 }];
 
 const fileNodeId = (project: DetectedProject, filePath: string): string =>

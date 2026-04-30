@@ -98,6 +98,7 @@ export interface EvidenceRef {
   endLine?: number;
   extractorId: string;
   captureName?: string;
+  locationUnavailable?: boolean;
 }
 
 export interface ProjectGraphNodeDto {

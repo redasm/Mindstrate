@@ -65,7 +65,7 @@ describe('project graph report export', () => {
         project: string;
         confidence: number;
         salience: number;
-        evidence: Array<{ path: string; extractorId: string }>;
+        evidence: Array<{ path: string; extractorId: string; locationUnavailable?: boolean; startLine?: number }>;
       }>;
       edges: Array<{
         id: string;
@@ -74,7 +74,7 @@ describe('project graph report export', () => {
         kind: string;
         relationType: string;
         confidence: number;
-        evidence: Array<{ path: string; extractorId: string }>;
+        evidence: Array<{ path: string; extractorId: string; locationUnavailable?: boolean }>;
       }>;
       stats: { nodes: number; edges: number };
     };
@@ -102,8 +102,13 @@ describe('project graph report export', () => {
       confidence: expect.any(Number),
       salience: expect.any(Number),
       evidence: expect.arrayContaining([
-        expect.objectContaining({ path: 'src/App.tsx' }),
+        expect.objectContaining({ path: 'src/App.tsx', locationUnavailable: true }),
       ]),
+    }));
+    expect(graph.nodes.find((node) => node.label === 'App')?.evidence[0]).toEqual(expect.objectContaining({
+      path: 'src/App.tsx',
+      startLine: 1,
+      locationUnavailable: false,
     }));
     expect(graph.edges[0]).toEqual(expect.objectContaining({
       sourceId: expect.any(String),
@@ -144,7 +149,7 @@ describe('project graph report export', () => {
           kind: ProjectGraphNodeKind.CONCEPT,
           provenance: ProjectGraphProvenance.INFERRED,
           summary: 'App.tsx composes the user-facing shell.',
-          evidence: [{ path: 'src/App.tsx', extractorId: 'llm-enrichment' }],
+          evidence: [{ path: 'src/App.tsx', startLine: 1, endLine: 3, extractorId: 'llm-enrichment' }],
         },
       });
       memory.context.createContextNode({
@@ -173,6 +178,7 @@ describe('project graph report export', () => {
       expect(report).toContain('## Inferred Summaries');
       expect(report).toContain('Application shell');
       expect(report).toContain('App.tsx composes the user-facing shell.');
+      expect(report).toContain('Evidence: src/App.tsx:1-3');
       expect(report).toContain('## Open Questions');
       expect(report).toContain('Routing ownership unclear');
       expect(report).toContain('Confirm whether App.tsx or a nested route owns routing decisions.');

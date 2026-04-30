@@ -329,9 +329,20 @@ const evidencePathsForNode = (node: ContextNode): string[] => {
   const evidence = node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.evidence];
   return Array.isArray(evidence)
     ? evidence
-      .map((entry) => typeof entry === 'object' && entry && 'path' in entry ? String(entry.path) : '')
+      .map(formatEvidenceLocation)
       .filter(Boolean)
     : [];
+};
+
+const formatEvidenceLocation = (entry: unknown): string => {
+  if (!entry || typeof entry !== 'object' || !('path' in entry)) return '';
+  const record = entry as Record<string, unknown>;
+  const evidencePath = String(record.path);
+  if (typeof record.startLine !== 'number') return evidencePath;
+  if (typeof record.endLine === 'number' && record.endLine !== record.startLine) {
+    return `${evidencePath}:${record.startLine}-${record.endLine}`;
+  }
+  return `${evidencePath}:${record.startLine}`;
 };
 
 const toArtifactNode = (node: ContextNode): ProjectGraphArtifactNode => {
@@ -378,6 +389,9 @@ const normalizeEvidence = (value: unknown): EvidenceRef[] => {
       endLine: typeof record.endLine === 'number' ? record.endLine : undefined,
       extractorId: typeof record.extractorId === 'string' ? record.extractorId : 'unknown',
       captureName: typeof record.captureName === 'string' ? record.captureName : undefined,
+      locationUnavailable: typeof record.locationUnavailable === 'boolean'
+        ? record.locationUnavailable
+        : typeof record.startLine !== 'number',
     });
   }
   return evidence;
