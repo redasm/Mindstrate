@@ -13,6 +13,7 @@ import {
 import {
   estimateProjectGraphBlastRadius,
   findProjectGraphPath,
+  queryProjectGraphTask,
 } from '../src/project-graph/analysis.js';
 
 describe('project graph analysis queries', () => {
@@ -56,6 +57,27 @@ describe('project graph analysis queries', () => {
     expect(result.root?.title).toBe('src/shared.ts');
     expect(result.affectedNodes.map((entry) => entry.title).sort()).toEqual(['src/Admin.tsx', 'src/App.tsx']);
     expect(result.edges.map((entry) => entry.id).sort()).toEqual(['e1', 'e2']);
+  });
+
+  it('answers task-oriented graph queries with bounded evidence', () => {
+    const nodes = [
+      node('pg:demo:file:src/App.tsx', 'src/App.tsx', ProjectGraphNodeKind.FILE),
+      node('pg:demo:function:App', 'App', ProjectGraphNodeKind.FUNCTION),
+      node('pg:demo:component:BP_Player', '/Game/Characters/BP_Player', ProjectGraphNodeKind.COMPONENT),
+      node('pg:demo:dependency:NativeExport', 'NativeExport', ProjectGraphNodeKind.DEPENDENCY),
+    ];
+    const edges = [
+      edge('e1', 'pg:demo:file:src/App.tsx', 'pg:demo:function:App', ProjectGraphEdgeKind.DEFINES),
+      edge('e2', 'pg:demo:function:App', 'pg:demo:dependency:NativeExport', ProjectGraphEdgeKind.BINDS_TO),
+      edge('e3', 'pg:demo:component:BP_Player', 'pg:demo:function:App', ProjectGraphEdgeKind.REFERENCES_ASSET),
+    ];
+
+    expect(queryProjectGraphTask({ nodes, edges, task: 'entry-points', limit: 2 }).items.map((item) => item.label)).toContain('src/App.tsx');
+    expect(queryProjectGraphTask({ nodes, edges, task: 'binding', query: 'NativeExport' }).items[0]).toMatchObject({
+      label: 'NativeExport',
+      evidence: expect.arrayContaining(['NativeExport']),
+    });
+    expect(queryProjectGraphTask({ nodes, edges, task: 'asset-references', query: 'BP_Player' }).items[0].label).toBe('/Game/Characters/BP_Player');
   });
 });
 

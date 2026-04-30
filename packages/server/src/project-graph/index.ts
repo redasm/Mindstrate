@@ -91,10 +91,15 @@ export {
 export {
   estimateProjectGraphBlastRadius,
   findProjectGraphPath,
+  queryProjectGraphTask,
   type ProjectGraphBlastRadiusInput,
   type ProjectGraphBlastRadiusResult,
   type ProjectGraphPathInput,
   type ProjectGraphPathResult,
+  type ProjectGraphTaskQuery,
+  type ProjectGraphTaskQueryInput,
+  type ProjectGraphTaskQueryItem,
+  type ProjectGraphTaskQueryResult,
 } from './analysis.js';
 export {
   createProjectGraphOverlay,

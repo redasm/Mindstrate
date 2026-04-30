@@ -1,4 +1,12 @@
-import { isProjectGraphEdge, isProjectGraphNode, type ContextEdge, type ContextNode } from '@mindstrate/protocol/models';
+import {
+  PROJECT_GRAPH_METADATA_KEYS,
+  ProjectGraphEdgeKind,
+  ProjectGraphNodeKind,
+  isProjectGraphEdge,
+  isProjectGraphNode,
+  type ContextEdge,
+  type ContextNode,
+} from '@mindstrate/protocol/models';
 
 export interface ProjectGraphAnalysisInput {
   nodes: ContextNode[];
@@ -27,6 +35,36 @@ export interface ProjectGraphBlastRadiusResult {
   root: ContextNode | null;
   affectedNodes: ContextNode[];
   edges: ContextEdge[];
+}
+
+export type ProjectGraphTaskQuery =
+  | 'entry-points'
+  | 'module'
+  | 'before-edit'
+  | 'binding'
+  | 'asset-references'
+  | 'flow'
+  | 'impact'
+  | 'explain';
+
+export interface ProjectGraphTaskQueryInput extends ProjectGraphAnalysisInput {
+  task: ProjectGraphTaskQuery;
+  query?: string;
+  limit?: number;
+}
+
+export interface ProjectGraphTaskQueryItem {
+  id: string;
+  label: string;
+  kind: string;
+  evidence: string[];
+}
+
+export interface ProjectGraphTaskQueryResult {
+  task: ProjectGraphTaskQuery;
+  query?: string;
+  items: ProjectGraphTaskQueryItem[];
+  suggestedNextQueries: string[];
 }
 
 export const findProjectGraphPath = (input: ProjectGraphPathInput): ProjectGraphPathResult => {
@@ -109,6 +147,24 @@ export const estimateProjectGraphBlastRadius = (
   };
 };
 
+export const queryProjectGraphTask = (
+  input: ProjectGraphTaskQueryInput,
+): ProjectGraphTaskQueryResult => {
+  const nodes = projectGraphNodes(input.nodes);
+  const edges = projectGraphEdges(input.edges);
+  const limit = Math.max(input.limit ?? 10, 1);
+  const query = input.query?.toLowerCase();
+  const matchingNodes = nodes.filter((node) => !query || node.title.toLowerCase().includes(query) || node.id.toLowerCase().includes(query));
+  const selected = selectTaskNodes(input.task, matchingNodes, edges).slice(0, limit);
+
+  return {
+    task: input.task,
+    query: input.query,
+    items: selected.map(toTaskItem),
+    suggestedNextQueries: selected.slice(0, 3).map((node) => `impact ${node.title}`),
+  };
+};
+
 const projectGraphNodes = (nodes: ContextNode[]): ContextNode[] =>
   nodes.filter(isProjectGraphNode);
 
@@ -120,3 +176,37 @@ const findNode = (nodes: ContextNode[], id: string): ContextNode | undefined =>
 
 const adjacentEdges = (edges: ContextEdge[], nodeId: string): ContextEdge[] =>
   edges.filter((edge) => edge.sourceId === nodeId || edge.targetId === nodeId);
+
+const selectTaskNodes = (
+  task: ProjectGraphTaskQuery,
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+): ContextNode[] => {
+  if (task === 'entry-points') return nodes.filter((node) => kindOf(node) === ProjectGraphNodeKind.FILE);
+  if (task === 'asset-references') return nodes.filter((node) => kindOf(node) === ProjectGraphNodeKind.COMPONENT);
+  if (task === 'binding') {
+    const bindingNodeIds = new Set(edges
+      .filter((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.BINDS_TO)
+      .flatMap((edge) => [edge.sourceId, edge.targetId]));
+    return nodes.filter((node) => bindingNodeIds.has(node.id));
+  }
+  return nodes;
+};
+
+const toTaskItem = (node: ContextNode): ProjectGraphTaskQueryItem => ({
+  id: node.id,
+  label: node.title,
+  kind: kindOf(node),
+  evidence: evidenceForNode(node),
+});
+
+const kindOf = (node: ContextNode): string =>
+  String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? 'unknown');
+
+const evidenceForNode = (node: ContextNode): string[] => {
+  const evidence = node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.evidence];
+  if (!Array.isArray(evidence)) return node.sourceRef ? [node.sourceRef] : [node.title];
+  return evidence
+    .map((entry) => entry && typeof entry === 'object' && 'path' in entry ? String((entry as Record<string, unknown>).path) : '')
+    .filter(Boolean);
+};
