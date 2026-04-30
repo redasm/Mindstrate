@@ -90,6 +90,36 @@ describe('SyncManager (integration)', () => {
     const files = fs.readdirSync(path.join(vaultDir, 'website', 'architecture'));
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(/^project-snapshot-website--/);
+    expect(files[0]).toMatch(/--[a-f0-9]{12}\.md$/);
+    expect(files[0]).not.toContain('--pg');
+    expect(fs.statSync(path.join(vaultDir, 'website', 'architecture', files[0])).size).toBeGreaterThan(0);
+  });
+
+  it('uses safe filenames for project graph ids and removes legacy empty --pg files', async () => {
+    await memory.snapshots.upsertProjectSnapshot({
+      name: 'client',
+      root: path.join(dataDir, 'client'),
+      dependencies: [],
+      truncatedDeps: 0,
+      entryPoints: [],
+      scripts: {},
+      topDirs: ['Source'],
+      detectedAt: new Date().toISOString(),
+    });
+
+    const architectureDir = path.join(vaultDir, 'client', 'architecture');
+    fs.mkdirSync(architectureDir, { recursive: true });
+    fs.writeFileSync(path.join(architectureDir, 'project-snapshot-client--pg-client.md'), '', 'utf8');
+
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    const out = await sync.exportAll();
+    expect(out.errors).toHaveLength(0);
+
+    const files = fs.readdirSync(architectureDir);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^project-snapshot-client--[a-f0-9]{12}\.md$/);
+    expect(files[0]).not.toContain('--pg');
+    expect(fs.statSync(path.join(architectureDir, files[0])).size).toBeGreaterThan(0);
   });
 
   it('exports graph updates and deletes during full sync', async () => {

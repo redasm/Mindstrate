@@ -12,8 +12,11 @@ export {
   computeBodyHash,
   extractBody,
   getVaultSyncMode,
+  normalizeObsidianSyncLocale,
   type ParsedMarkdown,
   type MarkdownFrontmatter,
+  type ObsidianSyncLocale,
+  type SerializeGraphKnowledgeOptions,
   type VaultSyncMode,
 } from './markdown.js';
 

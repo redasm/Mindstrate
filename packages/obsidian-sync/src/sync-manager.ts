@@ -28,6 +28,8 @@ export interface SyncManagerOptions {
   debounceMs?: number;
   /** Suppress console logs */
   silent?: boolean;
+  /** Markdown language for generated labels. Defaults to MINDSTRATE_LOCALE or English. */
+  locale?: string;
   /** Callback invoked after each watcher-driven sync */
   onWatchEvent?: (event: SyncEvent) => void;
 }
@@ -37,15 +39,22 @@ export class SyncManager {
   readonly exporter: VaultExporter;
   readonly watcher: VaultWatcher;
   private memory: Mindstrate;
+  private locale?: string;
 
   constructor(memory: Mindstrate, opts: SyncManagerOptions) {
     this.memory = memory;
+    this.locale = opts.locale ?? process.env.MINDSTRATE_LOCALE;
     this.layout = new VaultLayout({ vaultRoot: opts.vaultRoot });
-    this.exporter = new VaultExporter({ layout: this.layout, silent: opts.silent });
+    this.exporter = new VaultExporter({
+      layout: this.layout,
+      silent: opts.silent,
+      locale: this.locale,
+    });
     this.watcher = new VaultWatcher(memory, {
       layout: this.layout,
       debounceMs: opts.debounceMs,
       silent: opts.silent,
+      locale: this.locale,
       onSync: opts.onWatchEvent,
     });
   }
@@ -61,7 +70,7 @@ export class SyncManager {
   exportGraphView(k: GraphKnowledgeView): 'written' | 'skipped' | 'moved' {
     const res = this.exporter.exportGraphView(k);
     const rel = this.layout.relativePathForGraphView(k);
-    const text = serializeGraphKnowledge(k);
+    const text = serializeGraphKnowledge(k, { locale: this.locale });
     this.watcher.markWritten(rel, computeBodyHash(text));
     return res;
   }

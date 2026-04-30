@@ -13,6 +13,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   type GraphKnowledgeView,
   type Mindstrate,
@@ -23,7 +24,11 @@ import {
   computeBodyHash,
 } from './markdown.js';
 import { errorMessage, readTextIfExists } from './file-io.js';
-import { VaultLayout, type VaultIndex } from './vault-layout.js';
+import {
+  isLegacyUnsafeIdSuffixFilename,
+  VaultLayout,
+  type VaultIndex,
+} from './vault-layout.js';
 
 export interface ExportResult {
   written: number;
@@ -37,15 +42,19 @@ export interface VaultExporterOptions {
   layout: VaultLayout;
   /** Quiet logs */
   silent?: boolean;
+  /** Markdown language for generated labels. Defaults to MINDSTRATE_LOCALE or English. */
+  locale?: string;
 }
 
 export class VaultExporter {
   private layout: VaultLayout;
   private silent: boolean;
+  private locale?: string;
 
   constructor(opts: VaultExporterOptions) {
     this.layout = opts.layout;
     this.silent = opts.silent ?? false;
+    this.locale = opts.locale ?? process.env.MINDSTRATE_LOCALE;
   }
 
   /**
@@ -159,10 +168,7 @@ export class VaultExporter {
       if (fs.existsSync(absOld)) {
         const text = readTextIfExists(absOld);
         if (text) preservedUserNotes = parseMarkdown(text)?.userNotes;
-        try {
-          fs.unlinkSync(absOld);
-          moved = 'moved';
-        } catch { /* ignore */ }
+        moved = 'moved';
       }
     }
 
@@ -178,14 +184,57 @@ export class VaultExporter {
       }
     }
 
-    const out = serializeGraphKnowledge(k, { preserveUserNotes: preservedUserNotes });
+    const out = serializeGraphKnowledge(k, {
+      preserveUserNotes: preservedUserNotes,
+      locale: this.locale,
+    });
     const newBodyHash = computeBodyHash(out);
     if (existingBodyHash && existingBodyHash === newBodyHash && !moved) {
       return 'skipped';
     }
 
     this.layout.ensureDirFor(rel);
-    fs.writeFileSync(absNew, out, 'utf8');
+    writeFileAtomically(absNew, out);
+    this.removeMovedSource(oldRel, rel);
+    this.removeLegacyEmptyProjectGraphFile(rel);
     return moved ?? 'written';
   }
+
+  private removeMovedSource(oldRel: string | undefined, rel: string): void {
+    if (!oldRel || oldRel === rel) return;
+    const absOld = this.layout.absolutePath(oldRel);
+    if (fs.existsSync(absOld)) {
+      fs.unlinkSync(absOld);
+    }
+  }
+
+  private removeLegacyEmptyProjectGraphFile(rel: string): void {
+    const dir = path.dirname(this.layout.absolutePath(rel));
+    const filename = path.basename(rel);
+    const legacyPrefix = filename.replace(/--[a-f0-9]{12}\.md$/i, '--pg');
+    if (legacyPrefix === filename || !fs.existsSync(dir)) return;
+
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+      if (!entry.name.startsWith(legacyPrefix)) continue;
+      if (!isLegacyUnsafeIdSuffixFilename(entry.name)) continue;
+      const abs = path.join(dir, entry.name);
+      try {
+        if (fs.statSync(abs).size === 0) {
+          fs.unlinkSync(abs);
+        }
+      } catch {
+        /* ignore stale files */
+      }
+    }
+  }
+}
+
+function writeFileAtomically(filePath: string, text: string): void {
+  if (text.length === 0) {
+    throw new Error(`Refusing to write empty Obsidian export: ${filePath}`);
+  }
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmpPath, text, 'utf8');
+  fs.renameSync(tmpPath, filePath);
 }

@@ -47,6 +47,15 @@ describe('markdown serializer', () => {
     expect(parsed!.solution).toContain('useMemo');
   });
 
+  it('serializes localized generated headings', () => {
+    const md = serializeGraphKnowledge(makeView(), { locale: 'zh-CN' });
+    expect(md).toContain('## 解决方案');
+
+    const parsed = parseMarkdown(md);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.solution).toContain('useMemo');
+  });
+
   it('preserves user notes below the end marker', () => {
     const md = serializeGraphKnowledge(makeView(), {
       preserveUserNotes: 'My personal note: try this in v19 too.',

@@ -39,6 +39,8 @@ export interface VaultWatcherOptions {
   debounceMs?: number;
   /** Suppress logs */
   silent?: boolean;
+  /** Markdown language for generated labels. Defaults to MINDSTRATE_LOCALE or English. */
+  locale?: string;
   /** Callback invoked after each successful sync */
   onSync?: (event: SyncEvent) => void;
 }
@@ -56,6 +58,7 @@ export class VaultWatcher {
   private watcher: FSWatcher | null = null;
   private debounceMs: number;
   private silent: boolean;
+  private locale?: string;
   private onSync?: (event: SyncEvent) => void;
 
   /** rel path -> body hash that *we* (or a recent successful sync) last persisted */
@@ -68,6 +71,7 @@ export class VaultWatcher {
     this.layout = opts.layout;
     this.debounceMs = opts.debounceMs ?? 500;
     this.silent = opts.silent ?? false;
+    this.locale = opts.locale ?? process.env.MINDSTRATE_LOCALE;
     this.onSync = opts.onSync;
   }
 
@@ -188,7 +192,7 @@ export class VaultWatcher {
         status: existing.status,
         sourceRef: existing.sourceRef,
         tags: existing.tags,
-      }));
+      }, { locale: this.locale }));
       if (
         parsed.frontmatter.bodyHash
         && parsed.frontmatter.bodyHash !== currentHash

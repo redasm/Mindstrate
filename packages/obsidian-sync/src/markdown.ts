@@ -15,4 +15,9 @@ export {
 } from './markdown-format.js';
 export { parsedToCreate, parsedToUpdate } from './markdown-inputs.js';
 export { parseMarkdown } from './markdown-parser.js';
-export { serializeGraphKnowledge } from './markdown-serializer.js';
+export {
+  normalizeObsidianSyncLocale,
+  serializeGraphKnowledge,
+  type ObsidianSyncLocale,
+  type SerializeGraphKnowledgeOptions,
+} from './markdown-serializer.js';

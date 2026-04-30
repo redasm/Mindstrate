@@ -10,10 +10,24 @@ import {
   simpleHash,
 } from './markdown-format.js';
 
+export type ObsidianSyncLocale = 'en' | 'zh-CN';
+
+export interface SerializeGraphKnowledgeOptions {
+  syncedAt?: string;
+  preserveUserNotes?: string;
+  locale?: string;
+}
+
+const STRINGS: Record<ObsidianSyncLocale, { solutionHeading: string }> = {
+  en: { solutionHeading: 'Solution' },
+  'zh-CN': { solutionHeading: '解决方案' },
+};
+
 export function serializeGraphKnowledge(
   knowledge: GraphKnowledgeView,
-  options: { syncedAt?: string; preserveUserNotes?: string } = {},
+  options: SerializeGraphKnowledgeOptions = {},
 ): string {
+  const locale = normalizeObsidianSyncLocale(options.locale);
   const type = graphDomainToKnowledgeType(knowledge.domainType);
   const fm: MarkdownFrontmatter = {
     id: knowledge.id,
@@ -38,7 +52,7 @@ export function serializeGraphKnowledge(
   const content = (knowledge.content ?? '').trim();
   const bodyContent = content
     ? content
-    : ['## Solution', '', knowledge.summary.trim()].join('\n');
+    : [`## ${STRINGS[locale].solutionHeading}`, '', knowledge.summary.trim()].join('\n');
   const body = [
     `# ${escapeTitle(knowledge.title)}`,
     '',
@@ -54,4 +68,13 @@ export function serializeGraphKnowledge(
     if (!out.endsWith('\n')) out += '\n';
   }
   return out;
+}
+
+export function normalizeObsidianSyncLocale(locale: string | undefined): ObsidianSyncLocale {
+  if (!locale) return 'en';
+  const normalized = locale.toLowerCase();
+  if (normalized === 'zh' || normalized === 'zh-cn' || normalized === 'zh_hans' || normalized === 'zh-hans') {
+    return 'zh-CN';
+  }
+  return 'en';
 }

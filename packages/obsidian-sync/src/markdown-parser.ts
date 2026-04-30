@@ -24,7 +24,9 @@ export function parseMarkdown(text: string): ParsedMarkdown | null {
   const title = (titleMatch?.[1] ?? '').trim();
   const sections = splitSections(body);
   const problem = sections.get('problem');
-  const solution = sections.get('solution') ?? plainBodyWithoutTitle(body);
+  const solution = sections.get('solution')
+    ?? sections.get('解决方案')
+    ?? plainBodyWithoutTitle(body);
   const codeSnippets = parseCodeSnippets(sections.get('code'));
   const actionable = parseActionable(sections);
 

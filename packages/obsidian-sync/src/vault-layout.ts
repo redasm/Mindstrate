@@ -20,6 +20,7 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import { type GraphKnowledgeView, KnowledgeType } from '@mindstrate/server';
 
 const TYPE_FOLDERS: Record<KnowledgeType, string> = {
@@ -169,7 +170,7 @@ const SLUG_MAX = 60;
 
 function makeFilename(title: string, id: string): string {
   const slug = slugify(title) || 'untitled';
-  const idSuffix = id.replace(/-/g, '').slice(0, 8);
+  const idSuffix = hashIdSuffix(id);
   return `${slug}--${idSuffix}.md`;
 }
 
@@ -182,7 +183,19 @@ export function extractIdSuffixFromFilename(name: string): string | undefined {
 
 /** Match a real KU id against a id-prefix found in a filename. */
 export function idMatchesSuffix(id: string, suffix: string): boolean {
-  return id.replace(/-/g, '').toLowerCase().startsWith(suffix.toLowerCase());
+  const normalizedSuffix = suffix.toLowerCase();
+  return id.replace(/-/g, '').toLowerCase().startsWith(normalizedSuffix)
+    || hashIdSuffix(id).startsWith(normalizedSuffix);
+}
+
+export function isLegacyUnsafeIdSuffixFilename(name: string): boolean {
+  const base = name.replace(/\.md$/i, '');
+  const m = base.match(/--(.+)$/);
+  return Boolean(m && !/^[a-f0-9]{6,}$/i.test(m[1]));
+}
+
+function hashIdSuffix(id: string): string {
+  return createHash('sha256').update(id).digest('hex').slice(0, 12);
 }
 
 function slugify(s: string): string {
