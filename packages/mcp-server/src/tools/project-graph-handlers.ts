@@ -170,6 +170,7 @@ export async function handleProjectGraphAddOverlay(
         'Project graph overlay added.',
         `ID: ${overlay.id}`,
         `Project: ${overlay.project}`,
+        overlay.target ? `Target: ${overlay.target}` : null,
         overlay.targetNodeId ? `Target node: ${overlay.targetNodeId}` : null,
         overlay.targetEdgeId ? `Target edge: ${overlay.targetEdgeId}` : null,
         `Kind: ${overlay.kind}`,

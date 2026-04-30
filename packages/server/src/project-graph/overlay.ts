@@ -35,6 +35,7 @@ export interface ParsedProjectGraphOverlay {
 
 export interface ListProjectGraphOverlayInput {
   project?: string;
+  target?: string;
   targetNodeId?: string;
   targetEdgeId?: string;
   limit?: number;
@@ -80,6 +81,7 @@ export const listProjectGraphOverlays = (
     limit: input.limit ?? 200,
   })
     .filter((node) => node.metadata?.['projectGraphOverlay'] === true)
+    .filter((node) => !input.target || node.metadata?.['target'] === input.target)
     .filter((node) => !input.targetNodeId || node.metadata?.['targetNodeId'] === input.targetNodeId)
     .filter((node) => !input.targetEdgeId || node.metadata?.['targetEdgeId'] === input.targetEdgeId)
     .map(nodeToOverlay);

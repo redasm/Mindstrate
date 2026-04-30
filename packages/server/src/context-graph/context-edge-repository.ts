@@ -12,6 +12,12 @@ export interface CreateContextEdgeInput {
   evidence?: Record<string, unknown>;
 }
 
+export interface UpdateContextEdgeInput {
+  relationType?: ContextRelationType;
+  strength?: number;
+  evidence?: Record<string, unknown>;
+}
+
 export interface ListContextEdgesOptions {
   sourceId?: string;
   targetId?: string;
@@ -47,6 +53,26 @@ export class ContextEdgeRepository {
   getById(id: string): ContextEdge | null {
     const row = this.db.prepare('SELECT * FROM context_edges WHERE id = ?').get(id) as EdgeRow | undefined;
     return row ? rowToEdge(row) : null;
+  }
+
+  update(id: string, input: UpdateContextEdgeInput): ContextEdge | null {
+    const current = this.getById(id);
+    if (!current) return null;
+    const updatedAt = new Date().toISOString();
+
+    this.db.prepare(`
+      UPDATE context_edges
+      SET relation_type = ?, strength = ?, evidence = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      input.relationType ?? current.relationType,
+      input.strength ?? current.strength,
+      input.evidence ? JSON.stringify(input.evidence) : (current.evidence ? JSON.stringify(current.evidence) : null),
+      updatedAt,
+      id,
+    );
+
+    return this.getById(id);
   }
 
   listOutgoing(sourceId: string, relationType?: ContextRelationType): ContextEdge[] {

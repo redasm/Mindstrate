@@ -99,6 +99,7 @@ export interface ProjectGraphOverlayInput {
 
 export interface ProjectGraphOverlayQueryOptions {
   project?: string;
+  target?: string;
   targetNodeId?: string;
   targetEdgeId?: string;
   limit?: number;

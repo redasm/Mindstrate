@@ -35,12 +35,14 @@ describe('project graph ECS writer', () => {
       nodesCreated: 2,
       nodesUpdated: 0,
       edgesCreated: 1,
+      edgesUpdated: 0,
       edgesSkipped: 0,
     });
     expect(writeProjectGraphExtraction(store, extraction)).toEqual({
       nodesCreated: 0,
       nodesUpdated: 2,
       edgesCreated: 0,
+      edgesUpdated: 0,
       edgesSkipped: 1,
     });
 
@@ -161,6 +163,30 @@ describe('project graph ECS writer', () => {
     const regex = store.getEdgeById('pge:imports:file-app:unreal')!;
     expect(exact.strength).toBe(0.95);
     expect(regex.strength).toBe(0.85);
+  });
+
+  it('updates existing project graph edge confidence and evidence', () => {
+    const extraction = makeExtraction();
+    writeProjectGraphExtraction(store, extraction);
+
+    expect(writeProjectGraphExtraction(store, {
+      ...extraction,
+      edges: [{
+        ...extraction.edges[0],
+        evidence: [{ path: 'src/App.tsx', extractorId: 'script-regex' }],
+      }],
+    })).toMatchObject({
+      edgesCreated: 0,
+      edgesUpdated: 1,
+      edgesSkipped: 0,
+    });
+
+    const edge = store.getEdgeById('pge:defines:file-app:function-app')!;
+    expect(edge.strength).toBe(0.85);
+    expect(edge.evidence?.projectGraph).toBe(true);
+    expect(edge.evidence?.evidence).toEqual([
+      { path: 'src/App.tsx', extractorId: 'script-regex' },
+    ]);
   });
 
   it('archives facts owned by a deleted file', () => {

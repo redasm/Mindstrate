@@ -10,7 +10,7 @@ export interface ProjectGraphFileExtractionCacheEntry {
 }
 
 export interface ProjectGraphFileExtractionCache {
-  version: 1;
+  version: 2;
   files: Record<string, ProjectGraphFileExtractionCacheEntry>;
 }
 
@@ -21,8 +21,8 @@ export const readProjectGraphExtractionCache = (projectRoot: string): ProjectGra
   if (!fs.existsSync(cachePath)) return emptyCache();
   try {
     const parsed = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as Partial<ProjectGraphFileExtractionCache>;
-    if (parsed.version !== 1 || !parsed.files || typeof parsed.files !== 'object') return emptyCache();
-    return { version: 1, files: parsed.files };
+    if (parsed.version !== 2 || !parsed.files || typeof parsed.files !== 'object') return emptyCache();
+    return { version: 2, files: parsed.files };
   } catch {
     return emptyCache();
   }
@@ -38,6 +38,6 @@ export const writeProjectGraphExtractionCache = (
 };
 
 export const emptyCache = (): ProjectGraphFileExtractionCache => ({
-  version: 1,
+  version: 2,
   files: {},
 });

@@ -20,6 +20,7 @@ import {
   ContextEdgeRepository,
   type CreateContextEdgeInput,
   type ListContextEdgesOptions,
+  type UpdateContextEdgeInput,
 } from './context-edge-repository.js';
 import {
   ContextNodeRepository,
@@ -60,6 +61,7 @@ import { GraphQuery } from './graph-query.js';
 
 export type {
   CreateContextEdgeInput,
+  UpdateContextEdgeInput,
   CreateContextEventInput,
   CreateMetabolismRunInput,
   CreateContextNodeInput,
@@ -129,6 +131,10 @@ export class ContextGraphStore {
 
   createEdge(input: CreateContextEdgeInput): ContextEdge {
     return this.edges.create(input);
+  }
+
+  updateEdge(id: string, input: UpdateContextEdgeInput): ContextEdge | null {
+    return this.edges.update(id, input);
   }
 
   getEdgeById(id: string): ContextEdge | null {

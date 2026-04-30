@@ -203,12 +203,14 @@ export class ContextClient extends TeamDomainClient {
 
   async listProjectGraphOverlays(options?: {
     project?: string;
+    target?: string;
     targetNodeId?: string;
     targetEdgeId?: string;
     limit?: number;
   }): Promise<ProjectGraphOverlay[]> {
     const params = new URLSearchParams();
     if (options?.project) params.set('project', options.project);
+    if (options?.target) params.set('target', options.target);
     if (options?.targetNodeId) params.set('targetNodeId', options.targetNodeId);
     if (options?.targetEdgeId) params.set('targetEdgeId', options.targetEdgeId);
     if (options?.limit) params.set('limit', String(options.limit));

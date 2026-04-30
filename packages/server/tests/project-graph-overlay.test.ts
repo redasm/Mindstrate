@@ -58,6 +58,7 @@ describe('project graph overlays', () => {
     expect(overlay.targetNodeId).toBe(extracted.id);
     expect(overlay.kind).toBe(ProjectGraphOverlayKind.CONFIRMATION);
     expect(listProjectGraphOverlays(store, { project: 'demo', targetNodeId: extracted.id })).toEqual([overlay]);
+    expect(listProjectGraphOverlays(store, { project: 'demo', target: 'node:pg:demo:file:src/App.tsx' })).toEqual([overlay]);
   });
 
   it('exposes overlays through the context subdomain API', async () => {

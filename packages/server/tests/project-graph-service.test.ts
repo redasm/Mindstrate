@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   PROJECT_GRAPH_METADATA_KEYS,
@@ -286,6 +287,46 @@ describe('project graph service', () => {
 
     expect(secondCache.files['src/App.tsx']?.hash).toBe(firstCache.files['src/App.tsx']?.hash);
     expect(secondCache.files['src/App.tsx']?.nodes).toEqual(firstCache.files['src/App.tsx']?.nodes);
+  });
+
+  it('ignores stale extraction caches from older extractor pipelines', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    fs.mkdirSync(path.join(root, 'Content'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Config'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'Source'), { recursive: true });
+    write(root, '.mindstrate/rules/client-scripts.json', JSON.stringify({
+      id: 'client-scripts',
+      name: 'Client Scripts',
+      priority: 200,
+      match: { all: [{ glob: '*.uproject' }] },
+      detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+      sourceRoots: ['Source', 'Python'],
+      layers: [],
+      manifests: ['*.uproject'],
+    }));
+    const script = 'class ImportTool:\n  pass\n';
+    write(root, 'Python/tools.py', script);
+    const cachePath = path.join(root, '.mindstrate', 'project-graph-extract-cache.json');
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    fs.writeFileSync(cachePath, JSON.stringify({
+      version: 1,
+      files: {
+        'Python/tools.py': {
+          path: 'Python/tools.py',
+          hash: createHash('sha256').update(script).digest('hex'),
+          nodes: [],
+          edges: [],
+        },
+      },
+    }), 'utf8');
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
+    const rewritten = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as { version: number };
+
+    expect(rewritten.version).toBe(2);
+    expect(store.listNodes({ project: 'Client', limit: 100 }).find((node) => node.title === 'ImportTool')).toBeDefined();
   });
 
   it('reports extraction, binding, cache, and writing progress', () => {

@@ -126,7 +126,7 @@ const buildProjectGraphExtraction = (
     createScriptRegexParserAdapter(),
   ];
   const previousCache = readProjectGraphExtractionCache(project.root);
-  const nextCache: ProjectGraphFileExtractionCache = { version: 1, files: {} };
+  const nextCache: ProjectGraphFileExtractionCache = { version: 2, files: {} };
 
   addScanPlanFacts(project, scanPlan, nodes, edges);
   files.forEach((file, index) => {

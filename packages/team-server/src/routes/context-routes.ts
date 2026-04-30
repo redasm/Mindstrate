@@ -237,6 +237,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   app.get('/api/context/project-graph/overlays', withInitializedMemory(memory, async (req, res) => {
     const overlays = memory.context.listProjectGraphOverlays({
       project: typeof req.query.project === 'string' ? req.query.project : undefined,
+      target: typeof req.query.target === 'string' ? req.query.target : undefined,
       targetNodeId: typeof req.query.targetNodeId === 'string' ? req.query.targetNodeId : undefined,
       targetEdgeId: typeof req.query.targetEdgeId === 'string' ? req.query.targetEdgeId : undefined,
       limit: parseLimit(req.query.limit, 200),

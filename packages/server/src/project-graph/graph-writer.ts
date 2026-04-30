@@ -23,6 +23,7 @@ export interface ProjectGraphWriteResult {
   nodesCreated: number;
   nodesUpdated: number;
   edgesCreated: number;
+  edgesUpdated: number;
   edgesSkipped: number;
 }
 
@@ -39,6 +40,7 @@ export const writeProjectGraphExtraction = (
     nodesCreated: 0,
     nodesUpdated: 0,
     edgesCreated: 0,
+    edgesUpdated: 0,
     edgesSkipped: 0,
   };
 
@@ -53,29 +55,42 @@ export const writeProjectGraphExtraction = (
   }
 
   for (const edge of extraction.edges) {
-    if (store.getEdgeById(edge.id)) {
-      result.edgesSkipped++;
+    const edgeInput = toContextEdgeInput(edge);
+    const existing = store.getEdgeById(edge.id);
+    if (existing) {
+      if (
+        existing.relationType === edgeInput.relationType
+        && existing.strength === edgeInput.strength
+        && JSON.stringify(existing.evidence ?? null) === JSON.stringify(edgeInput.evidence ?? null)
+      ) {
+        result.edgesSkipped++;
+        continue;
+      }
+      store.updateEdge(edge.id, edgeInput);
+      result.edgesUpdated++;
       continue;
     }
-    store.createEdge({
-      id: edge.id,
-      sourceId: edge.sourceId,
-      targetId: edge.targetId,
-      relationType: relationForProjectGraphEdge(edge.kind),
-      strength: confidenceForProjectGraphEvidence(edge),
-      evidence: {
-        [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true,
-        [PROJECT_GRAPH_METADATA_KEYS.kind]: edge.kind,
-        [PROJECT_GRAPH_METADATA_KEYS.provenance]: edge.provenance,
-        [PROJECT_GRAPH_METADATA_KEYS.evidence]: edge.evidence,
-        ...(edge.metadata ?? {}),
-      },
-    });
+    store.createEdge(edgeInput);
     result.edgesCreated++;
   }
 
   return result;
 };
+
+const toContextEdgeInput = (edge: ProjectGraphEdgeDto) => ({
+  id: edge.id,
+  sourceId: edge.sourceId,
+  targetId: edge.targetId,
+  relationType: relationForProjectGraphEdge(edge.kind),
+  strength: confidenceForProjectGraphEvidence(edge),
+  evidence: {
+    [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true,
+    [PROJECT_GRAPH_METADATA_KEYS.kind]: edge.kind,
+    [PROJECT_GRAPH_METADATA_KEYS.provenance]: edge.provenance,
+    [PROJECT_GRAPH_METADATA_KEYS.evidence]: edge.evidence,
+    ...(edge.metadata ?? {}),
+  },
+});
 
 export const archiveProjectGraphFileFacts = (
   store: ContextGraphStore,

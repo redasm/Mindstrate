@@ -1,9 +1,12 @@
 export {
   ContextGraphStore,
-  type CreateContextEdgeInput,
-  type CreateContextEventInput,
-  type CreateContextNodeInput,
-  type UpdateContextNodeInput,
+} from './context-graph-store.js';
+export type {
+  CreateContextEdgeInput,
+  UpdateContextEdgeInput,
+  CreateContextEventInput,
+  CreateContextNodeInput,
+  UpdateContextNodeInput,
 } from './context-graph-store.js';
 export type { GraphNeighborhood } from './graph-query.js';
 export {
