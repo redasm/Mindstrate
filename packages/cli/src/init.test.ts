@@ -73,6 +73,7 @@ test('buildProjectGraphAnalysisLines explains scan scope and LLM enrichment', ()
     ignoredDirectories: ['node_modules', 'dist'],
     generatedRoots: ['dist'],
     metadataOnlyRoots: ['Content'],
+    warnings: ['Large scan scope: 60000 files. Mark generated/vendor directories before indexing.'],
     llmEnrichment: 'skipped',
   });
 
@@ -84,6 +85,7 @@ test('buildProjectGraphAnalysisLines explains scan scope and LLM enrichment', ()
     '  Languages: markdown 4, typescript 8',
     '  Ignored: dist, node_modules',
     '  Metadata-only roots: Content',
+    '  Warning: Large scan scope: 60000 files. Mark generated/vendor directories before indexing.',
     '  LLM enrichment: skipped (deterministic parser/config extraction only)',
     '  Privacy: full source files are not sent to LLM providers by default',
   ]);

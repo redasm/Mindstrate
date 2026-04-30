@@ -53,6 +53,7 @@ export interface ProjectGraphScanScope {
   ignoredDirectories: string[];
   generatedRoots: string[];
   metadataOnlyRoots: string[];
+  warnings: string[];
   llmEnrichment: 'enabled' | 'skipped';
 }
 
@@ -102,8 +103,20 @@ export const estimateProjectGraphScanScope = (
     ]),
     generatedRoots: plan.generatedRoots,
     metadataOnlyRoots: plan.metadataOnlyRoots,
+    warnings: buildScopeWarnings(entries.length, totalBytes),
     llmEnrichment: options.llmProviderConfigured ? 'enabled' : 'skipped',
   };
+};
+
+const buildScopeWarnings = (filesToScan: number, totalBytes: number): string[] => {
+  const warnings: string[] = [];
+  if (filesToScan > 50000) {
+    warnings.push(`Large scan scope: ${filesToScan} files. Mark generated/vendor directories before indexing.`);
+  }
+  if (totalBytes > 512 * 1024 * 1024) {
+    warnings.push(`Large scan size: ${Math.round(totalBytes / 1024 / 1024)} MB. Consider metadata-only or generated roots.`);
+  }
+  return warnings;
 };
 
 export const buildProjectGraphScanPlan = (

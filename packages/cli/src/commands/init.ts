@@ -224,6 +224,7 @@ export const buildProjectGraphAnalysisLines = (
   `  Languages: ${formatLanguageCounts(scope.languages)}`,
   `  Ignored: ${scope.ignoredDirectories.slice().sort().join(', ') || '(none)'}`,
   `  Metadata-only roots: ${scope.metadataOnlyRoots.slice().sort().join(', ') || '(none)'}`,
+  ...scope.warnings.map((warning) => `  Warning: ${warning}`),
   scope.llmEnrichment === 'enabled'
     ? '  LLM enrichment: enabled after deterministic extraction'
     : '  LLM enrichment: skipped (deterministic parser/config extraction only)',

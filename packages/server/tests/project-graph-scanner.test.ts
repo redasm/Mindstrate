@@ -168,6 +168,7 @@ describe('project graph scanner', () => {
     });
     expect(scope.ignoredDirectories).toContain('node_modules');
     expect(scope.ignoredDirectories).toContain('dist');
+    expect(scope.warnings).toEqual([]);
     expect(scope.llmEnrichment).toBe('enabled');
   });
 });
