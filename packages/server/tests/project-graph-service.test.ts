@@ -55,6 +55,7 @@ describe('project graph service', () => {
     expect(sourceNode?.metadata).toMatchObject({ scanMode: 'deep' });
     expect(contentNode?.metadata).toMatchObject({ scanMode: 'metadata-only' });
     expect(generatedNode?.metadata).toMatchObject({ scanMode: 'generated' });
+    expect(nodes.find((node) => node.title === 'Content/UI/WBP_MainMenu.uasset')).toBeUndefined();
     expect(generatedFile).toBeUndefined();
     expect(siblingGeneratedFile).toBeUndefined();
     expect(store.listEdges({ limit: 100 }).filter((edge) =>

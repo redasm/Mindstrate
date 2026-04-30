@@ -310,6 +310,10 @@ describe('project graph report export', () => {
       const modulePath = path.join(vaultRoot, 'module-pages-demo', 'architecture', 'modules', 'src-app.md');
       expect(fs.existsSync(modulePath)).toBe(true);
       expect(result.modulePaths).toContain(modulePath);
+      expect(result.modulePaths.every((filePath) =>
+        filePath.includes(`${path.sep}architecture${path.sep}modules${path.sep}`))).toBe(true);
+      expect(fs.existsSync(path.join(vaultRoot, 'module-pages-demo', 'architecture', 'functions'))).toBe(false);
+      expect(fs.existsSync(path.join(vaultRoot, 'module-pages-demo', 'architecture', 'components'))).toBe(false);
 
       let modulePage = fs.readFileSync(modulePath, 'utf8');
       expect(modulePage).toContain('# Module: src/App');
