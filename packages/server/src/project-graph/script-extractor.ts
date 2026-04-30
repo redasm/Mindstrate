@@ -53,6 +53,7 @@ const capturesForRegex = (
         text,
         ...lineRangeForIndex(input.content, index),
         path: input.path,
+        extractorId: 'script-regex',
       };
     });
 

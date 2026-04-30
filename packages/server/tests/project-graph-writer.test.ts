@@ -87,6 +87,27 @@ describe('project graph ECS writer', () => {
     expect(node.qualityScore).toBeLessThan(70);
   });
 
+  it('scores regex script facts below exact parser facts', () => {
+    writeProjectGraphExtraction(store, {
+      project: 'demo',
+      nodes: [
+        {
+          id: 'pg:demo:function:Scripts/weapon.py#script.function:fire',
+          kind: ProjectGraphNodeKind.FUNCTION,
+          label: 'fire',
+          project: 'demo',
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'Scripts/weapon.py', extractorId: 'script-regex' }],
+        },
+      ],
+      edges: [],
+    });
+
+    const node = store.getNodeById('pg:demo:function:Scripts/weapon.py#script.function:fire')!;
+    expect(node.confidence).toBeGreaterThan(0.7);
+    expect(node.confidence).toBeLessThan(0.95);
+  });
+
   it('archives facts owned by a deleted file', () => {
     writeProjectGraphExtraction(store, makeExtraction());
 

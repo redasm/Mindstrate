@@ -106,6 +106,9 @@ describe('project graph service', () => {
     expect(nodes.find((node) => node.title === 'Engine')?.metadata).toMatchObject({
       kind: ProjectGraphNodeKind.DEPENDENCY,
     });
+    expect(nodes.find((node) => node.title === 'Engine')?.metadata?.[PROJECT_GRAPH_METADATA_KEYS.evidence]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ extractorId: 'unreal-build-regex' })]),
+    );
     expect(edges.some((edge) =>
       edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.DEFINES
     )).toBe(true);
@@ -163,6 +166,9 @@ describe('project graph service', () => {
 
     expect(nodes.find((node) => node.title === 'game.inventory')).toBeDefined();
     expect(nodes.find((node) => node.title === 'ImportTool')?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.CLASS });
+    expect(nodes.find((node) => node.title === 'ImportTool')?.metadata?.[PROJECT_GRAPH_METADATA_KEYS.evidence]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ extractorId: 'script-regex' })]),
+    );
     expect(nodes.find((node) => node.title === 'Fire')?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.FUNCTION });
     expect(nodes.find((node) => node.title === 'InventoryComponent')).toBeDefined();
     expect(nodes.some((node) => node.metadata?.kind === ProjectGraphNodeKind.DEPENDENCY)).toBe(true);

@@ -27,6 +27,7 @@ export const extractUnrealBuildModuleDependencies = (input: {
         text,
         ...lineRangeForIndex(input.content, bodyOffset + (moduleMatch.index ?? 0)),
         path: input.path,
+        extractorId: 'unreal-build-regex',
       });
     }
   }

@@ -20,5 +20,6 @@ describe('script extractor', () => {
       'script.function:Fire',
       'script.ue-call:FireWeapon',
     ]));
+    expect(captures.every((capture) => capture.extractorId === 'script-regex')).toBe(true);
   });
 });
