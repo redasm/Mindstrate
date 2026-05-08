@@ -12,3 +12,4 @@ data/
 .mindstrate/
 .turbo/
 *.tsbuildinfo
+.tasks/
