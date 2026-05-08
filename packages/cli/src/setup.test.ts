@@ -29,6 +29,24 @@ test('initializeLocalProject writes the project graph to Obsidian when a vault i
   assert.equal(fs.existsSync(path.join(root, '.mindstrate', 'project-graph.json')), true);
 });
 
+test('initializeLocalProject writes local project graph artifacts when vault is skipped', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-local-'));
+  const dataDir = path.join(root, '.mindstrate');
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+    name: 'setup-local-graph-demo',
+  }), 'utf8');
+
+  const project = detectProject(root);
+  assert.ok(project);
+
+  await initializeLocalProject(project, dataDir, { vaultPath: '   ' });
+
+  assert.equal(fs.existsSync(path.join(root, 'PROJECT_GRAPH.md')), true);
+  assert.equal(fs.existsSync(path.join(root, '.mindstrate', 'project-graph.json')), true);
+  assert.equal(fs.existsSync(path.join(root, '.mindstrate', 'project-graph.graph.json')), true);
+  assert.equal(fs.existsSync(path.join(root, 'setup-local-graph-demo', 'architecture', 'project-graph.md')), false);
+});
+
 test('initializeLocalProject reports progress for long setup steps', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-progress-'));
   const dataDir = path.join(root, '.mindstrate');

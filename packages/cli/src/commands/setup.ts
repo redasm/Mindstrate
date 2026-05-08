@@ -71,7 +71,8 @@ export const setupCommand = new Command('setup')
 
       const mode: SetupMode = experience === 'team-client' ? 'team' : 'local';
       const tool = await readTool(rl, options);
-      const vaultPath = mode === 'local' ? await readOptionalVaultPath(rl, options) : undefined;
+      const vaultPath = mode === 'local' ? normalizeOptionalPath(await readOptionalVaultPath(rl, options)) : undefined;
+      const resolvedVaultPath = vaultPath ? path.resolve(vaultPath) : undefined;
       const teamServerUrl = mode === 'team' ? await readValue(rl, options.teamServerUrl, 'Team Server URL') : undefined;
       const teamApiKey = mode === 'team' ? await readValue(rl, options.teamApiKey, 'Team API key') : undefined;
       const llmEnv = await readLlmEnvironment(rl, options);
@@ -90,7 +91,7 @@ export const setupCommand = new Command('setup')
       console.log(`  Project: ${project.name}`);
       console.log(`  Data:    ${plan.dataDir}`);
       console.log(`  Tool:    ${tool}`);
-      if (vaultPath) console.log(`  Vault:   ${path.resolve(vaultPath)}`);
+      if (resolvedVaultPath) console.log(`  Vault:   ${resolvedVaultPath}`);
       if (teamServerUrl) console.log(`  Team:    ${teamServerUrl}`);
 
       if (!options.yes && !(await confirm(rl, 'Apply this setup?'))) {
@@ -101,14 +102,14 @@ export const setupCommand = new Command('setup')
       const configPath = writeProjectCliConfig(project.root, {
         mode,
         tool,
-        vaultPath: vaultPath ? path.resolve(vaultPath) : undefined,
+        vaultPath: resolvedVaultPath,
         teamServerUrl,
       });
 
       if (mode === 'local') {
         console.log('\nApplying local setup:');
         await initializeLocalProject(project, plan.dataDir, {
-          vaultPath: vaultPath ? path.resolve(vaultPath) : undefined,
+          vaultPath: resolvedVaultPath,
           onProgress: printStepProgress(7),
         });
       }
@@ -122,8 +123,8 @@ export const setupCommand = new Command('setup')
         },
       });
 
-      if (vaultPath && mode === 'local') {
-        await exportVault(plan.dataDir, vaultPath, printStepProgress(2, 'Vault export'));
+      if (resolvedVaultPath && mode === 'local') {
+        await exportVault(plan.dataDir, resolvedVaultPath, printStepProgress(2, 'Vault export'));
       }
 
       console.log('\nMindstrate ready:');
@@ -148,6 +149,7 @@ export async function initializeLocalProject(
   dataDir: string,
   options: { vaultPath?: string; onProgress?: SetupProgress } = {},
 ): Promise<void> {
+  const vaultPath = normalizeOptionalPath(options.vaultPath);
   options.onProgress?.('Opening local memory database');
   const memory = new Mindstrate({ dataDir });
   await memory.init();
@@ -177,8 +179,8 @@ export async function initializeLocalProject(
   options.onProgress?.('Running optional LLM enrichment');
   const enrichment = await memory.context.enrichProjectGraph(project);
   options.onProgress?.('Writing project graph artifacts');
-  const artifacts = options.vaultPath
-    ? memory.context.writeProjectGraphObsidianProjection(project, options.vaultPath)
+  const artifacts = vaultPath
+    ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath))
     : memory.context.writeProjectGraphArtifacts(project);
   options.onProgress?.('Saving project metadata');
   saveProjectMeta(project.root, {
@@ -215,6 +217,11 @@ async function exportVault(dataDir: string, vaultPath: string, onProgress?: Setu
   const result = await sync.exportAll();
   console.log(`  Vault export: ${result.written} written, ${result.skipped} skipped`);
   memory.close();
+}
+
+function normalizeOptionalPath(input: string | undefined): string | undefined {
+  const trimmed = input?.trim();
+  return trimmed || undefined;
 }
 
 function printBanner(workspace: string): void {
@@ -261,7 +268,7 @@ async function readTool(rl: readline.Interface, options: SetupOptions): Promise<
 }
 
 async function readOptionalVaultPath(rl: readline.Interface, options: SetupOptions): Promise<string | undefined> {
-  if (options.vault) return options.vault;
+  if (options.vault) return normalizeOptionalPath(options.vault);
   if (options.yes) return undefined;
   const useVault = await chooseOption(rl, 'Connect an Obsidian vault?', [
     { label: 'Skip for now', value: 'no', description: 'You can add it later with vault sync' },

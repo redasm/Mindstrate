@@ -209,9 +209,15 @@ export function writeLocalProjectGraphArtifacts(
   project: DetectedProject,
   vaultPath?: string,
 ): ProjectGraphArtifactResult {
-  return vaultPath
-    ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath))
+  const resolvedVaultPath = normalizeOptionalPath(vaultPath);
+  return resolvedVaultPath
+    ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(resolvedVaultPath))
     : memory.context.writeProjectGraphArtifacts(project);
+}
+
+function normalizeOptionalPath(input: string | undefined): string | undefined {
+  const trimmed = input?.trim();
+  return trimmed || undefined;
 }
 
 export const buildProjectGraphAnalysisLines = (

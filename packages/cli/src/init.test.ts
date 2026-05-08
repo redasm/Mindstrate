@@ -33,6 +33,28 @@ test('writeLocalProjectGraphArtifacts prefers Obsidian output when vault is conf
   }
 });
 
+test('writeLocalProjectGraphArtifacts falls back to local output for blank vault path', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-init-local-'));
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'init-local-graph-demo' }), 'utf8');
+
+  const memory = new Mindstrate({ dataDir: path.join(root, '.mindstrate') });
+  await memory.init();
+  try {
+    const project = detectProject(root);
+    assert.ok(project);
+    memory.context.indexProjectGraph(project);
+
+    const result = writeLocalProjectGraphArtifacts(memory, project, '   ');
+
+    assert.equal(result.reportPath, path.join(root, 'PROJECT_GRAPH.md'));
+    assert.equal(fs.existsSync(result.reportPath), true);
+    assert.equal(fs.existsSync(path.join(root, '.mindstrate', 'project-graph.json')), true);
+    assert.equal(fs.existsSync(path.join(root, 'init-local-graph-demo', 'architecture', 'project-graph.md')), false);
+  } finally {
+    memory.close();
+  }
+});
+
 test('publishProjectGraphToTeamServer sends a project-scoped graph bundle', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-init-team-'));
   fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'team-graph-demo' }), 'utf8');
