@@ -276,12 +276,14 @@ const addBindingFacts = (
   const scriptCallsByLabel = new Map<string, ProjectGraphNodeDto[]>();
   for (const node of nodes.values()) {
     if (node.kind !== ProjectGraphNodeKind.DEPENDENCY) continue;
-    const current = scriptCallsByLabel.get(node.label) ?? [];
+    const key = normalizeSymbolName(node.label).replace(/^u/, '');
+    const current = scriptCallsByLabel.get(key) ?? [];
     current.push(node);
-    scriptCallsByLabel.set(node.label, current);
+    scriptCallsByLabel.set(key, current);
   }
   for (const native of nativeSymbols) {
-    for (const scriptCall of scriptCallsByLabel.get(native.label) ?? []) {
+    const key = normalizeSymbolName(native.label).replace(/^u/, '');
+    for (const scriptCall of scriptCallsByLabel.get(key) ?? []) {
       addEdge(edges, makeEdge(native.id, scriptCall.id, ProjectGraphEdgeKind.BINDS_TO, native.evidence));
     }
   }

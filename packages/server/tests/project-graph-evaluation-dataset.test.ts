@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { ContextDomainType } from '@mindstrate/protocol/models';
 import { Mindstrate, detectProject } from '../src/index.js';
 import {
@@ -52,6 +53,7 @@ describe('project graph evaluation dataset', () => {
       expect(project?.framework).toBe(fixture.expected.framework);
 
       const indexResult = memory.context.indexProjectGraph(project!);
+      const projection = memory.context.writeProjectGraphObsidianProjection(project!, path.join(root, `${fixture.id}-vault`));
       const nodes = memory.context.listContextNodes({
         project: fixture.projectName,
         domainType: ContextDomainType.ARCHITECTURE,
@@ -62,6 +64,8 @@ describe('project graph evaluation dataset', () => {
         indexResult,
         nodes,
         edges,
+        modulePagePaths: projection.modulePaths,
+        reportMarkdown: fs.readFileSync(projection.reportPath, 'utf8'),
       });
 
       expect(result.passed, `${fixture.id}: ${result.failures.join(', ')}`).toBe(true);

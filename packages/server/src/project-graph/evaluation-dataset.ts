@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { isProjectGraphEdge, isProjectGraphNode, type ContextEdge, type ContextNode } from '@mindstrate/protocol/models';
+import { PROJECT_GRAPH_METADATA_KEYS, isProjectGraphEdge, isProjectGraphNode, type ContextEdge, type ContextNode } from '@mindstrate/protocol/models';
 import type { ProjectGraphIndexResult } from './project-graph-service.js';
 
 export type ProjectGraphEvaluationFixtureId =
@@ -26,12 +26,18 @@ export interface ProjectGraphFixtureExpectations {
   minProjectGraphNodes: number;
   minProjectGraphEdges: number;
   requiredNodeTitles: string[];
+  requiredEdges?: Array<{ sourceTitle: string; targetTitle: string; kind: string }>;
+  requiredEntryPoints?: string[];
+  requiredModulePageNames?: string[];
+  requiredReportSnippets?: string[];
 }
 
 export interface ProjectGraphFixtureEvaluationInput {
   indexResult: ProjectGraphIndexResult;
   nodes: ContextNode[];
   edges: ContextEdge[];
+  modulePagePaths?: string[];
+  reportMarkdown?: string;
 }
 
 export interface ProjectGraphFixtureEvaluationResult {
@@ -128,6 +134,9 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
       minProjectGraphNodes: 7,
       minProjectGraphEdges: 4,
       requiredNodeTitles: ['package.json', 'src/App.tsx', 'src/main.tsx', 'react', 'vite', 'App'],
+      requiredEdges: [{ sourceTitle: 'src/App.tsx', targetTitle: 'App', kind: 'defines' }],
+      requiredEntryPoints: ['src/main.tsx'],
+      requiredReportSnippets: ['Entry Points', 'Core Modules'],
     },
   },
   {
@@ -160,6 +169,8 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
       minProjectGraphNodes: 7,
       minProjectGraphEdges: 4,
       requiredNodeTitles: ['package.json', 'src/App.vue', 'src/main.ts', 'vue', 'vite'],
+      requiredEntryPoints: ['src/main.ts'],
+      requiredReportSnippets: ['Entry Points'],
     },
   },
   {
@@ -191,6 +202,8 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
       minProjectGraphNodes: 8,
       minProjectGraphEdges: 5,
       requiredNodeTitles: ['package.json', 'app/layout.tsx', 'app/page.tsx', 'next', 'react', 'Home'],
+      requiredEntryPoints: ['app/page.tsx'],
+      requiredReportSnippets: ['Entry Points'],
     },
   },
   {
@@ -221,6 +234,8 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
       minProjectGraphNodes: 7,
       minProjectGraphEdges: 4,
       requiredNodeTitles: ['package.json', 'tsconfig.json', 'src/server.ts', 'express', 'createServer'],
+      requiredEntryPoints: ['src/server.ts'],
+      requiredReportSnippets: ['Entry Points'],
     },
   },
   {
@@ -255,6 +270,9 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
         'Source/EvalGame/EvalGame.cpp',
         'Config/DefaultEngine.ini',
       ],
+      requiredEntryPoints: ['EvalGame.uproject'],
+      requiredModulePageNames: ['source-evalgame.md'],
+      requiredReportSnippets: ['Core Modules'],
     },
   },
   {
@@ -304,6 +322,13 @@ const FIXTURES: ProjectGraphEvaluationFixture[] = [
         'InventoryComponent',
         '/Game/UI/WBP_Inventory',
       ],
+      requiredEdges: [
+        { sourceTitle: '/Game/UI/WBP_Inventory', targetTitle: '/Game/Characters/BP_Player', kind: 'references_asset' },
+        { sourceTitle: 'UInventoryComponent', targetTitle: 'InventoryComponent', kind: 'binds_to' },
+      ],
+      requiredEntryPoints: ['MixedBindings.uproject'],
+      requiredModulePageNames: ['source-mixedbindings.md'],
+      requiredReportSnippets: ['Native To Script Bindings', 'Asset And Blueprint Surfaces'],
     },
   },
 ];
@@ -360,6 +385,10 @@ export const listProjectGraphEvaluationFixtures = (): ProjectGraphEvaluationFixt
     expected: {
       ...fixture.expected,
       requiredNodeTitles: [...fixture.expected.requiredNodeTitles],
+      requiredEdges: fixture.expected.requiredEdges?.map((edge) => ({ ...edge })),
+      requiredEntryPoints: fixture.expected.requiredEntryPoints ? [...fixture.expected.requiredEntryPoints] : undefined,
+      requiredModulePageNames: fixture.expected.requiredModulePageNames ? [...fixture.expected.requiredModulePageNames] : undefined,
+      requiredReportSnippets: fixture.expected.requiredReportSnippets ? [...fixture.expected.requiredReportSnippets] : undefined,
     },
   }));
 
@@ -399,6 +428,9 @@ export const evaluateProjectGraphFixture = (
   const projectGraphNodes = input.nodes.filter(isProjectGraphNode);
   const projectGraphEdges = input.edges.filter(isProjectGraphEdge);
   const nodeTitles = new Set(projectGraphNodes.map((node) => node.title));
+  const nodeById = new Map(projectGraphNodes.map((node) => [node.id, node]));
+  const modulePageNames = new Set((input.modulePagePaths ?? []).map((filePath) => path.basename(filePath)));
+  const report = input.reportMarkdown ?? '';
   const failures = [
     ...minFailure('files scanned', input.indexResult.filesScanned, fixture.expected.minFilesScanned),
     ...minFailure('project graph nodes', projectGraphNodes.length, fixture.expected.minProjectGraphNodes),
@@ -406,6 +438,24 @@ export const evaluateProjectGraphFixture = (
     ...fixture.expected.requiredNodeTitles
       .filter((title) => !nodeTitles.has(title))
       .map((title) => `missing node title: ${title}`),
+    ...(fixture.expected.requiredEdges ?? [])
+      .filter((expected) => !projectGraphEdges.some((edge) => {
+        const source = nodeById.get(edge.sourceId);
+        const target = nodeById.get(edge.targetId);
+        return source?.title === expected.sourceTitle
+          && target?.title === expected.targetTitle
+          && edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === expected.kind;
+      }))
+      .map((edge) => `missing edge: ${edge.sourceTitle} -[${edge.kind}]-> ${edge.targetTitle}`),
+    ...(fixture.expected.requiredEntryPoints ?? [])
+      .filter((entry) => !nodeTitles.has(entry))
+      .map((entry) => `missing entry point: ${entry}`),
+    ...(fixture.expected.requiredModulePageNames ?? [])
+      .filter((name) => input.modulePagePaths && !modulePageNames.has(name))
+      .map((name) => `missing module page: ${name}`),
+    ...(fixture.expected.requiredReportSnippets ?? [])
+      .filter((snippet) => input.reportMarkdown && !reportIncludesSnippet(report, snippet))
+      .map((snippet) => `missing report snippet: ${snippet}`),
   ];
 
   return {
@@ -467,6 +517,17 @@ export const renderProjectGraphEvaluationDatasetMarkdown = (
 const minFailure = (label: string, actual: number, expected: number): string[] =>
   actual >= expected ? [] : [`${label}: expected at least ${expected}, got ${actual}`];
 
+const reportIncludesSnippet = (report: string, snippet: string): boolean => {
+  if (report.includes(snippet)) return true;
+  const aliases: Record<string, string[]> = {
+    'Entry Points': ['入口点'],
+    'Core Modules': ['核心模块'],
+    'Native To Script Bindings': ['原生到脚本绑定'],
+    'Asset And Blueprint Surfaces': ['资产与蓝图表面'],
+  };
+  return (aliases[snippet] ?? []).some((alias) => report.includes(alias));
+};
+
 const summarizeMode = (
   taskById: Map<string, ProjectGraphEvaluationTask>,
   runs: ProjectGraphEvaluationRun[],
@@ -508,6 +569,9 @@ const renderFixtureMarkdown = (fixture: ProjectGraphEvaluationFixture): string[]
   `- Framework: ${fixture.expected.framework ?? '(none)'}`,
   `- Files: ${Object.keys(fixture.files).join(', ')}`,
   `- Required nodes: ${fixture.expected.requiredNodeTitles.join(', ')}`,
+  `- Required edges: ${(fixture.expected.requiredEdges ?? []).map((edge) => `${edge.sourceTitle} -[${edge.kind}]-> ${edge.targetTitle}`).join(', ') || '(none)'}`,
+  `- Required entry points: ${(fixture.expected.requiredEntryPoints ?? []).join(', ') || '(none)'}`,
+  `- Required module pages: ${(fixture.expected.requiredModulePageNames ?? []).join(', ') || '(none)'}`,
   `- Minimum files scanned: ${fixture.expected.minFilesScanned}`,
   `- Minimum graph nodes: ${fixture.expected.minProjectGraphNodes}`,
   `- Minimum graph edges: ${fixture.expected.minProjectGraphEdges}`,
