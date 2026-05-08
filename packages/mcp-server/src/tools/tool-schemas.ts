@@ -49,6 +49,13 @@ export const ProjectGraphQuerySchema = z.object({
   limit: z.number().int().min(1).max(50).optional(),
 });
 
+export const ProjectGraphTaskQuerySchema = z.object({
+  task: z.enum(['entry-points', 'module', 'before-edit', 'binding', 'asset-references', 'flow', 'impact', 'explain']),
+  query: z.string().optional(),
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(50).optional(),
+});
+
 export const ProjectGraphNodeSchema = z.object({
   id: z.string().min(1, 'id is required'),
   project: z.string().optional(),

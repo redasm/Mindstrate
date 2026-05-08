@@ -1,6 +1,9 @@
 import {
   ContextDomainType,
   PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  PROJECT_GRAPH_METADATA_KEYS,
+  ProjectGraphEdgeKind,
+  ProjectGraphNodeKind,
   ProjectGraphOverlaySource,
   isProjectGraphEdge,
   isProjectGraphNode,
@@ -33,6 +36,40 @@ export async function handleProjectGraphQuery(
     return { content: [{ type: 'text', text: 'No project graph nodes matched the query.' }] };
   }
   return { content: [{ type: 'text', text: formatProjectGraphNodes(nodes) }] };
+}
+
+export async function handleProjectGraphTaskQuery(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  const nodes = projectGraphNodes(await api.queryContextGraph({
+    project: input.project,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  }));
+  const edges = projectGraphEdges(await api.listContextEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }));
+  const query = typeof input.query === 'string' ? input.query.toLowerCase() : undefined;
+  const matching = nodes.filter((node) => !query || node.title.toLowerCase().includes(query) || node.id.toLowerCase().includes(query));
+  const selected = selectTaskNodes(input.task, nodes, edges, matching).slice(0, input.limit ?? 10);
+  const evidence = Array.from(new Set(selected.flatMap(evidencePaths))).slice(0, input.limit ?? 10);
+  const compactJson = {
+    task: input.task,
+    query: input.query,
+    nodeIds: selected.map((node) => node.id),
+    evidence,
+    suggestedNextQueries: selected.slice(0, 3).map((node) => `impact ${node.title}`),
+  };
+  const text = [
+    `### ${input.task}`,
+    '',
+    formatProjectGraphNodes(selected),
+    '',
+    '### Compact JSON',
+    '```json',
+    JSON.stringify(compactJson, null, 2),
+    '```',
+  ].join('\n');
+  return { content: [{ type: 'text', text }] };
 }
 
 export async function handleProjectGraphGetNode(
@@ -201,6 +238,51 @@ const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
 
 const findProjectGraphNodeInList = (nodes: ContextNode[], id: string): ContextNode | undefined =>
   nodes.find((node) => node.id === id || node.title === id || node.sourceRef === id);
+
+const selectTaskNodes = (
+  task: string,
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  matching: ContextNode[],
+): ContextNode[] => {
+  if (task === 'entry-points') return nodes.filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.FILE && node.metadata?.['generated'] !== true);
+  if (task === 'binding') return matching.filter((node) => edges.some((edge) =>
+    edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.BINDS_TO && (edge.sourceId === node.id || edge.targetId === node.id)));
+  if (task === 'asset-references') return relatedByEdgeKinds(matching, nodes, edges, [ProjectGraphEdgeKind.REFERENCES_ASSET, ProjectGraphEdgeKind.OWNS_ASSET]);
+  if (task === 'flow') return relatedByEdgeKinds(matching, nodes, edges, [ProjectGraphEdgeKind.ENTRYPOINT_TO, ProjectGraphEdgeKind.CALLS, ProjectGraphEdgeKind.BINDS_TO, ProjectGraphEdgeKind.IMPORTS], 2);
+  if (task === 'impact' || task === 'before-edit') return collectRelatedNodes(nodes, edges, matching, 2);
+  return collectRelatedNodes(nodes, edges, matching, 1);
+};
+
+const relatedByEdgeKinds = (
+  seeds: ContextNode[],
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  kinds: ProjectGraphEdgeKind[],
+  depth = 1,
+): ContextNode[] => collectRelatedNodes(nodes, edges.filter((edge) => kinds.includes(edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] as ProjectGraphEdgeKind)), seeds, depth);
+
+const collectRelatedNodes = (
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  seeds: ContextNode[],
+  depth: number,
+): ContextNode[] => {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const selected = new Set(seeds.map((node) => node.id));
+  const queue = seeds.map((node) => ({ id: node.id, depth: 0 }));
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current.depth >= depth) continue;
+    for (const edge of adjacentProjectGraphEdges(edges, current.id)) {
+      const nextId = edge.sourceId === current.id ? edge.targetId : edge.sourceId;
+      if (selected.has(nextId) || !byId.has(nextId)) continue;
+      selected.add(nextId);
+      queue.push({ id: nextId, depth: current.depth + 1 });
+    }
+  }
+  return nodes.filter((node) => selected.has(node.id));
+};
 
 const shortestProjectGraphPath = (
   nodes: ContextNode[],

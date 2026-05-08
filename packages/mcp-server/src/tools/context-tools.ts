@@ -14,6 +14,7 @@ import {
   handleProjectGraphGetNode,
   handleProjectGraphPath,
   handleProjectGraphQuery,
+  handleProjectGraphTaskQuery,
 } from './handlers.js';
 import {
   ContextAssembleSchema,
@@ -30,6 +31,7 @@ import {
   ProjectGraphOverlaySchema,
   ProjectGraphPathSchema,
   ProjectGraphQuerySchema,
+  ProjectGraphTaskQuerySchema,
 } from './tool-schemas.js';
 import { defineTool } from './tool-types.js';
 
@@ -87,6 +89,12 @@ export const contextTools = [
     description: 'Search Mindstrate project graph nodes and return bounded evidence-backed context.',
     schema: ProjectGraphQuerySchema,
     handler: (api, input) => handleProjectGraphQuery(api, input),
+  }),
+  defineTool({
+    name: 'query_project_graph_task',
+    description: 'Run a task-oriented graph query such as entry-points, before-edit, binding, asset-references, flow, impact, module, or explain.',
+    schema: ProjectGraphTaskQuerySchema,
+    handler: (api, input) => handleProjectGraphTaskQuery(api, input),
   }),
   defineTool({
     name: 'get_project_graph_node',

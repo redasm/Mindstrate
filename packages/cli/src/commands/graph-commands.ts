@@ -14,7 +14,9 @@ import {
   listProjectGraphEvaluationTasks,
   materializeProjectGraphEvaluationFixture,
   renderProjectGraphEvaluationDatasetMarkdown,
+  queryProjectGraphTask,
   type ContextNode,
+  type ProjectGraphTaskQuery,
 } from '@mindstrate/server';
 import { readProjectCliConfig } from '../cli-config.js';
 import { createMemory } from '../memory-factory.js';
@@ -30,6 +32,7 @@ import {
   printNodes,
   printOverlays,
   printPath,
+  printTaskQueryResult,
 } from './graph-render.js';
 import { PROJECT_GRAPH_CLI_QUERY_LIMIT, projectGraphEdges, projectGraphNodes } from './graph-selectors.js';
 import {
@@ -201,6 +204,23 @@ contextGraphCommand.command('impact <id>')
     printEdges('Edges', result.edges);
   }));
 
+contextGraphCommand.command('task <task> [query]')
+  .description('Run a task-oriented project graph query template')
+  .option('-p, --project <project>', 'Project scope')
+  .option('-l, --limit <number>', 'Maximum graph items', '10')
+  .option('--json', 'Also print compact JSON for agents')
+  .action(async (task: string, query: string | undefined, options) => withMemory('Graph task query failed', async (memory) => {
+    const graphTask = parseGraphTask(task);
+    const result = queryProjectGraphTask({
+      nodes: memory.context.listContextNodes({ project: options.project, domainType: ContextDomainType.ARCHITECTURE, limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
+      edges: memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
+      task: graphTask,
+      query,
+      limit: parseInt(options.limit, 10),
+    });
+    printTaskQueryResult(result, options.json === true);
+  }));
+
 contextGraphCommand.command('eval-dataset')
   .description('Export the project graph evaluation dataset report and fixtures')
   .requiredOption('--out <dir>', 'Output directory for the report and fixtures')
@@ -250,6 +270,22 @@ const projectGraphProjectionTargets = new Set<ProjectionTarget>([
   ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
   ProjectionTarget.PROJECT_GRAPH_TEAM_SERVER,
 ]);
+
+const projectGraphTasks = new Set<ProjectGraphTaskQuery>([
+  'entry-points',
+  'module',
+  'before-edit',
+  'binding',
+  'asset-references',
+  'flow',
+  'impact',
+  'explain',
+]);
+
+const parseGraphTask = (value: string): ProjectGraphTaskQuery => {
+  if (projectGraphTasks.has(value as ProjectGraphTaskQuery)) return value as ProjectGraphTaskQuery;
+  throw new Error(`Unknown graph task: ${value}. Expected one of: ${Array.from(projectGraphTasks).join(', ')}`);
+};
 
 const findProjectGraphNode = (memory: ReturnType<typeof createMemory>, id: string): ContextNode | null => {
   const direct = memory.context.getContextNode(id);

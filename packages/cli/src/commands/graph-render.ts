@@ -3,6 +3,7 @@ import {
   type ChangeSet,
   type ContextEdge,
   type ContextNode,
+  type ProjectGraphTaskQueryResult,
   type ProjectGraphOverlay,
   type ProjectionRecord,
 } from '@mindstrate/server';
@@ -67,6 +68,19 @@ export const buildGraphEvaluationDatasetExportLines = (input: {
   `  Fixture count: ${input.fixtureCount}`,
   `  Task count: ${input.taskCount}`,
 ];
+
+export const printTaskQueryResult = (result: ProjectGraphTaskQueryResult, json: boolean): void => {
+  console.log(result.markdown);
+  console.log('');
+  console.log('Evidence:');
+  for (const evidence of result.evidence) console.log(`  - ${evidence}`);
+  console.log('');
+  console.log('Suggested next queries:');
+  for (const query of result.suggestedNextQueries) console.log(`  - ${query}`);
+  if (!json) return;
+  console.log('');
+  console.log(JSON.stringify(result.compactJson, null, 2));
+};
 
 export const printNodes = (nodes: ContextNode[], verbose: boolean): void => {
   if (nodes.length === 0) {
