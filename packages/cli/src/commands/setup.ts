@@ -13,6 +13,7 @@ import {
   metaPath,
   type ProjectGraphIndexProgress,
   type ProjectGraphScanProgress,
+  type MindstrateConfig,
 } from '@mindstrate/server';
 import { SyncManager, VaultLayout } from '@mindstrate/obsidian-sync';
 import { buildSetupPlan, writeProjectCliConfig, type SetupMode, type SetupTool } from '../cli-config.js';
@@ -110,6 +111,7 @@ export const setupCommand = new Command('setup')
         console.log('\nApplying local setup:');
         await initializeLocalProject(project, plan.dataDir, {
           vaultPath: resolvedVaultPath,
+          llmEnv,
           onProgress: printStepProgress(7),
         });
       }
@@ -147,62 +149,123 @@ export const setupCommand = new Command('setup')
 export async function initializeLocalProject(
   project: NonNullable<ReturnType<typeof detectProject>>,
   dataDir: string,
-  options: { vaultPath?: string; onProgress?: SetupProgress } = {},
+  options: { vaultPath?: string; llmEnv?: Record<string, string>; onProgress?: SetupProgress } = {},
 ): Promise<void> {
   const vaultPath = normalizeOptionalPath(options.vaultPath);
   options.onProgress?.('Opening local memory database');
-  const memory = new Mindstrate({ dataDir });
-  await memory.init();
-  options.onProgress?.('Writing project snapshot');
-  const previousMeta = loadProjectMeta(project.root);
-  const now = new Date().toISOString();
-  const result = await memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-setup' });
-  options.onProgress?.('Scanning project graph scope');
-  const scanScopeProgress = printScanProgress('Scan scope');
-  const scope = memory.context.estimateProjectGraphScanScope(project, {
-    onScanProgress: scanScopeProgress,
-  });
-  scanScopeProgress.flush();
-  for (const line of buildProjectGraphAnalysisLines({
-    projectName: project.name,
-    ...scope,
-  })) console.log(`  ${line}`);
-  options.onProgress?.('Indexing project graph');
-  const indexProgress = printScanProgress('Index graph');
-  const extractionProgress = printIndexProgress('Index graph');
-  const graph = memory.context.indexProjectGraph(project, {
-    onScanProgress: indexProgress,
-    onIndexProgress: extractionProgress,
-  });
-  indexProgress.flush();
-  extractionProgress.flush();
-  options.onProgress?.('Running optional LLM enrichment');
-  const enrichment = await memory.context.enrichProjectGraph(project);
-  options.onProgress?.('Writing project graph artifacts');
-  const artifacts = vaultPath
-    ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath))
-    : memory.context.writeProjectGraphArtifacts(project);
-  options.onProgress?.('Saving project metadata');
-  saveProjectMeta(project.root, {
-    version: 1,
-    name: project.name,
-    rootHint: project.root,
-    language: project.language,
-    framework: project.framework,
-    snapshotKnowledgeId: result.view.id,
-    createdAt: previousMeta?.createdAt ?? now,
-    updatedAt: now,
-    fingerprint: dependencyFingerprint({
+  const memory = new Mindstrate(setupMindstrateConfig(dataDir, options.llmEnv));
+  try {
+    await runSetupStageAsync('opening local memory database', () => memory.init());
+    options.onProgress?.('Writing project snapshot');
+    const previousMeta = loadProjectMeta(project.root);
+    const now = new Date().toISOString();
+    const result = await runSetupStageAsync('writing project snapshot', () =>
+      memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-setup' }));
+    options.onProgress?.('Scanning project graph scope');
+    const scanScopeProgress = printScanProgress('Scan scope');
+    const scope = runSetupStage('scanning project graph scope', () => {
+      const result = memory.context.estimateProjectGraphScanScope(project, {
+        onScanProgress: scanScopeProgress,
+      });
+      scanScopeProgress.flush();
+      return result;
+    });
+    for (const line of buildProjectGraphAnalysisLines({
+      projectName: project.name,
+      ...scope,
+    })) console.log(`  ${line}`);
+    options.onProgress?.('Indexing project graph');
+    const indexProgress = printScanProgress('Index graph');
+    const extractionProgress = printIndexProgress('Index graph');
+    const graph = runSetupStage('indexing project graph', () => {
+      const result = memory.context.indexProjectGraph(project, {
+        onScanProgress: indexProgress,
+        onIndexProgress: extractionProgress,
+      });
+      indexProgress.flush();
+      extractionProgress.flush();
+      return result;
+    });
+    options.onProgress?.('Running optional LLM enrichment');
+    const enrichment = await runLlmEnrichment(memory, project);
+    options.onProgress?.('Writing project graph artifacts');
+    const artifacts = runSetupStage('writing project graph artifacts', () => vaultPath
+      ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath))
+      : memory.context.writeProjectGraphArtifacts(project));
+    options.onProgress?.('Saving project metadata');
+    runSetupStage('saving project metadata', () => saveProjectMeta(project.root, {
+      version: 1,
+      name: project.name,
+      rootHint: project.root,
       language: project.language,
       framework: project.framework,
-      dependencies: project.dependencies,
-    }),
-  });
-  console.log(`  Project snapshot: ${result.changed ? 'updated' : 'up-to-date'} (${result.view.id})`);
-  console.log(`  Project graph enrichment: ${enrichment.status}`);
-  console.log(`  Project graph: ${graph.filesScanned} files, ${graph.nodesCreated + graph.nodesUpdated} nodes (${artifacts.reportPath})`);
-  console.log(`  Meta: ${metaPath(project.root)}`);
-  memory.close();
+      snapshotKnowledgeId: result.view.id,
+      createdAt: previousMeta?.createdAt ?? now,
+      updatedAt: now,
+      fingerprint: dependencyFingerprint({
+        language: project.language,
+        framework: project.framework,
+        dependencies: project.dependencies,
+      }),
+    }));
+    console.log(`  Project snapshot: ${result.changed ? 'updated' : 'up-to-date'} (${result.view.id})`);
+    console.log(`  Project graph enrichment: ${formatSetupEnrichment(enrichment)}`);
+    console.log(`  Project graph: ${graph.filesScanned} files, ${graph.nodesCreated + graph.nodesUpdated} nodes (${artifacts.reportPath})`);
+    console.log(`  Meta: ${metaPath(project.root)}`);
+  } finally {
+    memory.close();
+  }
+}
+
+export function setupMindstrateConfig(
+  dataDir: string,
+  llmEnv: Record<string, string> | undefined,
+): Partial<MindstrateConfig> {
+  return {
+    dataDir,
+    openaiApiKey: llmEnv?.['OPENAI_API_KEY'],
+    openaiBaseUrl: llmEnv?.['OPENAI_BASE_URL'],
+    llmModel: llmEnv?.['MINDSTRATE_LLM_MODEL'],
+    embeddingModel: llmEnv?.['MINDSTRATE_EMBEDDING_MODEL'],
+  };
+}
+
+async function runLlmEnrichment(
+  memory: Mindstrate,
+  project: NonNullable<ReturnType<typeof detectProject>>,
+): Promise<Awaited<ReturnType<Mindstrate['context']['enrichProjectGraph']>> | { status: 'failed'; message: string }> {
+  try {
+    return await memory.context.enrichProjectGraph(project);
+  } catch (error) {
+    const message = errorMessage(error);
+    console.warn(`  Project graph enrichment skipped: ${message}`);
+    return { status: 'failed', message };
+  }
+}
+
+function formatSetupEnrichment(
+  enrichment: Awaited<ReturnType<Mindstrate['context']['enrichProjectGraph']>> | { status: 'failed'; message: string },
+): string {
+  if (enrichment.status === 'failed') return `failed (${enrichment.message})`;
+  if (enrichment.status === 'skipped') return `skipped (${enrichment.reason})`;
+  if (enrichment.status === 'noop') return enrichment.reason ? `noop (${enrichment.reason})` : 'noop';
+  return `enriched (${enrichment.nodesCreated} created, ${enrichment.nodesUpdated} updated)`;
+}
+
+function runSetupStage<T>(stage: string, work: () => T): T {
+  try {
+    return work();
+  } catch (error) {
+    throw new Error(`${stage} failed: ${errorMessage(error)}`);
+  }
+}
+
+async function runSetupStageAsync<T>(stage: string, work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    throw new Error(`${stage} failed: ${errorMessage(error)}`);
+  }
 }
 
 async function exportVault(dataDir: string, vaultPath: string, onProgress?: SetupProgress): Promise<void> {

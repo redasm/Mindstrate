@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { detectProject } from '@mindstrate/server';
-import { initializeLocalProject } from './commands/setup.js';
+import { initializeLocalProject, setupMindstrateConfig } from './commands/setup.js';
 
 test('initializeLocalProject writes the project graph to Obsidian when a vault is configured', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-'));
@@ -71,4 +71,19 @@ test('initializeLocalProject reports progress for long setup steps', async () =>
     'Writing project graph artifacts',
     'Saving project metadata',
   ]);
+});
+
+test('setupMindstrateConfig applies LLM values collected during setup', () => {
+  assert.deepEqual(setupMindstrateConfig('data', {
+    OPENAI_API_KEY: 'key',
+    OPENAI_BASE_URL: 'https://llm.example/v1',
+    MINDSTRATE_LLM_MODEL: 'chat-model',
+    MINDSTRATE_EMBEDDING_MODEL: 'embedding-model',
+  }), {
+    dataDir: 'data',
+    openaiApiKey: 'key',
+    openaiBaseUrl: 'https://llm.example/v1',
+    llmModel: 'chat-model',
+    embeddingModel: 'embedding-model',
+  });
 });
