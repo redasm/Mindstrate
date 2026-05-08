@@ -7,6 +7,7 @@ import {
   type ContextEdge,
   type ContextNode,
 } from '@mindstrate/protocol/models';
+import { sortProjectGraphNodesBySalience } from './salience.js';
 
 export interface ProjectGraphAnalysisInput {
   nodes: ContextNode[];
@@ -158,7 +159,7 @@ export const queryProjectGraphTask = (
   const limit = Math.max(input.limit ?? 10, 1);
   const query = input.query?.toLowerCase();
   const matchingNodes = nodes.filter((node) => matchesQuery(node, query));
-  const selected = selectTaskNodes(input.task, nodes, edges, matchingNodes).slice(0, limit);
+  const selected = sortProjectGraphNodesBySalience(selectTaskNodes(input.task, nodes, edges, matchingNodes), edges).slice(0, limit);
   const items = selected.map(toTaskItem);
   const evidence = Array.from(new Set(items.flatMap((item) => item.evidence))).slice(0, limit);
 

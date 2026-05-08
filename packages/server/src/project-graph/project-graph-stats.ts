@@ -10,6 +10,7 @@ import type { DetectedProject } from '../project/index.js';
 import { listProjectGraphOverlays } from './overlay.js';
 import type { ProjectGraphStatsExport } from './project-graph-report-types.js';
 import { countBy, evidencePathsForNode, scoreFirstFile } from './project-graph-report-shared.js';
+import { projectGraphNodeSalience, sortProjectGraphNodesBySalience } from './salience.js';
 
 export const collectProjectGraphStats = (
   store: ContextGraphStore,
@@ -22,30 +23,31 @@ export const collectProjectGraphStats = (
   }).filter(isProjectGraphNode);
   const edges = store.listEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT })
     .filter(isProjectGraphEdge);
+  const overlays = listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
   const firstFiles = nodes
     .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'file')
     .filter((node) => node.metadata?.['generated'] !== true)
+    .sort((left, right) =>
+      projectGraphNodeSalience({ node: right, edges, overlays }) - projectGraphNodeSalience({ node: left, edges, overlays })
+      || scoreFirstFile(right.title) - scoreFirstFile(left.title)
+      || left.title.localeCompare(right.title))
     .map((node) => node.title)
-    .sort((left, right) => scoreFirstFile(right) - scoreFirstFile(left) || left.localeCompare(right))
     .slice(0, 12);
   const entryPoints = firstFiles.slice(0, 8).map((label) => ({ label, evidencePaths: [label] }));
-  const coreModules = nodes
+  const coreModules = sortProjectGraphNodesBySalience(nodes
     .filter((node) => ['project', 'directory', 'file'].includes(String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? '')))
-    .map((node) => ({ label: node.title, evidencePaths: evidencePathsForNode(node), score: scoreFirstFile(node.title) }))
-    .sort((left, right) => right.score - left.score || left.label.localeCompare(right.label))
+    .filter((node) => node.metadata?.['generated'] !== true), edges, overlays)
     .slice(0, 8)
-    .map(({ label, evidencePaths }) => ({ label, evidencePaths }));
+    .map((node) => ({ label: node.title, evidencePaths: evidencePathsForNode(node) }));
   const assetSurfaces = nodes
     .filter((node) => node.metadata?.['scanMode'] === 'metadata-only' && typeof node.metadata?.['assetClass'] === 'string')
     .map((node) => ({ label: `${node.title} (${node.metadata?.['assetClass']})`, evidencePaths: evidencePathsForNode(node) }))
     .sort((left, right) => left.label.localeCompare(right.label))
     .slice(0, 8);
-  const bindingSurfaces = nodes
-    .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'dependency')
+  const bindingSurfaces = sortProjectGraphNodesBySalience(nodes
+    .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'dependency'), edges, overlays)
     .map((node) => ({ label: node.title, evidencePaths: evidencePathsForNode(node) }))
-    .sort((left, right) => left.label.localeCompare(right.label))
     .slice(0, 8);
-  const overlays = listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
 
   return {
     project: project.name,

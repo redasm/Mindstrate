@@ -17,6 +17,7 @@ import type { DetectedProject } from '../project/index.js';
 import { listProjectGraphOverlays } from './overlay.js';
 import { collectProjectGraphStats } from './project-graph-stats.js';
 import type { ProjectGraphStatsExport } from './project-graph-report-types.js';
+import { projectGraphNodeSalience } from './salience.js';
 
 export const collectProjectGraphArtifact = (
   store: ContextGraphStore,
@@ -43,7 +44,7 @@ export const collectProjectGraphArtifact = (
       language: project.language,
     },
     nodes: nodes
-      .map((node) => toArtifactNode(node, stats.overlays))
+      .map((node) => toArtifactNode(node, edges, stats.overlays))
       .sort((left, right) => left.id.localeCompare(right.id)),
     edges: edges
       .map(toArtifactEdge)
@@ -58,7 +59,11 @@ export const collectProjectGraphArtifact = (
   };
 };
 
-const toArtifactNode = (node: ContextNode, overlays: ProjectGraphOverlay[] = []): ProjectGraphArtifactNode => {
+const toArtifactNode = (
+  node: ContextNode,
+  edges: ReturnType<ContextGraphStore['listEdges']>,
+  overlays: ProjectGraphOverlay[] = [],
+): ProjectGraphArtifactNode => {
   const metadata = node.metadata ?? {};
   const evidence = normalizeEvidence(metadata[PROJECT_GRAPH_METADATA_KEYS.evidence]);
   const hasConfirmation = overlays.some((overlay) =>
@@ -72,7 +77,7 @@ const toArtifactNode = (node: ContextNode, overlays: ProjectGraphOverlay[] = [])
     sourceRef: node.sourceRef,
     provenance: String(metadata[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? 'unknown'),
     confidence: hasConfirmation ? Math.max(node.confidence, 0.99) : node.confidence,
-    salience: hasConfirmation ? Math.max(node.qualityScore, 99) : node.qualityScore,
+    salience: projectGraphNodeSalience({ node, edges, overlays }),
     evidence,
     metadata,
   };
