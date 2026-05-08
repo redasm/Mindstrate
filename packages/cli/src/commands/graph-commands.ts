@@ -58,6 +58,27 @@ contextGraphCommand.command('report')
     console.log(`Edges:  ${result.edges}`);
   }));
 
+contextGraphCommand.command('index')
+  .description('Index the project graph with scan and extraction progress, then write artifacts')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
+  .action(async (options) => withMemory('Graph index failed', async (memory) => {
+    const project = detectProject(options.cwd ?? process.cwd());
+    if (!project) throw new Error('Could not detect project.');
+    const result = memory.context.indexProjectGraph(project, {
+      onScanProgress: (event) => {
+        if (event.phase === 'file' && event.files % 100 !== 0) return;
+        console.log(`scan ${event.phase}: ${event.path || '.'} files=${event.files} dirs=${event.directories} generated=${event.generatedFiles} skipped=${event.skippedFiles}`);
+      },
+      onIndexProgress: (event) => {
+        console.log(`index ${event.phase}: ${event.filesProcessed}/${event.filesTotal} nodes=${event.nodes} edges=${event.edges} generated=${event.generatedFiles} metadataOnlyRoots=${event.metadataOnlyRoots} skipped=${event.skippedFiles}`);
+      },
+    });
+    const artifacts = memory.context.writeProjectGraphArtifacts(project);
+    console.log(`Indexed: ${result.filesScanned} files, ${result.nodesExtracted} nodes, ${result.edgesExtracted} edges`);
+    console.log(`Report: ${artifacts.reportPath}`);
+    if (result.nodesExtracted <= result.filesScanned) console.log('Warning: graph may be shallow; configure parser adapters, source roots, or metadata imports for richer graph facts.');
+  }));
+
 contextGraphCommand.command('stats')
   .description('Print project graph health and coverage stats')
   .option('-p, --project <project>', 'Project scope')

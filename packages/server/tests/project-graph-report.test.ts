@@ -302,6 +302,8 @@ describe('project graph report export', () => {
       const appNodePagePath = result.nodePaths.find((filePath) => fs.readFileSync(filePath, 'utf8').includes('# src/App.tsx'));
       expect(appNodePagePath).toBeDefined();
       expect(fs.readFileSync(appNodePagePath!, 'utf8')).toContain('## Outgoing Relations');
+      expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'flows', 'execution-flow.md'))).toBe(true);
+      expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'bindings', 'native-script.md'))).toBe(true);
       const records = memory.projections.listProjectionRecords({
         target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
         limit: 10,

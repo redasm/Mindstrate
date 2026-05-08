@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { createHash } from 'node:crypto';
 import {
   PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  ProjectGraphEdgeKind,
   ProjectionTarget,
   type ProjectGraphArtifact,
   type ProjectGraphArtifactEdge,
@@ -44,6 +45,7 @@ export const writeProjectGraphObsidianProjection = (
   const graph = collectProjectGraphArtifact(store, project, stats);
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
   const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug, overlays);
+  writeObsidianFlowAndBindingPages(graph, vaultRoot, projectSlug);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
@@ -71,6 +73,54 @@ export const writeProjectGraphObsidianProjection = (
     edges: stats.edges,
   };
 };
+
+const writeObsidianFlowAndBindingPages = (
+  graph: ProjectGraphArtifact,
+  vaultRoot: string,
+  projectSlug: string,
+): void => {
+  const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const flowEdges = graph.edges.filter((edge) => [
+    ProjectGraphEdgeKind.ENTRYPOINT_TO,
+    ProjectGraphEdgeKind.CALLS,
+    ProjectGraphEdgeKind.BINDS_TO,
+    ProjectGraphEdgeKind.ROUTES_TO,
+  ].includes(edge.kind as ProjectGraphEdgeKind));
+  const bindingEdges = graph.edges.filter((edge) => edge.kind === ProjectGraphEdgeKind.BINDS_TO);
+
+  writeProjectGraphTextFileAtomically(
+    path.join(architectureDir, 'flows', 'execution-flow.md'),
+    renderEdgeProjectionPage('Execution Flow', flowEdges, nodeById),
+  );
+  writeProjectGraphTextFileAtomically(
+    path.join(architectureDir, 'bindings', 'native-script.md'),
+    renderEdgeProjectionPage('Native Script Bindings', bindingEdges, nodeById),
+  );
+};
+
+const renderEdgeProjectionPage = (
+  title: string,
+  edges: ProjectGraphArtifactEdge[],
+  nodeById: Map<string, ProjectGraphArtifactNode>,
+): string => [
+  `# ${title}`,
+  '',
+  '<!-- mindstrate:project-graph:generated:start -->',
+  ...(edges.length > 0
+    ? edges
+      .slice()
+      .sort((left, right) => `${left.kind}:${left.sourceId}:${left.targetId}`.localeCompare(`${right.kind}:${right.sourceId}:${right.targetId}`))
+      .map((edge) => {
+        const source = nodeById.get(edge.sourceId);
+        const target = nodeById.get(edge.targetId);
+        const evidence = edge.evidence[0]?.path ? ` (${formatEvidence(edge.evidence[0].path, edge.evidence[0].startLine, edge.evidence[0].endLine)})` : '';
+        return `- ${nodeLink(source, edge.sourceId)} ${edge.kind} ${nodeLink(target, edge.targetId)}${evidence}`;
+      })
+    : ['- None detected yet.']),
+  '<!-- mindstrate:project-graph:generated:end -->',
+  '',
+].join('\n');
 
 const writeObsidianModulePages = (
   store: ContextGraphStore,
@@ -223,6 +273,9 @@ const nodePageSlug = (node: ProjectGraphArtifactNode): string => {
 };
 
 const escapeWikiLabel = (value: string): string => value.replace(/[\[\]|]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const nodeLink = (node: ProjectGraphArtifactNode | undefined, fallback: string): string =>
+  node ? `[[nodes/${nodePageSlug(node)}|${escapeWikiLabel(node.label)}]]` : fallback;
 
 const formatEvidence = (filePath: string, startLine?: number, endLine?: number): string => {
   if (typeof startLine !== 'number') return filePath;
