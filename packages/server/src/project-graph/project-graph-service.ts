@@ -121,9 +121,9 @@ const buildProjectGraphExtraction = (
   const nodes = new Map<string, ProjectGraphNodeDto>();
   const edges = new Map<string, ProjectGraphEdgeDto>();
   const parserAdapters = [
-    createTreeSitterSourceParser(),
     createUnrealCppParserAdapter(),
     createScriptRegexParserAdapter(),
+    createTreeSitterSourceParser(),
   ];
   const previousCache = readProjectGraphExtractionCache(project.root);
   const nextCache: ProjectGraphFileExtractionCache = { version: 2, files: {} };

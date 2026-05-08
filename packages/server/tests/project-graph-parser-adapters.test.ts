@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createScriptRegexParserAdapter } from '../src/project-graph/script-parser-adapter.js';
+import { createTreeSitterSourceParser } from '../src/project-graph/tree-sitter-source-parser.js';
 import { createUnrealCppParserAdapter } from '../src/project-graph/unreal-cpp-parser-adapter.js';
 
 describe('project graph parser adapters', () => {
@@ -58,5 +59,26 @@ describe('project graph parser adapters', () => {
         endLine: 5,
       }),
     ]));
+  });
+
+  it('extracts Python imports, symbols, calls, and UE bindings through tree-sitter', () => {
+    const parser = createTreeSitterSourceParser();
+    const result = parser.parse({
+      path: 'Python/tools.py',
+      language: 'python',
+      content: 'import unreal\nfrom Game.Inventory import Item\nclass ImportTool:\n  def run(self):\n    unreal.EditorAssetLibrary()\n    helper()\n',
+    });
+
+    expect(parser.languages).toContain('python');
+    expect(result.hasErrors).toBe(false);
+    expect(result.captures.map((capture) => `${capture.name}:${capture.text}`)).toEqual(expect.arrayContaining([
+      'script.import:unreal',
+      'script.import:Game.Inventory',
+      'script.class:ImportTool',
+      'script.function:run',
+      'script.ue-call:EditorAssetLibrary',
+      'call.function:helper',
+    ]));
+    expect(result.captures.every((capture) => capture.extractorId === 'tree-sitter-source')).toBe(true);
   });
 });

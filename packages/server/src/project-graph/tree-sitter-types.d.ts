@@ -38,3 +38,8 @@ declare module 'tree-sitter-javascript' {
   const grammar: unknown;
   export = grammar;
 }
+
+declare module 'tree-sitter-python' {
+  const grammar: unknown;
+  export = grammar;
+}

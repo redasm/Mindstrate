@@ -168,7 +168,7 @@ describe('project graph service', () => {
     expect(nodes.find((node) => node.title === 'game.inventory')).toBeDefined();
     expect(nodes.find((node) => node.title === 'ImportTool')?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.CLASS });
     expect(nodes.find((node) => node.title === 'ImportTool')?.metadata?.[PROJECT_GRAPH_METADATA_KEYS.evidence]).toEqual(
-      expect.arrayContaining([expect.objectContaining({ extractorId: 'script-regex' })]),
+      expect.arrayContaining([expect.objectContaining({ extractorId: 'tree-sitter-source' })]),
     );
     expect(nodes.find((node) => node.title === 'Fire')?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.FUNCTION });
     expect(nodes.find((node) => node.title === 'InventoryComponent')).toBeDefined();

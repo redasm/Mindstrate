@@ -1,5 +1,6 @@
 import Parser from 'tree-sitter';
 import JavaScript from 'tree-sitter-javascript';
+import Python from 'tree-sitter-python';
 import TypeScript from 'tree-sitter-typescript';
 import type {
   ParserAdapter,
@@ -14,7 +15,7 @@ export const createTreeSitterSourceParser = (): ParserAdapter => new TreeSitterS
 
 class TreeSitterSourceParser implements ParserAdapter {
   readonly id = 'tree-sitter-source';
-  readonly languages: SourceLanguage[] = ['typescript', 'tsx', 'javascript', 'jsx'];
+  readonly languages: SourceLanguage[] = ['typescript', 'tsx', 'javascript', 'jsx', 'python'];
 
   parse(input: ParserInput): ParserResult {
     const language = assertSourceLanguage(input.language);
@@ -39,22 +40,28 @@ class TreeSitterSourceParser implements ParserAdapter {
       path: input.path,
       language,
       hasErrors: tree.rootNode.hasError,
-      captures: addReactDerivedCaptures(captures),
+      captures: addDerivedCaptures(language, captures),
     };
   }
 }
 
 const assertSourceLanguage = (language: string): SourceLanguage => {
-  if (language === 'typescript' || language === 'tsx' || language === 'javascript' || language === 'jsx') {
+  if (language === 'typescript' || language === 'tsx' || language === 'javascript' || language === 'jsx' || language === 'python') {
     return language;
   }
   throw new Error(`Unsupported tree-sitter language: ${language}`);
 };
 
 const grammarForLanguage = (language: SourceLanguage): unknown => {
+  if (language === 'python') return Python;
   if (language === 'typescript') return TypeScript.typescript;
   if (language === 'tsx') return TypeScript.tsx;
   return JavaScript;
+};
+
+const addDerivedCaptures = (language: SourceLanguage, captures: ParserCapture[]): ParserCapture[] => {
+  if (language === 'python') return addPythonDerivedCaptures(captures);
+  return addReactDerivedCaptures(captures);
 };
 
 const addReactDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] => [
@@ -65,6 +72,17 @@ const addReactDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] => 
   ...captures
     .filter((capture) => capture.name === 'call.function' && isHookName(capture.text))
     .map((capture) => ({ ...capture, name: 'react.hook' })),
+];
+
+const addPythonDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] => [
+  ...captures.filter((capture) => capture.name !== 'python.call.attribute'),
+  ...captures
+    .filter((capture) => capture.name === 'python.call.attribute' && capture.text.startsWith('unreal.'))
+    .map((capture) => ({
+      ...capture,
+      name: 'script.ue-call',
+      text: capture.text.slice('unreal.'.length),
+    })),
 ];
 
 const startsWithUppercase = (value: string): boolean => /^[A-Z]/.test(value);
