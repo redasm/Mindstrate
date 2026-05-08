@@ -4,7 +4,10 @@ const nextConfig = {
   serverExternalPackages: [
     'better-sqlite3',
     'tree-sitter',
+    'tree-sitter-c-sharp',
+    'tree-sitter-cpp',
     'tree-sitter-javascript',
+    'tree-sitter-python',
     'tree-sitter-typescript',
   ],
   devIndicators: false,
