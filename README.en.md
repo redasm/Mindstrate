@@ -42,7 +42,7 @@ Main packages:
 - `packages/obsidian-sync`: Obsidian projection and sync.
 - `packages/team-server`, `packages/web-ui`: team deployment surface.
 
-See [Architecture](docs/architecture.md) for package boundaries.
+See [Architecture](docs/architecture.en.md) for package boundaries.
 
 ## Quick Start
 
@@ -116,9 +116,11 @@ mindstrate-scan daemon
 - [Data Collection Guide](docs/data-collection.en.md): `repo-scanner`, Git/P4, hooks, daemon, custom collectors, standard `ChangeSet`.
 - [Project Configuration](docs/project-configuration.en.md): `.mindstrate/project.json`, `.mindstrate/config.json`, built-in rules, custom `.mindstrate/rules/*.json`.
 - [Project Detection Rules](docs/project-detection-rules.en.md): rule schema, match conditions, security boundary.
-- [Deployment Guide](docs/deployment-guide.md): deeper deployment and operations guide.
-- [Repo Scanner Design](docs/repo-scanner-design.md): why external collection lives outside the framework.
-- [Project Graph Init Plan](docs/project-graph-init-plan.md): project graph roadmap and phase history.
+- [Deployment Guide](docs/deployment-guide.en.md): deployment modes and operations guide.
+- [Repo Scanner](docs/repo-scanner.en.md): external repository collection boundary and workflows.
+- [Project Graph](docs/project-graph.en.md): parser-first project graph pipeline and query surface.
+- [ECS Memory Architecture](docs/ecs-memory.en.md): graph-first memory substrate and metabolism model.
+- [Context Engineering](docs/context-engineering.en.md): working-context assembly policy.
 
 ## Runtime API Shape
 

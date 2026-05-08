@@ -8,12 +8,12 @@
 - [数据采集指南](data-collection.zh-CN.md)：repo-scanner、Git/P4、hook、daemon、自定义 collector、标准 changeset。
 - [项目配置](project-configuration.zh-CN.md)：`.mindstrate/project.json`、`.mindstrate/config.json`、内置和自定义项目规则。
 - [项目检测规则](project-detection-rules.zh-CN.md)：规则 schema 和安全边界。
-- [部署指南](deployment-guide.md)：更完整的部署和运维说明。
+- [部署指南](deployment-guide.zh-CN.md)：部署模式和运维说明。
 
 ## 架构与设计
 
-- [Architecture](architecture.md)：包边界和 import 规则。
-- [Repo Scanner Design](repo-scanner-design.md)：为什么 source collection 在框架外。
-- [Project Graph Init Plan](project-graph-init-plan.md)：项目图谱实施路线。
-- [ECS Refactor Design](ecs-refactor-design.md)：ECS 记忆架构设计。
-- [Context Engineering Optimization Plan](context-engineering-optimization-plan.md)：上下文装配与优化计划。
+- [架构](architecture.zh-CN.md)：包边界和 import 规则。
+- [Repo Scanner](repo-scanner.zh-CN.md)：外部仓库采集边界和工作流。
+- [项目图谱](project-graph.zh-CN.md)：parser-first 项目图谱 pipeline 和查询接口。
+- [ECS 记忆架构](ecs-memory.zh-CN.md)：graph-first 记忆基底和代谢模型。
+- [上下文工程](context-engineering.zh-CN.md)：工作上下文装配策略。

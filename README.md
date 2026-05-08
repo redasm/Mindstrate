@@ -13,7 +13,7 @@ Mindstrate is a memory and context substrate for AI coding agents. It captures r
 - [Installation / 安装](docs/installation.md)
 - [Data Collection / 数据采集](docs/data-collection.md)
 - [Project Configuration / 项目配置](docs/project-configuration.md)
-- [Architecture](docs/architecture.md)
+- [Architecture](docs/architecture.en.md) / [架构](docs/architecture.zh-CN.md)
 
 ## License
 

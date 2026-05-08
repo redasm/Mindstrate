@@ -42,7 +42,7 @@ AI 工具 -> 本地 MCP Server -> Team Server HTTP API -> 共享 Mindstrate runt
 - `packages/obsidian-sync`：Obsidian 投影与同步。
 - `packages/team-server`、`packages/web-ui`：团队部署入口。
 
-架构边界见 [Architecture](docs/architecture.md)。
+架构边界见 [架构](docs/architecture.zh-CN.md)。
 
 ## 快速开始
 
@@ -116,9 +116,11 @@ mindstrate-scan daemon
 - [数据采集指南](docs/data-collection.zh-CN.md)：`repo-scanner`、Git/P4、hook、daemon、自定义 collector、标准 `ChangeSet`。
 - [项目配置](docs/project-configuration.zh-CN.md)：`.mindstrate/project.json`、`.mindstrate/config.json`、内置规则、自定义 `.mindstrate/rules/*.json`。
 - [项目检测规则](docs/project-detection-rules.zh-CN.md)：规则 schema、匹配条件、安全边界。
-- [部署指南](docs/deployment-guide.md)：更完整的部署和运维说明。
-- [Repo Scanner 设计](docs/repo-scanner-design.md)：为什么外部采集放在框架外。
-- [Project Graph Init Plan](docs/project-graph-init-plan.md)：项目图谱路线图和阶段记录。
+- [部署指南](docs/deployment-guide.zh-CN.md)：部署模式和运维说明。
+- [Repo Scanner](docs/repo-scanner.zh-CN.md)：外部仓库采集边界和工作流。
+- [项目图谱](docs/project-graph.zh-CN.md)：parser-first 项目图谱 pipeline 和查询接口。
+- [ECS 记忆架构](docs/ecs-memory.zh-CN.md)：graph-first 记忆基底和代谢模型。
+- [上下文工程](docs/context-engineering.zh-CN.md)：工作上下文装配策略。
 
 ## Runtime API 形态
 
