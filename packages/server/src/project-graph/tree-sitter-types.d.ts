@@ -26,6 +26,11 @@ declare module 'tree-sitter' {
   export = Parser;
 }
 
+declare module 'tree-sitter-c-sharp' {
+  const grammar: unknown;
+  export = grammar;
+}
+
 declare module 'tree-sitter-typescript' {
   const grammars: {
     typescript: unknown;

@@ -81,4 +81,24 @@ describe('project graph parser adapters', () => {
     ]));
     expect(result.captures.every((capture) => capture.extractorId === 'tree-sitter-source')).toBe(true);
   });
+
+  it('extracts C# using directives, symbols, calls, and UE bindings through tree-sitter', () => {
+    const parser = createTreeSitterSourceParser();
+    const result = parser.parse({
+      path: 'CSharp/Game/Weapon.cs',
+      language: 'csharp',
+      content: 'using Game.Inventory;\npublic class Weapon {\n  public void Fire() { UE.FireWeapon(); helper(); }\n}\n',
+    });
+
+    expect(parser.languages).toContain('csharp');
+    expect(result.hasErrors).toBe(false);
+    expect(result.captures.map((capture) => `${capture.name}:${capture.text}`)).toEqual(expect.arrayContaining([
+      'script.import:Game.Inventory',
+      'script.class:Weapon',
+      'script.function:Fire',
+      'script.ue-call:FireWeapon',
+      'call.function:helper',
+    ]));
+    expect(result.captures.every((capture) => capture.extractorId === 'tree-sitter-source')).toBe(true);
+  });
 });

@@ -1,4 +1,5 @@
 import Parser from 'tree-sitter';
+import CSharp from 'tree-sitter-c-sharp';
 import JavaScript from 'tree-sitter-javascript';
 import Python from 'tree-sitter-python';
 import TypeScript from 'tree-sitter-typescript';
@@ -15,7 +16,7 @@ export const createTreeSitterSourceParser = (): ParserAdapter => new TreeSitterS
 
 class TreeSitterSourceParser implements ParserAdapter {
   readonly id = 'tree-sitter-source';
-  readonly languages: SourceLanguage[] = ['typescript', 'tsx', 'javascript', 'jsx', 'python'];
+  readonly languages: SourceLanguage[] = ['typescript', 'tsx', 'javascript', 'jsx', 'python', 'csharp'];
 
   parse(input: ParserInput): ParserResult {
     const language = assertSourceLanguage(input.language);
@@ -46,13 +47,21 @@ class TreeSitterSourceParser implements ParserAdapter {
 }
 
 const assertSourceLanguage = (language: string): SourceLanguage => {
-  if (language === 'typescript' || language === 'tsx' || language === 'javascript' || language === 'jsx' || language === 'python') {
+  if (
+    language === 'typescript'
+    || language === 'tsx'
+    || language === 'javascript'
+    || language === 'jsx'
+    || language === 'python'
+    || language === 'csharp'
+  ) {
     return language;
   }
   throw new Error(`Unsupported tree-sitter language: ${language}`);
 };
 
 const grammarForLanguage = (language: SourceLanguage): unknown => {
+  if (language === 'csharp') return CSharp;
   if (language === 'python') return Python;
   if (language === 'typescript') return TypeScript.typescript;
   if (language === 'tsx') return TypeScript.tsx;
@@ -60,6 +69,7 @@ const grammarForLanguage = (language: SourceLanguage): unknown => {
 };
 
 const addDerivedCaptures = (language: SourceLanguage, captures: ParserCapture[]): ParserCapture[] => {
+  if (language === 'csharp') return addMemberAccessDerivedCaptures(captures, 'csharp.call.member', 'UE.');
   if (language === 'python') return addPythonDerivedCaptures(captures);
   return addReactDerivedCaptures(captures);
 };
@@ -75,13 +85,21 @@ const addReactDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] => 
 ];
 
 const addPythonDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] => [
-  ...captures.filter((capture) => capture.name !== 'python.call.attribute'),
+  ...addMemberAccessDerivedCaptures(captures, 'python.call.attribute', 'unreal.'),
+];
+
+const addMemberAccessDerivedCaptures = (
+  captures: ParserCapture[],
+  memberCaptureName: string,
+  ueNamespace: string,
+): ParserCapture[] => [
+  ...captures.filter((capture) => capture.name !== memberCaptureName),
   ...captures
-    .filter((capture) => capture.name === 'python.call.attribute' && capture.text.startsWith('unreal.'))
+    .filter((capture) => capture.name === memberCaptureName && capture.text.startsWith(ueNamespace))
     .map((capture) => ({
       ...capture,
       name: 'script.ue-call',
-      text: capture.text.slice('unreal.'.length),
+      text: capture.text.slice(ueNamespace.length),
     })),
 ];
 

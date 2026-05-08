@@ -171,6 +171,9 @@ describe('project graph service', () => {
       expect.arrayContaining([expect.objectContaining({ extractorId: 'tree-sitter-source' })]),
     );
     expect(nodes.find((node) => node.title === 'Fire')?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.FUNCTION });
+    expect(nodes.find((node) => node.title === 'Fire')?.metadata?.[PROJECT_GRAPH_METADATA_KEYS.evidence]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ extractorId: 'tree-sitter-source' })]),
+    );
     expect(nodes.find((node) => node.title === 'InventoryComponent')).toBeDefined();
     expect(nodes.some((node) => node.metadata?.kind === ProjectGraphNodeKind.DEPENDENCY)).toBe(true);
     expect(typingFile).toBeUndefined();

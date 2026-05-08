@@ -26,6 +26,14 @@ const pythonQuery = `
   (call function: (attribute) @python.call.attribute)
 `;
 
+const csharpQuery = `
+  (using_directive (qualified_name) @script.import)
+  (class_declaration name: (identifier) @script.class)
+  (method_declaration name: (identifier) @script.function)
+  (invocation_expression function: (identifier) @call.function)
+  (invocation_expression function: (member_access_expression) @csharp.call.member)
+`;
+
 export const BUILTIN_TREE_SITTER_QUERY_PACKS: QueryPack[] = [
   {
     id: 'typescript-source',
@@ -41,6 +49,11 @@ export const BUILTIN_TREE_SITTER_QUERY_PACKS: QueryPack[] = [
     id: 'python-source',
     languages: ['python'],
     query: pythonQuery,
+  },
+  {
+    id: 'csharp-source',
+    languages: ['csharp'],
+    query: csharpQuery,
   },
 ];
 
