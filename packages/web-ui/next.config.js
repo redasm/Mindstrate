@@ -4,6 +4,7 @@ const nextConfig = {
   serverExternalPackages: [
     'better-sqlite3',
     'tree-sitter',
+    '@tree-sitter-grammars/tree-sitter-lua',
     'tree-sitter-c-sharp',
     'tree-sitter-cpp',
     'tree-sitter-javascript',

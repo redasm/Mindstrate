@@ -49,6 +49,11 @@ declare module 'tree-sitter-javascript' {
   export = grammar;
 }
 
+declare module '@tree-sitter-grammars/tree-sitter-lua' {
+  const grammar: unknown;
+  export = grammar;
+}
+
 declare module 'tree-sitter-python' {
   const grammar: unknown;
   export = grammar;

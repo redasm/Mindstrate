@@ -34,6 +34,14 @@ const csharpQuery = `
   (invocation_expression function: (member_access_expression) @csharp.call.member)
 `;
 
+const luaQuery = `
+  (function_declaration name: (identifier) @script.function)
+  (function_declaration name: (dot_index_expression field: (identifier) @script.function))
+  (function_call name: (identifier) @call.function)
+  (function_call name: (dot_index_expression) @lua.call.member)
+  (function_call name: (identifier) @lua.require arguments: (arguments (string content: (string_content) @script.import)))
+`;
+
 const cppQuery = `
   (preproc_include path: (string_literal) @import.source)
   (class_specifier name: (type_identifier) @class.name)
@@ -65,6 +73,11 @@ export const BUILTIN_TREE_SITTER_QUERY_PACKS: QueryPack[] = [
     id: 'csharp-source',
     languages: ['csharp'],
     query: csharpQuery,
+  },
+  {
+    id: 'lua-source',
+    languages: ['lua'],
+    query: luaQuery,
   },
   {
     id: 'cpp-source',

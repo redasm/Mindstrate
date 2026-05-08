@@ -2,6 +2,7 @@ import Parser from 'tree-sitter';
 import CSharp from 'tree-sitter-c-sharp';
 import Cpp from 'tree-sitter-cpp';
 import JavaScript from 'tree-sitter-javascript';
+import Lua from '@tree-sitter-grammars/tree-sitter-lua';
 import Python from 'tree-sitter-python';
 import TypeScript from 'tree-sitter-typescript';
 import type {
@@ -17,7 +18,7 @@ export const createTreeSitterSourceParser = (): ParserAdapter => new TreeSitterS
 
 class TreeSitterSourceParser implements ParserAdapter {
   readonly id = 'tree-sitter-source';
-  readonly languages: SourceLanguage[] = ['typescript', 'tsx', 'javascript', 'jsx', 'python', 'csharp', 'cpp'];
+  readonly languages: SourceLanguage[] = ['typescript', 'tsx', 'javascript', 'jsx', 'python', 'lua', 'csharp', 'cpp'];
 
   parse(input: ParserInput): ParserResult {
     const language = assertSourceLanguage(input.language);
@@ -54,6 +55,7 @@ const assertSourceLanguage = (language: string): SourceLanguage => {
     || language === 'javascript'
     || language === 'jsx'
     || language === 'python'
+    || language === 'lua'
     || language === 'csharp'
     || language === 'cpp'
   ) {
@@ -65,6 +67,7 @@ const assertSourceLanguage = (language: string): SourceLanguage => {
 const grammarForLanguage = (language: SourceLanguage): unknown => {
   if (language === 'cpp') return Cpp;
   if (language === 'csharp') return CSharp;
+  if (language === 'lua') return Lua;
   if (language === 'python') return Python;
   if (language === 'typescript') return TypeScript.typescript;
   if (language === 'tsx') return TypeScript.tsx;
@@ -74,6 +77,7 @@ const grammarForLanguage = (language: SourceLanguage): unknown => {
 const addDerivedCaptures = (language: SourceLanguage, captures: ParserCapture[]): ParserCapture[] => {
   if (language === 'cpp') return addCppDerivedCaptures(captures);
   if (language === 'csharp') return addMemberAccessDerivedCaptures(captures, 'csharp.call.member', 'UE.');
+  if (language === 'lua') return addLuaDerivedCaptures(captures);
   if (language === 'python') return addPythonDerivedCaptures(captures);
   return addReactDerivedCaptures(captures);
 };
@@ -90,6 +94,11 @@ const addReactDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] => 
 
 const addPythonDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] => [
   ...addMemberAccessDerivedCaptures(captures, 'python.call.attribute', 'unreal.'),
+];
+
+const addLuaDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] => [
+  ...addMemberAccessDerivedCaptures(captures, 'lua.call.member', 'UE.')
+    .filter((capture) => capture.name !== 'lua.require' && !(capture.name === 'call.function' && capture.text === 'require')),
 ];
 
 const addCppDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] =>

@@ -21,6 +21,7 @@
   "dependencies": {
     "@mindstrate/client": "*",
     "@mindstrate/protocol": "*",
+    "@tree-sitter-grammars/tree-sitter-lua": "^0.2.0",
     "better-sqlite3": "^11.7.0",
     "openai": "^4.77.0",
     "tree-sitter": "^0.21.1",

@@ -102,6 +102,26 @@ describe('project graph parser adapters', () => {
     expect(result.captures.every((capture) => capture.extractorId === 'tree-sitter-source')).toBe(true);
   });
 
+  it('extracts Lua imports, functions, calls, and UE bindings through tree-sitter', () => {
+    const parser = createTreeSitterSourceParser();
+    const result = parser.parse({
+      path: 'Scripts/inventory.lua',
+      language: 'lua',
+      content: 'local Inventory = require([[Game.Inventory]])\nfunction GiveItem()\n  UE.InventoryComponent()\n  helper()\nend\n',
+    });
+
+    expect(parser.languages).toContain('lua');
+    expect(result.hasErrors).toBe(false);
+    expect(result.captures.map((capture) => `${capture.name}:${capture.text}`)).toEqual(expect.arrayContaining([
+      'script.import:Game.Inventory',
+      'script.function:GiveItem',
+      'script.ue-call:InventoryComponent',
+      'call.function:helper',
+    ]));
+    expect(result.captures.map((capture) => `${capture.name}:${capture.text}`)).not.toContain('call.function:require');
+    expect(result.captures.every((capture) => capture.extractorId === 'tree-sitter-source')).toBe(true);
+  });
+
   it('extracts C++ includes, symbols, and calls through tree-sitter', () => {
     const parser = createTreeSitterSourceParser();
     const result = parser.parse({
