@@ -34,6 +34,17 @@ const csharpQuery = `
   (invocation_expression function: (member_access_expression) @csharp.call.member)
 `;
 
+const cppQuery = `
+  (preproc_include path: (string_literal) @import.source)
+  (class_specifier name: (type_identifier) @class.name)
+  (struct_specifier name: (type_identifier) @class.name)
+  (function_definition declarator: (function_declarator declarator: (identifier) @function.name))
+  (function_definition declarator: (function_declarator declarator: (field_identifier) @function.name))
+  (field_declaration declarator: (function_declarator declarator: (field_identifier) @function.name))
+  (declaration declarator: (function_declarator declarator: (identifier) @function.name))
+  (call_expression function: (identifier) @call.function)
+`;
+
 export const BUILTIN_TREE_SITTER_QUERY_PACKS: QueryPack[] = [
   {
     id: 'typescript-source',
@@ -54,6 +65,11 @@ export const BUILTIN_TREE_SITTER_QUERY_PACKS: QueryPack[] = [
     id: 'csharp-source',
     languages: ['csharp'],
     query: csharpQuery,
+  },
+  {
+    id: 'cpp-source',
+    languages: ['cpp'],
+    query: cppQuery,
   },
 ];
 

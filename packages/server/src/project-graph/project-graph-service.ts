@@ -407,6 +407,8 @@ const addSourceFacts = (
       addDependencyFact(project, filePath, stripQuotes(capture.text), nodes, edges, ProjectGraphEdgeKind.IMPORTS, capture);
     } else if (capture.name === 'function.name') {
       addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
+    } else if (capture.name === 'class.name') {
+      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
     } else if (capture.name === 'call.function') {
       addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
     } else if (capture.name === 'react.component') {
@@ -517,7 +519,28 @@ const makeEdge = (
 });
 
 const addNode = (nodes: Map<string, ProjectGraphNodeDto>, node: ProjectGraphNodeDto): void => {
-  nodes.set(node.id, node);
+  const existing = nodes.get(node.id);
+  if (!existing) {
+    nodes.set(node.id, node);
+    return;
+  }
+  nodes.set(node.id, {
+    ...existing,
+    ...node,
+    evidence: mergeEvidence(existing.evidence, node.evidence),
+    metadata: {
+      ...(existing.metadata ?? {}),
+      ...(node.metadata ?? {}),
+    },
+  });
+};
+
+const mergeEvidence = (left: EvidenceRef[], right: EvidenceRef[]): EvidenceRef[] => {
+  const merged = new Map<string, EvidenceRef>();
+  for (const ref of [...left, ...right]) {
+    merged.set(JSON.stringify(ref), ref);
+  }
+  return Array.from(merged.values());
 };
 
 const addEdge = (edges: Map<string, ProjectGraphEdgeDto>, edge: ProjectGraphEdgeDto): void => {

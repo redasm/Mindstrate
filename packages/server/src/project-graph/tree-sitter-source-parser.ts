@@ -1,5 +1,6 @@
 import Parser from 'tree-sitter';
 import CSharp from 'tree-sitter-c-sharp';
+import Cpp from 'tree-sitter-cpp';
 import JavaScript from 'tree-sitter-javascript';
 import Python from 'tree-sitter-python';
 import TypeScript from 'tree-sitter-typescript';
@@ -16,7 +17,7 @@ export const createTreeSitterSourceParser = (): ParserAdapter => new TreeSitterS
 
 class TreeSitterSourceParser implements ParserAdapter {
   readonly id = 'tree-sitter-source';
-  readonly languages: SourceLanguage[] = ['typescript', 'tsx', 'javascript', 'jsx', 'python', 'csharp'];
+  readonly languages: SourceLanguage[] = ['typescript', 'tsx', 'javascript', 'jsx', 'python', 'csharp', 'cpp'];
 
   parse(input: ParserInput): ParserResult {
     const language = assertSourceLanguage(input.language);
@@ -54,6 +55,7 @@ const assertSourceLanguage = (language: string): SourceLanguage => {
     || language === 'jsx'
     || language === 'python'
     || language === 'csharp'
+    || language === 'cpp'
   ) {
     return language;
   }
@@ -61,6 +63,7 @@ const assertSourceLanguage = (language: string): SourceLanguage => {
 };
 
 const grammarForLanguage = (language: SourceLanguage): unknown => {
+  if (language === 'cpp') return Cpp;
   if (language === 'csharp') return CSharp;
   if (language === 'python') return Python;
   if (language === 'typescript') return TypeScript.typescript;
@@ -69,6 +72,7 @@ const grammarForLanguage = (language: SourceLanguage): unknown => {
 };
 
 const addDerivedCaptures = (language: SourceLanguage, captures: ParserCapture[]): ParserCapture[] => {
+  if (language === 'cpp') return addCppDerivedCaptures(captures);
   if (language === 'csharp') return addMemberAccessDerivedCaptures(captures, 'csharp.call.member', 'UE.');
   if (language === 'python') return addPythonDerivedCaptures(captures);
   return addReactDerivedCaptures(captures);
@@ -88,6 +92,13 @@ const addPythonDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] =>
   ...addMemberAccessDerivedCaptures(captures, 'python.call.attribute', 'unreal.'),
 ];
 
+const addCppDerivedCaptures = (captures: ParserCapture[]): ParserCapture[] =>
+  captures.filter((capture) => {
+    if (capture.name === 'class.name' && capture.text.endsWith('_API')) return false;
+    if (capture.name === 'call.function' && UNREAL_REFLECTION_MACROS.has(capture.text)) return false;
+    return true;
+  });
+
 const addMemberAccessDerivedCaptures = (
   captures: ParserCapture[],
   memberCaptureName: string,
@@ -105,3 +116,4 @@ const addMemberAccessDerivedCaptures = (
 
 const startsWithUppercase = (value: string): boolean => /^[A-Z]/.test(value);
 const isHookName = (value: string): boolean => /^use[A-Z0-9]/.test(value);
+const UNREAL_REFLECTION_MACROS = new Set(['UCLASS', 'USTRUCT', 'UENUM', 'UFUNCTION', 'UPROPERTY', 'GENERATED_BODY']);

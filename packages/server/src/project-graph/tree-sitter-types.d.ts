@@ -31,6 +31,11 @@ declare module 'tree-sitter-c-sharp' {
   export = grammar;
 }
 
+declare module 'tree-sitter-cpp' {
+  const grammar: unknown;
+  export = grammar;
+}
+
 declare module 'tree-sitter-typescript' {
   const grammars: {
     typescript: unknown;

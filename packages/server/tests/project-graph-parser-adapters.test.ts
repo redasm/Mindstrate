@@ -101,4 +101,24 @@ describe('project graph parser adapters', () => {
     ]));
     expect(result.captures.every((capture) => capture.extractorId === 'tree-sitter-source')).toBe(true);
   });
+
+  it('extracts C++ includes, symbols, and calls through tree-sitter', () => {
+    const parser = createTreeSitterSourceParser();
+    const result = parser.parse({
+      path: 'Source/Game/Player.cpp',
+      language: 'cpp',
+      content: '#include "InventoryComponent.h"\nclass UInventoryComponent : public UObject {\npublic:\n  void AddItem();\n};\nvoid Fire() { AddItem(); }\n',
+    });
+
+    expect(parser.languages).toContain('cpp');
+    expect(result.hasErrors).toBe(false);
+    expect(result.captures.map((capture) => `${capture.name}:${capture.text}`)).toEqual(expect.arrayContaining([
+      'import.source:"InventoryComponent.h"',
+      'class.name:UInventoryComponent',
+      'function.name:AddItem',
+      'function.name:Fire',
+      'call.function:AddItem',
+    ]));
+    expect(result.captures.every((capture) => capture.extractorId === 'tree-sitter-source')).toBe(true);
+  });
 });
