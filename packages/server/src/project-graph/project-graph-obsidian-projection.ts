@@ -1,8 +1,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import {
   PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   ProjectionTarget,
+  type ProjectGraphArtifact,
+  type ProjectGraphArtifactEdge,
+  type ProjectGraphArtifactNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
@@ -19,6 +23,7 @@ import {
 import { slugifyProjectGraphValue } from './project-graph-report-shared.js';
 import type { ProjectGraphArtifactResult } from './project-graph-report-types.js';
 import { collectProjectGraphStats } from './project-graph-stats.js';
+import { resolveProjectGraphLocale } from './project-graph-locale.js';
 
 export const writeProjectGraphObsidianProjection = (
   store: ContextGraphStore,
@@ -37,6 +42,7 @@ export const writeProjectGraphObsidianProjection = (
   const report = renderEditableObsidianProjection(generated, existing, overlays);
   const graph = collectProjectGraphArtifact(store, project, stats);
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
+  const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
@@ -59,6 +65,7 @@ export const writeProjectGraphObsidianProjection = (
     statsPath,
     graphPath,
     modulePaths,
+    nodePaths,
     nodes: stats.nodes,
     edges: stats.edges,
   };
@@ -84,4 +91,134 @@ const writeObsidianModulePages = (
     writeProjectGraphTextFileAtomically(modulePath, renderEditableModulePage(module, overlays, existing));
     return modulePath;
   });
+};
+
+const writeObsidianNodePages = (
+  graph: ProjectGraphArtifact,
+  vaultRoot: string,
+  projectSlug: string,
+): string[] => {
+  const nodeDir = path.join(vaultRoot, projectSlug, 'architecture', 'nodes');
+  fs.mkdirSync(nodeDir, { recursive: true });
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const outgoing = edgesBy(graph.edges, (edge) => edge.sourceId);
+  const incoming = edgesBy(graph.edges, (edge) => edge.targetId);
+  const written = new Set<string>();
+  const paths: string[] = [];
+
+  for (const node of graph.nodes) {
+    const nodePath = path.join(nodeDir, `${nodePageSlug(node)}.md`);
+    writeProjectGraphTextFileAtomically(nodePath, renderObsidianNodePage({
+      node,
+      outgoing: outgoing.get(node.id) ?? [],
+      incoming: incoming.get(node.id) ?? [],
+      nodeById,
+    }));
+    written.add(path.basename(nodePath));
+    paths.push(nodePath);
+  }
+
+  const indexPath = path.join(nodeDir, 'index.md');
+  writeProjectGraphTextFileAtomically(indexPath, renderObsidianNodeIndex(graph.nodes));
+  written.add('index.md');
+  paths.unshift(indexPath);
+
+  for (const entry of fs.readdirSync(nodeDir)) {
+    if (entry.endsWith('.md') && !written.has(entry)) fs.rmSync(path.join(nodeDir, entry));
+  }
+
+  return paths;
+};
+
+const renderObsidianNodeIndex = (nodes: ProjectGraphArtifactNode[]): string => {
+  const zh = resolveProjectGraphLocale() === 'zh';
+  return [
+    `# ${zh ? '图节点索引' : 'Graph Node Index'}`,
+    '',
+    ...nodes
+      .slice()
+      .sort((left, right) => `${left.kind}:${left.label}`.localeCompare(`${right.kind}:${right.label}`))
+      .map((node) => `- [[nodes/${nodePageSlug(node)}|${escapeWikiLabel(node.label)}]] (${node.kind})`),
+    '',
+  ].join('\n');
+};
+
+const renderObsidianNodePage = (input: {
+  node: ProjectGraphArtifactNode;
+  outgoing: ProjectGraphArtifactEdge[];
+  incoming: ProjectGraphArtifactEdge[];
+  nodeById: Map<string, ProjectGraphArtifactNode>;
+}): string => {
+  const zh = resolveProjectGraphLocale() === 'zh';
+  return [
+    `# ${input.node.label}`,
+    '',
+    `- ${zh ? '类型' : 'Kind'}: ${input.node.kind}`,
+    `- ${zh ? '来源' : 'Provenance'}: ${input.node.provenance}`,
+    `- ${zh ? '置信度' : 'Confidence'}: ${input.node.confidence}`,
+    `- ${zh ? '项目' : 'Project'}: ${input.node.project}`,
+    '',
+    `## ${zh ? '出向关系' : 'Outgoing Relations'}`,
+    '',
+    ...edgeLines(input.outgoing, input.nodeById, 'targetId', zh),
+    '',
+    `## ${zh ? '入向关系' : 'Incoming Relations'}`,
+    '',
+    ...edgeLines(input.incoming, input.nodeById, 'sourceId', zh),
+    '',
+    `## ${zh ? '证据' : 'Evidence'}`,
+    '',
+    ...(input.node.evidence.length > 0
+      ? input.node.evidence.map((entry) => `- ${formatEvidence(entry.path, entry.startLine, entry.endLine)}`)
+      : [zh ? '- 暂无证据。' : '- No evidence.']),
+    '',
+  ].join('\n');
+};
+
+const edgeLines = (
+  edges: ProjectGraphArtifactEdge[],
+  nodeById: Map<string, ProjectGraphArtifactNode>,
+  linkedNodeKey: 'sourceId' | 'targetId',
+  zh: boolean,
+): string[] => {
+  if (edges.length === 0) return [zh ? '- 暂无。' : '- None.'];
+  return edges
+    .slice()
+    .sort((left, right) => `${left.kind}:${left[linkedNodeKey]}`.localeCompare(`${right.kind}:${right[linkedNodeKey]}`))
+    .map((edge) => {
+      const node = nodeById.get(edge[linkedNodeKey]);
+      const target = node
+        ? `[[nodes/${nodePageSlug(node)}|${escapeWikiLabel(node.label)}]]`
+        : edge[linkedNodeKey];
+      const evidence = edge.evidence[0]?.path ? ` (${formatEvidence(edge.evidence[0].path, edge.evidence[0].startLine, edge.evidence[0].endLine)})` : '';
+      return `- ${edge.kind}: ${target}${evidence}`;
+    });
+};
+
+const edgesBy = (
+  edges: ProjectGraphArtifactEdge[],
+  keyFor: (edge: ProjectGraphArtifactEdge) => string,
+): Map<string, ProjectGraphArtifactEdge[]> => {
+  const result = new Map<string, ProjectGraphArtifactEdge[]>();
+  for (const edge of edges) {
+    const key = keyFor(edge);
+    const current = result.get(key) ?? [];
+    current.push(edge);
+    result.set(key, current);
+  }
+  return result;
+};
+
+const nodePageSlug = (node: ProjectGraphArtifactNode): string => {
+  const slug = slugifyProjectGraphValue(`${node.kind}-${node.label}`);
+  const hash = createHash('sha1').update(node.id).digest('hex').slice(0, 8);
+  return `${slug}-${hash}`;
+};
+
+const escapeWikiLabel = (value: string): string => value.replace(/[\[\]|]/g, ' ').replace(/\s+/g, ' ').trim();
+
+const formatEvidence = (filePath: string, startLine?: number, endLine?: number): string => {
+  if (typeof startLine !== 'number') return filePath;
+  if (typeof endLine === 'number' && endLine !== startLine) return `${filePath}:${startLine}-${endLine}`;
+  return `${filePath}:${startLine}`;
 };

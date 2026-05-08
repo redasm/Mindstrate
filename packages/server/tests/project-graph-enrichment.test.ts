@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ContextDomainType,
   ContextNodeStatus,
+  ProjectGraphEdgeKind,
   ProjectGraphNodeKind,
   ProjectGraphProvenance,
   SubstrateType,
@@ -196,7 +197,7 @@ describe('project graph LLM enrichment boundary', () => {
       ],
     }));
 
-    const nodes = await summarizeProjectGraphWithLlm({
+    const extraction = await summarizeProjectGraphWithLlm({
       client,
       model: 'test-model',
       project: 'demo',
@@ -226,6 +227,7 @@ describe('project graph LLM enrichment boundary', () => {
       }],
     });
 
+    const nodes = extraction.nodes;
     expect(nodes).toHaveLength(1);
     expect(nodes[0]).toMatchObject({
       kind: ProjectGraphNodeKind.CONCEPT,
@@ -237,6 +239,36 @@ describe('project graph LLM enrichment boundary', () => {
         summary: 'The application shell starts in App.tsx and composes the home route.',
       },
     });
+  });
+
+  it('turns LLM relationships into cited inferred project graph edges', async () => {
+    const client = fakeChatClient(JSON.stringify({
+      summaries: [],
+      relationships: [{
+        sourceId: 'pg:demo:file:src/App.tsx',
+        targetId: 'pg:demo:file:src/routes.ts',
+        kind: ProjectGraphEdgeKind.ROUTES_TO,
+        evidencePaths: ['src/App.tsx'],
+        confidence: 'inferred',
+      }],
+    }));
+
+    const extraction = await summarizeProjectGraphWithLlm({
+      client,
+      model: 'test-model',
+      project: 'demo',
+      extractedNodes: [projectGraphNode('src/App.tsx'), projectGraphNode('src/routes.ts')],
+    });
+
+    expect(extraction.edges).toEqual([
+      expect.objectContaining({
+        sourceId: 'pg:demo:file:src/App.tsx',
+        targetId: 'pg:demo:file:src/routes.ts',
+        kind: ProjectGraphEdgeKind.ROUTES_TO,
+        provenance: ProjectGraphProvenance.INFERRED,
+        evidence: [{ path: 'src/App.tsx', extractorId: 'llm-enrichment' }],
+      }),
+    ]);
   });
 
   it('sends salient extracted facts to the LLM before applying the cap', async () => {

@@ -24,8 +24,11 @@ describe('project graph report export', () => {
   let root: string;
   let dataDir: string;
   let memory: Mindstrate;
+  let previousLocale: string | undefined;
 
   beforeEach(async () => {
+    previousLocale = process.env['MINDSTRATE_LOCALE'];
+    process.env['MINDSTRATE_LOCALE'] = 'en';
     root = createTempDir('mindstrate-project-graph-report-');
     dataDir = createTempDir('mindstrate-project-graph-report-data-');
     memory = new Mindstrate({ dataDir });
@@ -34,6 +37,11 @@ describe('project graph report export', () => {
 
   afterEach(() => {
     memory.close();
+    if (previousLocale === undefined) {
+      delete process.env['MINDSTRATE_LOCALE'];
+    } else {
+      process.env['MINDSTRATE_LOCALE'] = previousLocale;
+    }
     removeTempDir(root);
     removeTempDir(dataDir);
   });
@@ -276,8 +284,10 @@ describe('project graph report export', () => {
       const result = memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
 
       expect(result.reportPath).toBe(path.join(vaultRoot, 'demo-report', 'architecture', 'project-graph.md'));
+      expect(result.nodePaths.some((filePath) => filePath.endsWith(`${path.sep}nodes${path.sep}index.md`))).toBe(true);
       const report = fs.readFileSync(result.reportPath, 'utf8');
       expect(report).toContain('<!-- mindstrate:project-graph:generated:start -->');
+      expect(report).toContain('[[nodes/index|Graph node index]]');
       expect(report).toContain('<!-- mindstrate:project-graph:user-notes:start -->');
       expect(report).toContain('User Notes');
       expect(report).toContain('## Inferred Summaries');
@@ -287,6 +297,11 @@ describe('project graph report export', () => {
       expect(report).toContain('## Open Questions');
       expect(report).toContain('Routing ownership unclear');
       expect(report).toContain('Confirm whether App.tsx or a nested route owns routing decisions.');
+      const nodeIndex = fs.readFileSync(path.join(vaultRoot, 'demo-report', 'architecture', 'nodes', 'index.md'), 'utf8');
+      expect(nodeIndex).toContain('[[nodes/');
+      const appNodePagePath = result.nodePaths.find((filePath) => fs.readFileSync(filePath, 'utf8').includes('# src/App.tsx'));
+      expect(appNodePagePath).toBeDefined();
+      expect(fs.readFileSync(appNodePagePath!, 'utf8')).toContain('## Outgoing Relations');
       const records = memory.projections.listProjectionRecords({
         target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
         limit: 10,

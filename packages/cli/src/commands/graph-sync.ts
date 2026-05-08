@@ -37,8 +37,13 @@ export const extractProjectGraphUserNotes = (text: string): string => {
   const endIndex = text.indexOf(end);
   if (startIndex < 0 || endIndex < 0 || endIndex < startIndex) return '';
   const notes = text.slice(startIndex + start.length, endIndex).trim();
-  return notes === '- Add architecture notes, confirmations, corrections, or risks here.' ? '' : notes;
+  return defaultUserNotePlaceholders.has(notes) ? '' : notes;
 };
+
+const defaultUserNotePlaceholders = new Set([
+  '- Add architecture notes, confirmations, corrections, or risks here.',
+  '- 在这里补充架构备注、确认、修正或风险。',
+]);
 
 export const upsertObsidianProjectGraphNoteOverlay = (
   memory: ReturnType<typeof createMemory>,

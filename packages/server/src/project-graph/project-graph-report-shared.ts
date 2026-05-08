@@ -4,9 +4,35 @@ import {
   type ContextNode,
   type ProjectGraphOverlay,
 } from '@mindstrate/protocol/models';
+import { resolveProjectGraphLocale, type ProjectGraphLocale } from './project-graph-locale.js';
+
+const text = {
+  en: {
+    noneDetected: '- None detected yet.',
+    userCorrections: 'User Corrections',
+    userRisks: 'User Risks',
+    userConventions: 'User Conventions',
+    userConfirmations: 'User Confirmations',
+    target: 'Target',
+    targetNode: 'Target node',
+    targetEdge: 'Target edge',
+  },
+  zh: {
+    noneDetected: '- 暂未检测到。',
+    userCorrections: '用户修正',
+    userRisks: '用户风险',
+    userConventions: '用户约定',
+    userConfirmations: '用户确认',
+    target: '目标',
+    targetNode: '目标节点',
+    targetEdge: '目标边',
+  },
+} satisfies Record<ProjectGraphLocale, Record<string, string>>;
+
+const labels = () => text[resolveProjectGraphLocale()];
 
 export const listOrFallback = (items: string[]): string[] =>
-  items.length > 0 ? items.map((item) => `- ${item}`) : ['- None detected yet.'];
+  items.length > 0 ? items.map((item) => `- ${item}`) : [labels().noneDetected];
 
 export const scoreFirstFile = (filePath: string): number => {
   const normalized = filePath.replace(/\\/g, '/').toLowerCase();
@@ -43,10 +69,10 @@ export const evidencePathsForNode = (node: ContextNode): string[] => {
 };
 
 export const overlaySections = (overlays: ProjectGraphOverlay[]): string[] => [
-  ...overlayLines('User Corrections', overlays, ProjectGraphOverlayKind.CORRECTION),
-  ...overlayLines('User Risks', overlays, ProjectGraphOverlayKind.RISK),
-  ...overlayLines('User Conventions', overlays, ProjectGraphOverlayKind.CONVENTION),
-  ...overlayLines('User Confirmations', overlays, ProjectGraphOverlayKind.CONFIRMATION),
+  ...overlayLines(labels().userCorrections, overlays, ProjectGraphOverlayKind.CORRECTION),
+  ...overlayLines(labels().userRisks, overlays, ProjectGraphOverlayKind.RISK),
+  ...overlayLines(labels().userConventions, overlays, ProjectGraphOverlayKind.CONVENTION),
+  ...overlayLines(labels().userConfirmations, overlays, ProjectGraphOverlayKind.CONFIRMATION),
 ].filter((line, index, lines) => line.length > 0 || lines[index - 1]?.startsWith('## '));
 
 const overlayLines = (
@@ -61,9 +87,9 @@ const overlayLines = (
     '',
     ...matching.flatMap((overlay) => [
       `- ${overlay.content}`,
-      ...(overlay.target ? [`  - Target: ${overlay.target}`] : []),
-      ...(overlay.targetNodeId ? [`  - Target node: ${overlay.targetNodeId}`] : []),
-      ...(overlay.targetEdgeId ? [`  - Target edge: ${overlay.targetEdgeId}`] : []),
+      ...(overlay.target ? [`  - ${labels().target}: ${overlay.target}`] : []),
+      ...(overlay.targetNodeId ? [`  - ${labels().targetNode}: ${overlay.targetNodeId}`] : []),
+      ...(overlay.targetEdgeId ? [`  - ${labels().targetEdge}: ${overlay.targetEdgeId}`] : []),
     ]),
     '',
   ];

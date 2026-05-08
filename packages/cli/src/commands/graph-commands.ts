@@ -118,9 +118,13 @@ contextGraphCommand.command('sync')
     if (!fs.existsSync(plan.obsidianFile)) throw new Error(`Project graph projection not found: ${plan.obsidianFile}`);
     const notes = extractProjectGraphUserNotes(fs.readFileSync(plan.obsidianFile, 'utf8'));
     const created = notes ? upsertObsidianProjectGraphNoteOverlay(memory, project.name, notes) : false;
+    const graph = memory.context.indexProjectGraph(project);
+    const enrichment = await memory.context.enrichProjectGraph(project);
     const vaultRoot = path.dirname(path.dirname(path.dirname(plan.obsidianFile)));
     const artifacts = memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultRoot));
     console.log(`Obsidian sync: ${created ? 'overlay updated' : 'no user notes to import'}`);
+    console.log(`Graph index: ${graph.filesScanned} files, ${graph.nodesCreated + graph.nodesUpdated} nodes, ${graph.edgesCreated + graph.edgesUpdated} edges`);
+    console.log(`LLM enrichment: ${enrichment.status}`);
     console.log(`Projection: ${artifacts.reportPath}`);
   }));
 

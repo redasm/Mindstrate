@@ -3,17 +3,20 @@ import {
   ContextDomainType,
   ContextNodeStatus,
   PROJECT_GRAPH_METADATA_KEYS,
+  ProjectGraphEdgeKind,
   ProjectGraphNodeKind,
   ProjectGraphProvenance,
   SubstrateType,
   isProjectGraphNode,
   type ContextNode,
+  type ProjectGraphEdgeDto,
   type ProjectGraphNodeDto,
 } from '@mindstrate/protocol/models';
 import type { OpenAIClient } from '../openai-client.js';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import { writeProjectGraphExtraction } from './graph-writer.js';
-import { createProjectGraphNodeId } from './node-id.js';
+import { createProjectGraphEdgeId, createProjectGraphNodeId } from './node-id.js';
+import { projectGraphLanguageInstruction } from './project-graph-locale.js';
 
 const LLM_FACT_CAP = 80;
 
@@ -21,7 +24,12 @@ export interface ProjectGraphEnrichmentInput {
   project: string;
   llmConfigured: boolean;
   extractedNodes?: ContextNode[];
-  summarize?: () => Promise<ProjectGraphNodeDto[]>;
+  summarize?: () => Promise<ProjectGraphNodeDto[] | ProjectGraphEnrichmentExtraction>;
+}
+
+export interface ProjectGraphEnrichmentExtraction {
+  nodes: ProjectGraphNodeDto[];
+  edges: ProjectGraphEdgeDto[];
 }
 
 export type ProjectGraphEnrichmentResult =
@@ -52,14 +60,16 @@ export const enrichProjectGraph = async (
     return { status: 'noop', reason: 'unchanged_input', nodesCreated: 0, nodesUpdated: 0 };
   }
 
-  const nodes = (await input.summarize()).filter(isAcceptableInference);
+  const summarized = normalizeEnrichmentExtraction(await input.summarize());
+  const nodes = summarized.nodes.filter(isAcceptableInference);
+  const edges = summarized.edges.filter(isAcceptableInferredEdge);
   if (inputHash) upsertEnrichmentCacheNode(store, input.project, inputHash);
-  if (nodes.length === 0) return { status: 'noop', nodesCreated: 0, nodesUpdated: 0 };
+  if (nodes.length === 0 && edges.length === 0) return { status: 'noop', nodesCreated: 0, nodesUpdated: 0 };
 
   const writeResult = writeProjectGraphExtraction(store, {
     project: input.project,
     nodes,
-    edges: [],
+    edges,
   });
 
   return {
@@ -74,11 +84,23 @@ const isAcceptableInference = (node: ProjectGraphNodeDto): boolean =>
     node.provenance === ProjectGraphProvenance.AMBIGUOUS) &&
   node.evidence.length > 0;
 
+const isAcceptableInferredEdge = (edge: ProjectGraphEdgeDto): boolean =>
+  (edge.provenance === ProjectGraphProvenance.INFERRED ||
+    edge.provenance === ProjectGraphProvenance.AMBIGUOUS) &&
+  edge.evidence.length > 0;
+
+const normalizeEnrichmentExtraction = (
+  value: ProjectGraphNodeDto[] | ProjectGraphEnrichmentExtraction,
+): ProjectGraphEnrichmentExtraction => Array.isArray(value)
+  ? { nodes: value, edges: [] }
+  : value;
+
 export const summarizeProjectGraphWithLlm = async (
   input: SummarizeProjectGraphWithLlmInput,
-): Promise<ProjectGraphNodeDto[]> => {
+): Promise<ProjectGraphEnrichmentExtraction> => {
   const evidencePaths = collectEvidencePaths(input.extractedNodes);
-  if (evidencePaths.size === 0) return [];
+  const nodeIds = new Set(input.extractedNodes.filter(isProjectGraphNode).map((node) => node.id));
+  if (evidencePaths.size === 0) return { nodes: [], edges: [] };
 
   const response = await input.client.chat.completions.create({
     model: input.model,
@@ -90,9 +112,11 @@ export const summarizeProjectGraphWithLlm = async (
         role: 'system',
         content: [
           'You summarize a project graph for coding agents.',
-          'Only infer responsibilities, subsystem summaries, risks, or open questions from provided extracted facts.',
-          'Return JSON: {"summaries":[{"label":"...","summary":"...","evidencePaths":["path"],"confidence":"inferred|ambiguous"}]}.',
+          projectGraphLanguageInstruction(),
+          'Infer responsibilities, subsystem summaries, risks, open questions, and relationships only from provided extracted facts.',
+          'Return JSON: {"summaries":[{"label":"...","summary":"...","evidencePaths":["path"],"confidence":"inferred|ambiguous"}],"relationships":[{"sourceId":"provided node id","targetId":"provided node id","kind":"related_to|depends_on|calls|imports|configures|renders|binds_to|references_asset","evidencePaths":["path"],"confidence":"inferred|ambiguous"}]}.',
           'Every item must cite at least one provided evidence path.',
+          'Relationships must only use node ids from the provided extracted facts.',
         ].join(' '),
       },
       {
@@ -103,15 +127,29 @@ export const summarizeProjectGraphWithLlm = async (
   });
 
   const content = response.choices[0]?.message?.content;
-  if (!content) return [];
-  return parseSummaryResponse(content)
+  if (!content) return { nodes: [], edges: [] };
+  const parsed = parseSummaryResponse(content);
+  return {
+    nodes: parsed.summaries
     .map((item) => toInferredNode(input.project, item, evidencePaths))
-    .filter((node): node is ProjectGraphNodeDto => node !== null);
+      .filter((node): node is ProjectGraphNodeDto => node !== null),
+    edges: parsed.relationships
+      .map((item) => toInferredEdge(item, evidencePaths, nodeIds))
+      .filter((edge): edge is ProjectGraphEdgeDto => edge !== null),
+  };
 };
 
 interface ParsedSummaryItem {
   label: string;
   summary: string;
+  evidencePaths: string[];
+  confidence: 'inferred' | 'ambiguous';
+}
+
+interface ParsedRelationshipItem {
+  sourceId: string;
+  targetId: string;
+  kind: ProjectGraphEdgeKind;
   evidencePaths: string[];
   confidence: 'inferred' | 'ambiguous';
 }
@@ -139,15 +177,22 @@ const compareExtractedFactSalience = (a: ContextNode, b: ContextNode): number =>
 const salienceScore = (node: ContextNode): number =>
   node.positiveFeedback * 20 + node.accessCount * 5 + node.qualityScore + collectNodeEvidencePaths(node).length * 2;
 
-const parseSummaryResponse = (content: string): ParsedSummaryItem[] => {
+const parseSummaryResponse = (content: string): { summaries: ParsedSummaryItem[]; relationships: ParsedRelationshipItem[] } => {
   try {
-    const parsed = JSON.parse(content) as { summaries?: unknown };
-    if (!Array.isArray(parsed.summaries)) return [];
-    return parsed.summaries
+    const parsed = JSON.parse(content) as { summaries?: unknown; relationships?: unknown };
+    const summaries = Array.isArray(parsed.summaries)
+      ? parsed.summaries
       .map(normalizeSummaryItem)
-      .filter((item): item is ParsedSummaryItem => item !== null);
+        .filter((item): item is ParsedSummaryItem => item !== null)
+      : [];
+    const relationships = Array.isArray(parsed.relationships)
+      ? parsed.relationships
+        .map(normalizeRelationshipItem)
+        .filter((item): item is ParsedRelationshipItem => item !== null)
+      : [];
+    return { summaries, relationships };
   } catch {
-    return [];
+    return { summaries: [], relationships: [] };
   }
 };
 
@@ -162,6 +207,27 @@ const normalizeSummaryItem = (value: unknown): ParsedSummaryItem | null => {
   const confidence = item['confidence'] === 'ambiguous' ? 'ambiguous' : 'inferred';
   if (!label || !summary || evidencePaths.length === 0) return null;
   return { label, summary, evidencePaths, confidence };
+};
+
+const normalizeRelationshipItem = (value: unknown): ParsedRelationshipItem | null => {
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Record<string, unknown>;
+  const sourceId = typeof item['sourceId'] === 'string' ? item['sourceId'].trim() : '';
+  const targetId = typeof item['targetId'] === 'string' ? item['targetId'].trim() : '';
+  const evidencePaths = Array.isArray(item['evidencePaths'])
+    ? item['evidencePaths'].filter((path): path is string => typeof path === 'string' && path.length > 0)
+    : [];
+  const kind = normalizeEdgeKind(item['kind']);
+  const confidence = item['confidence'] === 'ambiguous' ? 'ambiguous' : 'inferred';
+  if (!sourceId || !targetId || sourceId === targetId || evidencePaths.length === 0) return null;
+  return { sourceId, targetId, kind, evidencePaths, confidence };
+};
+
+const normalizeEdgeKind = (value: unknown): ProjectGraphEdgeKind => {
+  if (typeof value !== 'string') return ProjectGraphEdgeKind.RELATED_TO;
+  return Object.values(ProjectGraphEdgeKind).includes(value as ProjectGraphEdgeKind)
+    ? value as ProjectGraphEdgeKind
+    : ProjectGraphEdgeKind.RELATED_TO;
 };
 
 const toInferredNode = (
@@ -190,6 +256,29 @@ const toInferredNode = (
       summary: item.summary,
       llmEnrichment: true,
     },
+  };
+};
+
+const toInferredEdge = (
+  item: ParsedRelationshipItem,
+  allowedEvidencePaths: Set<string>,
+  allowedNodeIds: Set<string>,
+): ProjectGraphEdgeDto | null => {
+  if (!allowedNodeIds.has(item.sourceId) || !allowedNodeIds.has(item.targetId)) return null;
+  const evidence = item.evidencePaths
+    .filter((path) => allowedEvidencePaths.has(path))
+    .map((path) => ({ path, extractorId: 'llm-enrichment' }));
+  if (evidence.length === 0) return null;
+  return {
+    id: createProjectGraphEdgeId({ sourceId: item.sourceId, targetId: item.targetId, kind: item.kind }),
+    sourceId: item.sourceId,
+    targetId: item.targetId,
+    kind: item.kind,
+    provenance: item.confidence === 'ambiguous'
+      ? ProjectGraphProvenance.AMBIGUOUS
+      : ProjectGraphProvenance.INFERRED,
+    evidence,
+    metadata: { llmEnrichment: true },
   };
 };
 

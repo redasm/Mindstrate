@@ -5,6 +5,7 @@ export interface ProjectGraphArtifactResult {
   statsPath: string;
   graphPath: string;
   modulePaths: string[];
+  nodePaths: string[];
   nodes: number;
   edges: number;
 }

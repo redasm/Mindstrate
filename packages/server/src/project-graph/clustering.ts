@@ -3,15 +3,24 @@ import {
   PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   PROJECT_GRAPH_METADATA_KEYS,
   type ContextNode,
+  isProjectGraphEdge,
   isProjectGraphNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
+import { slugifyProjectGraphValue } from './project-graph-report-shared.js';
+
+export interface ProjectGraphModuleRelation {
+  kind: string;
+  targetLabel: string;
+  targetSlug: string;
+}
 
 export interface ProjectGraphModule {
   id: string;
   label: string;
   files: string[];
   nodes: string[];
+  relations: ProjectGraphModuleRelation[];
 }
 
 export const collectProjectGraphModules = (
@@ -36,10 +45,31 @@ export const collectProjectGraphModules = (
       label: moduleRoot,
       files: [],
       nodes: [],
+      relations: [],
     };
     if (!module.files.includes(filePath)) module.files.push(filePath);
     module.nodes.push(node.id);
     modules.set(id, module);
+  }
+
+  const moduleByNodeId = new Map<string, ProjectGraphModule>();
+  for (const module of modules.values()) {
+    for (const nodeId of module.nodes) moduleByNodeId.set(nodeId, module);
+  }
+  const relationKeys = new Set<string>();
+  for (const edge of store.listEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }).filter(isProjectGraphEdge)) {
+    const source = moduleByNodeId.get(edge.sourceId);
+    const target = moduleByNodeId.get(edge.targetId);
+    if (!source || !target || source.id === target.id) continue;
+    const kind = String(edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? edge.relationType);
+    const key = `${source.id}:${kind}:${target.id}`;
+    if (relationKeys.has(key)) continue;
+    relationKeys.add(key);
+    source.relations.push({
+      kind,
+      targetLabel: target.label,
+      targetSlug: slugifyProjectGraphValue(target.label),
+    });
   }
 
   return Array.from(modules.values())
@@ -47,6 +77,8 @@ export const collectProjectGraphModules = (
       ...module,
       files: module.files.sort((left, right) => left.localeCompare(right)),
       nodes: module.nodes.sort((left, right) => left.localeCompare(right)),
+      relations: module.relations.sort((left, right) =>
+        `${left.kind}:${left.targetLabel}`.localeCompare(`${right.kind}:${right.targetLabel}`)),
     }))
     .sort((left, right) => left.label.localeCompare(right.label));
 };

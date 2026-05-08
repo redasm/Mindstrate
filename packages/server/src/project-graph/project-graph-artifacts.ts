@@ -40,6 +40,7 @@ export const writeProjectGraphArtifacts = (
     statsPath,
     graphPath,
     modulePaths: [],
+    nodePaths: [],
     nodes: stats.nodes,
     edges: stats.edges,
   };
