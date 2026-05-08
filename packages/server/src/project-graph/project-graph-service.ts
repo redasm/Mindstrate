@@ -407,8 +407,12 @@ const addSourceFacts = (
       addDependencyFact(project, filePath, stripQuotes(capture.text), nodes, edges, ProjectGraphEdgeKind.IMPORTS, capture);
     } else if (capture.name === 'function.name') {
       addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
+    } else if (capture.name === 'call.function') {
+      addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
     } else if (capture.name === 'react.component') {
       addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.COMPONENT, nodes, edges, capture);
+    } else if (capture.name === 'react.hook') {
+      addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.USES_HOOK, capture);
     } else if (capture.name === 'unreal.class') {
       addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
     } else if (capture.name === 'unreal.struct' || capture.name === 'unreal.enum') {
