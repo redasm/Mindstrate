@@ -186,7 +186,7 @@ describe('project graph service', () => {
       priority: 200,
       match: { all: [{ glob: '*.uproject' }] },
       detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
-      sourceRoots: ['Source', 'Lua', 'TypeScript/src'],
+      sourceRoots: ['Source', 'Lua', 'TypeScript/src', 'TypeScript/Typing'],
       generatedRoots: ['TypeScript/Typing'],
       layers: [],
       manifests: ['*.uproject'],
@@ -202,6 +202,7 @@ describe('project graph service', () => {
     `);
     write(root, 'Lua/inventory.lua', 'UE.InventoryComponent()');
     write(root, 'TypeScript/src/inventory.ts', 'ue.OpenInventory();');
+    write(root, 'TypeScript/Typing/InventoryComponent.ts', 'export declare class InventoryComponent {}');
 
     const project = detectProject(root);
     expect(project).not.toBeNull();
@@ -211,7 +212,11 @@ describe('project graph service', () => {
     const bindingEdges = store.listEdges({ limit: 200 }).filter((edge) =>
       edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.BINDS_TO
     );
+    const generatedEdges = store.listEdges({ limit: 200 }).filter((edge) =>
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.GENERATED_FROM
+    );
     const labelsById = new Map(nodes.map((node) => [node.id, node.title]));
+    const generatedFile = nodes.find((node) => node.title === 'TypeScript/Typing/InventoryComponent.ts');
 
     expect(bindingEdges.map((edge) => [labelsById.get(edge.sourceId), labelsById.get(edge.targetId)])).toEqual(
       expect.arrayContaining([
@@ -219,6 +224,16 @@ describe('project graph service', () => {
         ['OpenInventory', 'OpenInventory'],
       ]),
     );
+    expect(generatedFile?.metadata).toMatchObject({
+      generated: true,
+      doNotEdit: true,
+      metadataOnly: true,
+      sourceGeneratedFrom: expect.any(String),
+    });
+    expect(generatedEdges.map((edge) => [labelsById.get(edge.sourceId), labelsById.get(edge.targetId)])).toContainEqual([
+      'TypeScript/Typing/InventoryComponent.ts',
+      'InventoryComponent',
+    ]);
   });
 
   it('imports Unreal Asset Registry exports as metadata-only asset relationships', () => {

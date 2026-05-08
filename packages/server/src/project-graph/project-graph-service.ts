@@ -165,6 +165,7 @@ const buildProjectGraphExtraction = (
     skippedFiles,
   });
   addBindingFacts(nodes, edges);
+  addGeneratedBindingFacts(nodes, edges);
   emitIndexProgress(options.onIndexProgress, {
     phase: 'cache',
     filesProcessed: files.length,
@@ -283,6 +284,27 @@ const addBindingFacts = (
     for (const scriptCall of scriptCallsByLabel.get(native.label) ?? []) {
       addEdge(edges, makeEdge(native.id, scriptCall.id, ProjectGraphEdgeKind.BINDS_TO, native.evidence));
     }
+  }
+};
+
+const addGeneratedBindingFacts = (
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  const generatedFiles = Array.from(nodes.values())
+    .filter((node) => node.kind === ProjectGraphNodeKind.FILE && node.metadata?.['generated'] === true);
+  const nativeSymbols = Array.from(nodes.values())
+    .filter((node) => node.kind === ProjectGraphNodeKind.CLASS || node.kind === ProjectGraphNodeKind.FUNCTION || node.kind === ProjectGraphNodeKind.TYPE);
+  for (const generatedFile of generatedFiles) {
+    const bindingName = generatedBindingName(generatedFile.label);
+    if (!bindingName) continue;
+    const source = nativeSymbols.find((node) => generatedBindingMatches(bindingName, node.label));
+    if (!source) continue;
+    generatedFile.metadata = {
+      ...(generatedFile.metadata ?? {}),
+      sourceGeneratedFrom: source.id,
+    };
+    addEdge(edges, makeEdge(generatedFile.id, source.id, ProjectGraphEdgeKind.GENERATED_FROM, generatedFile.evidence));
   }
 };
 
@@ -517,3 +539,17 @@ const isUnrealBuildFile = (filePath: string): boolean =>
   filePath.endsWith('.Build.cs') || filePath.endsWith('.Target.cs');
 
 const stripQuotes = (value: string): string => value.replace(/^['"]|['"]$/g, '');
+
+const generatedBindingName = (filePath: string): string | undefined => {
+  const base = path.basename(filePath).replace(/\.[^.]+$/, '');
+  return base || undefined;
+};
+
+const generatedBindingMatches = (bindingName: string, symbolName: string): boolean => {
+  const normalizedBinding = normalizeSymbolName(bindingName);
+  const normalizedSymbol = normalizeSymbolName(symbolName);
+  return normalizedBinding === normalizedSymbol
+    || normalizedBinding.replace(/^u/, '') === normalizedSymbol.replace(/^u/, '');
+};
+
+const normalizeSymbolName = (value: string): string => value.replace(/[^a-z0-9]/gi, '').toLowerCase();
