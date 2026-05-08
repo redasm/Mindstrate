@@ -12,6 +12,7 @@ import type { ContextGraphStore } from '../context-graph/context-graph-store.js'
 import type { DetectedProject } from '../project/index.js';
 import { collectProjectGraphModules } from './clustering.js';
 import { listProjectGraphOverlays } from './overlay.js';
+import { projectGraphOverlayProjectionForNode } from './overlay-application.js';
 import { collectProjectGraphArtifact } from './project-graph-artifact.js';
 import { writeProjectGraphTextFileAtomically } from './project-graph-file-io.js';
 import { importProjectGraphOverlayBlock } from './project-graph-overlay-import.js';
@@ -42,7 +43,7 @@ export const writeProjectGraphObsidianProjection = (
   const report = renderEditableObsidianProjection(generated, existing, overlays);
   const graph = collectProjectGraphArtifact(store, project, stats);
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
-  const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug);
+  const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug, overlays);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
@@ -97,6 +98,7 @@ const writeObsidianNodePages = (
   graph: ProjectGraphArtifact,
   vaultRoot: string,
   projectSlug: string,
+  overlays: ReturnType<typeof listProjectGraphOverlays>,
 ): string[] => {
   const nodeDir = path.join(vaultRoot, projectSlug, 'architecture', 'nodes');
   fs.mkdirSync(nodeDir, { recursive: true });
@@ -113,13 +115,14 @@ const writeObsidianNodePages = (
       outgoing: outgoing.get(node.id) ?? [],
       incoming: incoming.get(node.id) ?? [],
       nodeById,
+      overlays,
     }));
     written.add(path.basename(nodePath));
     paths.push(nodePath);
   }
 
   const indexPath = path.join(nodeDir, 'index.md');
-  writeProjectGraphTextFileAtomically(indexPath, renderObsidianNodeIndex(graph.nodes));
+  writeProjectGraphTextFileAtomically(indexPath, renderObsidianNodeIndex(graph.nodes, overlays));
   written.add('index.md');
   paths.unshift(indexPath);
 
@@ -130,7 +133,7 @@ const writeObsidianNodePages = (
   return paths;
 };
 
-const renderObsidianNodeIndex = (nodes: ProjectGraphArtifactNode[]): string => {
+const renderObsidianNodeIndex = (nodes: ProjectGraphArtifactNode[], overlays: ReturnType<typeof listProjectGraphOverlays>): string => {
   const zh = resolveProjectGraphLocale() === 'zh';
   return [
     `# ${zh ? '图节点索引' : 'Graph Node Index'}`,
@@ -138,7 +141,7 @@ const renderObsidianNodeIndex = (nodes: ProjectGraphArtifactNode[]): string => {
     ...nodes
       .slice()
       .sort((left, right) => `${left.kind}:${left.label}`.localeCompare(`${right.kind}:${right.label}`))
-      .map((node) => `- [[nodes/${nodePageSlug(node)}|${escapeWikiLabel(node.label)}]] (${node.kind})`),
+      .map((node) => `- [[nodes/${nodePageSlug(node)}|${escapeWikiLabel(projectGraphOverlayProjectionForNode(node, overlays).displayLabel)}]] (${node.kind})`),
     '',
   ].join('\n');
 };
@@ -148,15 +151,19 @@ const renderObsidianNodePage = (input: {
   outgoing: ProjectGraphArtifactEdge[];
   incoming: ProjectGraphArtifactEdge[];
   nodeById: Map<string, ProjectGraphArtifactNode>;
+  overlays: ReturnType<typeof listProjectGraphOverlays>;
 }): string => {
   const zh = resolveProjectGraphLocale() === 'zh';
+  const overlayProjection = projectGraphOverlayProjectionForNode(input.node, input.overlays);
   return [
-    `# ${input.node.label}`,
+    `# ${overlayProjection.displayLabel}`,
     '',
+    ...(overlayProjection.displayLabel !== input.node.label ? [`- ${zh ? '原始标签' : 'Raw label'}: ${input.node.label}`] : []),
     `- ${zh ? '类型' : 'Kind'}: ${input.node.kind}`,
     `- ${zh ? '来源' : 'Provenance'}: ${input.node.provenance}`,
     `- ${zh ? '置信度' : 'Confidence'}: ${input.node.confidence}`,
     `- ${zh ? '项目' : 'Project'}: ${input.node.project}`,
+    ...(overlayProjection.correction ? [`- ${zh ? '用户修正' : 'User correction'}: ${overlayProjection.correction}`] : []),
     '',
     `## ${zh ? '出向关系' : 'Outgoing Relations'}`,
     '',

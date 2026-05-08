@@ -8,6 +8,7 @@ import {
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
 import { listProjectGraphOverlays } from './overlay.js';
+import { projectGraphOverlayProjectionForNode } from './overlay-application.js';
 import type { ProjectGraphStatsExport } from './project-graph-report-types.js';
 import { countBy, evidencePathsForNode, scoreFirstFile } from './project-graph-report-shared.js';
 import { projectGraphNodeSalience, sortProjectGraphNodesBySalience } from './salience.js';
@@ -38,15 +39,15 @@ export const collectProjectGraphStats = (
     .filter((node) => ['project', 'directory', 'file'].includes(String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? '')))
     .filter((node) => node.metadata?.['generated'] !== true), edges, overlays)
     .slice(0, 8)
-    .map((node) => ({ label: node.title, evidencePaths: evidencePathsForNode(node) }));
+    .map((node) => ({ label: projectGraphOverlayProjectionForNode(node, overlays).displayLabel, evidencePaths: evidencePathsForNode(node) }));
   const assetSurfaces = nodes
     .filter((node) => node.metadata?.['scanMode'] === 'metadata-only' && typeof node.metadata?.['assetClass'] === 'string')
-    .map((node) => ({ label: `${node.title} (${node.metadata?.['assetClass']})`, evidencePaths: evidencePathsForNode(node) }))
+    .map((node) => ({ label: `${projectGraphOverlayProjectionForNode(node, overlays).displayLabel} (${node.metadata?.['assetClass']})`, evidencePaths: evidencePathsForNode(node) }))
     .sort((left, right) => left.label.localeCompare(right.label))
     .slice(0, 8);
   const bindingSurfaces = sortProjectGraphNodesBySalience(nodes
     .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === 'dependency'), edges, overlays)
-    .map((node) => ({ label: node.title, evidencePaths: evidencePathsForNode(node) }))
+    .map((node) => ({ label: projectGraphOverlayProjectionForNode(node, overlays).displayLabel, evidencePaths: evidencePathsForNode(node) }))
     .slice(0, 8);
 
   return {

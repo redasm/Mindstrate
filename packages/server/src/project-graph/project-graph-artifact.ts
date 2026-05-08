@@ -15,6 +15,7 @@ import {
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
 import { listProjectGraphOverlays } from './overlay.js';
+import { projectGraphOverlayProjectionForNode } from './overlay-application.js';
 import { collectProjectGraphStats } from './project-graph-stats.js';
 import type { ProjectGraphStatsExport } from './project-graph-report-types.js';
 import { projectGraphNodeSalience } from './salience.js';
@@ -68,6 +69,7 @@ const toArtifactNode = (
   const evidence = normalizeEvidence(metadata[PROJECT_GRAPH_METADATA_KEYS.evidence]);
   const hasConfirmation = overlays.some((overlay) =>
     overlay.kind === ProjectGraphOverlayKind.CONFIRMATION && overlay.targetNodeId === node.id);
+  const overlayProjection = projectGraphOverlayProjectionForNode(node, overlays);
   return {
     id: node.id,
     kind: String(metadata[PROJECT_GRAPH_METADATA_KEYS.kind] ?? 'unknown'),
@@ -79,7 +81,11 @@ const toArtifactNode = (
     confidence: hasConfirmation ? Math.max(node.confidence, 0.99) : node.confidence,
     salience: projectGraphNodeSalience({ node, edges, overlays }),
     evidence,
-    metadata,
+    metadata: {
+      ...metadata,
+      ...(overlayProjection.displayLabel !== node.title ? { displayLabel: overlayProjection.displayLabel } : {}),
+      ...(overlayProjection.correction ? { overlayCorrection: overlayProjection.correction } : {}),
+    },
   };
 };
 
