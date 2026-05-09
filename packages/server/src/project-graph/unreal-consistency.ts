@@ -13,6 +13,11 @@ export interface UnrealPluginDependencyConsistencyInput {
   edges: ContextEdge[];
 }
 
+export interface UnrealModuleBoundaryConsistencyInput {
+  nodes: ContextNode[];
+  edges: ContextEdge[];
+}
+
 export interface UnrealPluginDependencyConsistencyIssue {
   code: 'missing-plugin-dependency';
   severity: 'error';
@@ -22,6 +27,19 @@ export interface UnrealPluginDependencyConsistencyIssue {
   moduleFile: string;
   dependencyModule: string;
   requiredPlugin: string;
+  message: string;
+  evidence: string[];
+}
+
+export interface UnrealModuleBoundaryConsistencyIssue {
+  code: 'runtime-depends-on-editor-module';
+  severity: 'error';
+  module: string;
+  moduleType?: string;
+  moduleFile?: string;
+  dependencyModule: string;
+  dependencyModuleType?: string;
+  dependencyModuleFile?: string;
   message: string;
   evidence: string[];
 }
@@ -71,6 +89,47 @@ export const checkUnrealPluginDependencyConsistency = (
   return issues;
 };
 
+export const checkUnrealModuleBoundaryConsistency = (
+  input: UnrealModuleBoundaryConsistencyInput,
+): UnrealModuleBoundaryConsistencyIssue[] => {
+  const nodes = input.nodes.filter(isProjectGraphNode);
+  const edges = input.edges.filter(isProjectGraphEdge);
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const modulesByName = new Map(nodes
+    .filter((node) => kindOf(node) === ProjectGraphNodeKind.MODULE && node.metadata?.['unrealModule'] === true)
+    .map((node) => [node.title, node]));
+  const issues: UnrealModuleBoundaryConsistencyIssue[] = [];
+
+  for (const edge of edges) {
+    if (edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] !== ProjectGraphEdgeKind.DEPENDS_ON) continue;
+    if (edge.evidence?.['dependencyKind'] !== 'unreal-module') continue;
+    const sourceModule = nodesById.get(edge.sourceId);
+    const dependency = nodesById.get(edge.targetId);
+    if (!sourceModule || !dependency || kindOf(sourceModule) !== ProjectGraphNodeKind.MODULE) continue;
+    const targetModule = modulesByName.get(dependency.title);
+    if (!targetModule) continue;
+    const sourceType = stringMetadata(sourceModule, 'moduleType');
+    const targetType = stringMetadata(targetModule, 'moduleType');
+    if (isEditorOnlyModuleType(sourceType) || !isEditorOnlyModuleType(targetType)) continue;
+    const sourceFile = stringMetadata(sourceModule, 'declaredIn');
+    const targetFile = stringMetadata(targetModule, 'declaredIn');
+    issues.push({
+      code: 'runtime-depends-on-editor-module',
+      severity: 'error',
+      module: sourceModule.title,
+      moduleType: sourceType,
+      moduleFile: sourceFile,
+      dependencyModule: targetModule.title,
+      dependencyModuleType: targetType,
+      dependencyModuleFile: targetFile,
+      message: `${sourceModule.title} (${sourceType ?? 'unknown module type'}) depends on editor-only module ${targetModule.title}. Runtime modules must not depend on Editor modules.`,
+      evidence: evidencePaths([sourceModule, dependency, targetModule]),
+    });
+  }
+
+  return issues;
+};
+
 const collectDeclaredPluginDependencies = (
   nodesById: Map<string, ContextNode>,
   edges: ContextEdge[],
@@ -99,6 +158,9 @@ const kindOf = (node: ContextNode): string | undefined =>
 
 const stringMetadata = (node: ContextNode, key: string): string | undefined =>
   typeof node.metadata?.[key] === 'string' ? String(node.metadata[key]) : undefined;
+
+const isEditorOnlyModuleType = (moduleType: string | undefined): boolean =>
+  typeof moduleType === 'string' && moduleType.toLowerCase().includes('editor');
 
 const pluginNameForPath = (filePath: string): string | undefined =>
   normalizePath(filePath).match(/^Plugins\/([^/]+)\//)?.[1];

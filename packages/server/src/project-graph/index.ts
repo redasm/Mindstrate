@@ -108,7 +108,10 @@ export {
   type ProjectGraphTaskQueryResult,
 } from './analysis.js';
 export {
+  checkUnrealModuleBoundaryConsistency,
   checkUnrealPluginDependencyConsistency,
+  type UnrealModuleBoundaryConsistencyInput,
+  type UnrealModuleBoundaryConsistencyIssue,
   type UnrealPluginDependencyConsistencyInput,
   type UnrealPluginDependencyConsistencyIssue,
 } from './unreal-consistency.js';
