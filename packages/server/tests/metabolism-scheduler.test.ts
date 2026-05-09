@@ -32,14 +32,14 @@ describe('Mindstrate metabolism scheduling', () => {
   it('starts and stops a scheduled metabolism loop from the facade', async () => {
     vi.useFakeTimers();
     const memory = new Mindstrate();
-    const runMetabolism = vi.spyOn(memory, 'runMetabolism').mockResolvedValue({} as any);
+    const runMetabolism = vi.spyOn(memory.metabolism, 'runMetabolism').mockResolvedValue({} as any);
 
     memory.metabolism.startMetabolismScheduler({
       project: 'mindstrate',
       intervalMs: 1000,
     });
     await vi.advanceTimersByTimeAsync(1000);
-    memory.stopMetabolismScheduler();
+    memory.metabolism.stopMetabolismScheduler();
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(runMetabolism).toHaveBeenCalledTimes(1);
