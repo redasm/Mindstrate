@@ -54,7 +54,67 @@ describe('project graph change detection', () => {
     expect(result.changeSet.source).toBe(ChangeSource.MANUAL);
     expect(result.affectedNodeIds.length).toBeGreaterThan(0);
     expect(result.affectedLayers).toEqual(expect.arrayContaining(['gameplay-cpp', 'generated']));
+    expect(result.changeTypes).toEqual(expect.arrayContaining(['build-module', 'generated-output']));
+    expect(result.doNotEdit).toEqual(expect.arrayContaining(['Intermediate']));
     expect(result.riskHints).toContain('Do not edit generated Unreal output unless explicitly requested.');
+    expect(result.riskHints).toContain('Generated output changed; identify the source of truth before editing or committing.');
+    expect(result.requiredSearches).toEqual(expect.arrayContaining([
+      'direct callers/importers of changed files',
+      'source files or generator inputs that produce changed generated declarations',
+      '.uproject, .uplugin, and Build.cs dependency consistency',
+    ]));
+    expect(result.recommendedValidation).toEqual(expect.arrayContaining([
+      'Unreal build compile for the affected target.',
+      'Run type generation or TypeScript validation for affected generated declarations/consumers.',
+    ]));
+  });
+
+  it('classifies Unreal manifest, config, asset, editor, cpp, and TypeScript changes', () => {
+    write(root, 'Client.uproject', JSON.stringify({ FileVersion: 3 }));
+    fs.mkdirSync(path.join(root, 'Content'));
+    fs.mkdirSync(path.join(root, 'Config'));
+
+    const project = detectProject(root)!;
+    const result = memory.context.ingestProjectGraphChangeSet(project, {
+      source: ChangeSource.MANUAL,
+      files: [
+        { path: 'Client.uproject', status: 'modified' },
+        { path: 'Plugins/Inventory/Inventory.uplugin', status: 'modified' },
+        { path: 'Config/DefaultEngine.ini', status: 'modified' },
+        { path: 'Content/UI/HUD.uasset', status: 'modified' },
+        { path: 'Source/Client/Private/ClientGame.cpp', status: 'modified' },
+        { path: 'Source/ClientEditor/Private/ClientEditor.cpp', status: 'modified' },
+        { path: 'TypeScript/app.ts', status: 'modified' },
+      ],
+    });
+
+    expect(result.changeTypes).toEqual(expect.arrayContaining([
+      'project-manifest',
+      'plugin-manifest',
+      'config-sensitive',
+      'asset-reference-sensitive',
+      'cpp-source',
+      'editor-boundary',
+      'typescript-consumer',
+    ]));
+    expect(result.riskHints).toEqual(expect.arrayContaining([
+      'Manifest changes can alter enabled plugins, module load phase, and startup behavior.',
+      'Check that Runtime modules do not depend on editor-only modules.',
+      'Content asset paths may be soft-referenced; avoid plain filesystem rename.',
+    ]));
+    expect(result.requiredSearches).toEqual(expect.arrayContaining([
+      '.uproject, .uplugin, and Build.cs dependency consistency',
+      'Runtime versus Editor module dependency direction',
+      'classes, modules, or plugins referenced from config',
+      'Asset Registry soft/hard references',
+    ]));
+    expect(result.recommendedValidation).toEqual(expect.arrayContaining([
+      'Unreal build compile for the affected target.',
+      'Validate plugin dependency consistency and editor/runtime startup.',
+      'Validate config load for the affected target.',
+      'Run Unreal-aware asset reference validation.',
+      'Run type generation or TypeScript validation for affected generated declarations/consumers.',
+    ]));
   });
 
   it('preserves external collector changeset metadata while mapping affected graph context', () => {

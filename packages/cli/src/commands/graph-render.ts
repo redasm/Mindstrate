@@ -41,6 +41,10 @@ export const buildGraphChangeResultLines = (result: {
   changeSet: ChangeSet;
   affectedNodeIds: string[];
   affectedLayers: string[];
+  changeTypes?: string[];
+  doNotEdit?: string[];
+  requiredSearches?: string[];
+  recommendedValidation?: string[];
   riskHints: string[];
   suggestedQueries: string[];
 }): string[] => [
@@ -48,8 +52,20 @@ export const buildGraphChangeResultLines = (result: {
   `Files: ${result.changeSet.files.length}`,
   `Affected nodes: ${result.affectedNodeIds.length}`,
   `Affected layers: ${result.affectedLayers.join(', ') || '(none)'}`,
+  ...(result.changeTypes && result.changeTypes.length > 0
+    ? [`Change types: ${result.changeTypes.join(', ')}`]
+    : []),
+  ...(result.doNotEdit && result.doNotEdit.length > 0
+    ? ['', 'Do not edit directly:', ...result.doNotEdit.map((target) => `  - ${target}`)]
+    : []),
   ...(result.riskHints.length > 0
     ? ['', 'Risk hints:', ...result.riskHints.map((hint) => `  - ${hint}`)]
+    : []),
+  ...(result.requiredSearches && result.requiredSearches.length > 0
+    ? ['', 'Required searches:', ...result.requiredSearches.map((search) => `  - ${search}`)]
+    : []),
+  ...(result.recommendedValidation && result.recommendedValidation.length > 0
+    ? ['', 'Recommended validation:', ...result.recommendedValidation.map((validation) => `  - ${validation}`)]
     : []),
   '',
   'Suggested queries:',
