@@ -17,6 +17,7 @@ export interface ProjectGraphStatsExport {
   edges: number;
   projectionNodeId?: string;
   firstFiles: string[];
+  highImpactFiles: ProjectGraphReportItem[];
   entryPoints: ProjectGraphReportItem[];
   coreModules: ProjectGraphReportItem[];
   assetSurfaces: ProjectGraphReportItem[];
@@ -40,4 +41,5 @@ export interface ProjectGraphStatsExport {
 export interface ProjectGraphReportItem {
   label: string;
   evidencePaths: string[];
+  impactTags?: string[];
 }

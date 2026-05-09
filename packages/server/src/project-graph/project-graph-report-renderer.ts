@@ -116,7 +116,7 @@ export const renderProjectGraphReport = (
   '',
   `## ${labels().highImpactFiles}`,
   '',
-  ...listOrFallback(stats.firstFiles),
+  ...reportItemLines(stats.highImpactFiles),
   '',
   `## ${labels().nativeToScriptBindings}`,
   '',
@@ -183,6 +183,10 @@ export const renderProjectGraphRepoEntry = (
   `## ${labels().coreModules}`,
   '',
   ...reportItemLines(stats.coreModules),
+  '',
+  `## ${labels().highImpactFiles}`,
+  '',
+  ...reportItemLines(stats.highImpactFiles),
   '',
   `## ${labels().nativeToScriptBindings}`,
   '',
@@ -259,6 +263,7 @@ const reportItemLines = (items: ProjectGraphReportItem[]): string[] =>
   items.length > 0
     ? items.flatMap((item) => [
       `- ${item.label}`,
+      ...(item.impactTags && item.impactTags.length > 0 ? [`  - Tags: ${item.impactTags.join(', ')}`] : []),
       `  - ${labels().evidence}: ${item.evidencePaths.join(', ') || '(none)'}`,
     ])
     : [labels().noneDetected];

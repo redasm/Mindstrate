@@ -174,6 +174,7 @@ describe('project graph report export', () => {
         provenance: ProjectGraphProvenance.EXTRACTED,
         scanMode: 'metadata-only',
         assetClass: 'Blueprint',
+        impactTags: ['asset-reference-sensitive'],
         evidence: [{ path: '.mindstrate/unreal-asset-registry.json', extractorId: 'unreal-asset-registry' }],
       },
     });
@@ -200,6 +201,7 @@ describe('project graph report export', () => {
     expect(report).toContain('## Core Modules');
     expect(report).toContain('## Asset And Blueprint Surfaces');
     expect(report).toContain('/Game/Characters/BP_Player');
+    expect(report).toContain('Tags: asset-reference-sensitive');
     expect(report).toContain('## Native To Script Bindings');
     expect(report).toContain('NativeExport');
     expect(report).toContain('src/App.tsx:1');

@@ -35,6 +35,15 @@ export const collectProjectGraphStats = (
     .map((node) => node.title)
     .slice(0, 12);
   const entryPoints = firstFiles.slice(0, 8).map((label) => ({ label, evidencePaths: [label] }));
+  const highImpactFiles = sortProjectGraphNodesBySalience(nodes
+    .filter((node) => node.metadata?.['generated'] !== true)
+    .filter((node) => impactTagsForNode(node).length > 0), edges, overlays)
+    .slice(0, 12)
+    .map((node) => ({
+      label: projectGraphOverlayProjectionForNode(node, overlays).displayLabel,
+      evidencePaths: evidencePathsForNode(node),
+      impactTags: impactTagsForNode(node),
+    }));
   const coreModules = sortProjectGraphNodesBySalience(nodes
     .filter((node) => ['project', 'directory', 'file'].includes(String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? '')))
     .filter((node) => node.metadata?.['generated'] !== true), edges, overlays)
@@ -57,6 +66,7 @@ export const collectProjectGraphStats = (
     edges: edges.length,
     projectionNodeId: nodes[0]?.id,
     firstFiles,
+    highImpactFiles,
     entryPoints,
     coreModules,
     assetSurfaces,
@@ -82,4 +92,9 @@ export const collectProjectGraphStats = (
     provenanceCounts: countBy(nodes, (node) => String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.provenance] ?? 'unknown')),
     nodeKindCounts: countBy(nodes, (node) => String(node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? 'unknown')),
   };
+};
+
+const impactTagsForNode = (node: { metadata?: Record<string, unknown> }): string[] => {
+  const tags = node.metadata?.['impactTags'];
+  return Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === 'string' && tag.length > 0) : [];
 };
