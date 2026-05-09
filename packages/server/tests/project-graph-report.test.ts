@@ -304,6 +304,13 @@ describe('project graph report export', () => {
       expect(fs.readFileSync(appNodePagePath!, 'utf8')).toContain('## Outgoing Relations');
       expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'flows', 'execution-flow.md'))).toBe(true);
       expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'bindings', 'native-script.md'))).toBe(true);
+      const flowSummary = fs.readFileSync(path.join(vaultRoot, 'demo-report', 'architecture', 'flows', 'execution-flow.md'), 'utf8');
+      const bindingSummary = fs.readFileSync(path.join(vaultRoot, 'demo-report', 'architecture', 'bindings', 'native-script.md'), 'utf8');
+      expect(flowSummary).toContain('Generated detail page: [[execution-flow.generated.md]]');
+      expect(bindingSummary).toContain('Generated detail page: [[native-script.generated.md]]');
+      expect(bindingSummary).toContain('TypeScript/Typing');
+      expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'flows', 'execution-flow.generated.md'))).toBe(true);
+      expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'bindings', 'native-script.generated.md'))).toBe(true);
       const generatedFilesPage = fs.readFileSync(path.join(vaultRoot, 'demo-report', 'architecture', '04-generated-files.md'), 'utf8');
       expect(generatedFilesPage).toContain('# Generated Files And Source Of Truth');
       expect(generatedFilesPage).toContain('<!-- mindstrate:project-graph:overlay:start -->');

@@ -39,6 +39,7 @@ export const writeProjectGraphObsidianProjection = (
   const existing = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
   importProjectGraphOverlayBlock(store, project.name, existing);
   importExistingSystemPageOverlays(store, project.name, vaultRoot, projectSlug);
+  importExistingSummaryPageOverlays(store, project.name, vaultRoot, projectSlug);
   const stats = collectProjectGraphStats(store, project);
   const generated = renderProjectGraphReport(project, stats);
   const overlays = listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
@@ -96,6 +97,20 @@ const importExistingSystemPageOverlays = (
   const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
   for (const pageName of SYSTEM_PAGE_NAMES) {
     const pagePath = path.join(architectureDir, pageName);
+    if (fs.existsSync(pagePath)) importProjectGraphOverlayBlock(store, projectName, fs.readFileSync(pagePath, 'utf8'));
+  }
+};
+
+const importExistingSummaryPageOverlays = (
+  store: ContextGraphStore,
+  projectName: string,
+  vaultRoot: string,
+  projectSlug: string,
+): void => {
+  for (const pagePath of [
+    path.join(vaultRoot, projectSlug, 'architecture', 'flows', 'execution-flow.md'),
+    path.join(vaultRoot, projectSlug, 'architecture', 'bindings', 'native-script.md'),
+  ]) {
     if (fs.existsSync(pagePath)) importProjectGraphOverlayBlock(store, projectName, fs.readFileSync(pagePath, 'utf8'));
   }
 };
@@ -327,16 +342,102 @@ const writeObsidianFlowAndBindingPages = (
     ProjectGraphEdgeKind.ROUTES_TO,
   ].includes(edge.kind as ProjectGraphEdgeKind));
   const bindingEdges = graph.edges.filter((edge) => edge.kind === ProjectGraphEdgeKind.BINDS_TO);
+  const flowSummaryPath = path.join(architectureDir, 'flows', 'execution-flow.md');
+  const bindingSummaryPath = path.join(architectureDir, 'bindings', 'native-script.md');
 
   writeProjectGraphTextFileAtomically(
-    path.join(architectureDir, 'flows', 'execution-flow.md'),
-    renderEdgeProjectionPage('Execution Flow', flowEdges, nodeById),
+    flowSummaryPath,
+    renderEdgeSummaryPage({
+      title: 'Execution Flow',
+      generatedPage: 'execution-flow.generated.md',
+      edgeCount: flowEdges.length,
+      existing: fs.existsSync(flowSummaryPath) ? fs.readFileSync(flowSummaryPath, 'utf8') : '',
+      body: [
+        '## Purpose',
+        '',
+        '- Human-readable summary page for entrypoint, call, route, and binding relationships.',
+        '- Use the generated detail page only after checking the lifecycle and boundary pages.',
+        '',
+        '## Before Editing',
+        '',
+        '- Query `before-edit` and `impact` for the target subsystem or file.',
+        '- Check module ownership before following raw call edges.',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  content: Treat raw execution-flow edges as navigation hints, not as confirmed lifecycle documentation.',
+      ],
+    }),
   );
   writeProjectGraphTextFileAtomically(
-    path.join(architectureDir, 'bindings', 'native-script.md'),
-    renderEdgeProjectionPage('Native Script Bindings', bindingEdges, nodeById),
+    path.join(architectureDir, 'flows', 'execution-flow.generated.md'),
+    renderEdgeProjectionPage('Execution Flow Details', flowEdges, nodeById),
+  );
+  writeProjectGraphTextFileAtomically(
+    bindingSummaryPath,
+    renderEdgeSummaryPage({
+      title: 'Native Script Bindings',
+      generatedPage: 'native-script.generated.md',
+      edgeCount: bindingEdges.length,
+      existing: fs.existsSync(bindingSummaryPath) ? fs.readFileSync(bindingSummaryPath, 'utf8') : '',
+      body: [
+        '## Purpose',
+        '',
+        '- Human-readable summary page for native C++ APIs exposed to the script/TypeScript layer.',
+        '- Keep source-of-truth decisions here and leave raw binding facts in the generated detail page.',
+        '',
+        '## Source Of Truth',
+        '',
+        '- C++ reflection source and UnrealSharp generator/configuration.',
+        '- `TypeScript/Typing` is generated output and should not be edited manually.',
+        '',
+        '## Verify',
+        '',
+        '- Build affected C++ target, run type generation, inspect generated declarations, and run TS validation.',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  target: TypeScript/Typing',
+        '  content: Native script binding fixes must update C++ reflection source or generator configuration before generated TypeScript declarations.',
+      ],
+    }),
+  );
+  writeProjectGraphTextFileAtomically(
+    path.join(architectureDir, 'bindings', 'native-script.generated.md'),
+    renderEdgeProjectionPage('Native Script Binding Details', bindingEdges, nodeById),
   );
 };
+
+const renderEdgeSummaryPage = (input: {
+  title: string;
+  generatedPage: string;
+  edgeCount: number;
+  existing: string;
+  body: string[];
+  overlays: string[];
+}): string => [
+  '<!-- mindstrate:project-graph:summary-generated:start -->',
+  `# ${input.title}`,
+  '',
+  `- Generated detail page: [[${input.generatedPage}]]`,
+  `- Extracted edge count: ${input.edgeCount}`,
+  '',
+  ...input.body,
+  '<!-- mindstrate:project-graph:summary-generated:end -->',
+  '',
+  '## User Notes',
+  '',
+  '<!-- mindstrate:project-graph:user-notes:start -->',
+  preserveProjectGraphBlock(input.existing, 'user-notes') || '- Add project-specific binding or flow notes here.',
+  '<!-- mindstrate:project-graph:user-notes:end -->',
+  '',
+  '## Structured Overlay',
+  '',
+  '<!-- mindstrate:project-graph:overlay:start -->',
+  preserveProjectGraphBlock(input.existing, 'overlay') || input.overlays.join('\n'),
+  '<!-- mindstrate:project-graph:overlay:end -->',
+  '',
+].join('\n');
 
 const renderEdgeProjectionPage = (
   title: string,
