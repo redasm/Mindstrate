@@ -5,7 +5,12 @@ export interface UnrealAssetRegistryAsset {
   path: string;
   class?: string;
   parent?: string;
-  references?: string[];
+  references?: UnrealAssetRegistryReference[];
+}
+
+export interface UnrealAssetRegistryReference {
+  path: string;
+  type?: 'soft' | 'hard';
 }
 
 export interface UnrealAssetRegistryImport {
@@ -38,8 +43,34 @@ const normalizeAsset = (value: unknown): UnrealAssetRegistryAsset | null => {
     path: record.path,
     class: typeof record.class === 'string' ? record.class : undefined,
     parent: typeof record.parent === 'string' ? record.parent : undefined,
-    references: Array.isArray(record.references)
-      ? record.references.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
-      : undefined,
+    references: normalizeReferences(record),
   };
+};
+
+const normalizeReferences = (record: Record<string, unknown>): UnrealAssetRegistryReference[] | undefined => {
+  const references = [
+    ...referenceArray(record.references),
+    ...referenceArray(record.softReferences).map((reference) => ({ ...reference, type: 'soft' as const })),
+    ...referenceArray(record.hardReferences).map((reference) => ({ ...reference, type: 'hard' as const })),
+  ];
+  return references.length > 0 ? uniqueReferences(references) : undefined;
+};
+
+const referenceArray = (value: unknown): UnrealAssetRegistryReference[] =>
+  Array.isArray(value)
+    ? value.flatMap((entry) => {
+      if (typeof entry === 'string' && entry.length > 0) return [{ path: entry }];
+      if (!entry || typeof entry !== 'object') return [];
+      const record = entry as Record<string, unknown>;
+      const referenceType = record.type === 'soft' || record.type === 'hard' ? record.type : undefined;
+      return typeof record.path === 'string' && record.path.length > 0
+        ? [{ path: record.path, type: referenceType }]
+        : [];
+    })
+    : [];
+
+const uniqueReferences = (references: UnrealAssetRegistryReference[]): UnrealAssetRegistryReference[] => {
+  const out = new Map<string, UnrealAssetRegistryReference>();
+  for (const reference of references) out.set(`${reference.path}:${reference.type ?? ''}`, reference);
+  return Array.from(out.values());
 };

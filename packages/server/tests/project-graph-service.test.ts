@@ -328,7 +328,8 @@ describe('project graph service', () => {
           path: '/Game/UI/WBP_MainMenu',
           class: 'WidgetBlueprint',
           parent: 'UUserWidget',
-          references: ['/Game/Data/DA_MenuTheme'],
+          references: [{ path: '/Game/Data/DA_MenuTheme', type: 'hard' }],
+          softReferences: ['/Game/Audio/DA_MenuMusic'],
         },
         {
           path: '/Game/Data/DA_MenuTheme',
@@ -347,6 +348,7 @@ describe('project graph service', () => {
     const menu = nodes.find((node) => node.title === '/Game/UI/WBP_MainMenu');
     const parent = nodes.find((node) => node.title === 'UUserWidget');
     const theme = nodes.find((node) => node.title === '/Game/Data/DA_MenuTheme');
+    const music = nodes.find((node) => node.title === '/Game/Audio/DA_MenuMusic');
 
     expect(menu?.metadata).toMatchObject({ assetClass: 'WidgetBlueprint', scanMode: 'metadata-only' });
     expect(parent?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.CLASS });
@@ -359,7 +361,14 @@ describe('project graph service', () => {
     expect(edges.some((edge) =>
       edge.sourceId === menu?.id &&
       edge.targetId === theme?.id &&
-      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.REFERENCES_ASSET
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.REFERENCES_ASSET &&
+      edge.evidence?.referenceType === 'hard'
+    )).toBe(true);
+    expect(edges.some((edge) =>
+      edge.sourceId === menu?.id &&
+      edge.targetId === music?.id &&
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.REFERENCES_ASSET &&
+      edge.evidence?.referenceType === 'soft'
     )).toBe(true);
   });
 

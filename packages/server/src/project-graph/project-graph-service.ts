@@ -288,11 +288,13 @@ const addUnrealAssetRegistryFacts = (
       addEdge(edges, makeEdge(assetNode.id, parentNode.id, ProjectGraphEdgeKind.DEPENDS_ON, evidence(asset.path)));
     }
     for (const reference of asset.references ?? []) {
-      const referenceNode = makeNode(project, ProjectGraphNodeKind.COMPONENT, reference, reference, evidence(asset.path), {
+      const referenceNode = makeNode(project, ProjectGraphNodeKind.COMPONENT, reference.path, reference.path, evidence(asset.path), {
         scanMode: 'metadata-only',
       });
       addNode(nodes, referenceNode);
-      addEdge(edges, makeEdge(assetNode.id, referenceNode.id, ProjectGraphEdgeKind.REFERENCES_ASSET, evidence(asset.path)));
+      addEdge(edges, makeEdge(assetNode.id, referenceNode.id, ProjectGraphEdgeKind.REFERENCES_ASSET, evidence(asset.path), {
+        referenceType: reference.type,
+      }));
     }
   }
 };
