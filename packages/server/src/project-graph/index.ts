@@ -113,6 +113,11 @@ export {
   type UnrealPluginDependencyConsistencyIssue,
 } from './unreal-consistency.js';
 export {
+  checkGeneratedEditSafety,
+  type GeneratedEditSafetyInput,
+  type GeneratedEditSafetyIssue,
+} from './generated-consistency.js';
+export {
   createProjectGraphOverlay,
   listProjectGraphOverlays,
   parseProjectGraphOverlayBlock,
