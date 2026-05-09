@@ -315,6 +315,20 @@ describe('project graph report export', () => {
       expect(generatedFilesPage).toContain('# Generated Files And Source Of Truth');
       expect(generatedFilesPage).toContain('<!-- mindstrate:project-graph:overlay:start -->');
       expect(generatedFilesPage).toContain('TypeScript/Typing');
+      const projectionIndex = JSON.parse(fs.readFileSync(path.join(vaultRoot, '_meta', 'index.json'), 'utf8')) as {
+        projectGraphPages: Record<string, { project: string; path: string; role: string; priority: number }>;
+      };
+      expect(projectionIndex.projectGraphPages['demo-report:system:00-overview']).toEqual({
+        project: 'demo-report',
+        path: 'demo-report/architecture/00-overview.md',
+        role: 'system',
+        priority: 95,
+      });
+      expect(projectionIndex.projectGraphPages['demo-report:project-graph']).toMatchObject({
+        path: 'demo-report/architecture/project-graph.md',
+        role: 'project-graph',
+        priority: 100,
+      });
       expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', '06-common-change-playbooks.md'))).toBe(true);
       const records = memory.projections.listProjectionRecords({
         target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,

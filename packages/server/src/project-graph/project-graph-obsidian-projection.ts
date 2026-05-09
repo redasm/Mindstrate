@@ -47,14 +47,25 @@ export const writeProjectGraphObsidianProjection = (
   const graph = collectProjectGraphArtifact(store, project, stats);
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
   const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug, overlays);
-  writeObsidianFlowAndBindingPages(graph, vaultRoot, projectSlug);
-  writeObsidianSystemPages(project, vaultRoot, projectSlug);
+  const flowAndBindingPaths = writeObsidianFlowAndBindingPages(graph, vaultRoot, projectSlug);
+  const systemPaths = writeObsidianSystemPages(project, vaultRoot, projectSlug);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
   writeProjectGraphTextFileAtomically(reportPath, report);
   writeProjectGraphTextFileAtomically(statsPath, `${JSON.stringify(stats, null, 2)}\n`);
   writeProjectGraphTextFileAtomically(graphPath, `${JSON.stringify(graph, null, 2)}\n`);
+  writeObsidianProjectionIndex(vaultRoot, projectSlug, [
+    { key: 'project-graph', path: reportPath, role: 'project-graph', priority: 100 },
+    ...systemPaths.map((filePath, index) => ({ key: `system:${path.basename(filePath, '.md')}`, path: filePath, role: 'system', priority: 95 - index })),
+    ...flowAndBindingPaths.map((filePath) => ({
+      key: `relationship:${path.basename(filePath, '.md')}`,
+      path: filePath,
+      role: filePath.endsWith('.generated.md') ? 'generated-detail' : 'summary',
+      priority: filePath.endsWith('.generated.md') ? 40 : 80,
+    })),
+    { key: 'nodes:index', path: nodePaths[0], role: 'node-index', priority: 50 },
+  ]);
   if (stats.projectionNodeId) {
     store.upsertProjectionRecord({
       id: `projection:${ProjectionTarget.PROJECT_GRAPH_OBSIDIAN}:${project.name}`,
@@ -119,13 +130,16 @@ const writeObsidianSystemPages = (
   project: DetectedProject,
   vaultRoot: string,
   projectSlug: string,
-): void => {
+): string[] => {
   const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
+  const paths: string[] = [];
   for (const page of systemPageDefinitions(project)) {
     const pagePath = path.join(architectureDir, page.name);
     const existing = fs.existsSync(pagePath) ? fs.readFileSync(pagePath, 'utf8') : '';
     writeProjectGraphTextFileAtomically(pagePath, renderSystemPage(page, existing));
+    paths.push(pagePath);
   }
+  return paths;
 };
 
 interface SystemPageDefinition {
@@ -134,6 +148,60 @@ interface SystemPageDefinition {
   body: string[];
   overlays: string[];
 }
+
+interface ObsidianProjectionIndexEntry {
+  key: string;
+  path: string | undefined;
+  role: string;
+  priority: number;
+}
+
+const writeObsidianProjectionIndex = (
+  vaultRoot: string,
+  projectSlug: string,
+  entries: ObsidianProjectionIndexEntry[],
+): void => {
+  const metaDir = path.join(vaultRoot, '_meta');
+  const indexPath = path.join(metaDir, 'index.json');
+  fs.mkdirSync(metaDir, { recursive: true });
+  const current = readObsidianIndex(indexPath);
+  const currentPages = current['projectGraphPages'] && typeof current['projectGraphPages'] === 'object'
+    ? current['projectGraphPages'] as Record<string, unknown>
+    : {};
+  const nextPages = Object.fromEntries(Object.entries(currentPages)
+    .filter(([, value]) => !isProjectGraphPageForProject(value, projectSlug)));
+  for (const entry of entries) {
+    if (!entry.path) continue;
+    nextPages[`${projectSlug}:${entry.key}`] = {
+      project: projectSlug,
+      path: relativePath(vaultRoot, entry.path),
+      role: entry.role,
+      priority: entry.priority,
+    };
+  }
+  writeProjectGraphTextFileAtomically(indexPath, `${JSON.stringify({
+    ...current,
+    version: typeof current['version'] === 'number' ? current['version'] : 1,
+    files: current['files'] && typeof current['files'] === 'object' ? current['files'] : {},
+    projectGraphPages: nextPages,
+  }, null, 2)}\n`);
+};
+
+const readObsidianIndex = (indexPath: string): Record<string, unknown> => {
+  if (!fs.existsSync(indexPath)) return { files: {}, version: 1 };
+  try {
+    const parsed = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : { files: {}, version: 1 };
+  } catch {
+    return { files: {}, version: 1 };
+  }
+};
+
+const isProjectGraphPageForProject = (value: unknown, projectSlug: string): boolean =>
+  !!value && typeof value === 'object' && (value as Record<string, unknown>)['project'] === projectSlug;
+
+const relativePath = (root: string, filePath: string): string =>
+  path.relative(root, filePath).split(path.sep).join('/');
 
 const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[] => {
   const generatedRoots = project.graphHints?.generatedRoots ?? ['Binaries', 'Intermediate', 'Saved', 'DerivedDataCache', 'TypeScript/Typing'];
@@ -332,7 +400,7 @@ const writeObsidianFlowAndBindingPages = (
   graph: ProjectGraphArtifact,
   vaultRoot: string,
   projectSlug: string,
-): void => {
+): string[] => {
   const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const flowEdges = graph.edges.filter((edge) => [
@@ -369,8 +437,9 @@ const writeObsidianFlowAndBindingPages = (
       ],
     }),
   );
+  const flowGeneratedPath = path.join(architectureDir, 'flows', 'execution-flow.generated.md');
   writeProjectGraphTextFileAtomically(
-    path.join(architectureDir, 'flows', 'execution-flow.generated.md'),
+    flowGeneratedPath,
     renderEdgeProjectionPage('Execution Flow Details', flowEdges, nodeById),
   );
   writeProjectGraphTextFileAtomically(
@@ -402,10 +471,12 @@ const writeObsidianFlowAndBindingPages = (
       ],
     }),
   );
+  const bindingGeneratedPath = path.join(architectureDir, 'bindings', 'native-script.generated.md');
   writeProjectGraphTextFileAtomically(
-    path.join(architectureDir, 'bindings', 'native-script.generated.md'),
+    bindingGeneratedPath,
     renderEdgeProjectionPage('Native Script Binding Details', bindingEdges, nodeById),
   );
+  return [flowSummaryPath, flowGeneratedPath, bindingSummaryPath, bindingGeneratedPath];
 };
 
 const renderEdgeSummaryPage = (input: {

@@ -63,7 +63,12 @@ export class VaultExporter {
 
     const all = memory.context.readGraphKnowledge({ limit: 100000 });
     const idx: VaultIndex = this.layout.loadIndex();
-    const newIndex: VaultIndex = { files: {}, version: idx.version, lastFullSyncAt: new Date().toISOString() };
+    const newIndex: VaultIndex = {
+      files: {},
+      projectGraphPages: idx.projectGraphPages,
+      version: idx.version,
+      lastFullSyncAt: new Date().toISOString(),
+    };
 
     const desiredAbsPaths = new Set<string>();
 

@@ -47,6 +47,8 @@ export interface VaultLayoutOptions {
 export interface VaultIndex {
   /** Map: knowledge-id -> relative file path inside vault (forward slashes) */
   files: Record<string, string>;
+  /** Project graph projection entry points keyed by stable projection id. */
+  projectGraphPages?: Record<string, { project: string; path: string; role: string; priority: number }>;
   /** Last full sync timestamp */
   lastFullSyncAt?: string;
   /** Schema version */
@@ -105,6 +107,7 @@ export class VaultLayout {
       const parsed = JSON.parse(raw);
       return {
         files: parsed.files ?? {},
+        projectGraphPages: parsed.projectGraphPages ?? undefined,
         lastFullSyncAt: parsed.lastFullSyncAt,
         version: parsed.version ?? INDEX_SCHEMA_VERSION,
       };

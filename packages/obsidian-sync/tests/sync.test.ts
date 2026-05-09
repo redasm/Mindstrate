@@ -70,6 +70,43 @@ describe('SyncManager (integration)', () => {
     expect(Object.keys(idx.files)).toHaveLength(2);
   });
 
+  it('preserves project graph projection entries in the vault index', async () => {
+    const layout = new VaultLayout({ vaultRoot: vaultDir });
+    layout.saveIndex({
+      files: {},
+      projectGraphPages: {
+        'client:system:00-overview': {
+          project: 'client',
+          path: 'client/architecture/00-overview.md',
+          role: 'system',
+          priority: 95,
+        },
+      },
+      version: 1,
+    });
+    const r = await memory.knowledge.add({
+      type: KnowledgeType.BEST_PRACTICE,
+      title: 'Keep graph entry points indexed',
+      solution: 'Preserve projectGraphPages while refreshing knowledge files.',
+      context: { project: 'client' },
+      source: CaptureSource.CLI,
+    });
+    expect(r.success).toBe(true);
+
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    const out = await sync.exportAll();
+
+    expect(out.errors).toHaveLength(0);
+    expect(new VaultLayout({ vaultRoot: vaultDir }).loadIndex().projectGraphPages).toEqual({
+      'client:system:00-overview': {
+        project: 'client',
+        path: 'client/architecture/00-overview.md',
+        role: 'system',
+        priority: 95,
+      },
+    });
+  });
+
   it('exports project snapshot graph nodes into architecture folders', async () => {
     await memory.snapshots.upsertProjectSnapshot({
       name: 'website',
