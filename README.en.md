@@ -15,7 +15,7 @@ Mindstrate supports two operating modes:
 
 - **ECS memory lineage**: bug fixes, conventions, architecture decisions, gotchas, workflows, session summaries, skills, and rules are governed in one compression spectrum.
 - **Memory metabolism engine**: Digest, Assimilate, Compress, Prune, and Reflect let memory absorb, merge, upgrade, down-rank, forget, and resolve conflicts.
-- **Project graph context**: parser-first graph facts for files, dependencies, components, risk hints, evidence paths, and editable overlays.
+- **Project graph context**: parser-first graph facts for files, dependencies, components, cross-system flows, risk hints, safety checks, evidence paths, and editable overlays.
 - **External data collection**: Git, Perforce, hooks, daemon polling, and custom collectors live in `repo-scanner`; the framework receives standard `event`, `ChangeSet`, and `bundle` inputs.
 - **Agent-friendly MCP tools**: search, write knowledge, assemble context, restore sessions, query the project graph, and record feedback.
 - **Human-editable projections**: local mode can write project graph output to Obsidian; team mode can publish it to Team Server.
@@ -98,6 +98,8 @@ mindstrate init                      # idempotent project snapshot and graph ini
 mindstrate mcp setup --tool cursor   # write MCP config
 mindstrate graph status              # show project graph projection status
 mindstrate graph query "auth flow"   # search project graph nodes
+mindstrate graph task before-edit "Source/Client" --project Client
+mindstrate graph changes --source git # map changes to graph risks and safety issues
 mindstrate graph ingest --changes changeset.json
 mindstrate graph eval-dataset --out ./out/project-graph-eval
 mindstrate vault export ~/Vault      # export knowledge to Obsidian
@@ -112,6 +114,24 @@ mindstrate-scan ingest p4 --recent 10 --project my-project
 mindstrate-scan source add-git --name repo --project my-project --repo-path .
 mindstrate-scan daemon
 ```
+
+## Project Graph And Edit Safety
+
+Mindstrate's project graph is more than a file index. Extracted facts are turned into agent-actionable before-edit reports and impact analysis:
+
+- `before-edit` / `impact` reports include classification, known constraints, affected chains, source of truth, do-not-edit targets, required searches, recommended verification, and relevant overlays.
+- CLI commands such as `mindstrate graph changes` and `mindstrate graph ingest` show safety issues, including direct generated-file edits, missing `.uplugin` plugin dependencies, and Runtime modules depending on Editor-only modules.
+- MCP project graph tools expose safety issues in `before-edit` / `impact` reports so agents can identify global risks before editing.
+- Obsidian projections generate system architecture pages, summary pages, and generated detail pages while preserving user notes and structured overlays for human confirmations.
+- High-impact graph nodes carry `impactTags`, such as `build-critical`, `project-manifest`, `plugin-manifest`, `config-sensitive`, `asset-reference-sensitive`, `generated`, `do-not-edit`, `runtime-module`, and `editor-only`.
+
+Unreal project graph extraction includes:
+
+- `.uproject` enabled plugins, `.uplugin` modules / dependency plugins, and `*.Build.cs` public/private module dependencies.
+- `UCLASS`, `USTRUCT`, `UENUM`, `UFUNCTION`, and `UPROPERTY` extraction with native-to-TypeScript usage surfaces.
+- `Config/*.ini` references such as `/Script/Module.Class` and plugin config entries.
+- Unreal Asset Registry soft/hard asset references.
+- Generated/source-of-truth, generated roots, Config, Content asset, and Runtime/Editor module boundary risk metadata.
 
 ## Documentation
 

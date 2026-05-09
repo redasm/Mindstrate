@@ -15,7 +15,7 @@ Mindstrate 支持两种运行模式：
 
 - **ECS 记忆谱系**：Bug 修复、项目约定、架构决策、踩坑记录、工作流、会话摘要、技能和规则在同一压缩谱系中治理。
 - **记忆代谢引擎**：Digest、Assimilate、Compress、Prune、Reflect 让记忆能吸收、合并、升级、降权、遗忘和冲突反思。
-- **项目图谱上下文**：parser-first 的项目图谱，包含文件、依赖、组件、风险提示、证据路径和可编辑 overlays。
+- **项目图谱上下文**：parser-first 的项目图谱，包含文件、依赖、组件、跨系统链路、风险提示、安全检查、证据路径和可编辑 overlays。
 - **外部数据采集**：Git、Perforce、hook、daemon 和自定义 collector 统一放在 `repo-scanner`；框架只接收标准 `event`、`ChangeSet`、`bundle` 输入。
 - **Agent 友好的 MCP 工具**：搜索、写入知识、组装上下文、恢复会话、查询项目图谱、记录反馈。
 - **人类可编辑投影**：个人模式可把项目图谱输出到 Obsidian；团队模式可发布到 Team Server。
@@ -98,6 +98,8 @@ mindstrate init                      # 幂等生成项目快照和项目图谱
 mindstrate mcp setup --tool cursor   # 写入 MCP 配置
 mindstrate graph status              # 查看项目图谱投影状态
 mindstrate graph query "auth flow"   # 搜索项目图谱节点
+mindstrate graph task before-edit "Source/Client" --project Client
+mindstrate graph changes --source git # 将改动映射到图谱风险和安全问题
 mindstrate graph ingest --changes changeset.json
 mindstrate graph eval-dataset --out ./out/project-graph-eval
 mindstrate vault export ~/Vault      # 导出知识到 Obsidian
@@ -112,6 +114,24 @@ mindstrate-scan ingest p4 --recent 10 --project my-project
 mindstrate-scan source add-git --name repo --project my-project --repo-path .
 mindstrate-scan daemon
 ```
+
+## 项目图谱与修改安全
+
+Mindstrate 的项目图谱不只是文件索引。它会把抽取到的事实转换成 agent 可执行的修改前报告和影响面分析：
+
+- `before-edit` / `impact` 报告会输出分类、已知约束、影响链路、source of truth、禁止直接编辑目标、必查项、推荐验证命令和相关 overlay。
+- CLI 的 `mindstrate graph changes` / `mindstrate graph ingest` 会显示 safety issues，例如 generated 文件被直接修改、`.uplugin` 缺失 plugin dependency、Runtime module 依赖 Editor-only module。
+- MCP 项目图谱工具也会在 `before-edit` / `impact` 报告中暴露 safety issues，方便 agent 在动手前识别全局风险。
+- Obsidian 投影会生成系统级架构页、摘要页和 generated 明细页，并保留用户备注 / structured overlay，用于把人工确认回流到图谱。
+- 高影响节点会带有 `impactTags`，例如 `build-critical`、`project-manifest`、`plugin-manifest`、`config-sensitive`、`asset-reference-sensitive`、`generated`、`do-not-edit`、`runtime-module`、`editor-only`。
+
+Unreal 项目图谱增强包括：
+
+- 解析 `.uproject` enabled plugins、`.uplugin` modules / dependency plugins、`*.Build.cs` public/private module dependencies。
+- 抽取 `UCLASS`、`USTRUCT`、`UENUM`、`UFUNCTION`、`UPROPERTY` 并关联 native 到 TypeScript 使用面。
+- 解析 `Config/*.ini` 中的 `/Script/Module.Class` 和 plugin 配置引用。
+- 接入 Unreal Asset Registry 导出的 soft/hard asset references。
+- 标记 generated/source-of-truth、generated roots、Config、Content asset、Runtime/Editor module 边界等风险信息。
 
 ## 文档
 
