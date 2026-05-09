@@ -32,7 +32,9 @@ import {
   type ProjectGraphWriteResult,
 } from './graph-writer.js';
 import {
+  extractUnrealBuildModuleInfo,
   extractUnrealBuildModuleDependencies,
+  extractUnrealManifestInfo,
 } from './unreal-extractor.js';
 import { readUnrealAssetRegistryExport } from './unreal-asset-registry-importer.js';
 import {
@@ -223,6 +225,10 @@ const extractFileFacts = (
   if (file.path === 'package.json') {
     addPackageFacts(project, file.path, nodes, edges);
   }
+  if (isUnrealManifestFile(file.path)) {
+    const content = readSourceFile(file.absolutePath);
+    if (content !== null) addUnrealManifestFacts(project, file.path, content, nodes, edges);
+  }
   if (isUnrealBuildFile(file.path)) {
     const content = readSourceFile(file.absolutePath);
     if (content !== null) addUnrealBuildFacts(project, file.path, content, nodes, edges);
@@ -341,8 +347,60 @@ const addUnrealBuildFacts = (
   nodes: Map<string, ProjectGraphNodeDto>,
   edges: Map<string, ProjectGraphEdgeDto>,
 ): void => {
+  const moduleInfo = extractUnrealBuildModuleInfo({ path: filePath, content });
+  const moduleNode = makeUnrealModuleNode(project, moduleInfo.moduleName, evidence(filePath), {
+    declaredIn: filePath,
+    dependencySurface: {
+      public: moduleInfo.publicDependencies,
+      private: moduleInfo.privateDependencies,
+    },
+  });
+  addNode(nodes, moduleNode);
+  addEdge(edges, makeEdge(fileNodeId(project, filePath), moduleNode.id, ProjectGraphEdgeKind.DECLARES_MODULE, evidence(filePath), {
+    declarationSource: 'build-module',
+  }));
   for (const capture of extractUnrealBuildModuleDependencies({ path: filePath, content })) {
-    addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.DEPENDS_ON, capture);
+    addUnrealModuleDependencyFact(project, filePath, capture.text, moduleNode.id, nodes, edges, dependencyScopeFromCapture(capture), capture);
+  }
+};
+
+const addUnrealManifestFacts = (
+  project: DetectedProject,
+  filePath: string,
+  content: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  const manifest = extractUnrealManifestInfo({ path: filePath, content });
+  if (!manifest) return;
+  for (const moduleInfo of manifest.modules) {
+    const moduleNode = makeUnrealModuleNode(project, moduleInfo.name, evidence(filePath), {
+      manifestType: manifest.type,
+      moduleType: moduleInfo.type,
+      loadingPhase: moduleInfo.loadingPhase,
+      declaredIn: filePath,
+    });
+    addNode(nodes, moduleNode);
+    addEdge(edges, makeEdge(fileNodeId(project, filePath), moduleNode.id, ProjectGraphEdgeKind.DECLARES_MODULE, evidence(filePath), {
+      declarationSource: manifest.type === 'plugin' ? 'plugin-manifest' : 'project-manifest',
+      moduleType: moduleInfo.type,
+      loadingPhase: moduleInfo.loadingPhase,
+    }));
+    addEdge(edges, makeEdge(fileNodeId(project, filePath), moduleNode.id, ProjectGraphEdgeKind.LOADS_MODULE, evidence(filePath), {
+      moduleType: moduleInfo.type,
+      loadingPhase: moduleInfo.loadingPhase,
+    }));
+  }
+  for (const plugin of manifest.pluginDependencies) {
+    const dependency = makeNode(project, ProjectGraphNodeKind.DEPENDENCY, `unreal-plugin:${plugin.name}`, plugin.name, evidence(filePath), {
+      unrealPlugin: true,
+      enabled: plugin.enabled,
+    });
+    addNode(nodes, dependency);
+    addEdge(edges, makeEdge(fileNodeId(project, filePath), dependency.id, ProjectGraphEdgeKind.DEPENDS_ON, evidence(filePath), {
+      dependencyKind: 'unreal-plugin',
+      enabled: plugin.enabled,
+    }));
   }
 };
 
@@ -474,6 +532,29 @@ const addDependencyFact = (
   addEdge(edges, makeEdge(fileNodeId(project, filePath), dependency.id, kind, evidence(filePath, capture)));
 };
 
+const addUnrealModuleDependencyFact = (
+  project: DetectedProject,
+  filePath: string,
+  name: string,
+  moduleNodeId: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+  dependencyScope: 'public' | 'private',
+  capture: ParserCapture,
+): void => {
+  if (!name) return;
+  const dependency = makeNode(project, ProjectGraphNodeKind.DEPENDENCY, `unreal-module:${name}`, name, evidence(filePath, capture), {
+    unrealModuleDependency: true,
+  });
+  addNode(nodes, dependency);
+  const edgeMetadata = {
+    dependencyKind: 'unreal-module',
+    dependencyScope,
+  };
+  addEdge(edges, makeEdge(fileNodeId(project, filePath), dependency.id, ProjectGraphEdgeKind.DEPENDS_ON, evidence(filePath, capture), edgeMetadata));
+  addEdge(edges, makeEdge(moduleNodeId, dependency.id, ProjectGraphEdgeKind.DEPENDS_ON, evidence(filePath, capture), edgeMetadata));
+};
+
 const addSymbolFact = (
   project: DetectedProject,
   filePath: string,
@@ -528,11 +609,22 @@ const makeNode = (
   metadata,
 });
 
+const makeUnrealModuleNode = (
+  project: DetectedProject,
+  name: string,
+  nodeEvidence: EvidenceRef[],
+  metadata?: Record<string, unknown>,
+): ProjectGraphNodeDto => makeNode(project, ProjectGraphNodeKind.MODULE, `unreal-module:${name}`, name, nodeEvidence, {
+  unrealModule: true,
+  ...(metadata ?? {}),
+});
+
 const makeEdge = (
   sourceId: string,
   targetId: string,
   kind: ProjectGraphEdgeKind,
   edgeEvidence: EvidenceRef[],
+  metadata?: Record<string, unknown>,
 ): ProjectGraphEdgeDto => ({
   id: createProjectGraphEdgeId({ sourceId, targetId, kind }),
   sourceId,
@@ -540,6 +632,7 @@ const makeEdge = (
   kind,
   provenance: ProjectGraphProvenance.EXTRACTED,
   evidence: edgeEvidence,
+  metadata,
 });
 
 const addNode = (nodes: Map<string, ProjectGraphNodeDto>, node: ProjectGraphNodeDto): void => {
@@ -590,6 +683,12 @@ const fileNodeId = (project: DetectedProject, filePath: string): string =>
 
 const isUnrealBuildFile = (filePath: string): boolean =>
   filePath.endsWith('.Build.cs') || filePath.endsWith('.Target.cs');
+
+const isUnrealManifestFile = (filePath: string): boolean =>
+  filePath.endsWith('.uproject') || filePath.endsWith('.uplugin');
+
+const dependencyScopeFromCapture = (capture: ParserCapture): 'public' | 'private' =>
+  capture.name.includes('.private-') ? 'private' : 'public';
 
 const stripQuotes = (value: string): string => value.replace(/^['"]|['"]$/g, '');
 

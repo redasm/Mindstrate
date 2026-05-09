@@ -65,13 +65,23 @@ describe('project graph service', () => {
   });
 
   it('extracts Unreal C++ reflection symbols and Build.cs module dependencies', () => {
-    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'Client.uproject', JSON.stringify({
+      FileVersion: 3,
+      Modules: [{ Name: 'Client', Type: 'Runtime', LoadingPhase: 'Default' }],
+      Plugins: [{ Name: 'EnhancedInput', Enabled: true }],
+    }));
     write(root, 'Config/DefaultGame.ini', '[/Script/EngineSettings.GeneralProjectSettings]');
     fs.mkdirSync(path.join(root, 'Content'), { recursive: true });
+    write(root, 'Plugins/Inventory/Inventory.uplugin', JSON.stringify({
+      FileVersion: 3,
+      Modules: [{ Name: 'Inventory', Type: 'Runtime', LoadingPhase: 'PreDefault' }],
+      Plugins: [{ Name: 'GameplayAbilities', Enabled: true }],
+    }));
     write(root, 'Source/Client/Client.Build.cs', `
       public class Client : ModuleRules {
         public Client(ReadOnlyTargetRules Target) : base(Target) {
           PublicDependencyModuleNames.AddRange(new string[] { "Core", "Engine", "UMG" });
+          PrivateDependencyModuleNames.Add("Slate");
         }
       }
     `);
@@ -115,6 +125,46 @@ describe('project graph service', () => {
     )).toBe(true);
     expect(edges.some((edge) =>
       edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.DEPENDS_ON
+    )).toBe(true);
+
+    const clientModule = nodes.find((node) => node.title === 'Client' && node.metadata?.kind === ProjectGraphNodeKind.MODULE);
+    const inventoryModule = nodes.find((node) => node.title === 'Inventory' && node.metadata?.kind === ProjectGraphNodeKind.MODULE);
+    const enhancedInput = nodes.find((node) => node.title === 'EnhancedInput');
+    const gameplayAbilities = nodes.find((node) => node.title === 'GameplayAbilities');
+    const engine = nodes.find((node) => node.title === 'Engine');
+    const slate = nodes.find((node) => node.title === 'Slate');
+
+    expect(clientModule?.metadata).toMatchObject({
+      unrealModule: true,
+      manifestType: 'project',
+      moduleType: 'Runtime',
+      loadingPhase: 'Default',
+      dependencySurface: { public: ['Core', 'Engine', 'UMG'], private: ['Slate'] },
+    });
+    expect(inventoryModule?.metadata).toMatchObject({
+      unrealModule: true,
+      manifestType: 'plugin',
+      moduleType: 'Runtime',
+      loadingPhase: 'PreDefault',
+    });
+    expect(enhancedInput?.metadata).toMatchObject({ unrealPlugin: true, enabled: true });
+    expect(gameplayAbilities?.metadata).toMatchObject({ unrealPlugin: true, enabled: true });
+    expect(edges.some((edge) =>
+      edge.sourceId === clientModule?.id
+      && edge.targetId === engine?.id
+      && edge.evidence?.dependencyKind === 'unreal-module'
+      && edge.evidence?.dependencyScope === 'public'
+    )).toBe(true);
+    expect(edges.some((edge) =>
+      edge.sourceId === clientModule?.id
+      && edge.targetId === slate?.id
+      && edge.evidence?.dependencyKind === 'unreal-module'
+      && edge.evidence?.dependencyScope === 'private'
+    )).toBe(true);
+    expect(edges.some((edge) =>
+      edge.targetId === enhancedInput?.id
+      && edge.evidence?.dependencyKind === 'unreal-plugin'
+      && edge.evidence?.enabled === true
     )).toBe(true);
   });
 
