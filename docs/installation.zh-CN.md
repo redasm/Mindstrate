@@ -351,6 +351,25 @@ Cursor 项目级配置示例：
 }
 ```
 
+### 告诉 AI 何时使用 Mindstrate MCP
+
+MCP 配置只让工具可用，不一定会让 AI 主动使用它。建议在每个接入 Mindstrate 的项目根目录创建或更新 `AGENTS.md`，加入项目级使用规则。OpenCode、Cursor、Claude Code 等工具会读取类似的 agent instruction 文件时，可以据此决定何时查询或写入 Mindstrate。
+
+示例：
+
+```md
+# Agent Memory Rules
+
+- Before planning non-trivial code changes, query Mindstrate for relevant project knowledge, project graph facts, prior decisions, and known risks.
+- Use Mindstrate MCP to assemble task context when the task touches unfamiliar code, architecture boundaries, tests, deployment, or previous incidents.
+- Query the project graph before editing files to understand ownership, dependencies, call chains, generated code, and blast radius.
+- After fixing a bug, discovering a project convention, resolving a confusing setup issue, or learning a reusable workflow, write a concise memory entry to Mindstrate with evidence paths.
+- Do not store secrets, API keys, credentials, personal data, or large raw logs in Mindstrate memory.
+- Treat Mindstrate results as evidence-backed context, not as permission to skip reading source files or running tests.
+```
+
+如果项目已有 `AGENTS.md`，把上面的规则追加到现有文件即可；不要覆盖团队已有的代码风格、测试和安全规则。
+
 ## LLM 服务商配置
 
 Mindstrate 不强制依赖 LLM。不设置 `OPENAI_API_KEY` 时，会使用确定性提取和本地 hash embedding。

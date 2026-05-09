@@ -86,6 +86,8 @@ mindstrate setup \
 - OpenCode：`opencode.json`
 - Claude Desktop：全局桌面配置
 
+建议同时在项目根目录的 `AGENTS.md` 中追加 Mindstrate MCP 使用规则，告诉 AI 在规划复杂修改、查询项目图谱、恢复上下文和沉淀可复用经验时主动调用 Mindstrate。完整模板见 [安装指南](installation.zh-CN.md#告诉-ai-何时使用-mindstrate-mcp)。
+
 ## 环境变量
 
 | 变量 | 用途 |

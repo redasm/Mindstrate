@@ -345,6 +345,25 @@ Team mode adds:
 }
 ```
 
+### Tell The AI When To Use Mindstrate MCP
+
+MCP configuration only makes the tool available; it does not always make the AI use it proactively. For each project connected to Mindstrate, create or update an `AGENTS.md` file at the project root with project-level usage rules. Tools such as OpenCode, Cursor, and Claude Code can read agent instruction files and use them to decide when to query or write Mindstrate memory.
+
+Example:
+
+```md
+# Agent Memory Rules
+
+- Before planning non-trivial code changes, query Mindstrate for relevant project knowledge, project graph facts, prior decisions, and known risks.
+- Use Mindstrate MCP to assemble task context when the task touches unfamiliar code, architecture boundaries, tests, deployment, or previous incidents.
+- Query the project graph before editing files to understand ownership, dependencies, call chains, generated code, and blast radius.
+- After fixing a bug, discovering a project convention, resolving a confusing setup issue, or learning a reusable workflow, write a concise memory entry to Mindstrate with evidence paths.
+- Do not store secrets, API keys, credentials, personal data, or large raw logs in Mindstrate memory.
+- Treat Mindstrate results as evidence-backed context, not as permission to skip reading source files or running tests.
+```
+
+If the project already has `AGENTS.md`, append these rules to the existing file. Do not overwrite team-specific coding, testing, and security instructions.
+
 ## LLM Provider Configuration
 
 Mindstrate does not require an LLM. Without `OPENAI_API_KEY`, it uses deterministic extraction and local hash embeddings.

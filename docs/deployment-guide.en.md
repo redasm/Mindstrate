@@ -86,6 +86,8 @@ Common tools:
 - OpenCode: `opencode.json`
 - Claude Desktop: global desktop config
 
+Also append Mindstrate MCP usage rules to the project-root `AGENTS.md` so the AI knows to call Mindstrate when planning complex changes, querying the project graph, restoring context, or capturing reusable experience. See the full template in the [Installation Guide](installation.en.md#tell-the-ai-when-to-use-mindstrate-mcp).
+
 ## Environment Variables
 
 | Variable | Purpose |
