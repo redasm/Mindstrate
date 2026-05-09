@@ -58,6 +58,8 @@ export async function handleProjectGraphTaskQuery(
     const report = buildBeforeEditReport({
       task: input.task,
       query: input.query,
+      nodes,
+      edges,
       selected,
       evidence,
       overlays,
@@ -255,6 +257,8 @@ const findProjectGraphNodeInList = (nodes: ContextNode[], id: string): ContextNo
 interface ProjectGraphTaskReportInput {
   task: string;
   query: unknown;
+  nodes: ContextNode[];
+  edges: ContextEdge[];
   selected: ContextNode[];
   evidence: string[];
   overlays: ProjectGraphOverlay[];
@@ -269,7 +273,15 @@ interface ProjectGraphTaskReport {
   doNotEdit: string[];
   requiredSearches: string[];
   recommendedVerification: string[];
+  safetyIssues: ProjectGraphSafetyIssue[];
   overlays: ProjectGraphOverlay[];
+}
+
+interface ProjectGraphSafetyIssue {
+  code: string;
+  severity: 'error' | 'warning';
+  message: string;
+  evidence: string[];
 }
 
 const GENERATED_ROOTS = [
@@ -290,6 +302,7 @@ const buildBeforeEditReport = (input: ProjectGraphTaskReportInput): string => {
     evidence: input.evidence,
     sourceOfTruth: report.sourceOfTruth,
     doNotEdit: report.doNotEdit,
+    safetyIssues: report.safetyIssues,
     requiredSearches: report.requiredSearches,
     recommendedVerification: report.recommendedVerification,
     suggestedNextQueries: input.selected.slice(0, 3).map((node) => `impact ${node.title}`),
@@ -320,6 +333,9 @@ const buildBeforeEditReport = (input: ProjectGraphTaskReportInput): string => {
     '### Recommended Verification',
     formatList(report.recommendedVerification),
     '',
+    '### Safety Issues',
+    formatSafetyIssues(report.safetyIssues),
+    '',
     '### Relevant Overlays',
     formatProjectGraphOverlays(report.overlays),
     '',
@@ -345,9 +361,134 @@ const analyzeProjectGraphTask = (input: ProjectGraphTaskReportInput): ProjectGra
     doNotEdit: doNotEditTargets(classifications),
     requiredSearches: requiredSearches(classifications),
     recommendedVerification: recommendedVerification(classifications),
+    safetyIssues: collectSafetyIssues(input.nodes, input.edges, input.selected, targetText),
     overlays,
   };
 };
+
+const collectSafetyIssues = (
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  selected: ContextNode[],
+  targetText: string[],
+): ProjectGraphSafetyIssue[] => {
+  const selectedIds = new Set(selected.map((node) => node.id));
+  const issues = [
+    ...generatedOutputIssues(selected, targetText),
+    ...pluginDependencyIssues(nodes, edges, selectedIds),
+    ...moduleBoundaryIssues(nodes, edges, selectedIds),
+  ];
+  const seen = new Set<string>();
+  return issues.filter((issue) => {
+    const key = `${issue.code}:${issue.message}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const generatedOutputIssues = (selected: ContextNode[], targetText: string[]): ProjectGraphSafetyIssue[] => {
+  const targetPaths = targetText.map((value) => value.replace(/\\/g, '/'));
+  const generatedTargets = selected.filter((node) => node.metadata?.['generated'] === true || node.metadata?.['doNotEdit'] === true);
+  const generatedPathTargets = targetPaths.filter((value) => GENERATED_ROOTS.some((root) => value === root || value.startsWith(`${root}/`) || value.includes(`/${root}/`)));
+  if (generatedTargets.length === 0 && generatedPathTargets.length === 0) return [];
+  return [{
+    code: 'generated-output-targeted',
+    severity: 'error',
+    message: 'The target includes generated output. Identify and edit the upstream source of truth, then regenerate instead of editing it directly.',
+    evidence: uniqueStrings([...generatedTargets.flatMap(evidencePaths), ...generatedPathTargets]),
+  }];
+};
+
+const pluginDependencyIssues = (
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  selectedIds: Set<string>,
+): ProjectGraphSafetyIssue[] => {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const modulesByName = new Map(nodes
+    .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.MODULE && node.metadata?.['unrealModule'] === true)
+    .map((node) => [node.title, node]));
+  const declaredPlugins = collectDeclaredPluginDependencies(nodesById, edges);
+  return edges.flatMap((edge) => {
+    if (!isUnrealModuleDependencyEdge(edge)) return [];
+    if (!selectedIds.has(edge.sourceId) && !selectedIds.has(edge.targetId)) return [];
+    const sourceModule = nodesById.get(edge.sourceId);
+    const dependency = nodesById.get(edge.targetId);
+    if (!sourceModule || !dependency || sourceModule.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] !== ProjectGraphNodeKind.MODULE) return [];
+    const sourcePlugin = pluginNameForPath(stringMetadata(sourceModule, 'declaredIn'));
+    const targetModule = modulesByName.get(dependency.title);
+    const targetPlugin = pluginNameForPath(stringMetadata(targetModule, 'declaredIn'));
+    if (!sourcePlugin || !targetPlugin || sourcePlugin === targetPlugin) return [];
+    if (declaredPlugins.get(sourcePlugin)?.dependencies.has(targetPlugin)) return [];
+    return [{
+      code: 'missing-plugin-dependency',
+      severity: 'error' as const,
+      message: `${sourcePlugin} module ${sourceModule.title} depends on ${dependency.title}, but ${sourcePlugin}.uplugin does not declare plugin dependency ${targetPlugin}.`,
+      evidence: uniqueStrings([...evidencePaths(sourceModule), ...evidencePaths(dependency), ...(targetModule ? evidencePaths(targetModule) : [])]),
+    }];
+  });
+};
+
+const moduleBoundaryIssues = (
+  nodes: ContextNode[],
+  edges: ContextEdge[],
+  selectedIds: Set<string>,
+): ProjectGraphSafetyIssue[] => {
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const modulesByName = new Map(nodes
+    .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.MODULE && node.metadata?.['unrealModule'] === true)
+    .map((node) => [node.title, node]));
+  return edges.flatMap((edge) => {
+    if (!isUnrealModuleDependencyEdge(edge)) return [];
+    if (!selectedIds.has(edge.sourceId) && !selectedIds.has(edge.targetId)) return [];
+    const sourceModule = nodesById.get(edge.sourceId);
+    const dependency = nodesById.get(edge.targetId);
+    const targetModule = dependency ? modulesByName.get(dependency.title) : undefined;
+    if (!sourceModule || !targetModule) return [];
+    const sourceType = stringMetadata(sourceModule, 'moduleType');
+    const targetType = stringMetadata(targetModule, 'moduleType');
+    if (isEditorOnlyModuleType(sourceType) || !isEditorOnlyModuleType(targetType)) return [];
+    return [{
+      code: 'runtime-depends-on-editor-module',
+      severity: 'error' as const,
+      message: `${sourceModule.title} (${sourceType ?? 'unknown module type'}) depends on editor-only module ${targetModule.title}. Runtime modules must not depend on Editor modules.`,
+      evidence: uniqueStrings([...evidencePaths(sourceModule), ...evidencePaths(targetModule)]),
+    }];
+  });
+};
+
+const collectDeclaredPluginDependencies = (
+  nodesById: Map<string, ContextNode>,
+  edges: ContextEdge[],
+): Map<string, { dependencies: Set<string> }> => {
+  const declared = new Map<string, { dependencies: Set<string> }>();
+  for (const edge of edges) {
+    if (edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] !== ProjectGraphEdgeKind.DEPENDS_ON) continue;
+    if (edge.evidence?.['dependencyKind'] !== 'unreal-plugin') continue;
+    const source = nodesById.get(edge.sourceId);
+    const target = nodesById.get(edge.targetId);
+    const plugin = source ? pluginNameForPath(source.title) : undefined;
+    if (!plugin || !target) continue;
+    const entry = declared.get(plugin) ?? { dependencies: new Set<string>() };
+    entry.dependencies.add(target.title);
+    declared.set(plugin, entry);
+  }
+  return declared;
+};
+
+const isUnrealModuleDependencyEdge = (edge: ContextEdge): boolean =>
+  edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.DEPENDS_ON
+  && edge.evidence?.['dependencyKind'] === 'unreal-module';
+
+const stringMetadata = (node: ContextNode | undefined, key: string): string =>
+  typeof node?.metadata?.[key] === 'string' ? String(node.metadata[key]) : '';
+
+const isEditorOnlyModuleType = (moduleType: string): boolean =>
+  moduleType.toLowerCase().includes('editor');
+
+const pluginNameForPath = (filePath: string): string | undefined =>
+  filePath.replace(/\\/g, '/').match(/^Plugins\/([^/]+)\//)?.[1];
 
 const collectTargetText = (input: ProjectGraphTaskReportInput): string[] => uniqueStrings([
   typeof input.query === 'string' ? input.query : undefined,
@@ -478,6 +619,14 @@ const hasUnrealReflectionEvidence = (node: ContextNode): boolean => {
 
 const formatList = (values: string[]): string =>
   values.length === 0 ? '- None' : values.map((value) => `- ${value}`).join('\n');
+
+const formatSafetyIssues = (issues: ProjectGraphSafetyIssue[]): string =>
+  issues.length === 0
+    ? '- None'
+    : issues.map((issue) => [
+      `- [${issue.severity}] ${issue.code}: ${issue.message}`,
+      issue.evidence.length > 0 ? `  Evidence: ${issue.evidence.join(', ')}` : undefined,
+    ].filter(Boolean).join('\n')).join('\n');
 
 const uniqueStrings = (values: Array<string | undefined>): string[] =>
   Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0)));
