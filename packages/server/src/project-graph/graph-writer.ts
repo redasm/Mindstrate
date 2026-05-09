@@ -45,33 +45,41 @@ export const writeProjectGraphExtraction = (
   };
 
   for (const node of extraction.nodes) {
-    if (store.getNodeById(node.id)) {
-      store.updateNode(node.id, toContextNodeUpdate(node));
-      result.nodesUpdated++;
-    } else {
-      store.createNode(toContextNodeCreate(node));
-      result.nodesCreated++;
+    try {
+      if (store.getNodeById(node.id)) {
+        store.updateNode(node.id, toContextNodeUpdate(node));
+        result.nodesUpdated++;
+      } else {
+        store.createNode(toContextNodeCreate(node));
+        result.nodesCreated++;
+      }
+    } catch (error) {
+      throw new Error(`writing project graph node "${node.label}" (${node.kind}, ${node.id}) failed: ${errorMessage(error)}`);
     }
   }
 
   for (const edge of extraction.edges) {
-    const edgeInput = toContextEdgeInput(edge);
-    const existing = store.getEdgeById(edge.id);
-    if (existing) {
-      if (
-        existing.relationType === edgeInput.relationType
-        && existing.strength === edgeInput.strength
-        && JSON.stringify(existing.evidence ?? null) === JSON.stringify(edgeInput.evidence ?? null)
-      ) {
-        result.edgesSkipped++;
+    try {
+      const edgeInput = toContextEdgeInput(edge);
+      const existing = store.getEdgeById(edge.id);
+      if (existing) {
+        if (
+          existing.relationType === edgeInput.relationType
+          && existing.strength === edgeInput.strength
+          && JSON.stringify(existing.evidence ?? null) === JSON.stringify(edgeInput.evidence ?? null)
+        ) {
+          result.edgesSkipped++;
+          continue;
+        }
+        store.updateEdge(edge.id, edgeInput);
+        result.edgesUpdated++;
         continue;
       }
-      store.updateEdge(edge.id, edgeInput);
-      result.edgesUpdated++;
-      continue;
+      store.createEdge(edgeInput);
+      result.edgesCreated++;
+    } catch (error) {
+      throw new Error(`writing project graph edge ${edge.kind} (${edge.sourceId} -> ${edge.targetId}, ${edge.id}) failed: ${errorMessage(error)}`);
     }
-    store.createEdge(edgeInput);
-    result.edgesCreated++;
   }
 
   return result;
@@ -172,3 +180,5 @@ const relationForProjectGraphEdge = (kind: ProjectGraphEdgeKind): ContextRelatio
   if (kind === ProjectGraphEdgeKind.RELATED_TO) return ContextRelationType.SUPPORTS;
   return ContextRelationType.APPLIES_TO;
 };
+
+const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error);

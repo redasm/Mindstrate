@@ -189,6 +189,36 @@ describe('project graph ECS writer', () => {
     ]);
   });
 
+  it('reports graph node context when store writes fail', () => {
+    const failingStore = {
+      getNodeById: () => null,
+      createNode: () => {
+        throw new Error('Invalid argument');
+      },
+    } as unknown as ContextGraphStore;
+
+    expect(() => writeProjectGraphExtraction(failingStore, {
+      ...makeExtraction(),
+      edges: [],
+    })).toThrow('writing project graph node "src/App.tsx" (file, pg:demo:file:src/App.tsx) failed: Invalid argument');
+  });
+
+  it('reports graph edge context when store writes fail', () => {
+    const failingStore = {
+      getEdgeById: () => null,
+      createEdge: () => {
+        throw new Error('Invalid argument');
+      },
+    } as unknown as ContextGraphStore;
+
+    expect(() => writeProjectGraphExtraction(failingStore, {
+      ...makeExtraction(),
+      nodes: [],
+    })).toThrow(
+      'writing project graph edge defines (pg:demo:file:src/App.tsx -> pg:demo:function:src/App.tsx#App, pge:defines:file-app:function-app) failed: Invalid argument',
+    );
+  });
+
   it('archives facts owned by a deleted file', () => {
     writeProjectGraphExtraction(store, makeExtraction());
 

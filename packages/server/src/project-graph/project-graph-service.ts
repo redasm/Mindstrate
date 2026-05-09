@@ -96,6 +96,10 @@ interface ProjectGraphExtractionWithStats extends ProjectGraphExtractionResult {
   skippedFiles: number;
 }
 
+interface ProjectGraphFileExtractionOutcome extends ProjectGraphExtractionResult {
+  skipped: boolean;
+}
+
 const buildProjectGraphExtraction = (
   project: DetectedProject,
   options: ProjectGraphIndexOptions,
@@ -133,12 +137,15 @@ const buildProjectGraphExtraction = (
     addNode(nodes, makeFileNode(project, file.path, scanPlan));
     addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
     const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache);
-    nextCache.files[file.path] = {
-      path: file.path,
-      hash: file.hash,
-      nodes: fileExtraction.nodes,
-      edges: fileExtraction.edges,
-    };
+    if (fileExtraction.skipped) skippedFiles += 1;
+    if (!fileExtraction.skipped) {
+      nextCache.files[file.path] = {
+        path: file.path,
+        hash: file.hash,
+        nodes: fileExtraction.nodes,
+        edges: fileExtraction.edges,
+      };
+    }
     for (const node of fileExtraction.nodes) addNode(nodes, node);
     for (const edge of fileExtraction.edges) addEdge(edges, edge);
     emitIndexProgress(options.onIndexProgress, {
@@ -201,16 +208,17 @@ const extractFileFacts = (
   file: ProjectFileInventoryEntry,
   parserAdapters: ParserAdapter[],
   previousCache: ProjectGraphFileExtractionCache,
-): ProjectGraphExtractionResult => {
+): ProjectGraphFileExtractionOutcome => {
   const cached = previousCache.files[file.path];
   if (cached?.hash === file.hash) {
-    return { project: project.name, nodes: cached.nodes, edges: cached.edges };
+    return { project: project.name, nodes: cached.nodes, edges: cached.edges, skipped: false };
   }
 
   const nodes = new Map<string, ProjectGraphNodeDto>();
   const edges = new Map<string, ProjectGraphEdgeDto>();
+  let skipped = false;
   if (file.generated) {
-    return { project: project.name, nodes: [], edges: [] };
+    return { project: project.name, nodes: [], edges: [], skipped };
   }
   if (file.path === 'package.json') {
     addPackageFacts(project, file.path, nodes, edges);
@@ -226,15 +234,31 @@ const extractFileFacts = (
     const content = readSourceFile(file.absolutePath);
     for (const parser of matchingParsers) {
       if (content === null) continue;
-      const parsed = parser.parse({
-        path: file.path,
-        language: file.language ?? '',
-        content,
-      });
+      const parsed = parseFileFacts(parser, file, content);
+      if (!parsed) {
+        skipped = true;
+        continue;
+      }
       addSourceFacts(project, file.path, parsed.captures, nodes, edges);
     }
   }
-  return { project: project.name, nodes: Array.from(nodes.values()), edges: Array.from(edges.values()) };
+  return { project: project.name, nodes: Array.from(nodes.values()), edges: Array.from(edges.values()), skipped };
+};
+
+const parseFileFacts = (
+  parser: ParserAdapter,
+  file: ProjectFileInventoryEntry,
+  content: string,
+) => {
+  try {
+    return parser.parse({
+      path: file.path,
+      language: file.language ?? '',
+      content,
+    });
+  } catch {
+    return null;
+  }
 };
 
 const addUnrealAssetRegistryFacts = (
