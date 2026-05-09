@@ -9,6 +9,8 @@ export {
 } from './project-graph-file-io.js';
 export {
   writeProjectGraphObsidianProjection,
+  type ProjectGraphObsidianProjectionOptions,
+  type SystemPageDefinition,
 } from './project-graph-obsidian-projection.js';
 export {
   collectProjectGraphStats,

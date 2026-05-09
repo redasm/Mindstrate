@@ -188,9 +188,12 @@ export async function initializeLocalProject(
     });
     options.onProgress?.('Running optional LLM enrichment');
     const enrichment = await runLlmEnrichment(memory, project);
+    const systemPages = vaultPath ? await runLlmSystemPagePlanning(memory, project) : null;
     options.onProgress?.('Writing project graph artifacts');
     const artifacts = runSetupStage('writing project graph artifacts', () => vaultPath
-      ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath))
+      ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath), {
+        systemPages: systemPages ?? undefined,
+      })
       : memory.context.writeProjectGraphArtifacts(project));
     options.onProgress?.('Saving project metadata');
     runSetupStage('saving project metadata', () => saveProjectMeta(project.root, {
@@ -240,6 +243,18 @@ async function runLlmEnrichment(
     const message = errorMessage(error);
     console.warn(`  Project graph enrichment skipped: ${message}`);
     return { status: 'failed', message };
+  }
+}
+
+async function runLlmSystemPagePlanning(
+  memory: Mindstrate,
+  project: NonNullable<ReturnType<typeof detectProject>>,
+): Promise<Awaited<ReturnType<Mindstrate['context']['planProjectGraphSystemPages']>> | null> {
+  try {
+    return await memory.context.planProjectGraphSystemPages(project);
+  } catch (error) {
+    console.warn(`  Project graph system page planning skipped: ${errorMessage(error)}`);
+    return null;
   }
 }
 

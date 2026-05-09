@@ -78,7 +78,9 @@ export {
   writeProjectGraphArtifacts,
   writeProjectGraphObsidianProjection,
   type ProjectGraphArtifactResult,
+  type ProjectGraphObsidianProjectionOptions,
   type ProjectGraphStatsExport,
+  type SystemPageDefinition,
 } from './project-graph-report.js';
 export {
   detectProjectGraphChangeSet,
@@ -95,6 +97,10 @@ export {
   type SummarizeProjectGraphWithLlmInput,
 } from './enrichment.js';
 export {
+  planProjectGraphSystemPagesWithLlm,
+  type PlanProjectGraphSystemPagesWithLlmInput,
+} from './system-page-planner.js';
+export {
   estimateProjectGraphBlastRadius,
   findProjectGraphPath,
   queryProjectGraphTask,
@@ -107,6 +113,12 @@ export {
   type ProjectGraphTaskQueryItem,
   type ProjectGraphTaskQueryResult,
 } from './analysis.js';
+export {
+  operationManualForProject,
+  renderProjectOperationManualSections,
+  taskGuidanceFromOperationManual,
+  type ProjectGraphTaskGuidance,
+} from './operation-manual.js';
 export {
   checkUnrealModuleBoundaryConsistency,
   checkUnrealPluginDependencyConsistency,

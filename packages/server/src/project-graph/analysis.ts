@@ -7,6 +7,8 @@ import {
   type ContextEdge,
   type ContextNode,
 } from '@mindstrate/protocol/models';
+import type { DetectedProject } from '../project/index.js';
+import { taskGuidanceFromOperationManual, type ProjectGraphTaskGuidance } from './operation-manual.js';
 import { sortProjectGraphNodesBySalience } from './salience.js';
 
 export interface ProjectGraphAnalysisInput {
@@ -49,6 +51,7 @@ export type ProjectGraphTaskQuery =
   | 'explain';
 
 export interface ProjectGraphTaskQueryInput extends ProjectGraphAnalysisInput {
+  project?: DetectedProject;
   task: ProjectGraphTaskQuery;
   query?: string;
   limit?: number;
@@ -71,10 +74,12 @@ export interface ProjectGraphTaskQueryResult {
     query?: string;
     nodeIds: string[];
     evidence: string[];
+    guidance: ProjectGraphTaskGuidance[];
     suggestedNextQueries: string[];
   };
   evidence: string[];
   items: ProjectGraphTaskQueryItem[];
+  guidance: ProjectGraphTaskGuidance[];
   suggestedNextQueries: string[];
 }
 
@@ -173,21 +178,26 @@ export const queryProjectGraphTask = (
   const items = selected.map(toTaskItem);
   const evidence = Array.from(new Set(items.flatMap((item) => item.evidence))).slice(0, limit);
   const suggestedNextQueries = selected.slice(0, 3).map((node) => `impact ${node.title}`);
+  const guidance = input.task === 'before-edit' || input.task === 'impact'
+    ? taskGuidanceFromOperationManual(input.project, input.task, input.query)
+    : [];
 
   return {
     task: input.task,
     query: input.query,
     summary: `${input.task}: ${items.length} item(s)`,
-    markdown: renderTaskMarkdown(input.task, items),
+    markdown: renderTaskMarkdown(input.task, items, guidance),
     compactJson: {
       task: input.task,
       query: input.query,
       nodeIds: selected.map((node) => node.id),
       evidence,
+      guidance,
       suggestedNextQueries,
     },
     evidence,
     items,
+    guidance,
     suggestedNextQueries,
   };
 };
@@ -370,10 +380,18 @@ const evidenceForNode = (node: ContextNode): string[] => {
 const renderTaskMarkdown = (
   task: ProjectGraphTaskQuery,
   items: ProjectGraphTaskQueryItem[],
+  guidance: ProjectGraphTaskGuidance[],
 ): string => [
   `### ${task}`,
   '',
   ...(items.length > 0
     ? items.map((item) => `- ${item.label} (${item.kind})`)
     : ['- No matching graph items.']),
+  '',
+  ...guidance.flatMap((entry) => [
+    `#### ${entry.title}`,
+    '',
+    ...entry.items.map((item) => `- ${item}`),
+    '',
+  ]),
 ].join('\n');

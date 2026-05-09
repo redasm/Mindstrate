@@ -3,6 +3,7 @@ import type { DetectedProject } from '../project/index.js';
 import type { ProjectGraphModule } from './clustering.js';
 import { renderProjectGraphOverlayBlock } from './overlay.js';
 import type { ProjectGraphReportItem, ProjectGraphStatsExport } from './project-graph-report-types.js';
+import { renderProjectOperationManualSections } from './operation-manual.js';
 import { resolveProjectGraphLocale, type ProjectGraphLocale } from './project-graph-locale.js';
 import {
   listOrFallback,
@@ -142,6 +143,7 @@ export const renderProjectGraphReport = (
   '',
   ...openQuestionLines(stats.openQuestions),
   '',
+  ...renderProjectOperationManualSections(project),
   `## ${labels().graphNetwork}`,
   '',
   `- ${labels().graphNetworkHint}`,
@@ -196,6 +198,7 @@ export const renderProjectGraphRepoEntry = (
   '',
   ...reportItemLines(stats.assetSurfaces),
   '',
+  ...renderProjectOperationManualSections(project),
   ...overlaySections(stats.overlays),
   '',
   `## ${labels().usefulCommands}`,

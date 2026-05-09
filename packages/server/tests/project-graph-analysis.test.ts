@@ -106,6 +106,47 @@ describe('project graph analysis queries', () => {
       expect(result.summary).toContain(task);
     }
   });
+
+  it('adds operation manual guidance to before-edit and impact queries', () => {
+    process.env['MINDSTRATE_LOCALE'] = 'en';
+    const nodes = [
+      node('pg:demo:file:TypeScript/Typing/UObject.ts', 'TypeScript/Typing/UObject.ts', ProjectGraphNodeKind.FILE),
+      node('pg:demo:file:Source/Demo/DemoActor.h', 'Source/Demo/DemoActor.h', ProjectGraphNodeKind.FILE),
+    ];
+    const edges = [
+      edge('e1', 'pg:demo:file:Source/Demo/DemoActor.h', 'pg:demo:file:TypeScript/Typing/UObject.ts', ProjectGraphEdgeKind.GENERATED_FROM),
+    ];
+    const project = {
+      name: 'demo',
+      root: process.cwd(),
+      dependencies: [],
+      entryPoints: [],
+      graphHints: {
+        operationManual: {
+          beforeEditWorkflow: ['Run before-edit and impact before editing generated bindings.'],
+          criticalInvariants: ['TypeScript/Typing is generated output and must not be edited manually.'],
+          playbooks: [{
+            changeType: 'Modify C++ reflection API consumed by TypeScript',
+            appliesTo: ['TypeScript/Typing', 'UCLASS'],
+            beforeEdit: ['Search TypeScript consumers.'],
+            verify: ['Run type generation.'],
+          }],
+          validationCommands: [{
+            name: 'TypeScript declaration generation',
+            appliesTo: ['TypeScript/Typing'],
+            note: 'Use the project-approved generator command.',
+          }],
+        },
+      },
+    } as never;
+
+    const result = queryProjectGraphTask({ project, nodes, edges, task: 'before-edit', query: 'TypeScript/Typing', limit: 10 });
+
+    expect(result.markdown).toContain('TypeScript/Typing is generated output');
+    expect(result.markdown).toContain('Modify C++ reflection API consumed by TypeScript');
+    expect(result.markdown).toContain('TypeScript declaration generation');
+    expect(result.compactJson.guidance.map((entry) => entry.title)).toEqual(expect.arrayContaining(['Before Editing', 'Critical Invariants']));
+  });
 });
 
 const node = (

@@ -85,6 +85,150 @@
   "riskHints": [
     "Do not edit generated Unreal output unless explicitly requested."
   ],
+  "operationManual": {
+    "architecture": [
+      "Unreal project manifests define enabled plugins, module visibility, and startup surfaces before source files are considered.",
+      "Runtime modules should own game/client runtime behavior; editor modules should own editor tooling and asset-authoring workflows.",
+      "C++ reflection declarations are source-of-truth for UnrealHeaderTool and downstream binding generators.",
+      "Config and Content paths may be consumed indirectly through Unreal loaders, soft references, Blueprints, and generated metadata."
+    ],
+    "beforeEditWorkflow": [
+      "Run a before-edit project graph query for the target file, module, or subsystem.",
+      "Run an impact project graph query for the same target before changing generated files, assets, build files, plugins, configs, or bindings.",
+      "Read the exact files to be edited and search for direct callers, generated outputs, configs, and TypeScript consumers when the change crosses boundaries.",
+      "State the affected chain before editing when C++/TypeScript/plugin/config/assets boundaries are involved.",
+      "If the affected chain includes generated files, assets, build files, plugins, or TypeScript bindings, identify the source of truth before editing."
+    ],
+    "criticalInvariants": [
+      "TypeScript/Typing is generated Unreal TypeScript declaration output and must not be edited manually.",
+      "Binaries, Intermediate, Saved, and DerivedDataCache are generated or local output areas and must not be treated as source.",
+      "Changing .uplugin or *.Build.cs requires checking plugin dependency declarations and module dependency direction together.",
+      "Runtime modules must not depend on editor-only modules.",
+      "Content asset paths may be used by soft references; do not treat ordinary file renames as safe without Unreal-aware validation.",
+      "Generated declarations must be driven by C++ reflection source or the binding generator, not by hand-edited generated output.",
+      ".uproject plugin enable/disable changes are high-impact and require impact analysis before editing."
+    ],
+    "conventions": [
+      "Treat .uproject as the project-level manifest and plugin enablement surface.",
+      "Treat .uplugin files as plugin module boundary and load-phase declarations.",
+      "Treat *.Build.cs as module dependency declarations, not ordinary C# application code.",
+      "Prefer project graph system pages and playbooks before raw node pages when planning non-trivial edits."
+    ],
+    "moduleResponsibilities": [
+      {
+        "path": "Source/<Project>",
+        "role": "Primary runtime module for project entry, target integration, and foundational runtime dependencies.",
+        "owns": ["project runtime module registration", "core runtime build dependencies"],
+        "doesNotOwn": ["editor-only tooling", "generated TypeScript declarations", "third-party plugin internals"],
+        "editingRules": ["Check the owning *.Build.cs before adding module dependencies.", "Do not add editor-only dependencies to runtime modules."]
+      },
+      {
+        "path": "Plugins/*/Source/*Editor",
+        "role": "Editor-only tooling, asset editors, importers, and workflow extensions.",
+        "owns": ["editor UI", "asset authoring tools", "commandlets and editor workflows"],
+        "runtimeImpact": "Should not become a dependency of runtime modules.",
+        "editingRules": ["Keep editor-only APIs out of runtime dependency chains."]
+      },
+      {
+        "path": "Plugins/*/Source/*Runtime",
+        "role": "Plugin runtime behavior used by game/client modules.",
+        "owns": ["runtime subsystem code", "runtime-facing module dependencies"],
+        "doesNotOwn": ["editor-only asset tooling"],
+        "editingRules": ["Validate runtime/editor boundary when changing dependencies or load phases."]
+      },
+      {
+        "path": "TypeScript/Typing",
+        "role": "Generated TypeScript declarations for Unreal-exposed native APIs.",
+        "generatedOutputs": ["TypeScript declaration files"],
+        "editingRules": ["Do not edit generated typings manually.", "Change C++ reflection source or the generator/configuration instead."]
+      }
+    ],
+    "flows": [
+      {
+        "name": "Native C++ API exposed to TypeScript",
+        "appliesTo": ["UCLASS", "USTRUCT", "UENUM", "UFUNCTION", "UPROPERTY", "TypeScript/Typing", "UnrealSharp"],
+        "steps": [
+          "C++ reflection declarations define the native API surface.",
+          "UnrealHeaderTool produces reflection metadata.",
+          "The binding generator consumes reflection metadata and generator configuration.",
+          "Generated TypeScript declarations are written under TypeScript/Typing.",
+          "TypeScript business code consumes generated declarations."
+        ],
+        "validation": ["Build affected C++ target.", "Run or verify type generation.", "Inspect generated declaration changes.", "Run TypeScript validation for consumers."]
+      },
+      {
+        "name": "Plugin dependency and module load flow",
+        "appliesTo": [".uproject", ".uplugin", "*.Build.cs", "module dependency", "loading phase"],
+        "steps": [
+          ".uproject enables project plugins.",
+          ".uplugin declares plugin modules, module type, loading phase, and plugin dependencies.",
+          "*.Build.cs declares public/private module dependencies.",
+          "Runtime/editor targets load compatible modules based on type and phase."
+        ],
+        "validation": ["Check .uplugin dependencies against Build.cs module dependencies.", "Check runtime modules do not depend on editor-only modules.", "Validate editor/runtime startup for changed plugins."]
+      },
+      {
+        "name": "Asset reference flow",
+        "appliesTo": ["Content", "Blueprint", "soft reference", "hard reference", "asset path"],
+        "steps": [
+          "Content assets may be referenced by object path from C++, config, Blueprints, data assets, or generated metadata.",
+          "Soft references may not appear as direct source imports.",
+          "Renames and moves require Unreal-aware reference validation."
+        ],
+        "validation": ["Use Unreal-aware asset reference checks before and after path changes."]
+      }
+    ],
+    "playbooks": [
+      {
+        "changeType": "Modify C++ reflection API consumed by TypeScript",
+        "appliesTo": ["UCLASS", "USTRUCT", "UENUM", "UFUNCTION", "UPROPERTY", "TypeScript/Typing"],
+        "beforeEdit": ["Query project graph neighbors for the target type.", "Check whether TypeScript/Typing has a generated declaration.", "Search TypeScript consumers.", "Check the owning module Build.cs."],
+        "edit": ["Modify C++ source/header or generator configuration.", "Do not edit TypeScript/Typing manually."],
+        "verify": ["Build affected C++ target.", "Run type generation or confirm generated output path.", "Inspect generated declarations.", "Run TypeScript validation for consumers."]
+      },
+      {
+        "changeType": "Modify .uplugin or *.Build.cs",
+        "appliesTo": [".uplugin", "*.Build.cs", "module dependency"],
+        "beforeEdit": ["Check plugin dependencies, module type, loading phase, public/private dependency direction, and runtime/editor boundary."],
+        "edit": ["Keep plugin dependency declarations and module dependencies consistent."],
+        "verify": ["Run plugin dependency consistency checks.", "Run runtime/editor boundary checks.", "Build affected target and validate startup where possible."]
+      },
+      {
+        "changeType": "Modify Content asset path",
+        "appliesTo": ["Content", "asset path", "Blueprint", "soft reference"],
+        "beforeEdit": ["Query asset references and impact before renaming or moving assets."],
+        "edit": ["Use Unreal-aware rename/move tooling when available."],
+        "verify": ["Run Unreal-aware asset reference validation."]
+      }
+    ],
+    "validationCommands": [
+      {
+        "name": "UBT compile",
+        "appliesTo": ["Source", "Plugins", "*.Build.cs", "C++"],
+        "note": "Use the project-approved UnrealBuildTool command for the affected target."
+      },
+      {
+        "name": "TypeScript declaration generation",
+        "appliesTo": ["TypeScript/Typing", "UnrealSharp", "UCLASS", "UFUNCTION"],
+        "note": "Run the project-approved binding/type generation command, or mark it as maintainer-confirmed if not automated."
+      },
+      {
+        "name": "TypeScript validation",
+        "appliesTo": ["TypeScript", "TypeScript/Typing"],
+        "note": "Run the project-approved TypeScript typecheck/build command for consumers."
+      },
+      {
+        "name": "Plugin dependency consistency",
+        "appliesTo": [".uplugin", "*.Build.cs"],
+        "note": "Run Mindstrate project graph plugin dependency and module boundary checks."
+      },
+      {
+        "name": "Asset reference validation",
+        "appliesTo": ["Content", "asset path", "Blueprint"],
+        "note": "Use Unreal-aware reference validation for asset renames or moves."
+      }
+    ]
+  },
   "layers": [
     {
       "id": "gameplay-cpp",

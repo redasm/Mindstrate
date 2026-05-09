@@ -154,6 +154,42 @@ describe('project graph report export', () => {
     expect(report).toContain('- mindstrate graph context src/index.tsx');
   });
 
+  it('renders project operation manual guidance in graph reports', () => {
+    write(root, '.mindstrate/rules/manual-demo.json', JSON.stringify({
+      id: 'manual-demo',
+      name: 'Manual Demo',
+      priority: 200,
+      match: { all: [{ file: 'package.json' }] },
+      detect: { language: 'typescript', framework: 'manual-demo' },
+      sourceRoots: ['src'],
+      operationManual: {
+        architecture: ['Runtime starts in src/index.ts and composes App.tsx.'],
+        criticalInvariants: ['Generated declarations must not be edited manually.'],
+        beforeEditWorkflow: ['Run before-edit and impact before non-trivial changes.'],
+        playbooks: [{
+          changeType: 'Modify generated declaration source',
+          appliesTo: ['generated'],
+          beforeEdit: ['Identify source of truth.'],
+          verify: ['Run type generation.'],
+        }],
+      },
+    }));
+    write(root, 'package.json', JSON.stringify({ name: 'manual-report-demo' }));
+    write(root, 'src/index.ts', 'export const main = true;');
+
+    const project = detectProject(root)!;
+    memory.context.indexProjectGraph(project);
+    memory.context.writeProjectGraphArtifacts(project);
+
+    const report = fs.readFileSync(path.join(root, 'PROJECT_GRAPH.md'), 'utf8');
+    expect(report).toContain('## Architecture & Lifecycle');
+    expect(report).toContain('Runtime starts in src/index.ts and composes App.tsx.');
+    expect(report).toContain('## Critical Invariants');
+    expect(report).toContain('Generated declarations must not be edited manually.');
+    expect(report).toContain('## Change Playbooks');
+    expect(report).toContain('Modify generated declaration source');
+  });
+
   it('renders evidence-rich project graph sections for humans and agents', () => {
     write(root, 'package.json', JSON.stringify({ name: 'sections-demo' }));
     write(root, 'src/App.tsx', 'export function App() { return <main />; }');
@@ -374,6 +410,37 @@ describe('project graph report export', () => {
           content: 'Imported Build.cs risk from system page.',
         }),
       ]));
+    } finally {
+      removeTempDir(vaultRoot);
+    }
+  });
+
+  it('localizes Obsidian system pages for Chinese project graph locale', () => {
+    process.env['MINDSTRATE_LOCALE'] = 'zh-CN';
+    write(root, 'package.json', JSON.stringify({ name: 'localized-system-pages-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    const vaultRoot = createTempDir('mindstrate-project-graph-localized-vault-');
+
+    try {
+      const project = detectProject(root)!;
+      memory.context.indexProjectGraph(project);
+      memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+
+      const generatedFilesPath = path.join(vaultRoot, 'localized-system-pages-demo', 'architecture', '04-生成文件.md');
+      expect(fs.existsSync(generatedFilesPath)).toBe(true);
+      expect(fs.existsSync(path.join(vaultRoot, 'localized-system-pages-demo', 'architecture', '04-generated-files.md'))).toBe(false);
+      const generatedFilesPage = fs.readFileSync(generatedFilesPath, 'utf8');
+      expect(generatedFilesPage).toContain('# 生成文件和 Source Of Truth');
+      expect(generatedFilesPage).toContain('## 生成根目录');
+      expect(generatedFilesPage).toContain('## 用户笔记');
+      expect(generatedFilesPage).toContain('不要手工编辑');
+
+      const projectionIndex = JSON.parse(fs.readFileSync(path.join(vaultRoot, '_meta', 'index.json'), 'utf8')) as {
+        projectGraphPages: Record<string, { path: string }>;
+      };
+      expect(projectionIndex.projectGraphPages['localized-system-pages-demo:system:04-generated-files']).toMatchObject({
+        path: 'localized-system-pages-demo/architecture/04-生成文件.md',
+      });
     } finally {
       removeTempDir(vaultRoot);
     }

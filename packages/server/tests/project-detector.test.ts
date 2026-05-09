@@ -171,6 +171,8 @@ describe('detectProject', () => {
       'DerivedDataCache',
       'TypeScript/Typing',
     ]));
+    expect(p.graphHints?.operationManual?.criticalInvariants).toContain('TypeScript/Typing is generated Unreal TypeScript declaration output and must not be edited manually.');
+    expect(p.graphHints?.operationManual?.playbooks?.map((playbook) => playbook.changeType)).toContain('Modify C++ reflection API consumed by TypeScript');
     expect(p.graphHints?.layers?.map((layer) => layer.id)).toEqual(expect.arrayContaining(['gameplay-cpp', 'content-assets', 'config', 'generated']));
   });
 

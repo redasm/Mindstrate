@@ -235,7 +235,9 @@ contextGraphCommand.command('task <task> [query]')
   .option('--json', 'Also print compact JSON for agents')
   .action(async (task: string, query: string | undefined, options) => withMemory('Graph task query failed', async (memory) => {
     const graphTask = parseGraphTask(task);
+    const project = detectProject(process.cwd()) ?? undefined;
     const result = queryProjectGraphTask({
+      project,
       nodes: memory.context.listContextNodes({ project: options.project, domainType: ContextDomainType.ARCHITECTURE, limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
       edges: memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
       task: graphTask,

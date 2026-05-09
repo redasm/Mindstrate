@@ -17,6 +17,7 @@ import { projectGraphOverlayProjectionForNode } from './overlay-application.js';
 import { collectProjectGraphArtifact } from './project-graph-artifact.js';
 import { writeProjectGraphTextFileAtomically } from './project-graph-file-io.js';
 import { importProjectGraphOverlayBlock } from './project-graph-overlay-import.js';
+import { renderProjectOperationManualSections } from './operation-manual.js';
 import {
   renderEditableModulePage,
   renderEditableObsidianProjection,
@@ -31,6 +32,7 @@ export const writeProjectGraphObsidianProjection = (
   store: ContextGraphStore,
   project: DetectedProject,
   vaultRoot: string,
+  options: ProjectGraphObsidianProjectionOptions = {},
 ): ProjectGraphArtifactResult => {
   const projectSlug = slugifyProjectGraphValue(project.name);
   const reportPath = path.join(vaultRoot, projectSlug, 'architecture', 'project-graph.md');
@@ -38,7 +40,13 @@ export const writeProjectGraphObsidianProjection = (
   const graphPath = path.join(project.root, '.mindstrate', 'project-graph.graph.json');
   const existing = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
   importProjectGraphOverlayBlock(store, project.name, existing);
-  importExistingSystemPageOverlays(store, project.name, vaultRoot, projectSlug);
+  importExistingSystemPageOverlays(
+    store,
+    project.name,
+    vaultRoot,
+    projectSlug,
+    options.systemPages?.map((page) => page.name),
+  );
   importExistingSummaryPageOverlays(store, project.name, vaultRoot, projectSlug);
   const stats = collectProjectGraphStats(store, project);
   const generated = renderProjectGraphReport(project, stats);
@@ -48,7 +56,7 @@ export const writeProjectGraphObsidianProjection = (
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
   const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug, overlays);
   const flowAndBindingPaths = writeObsidianFlowAndBindingPages(graph, vaultRoot, projectSlug);
-  const systemPaths = writeObsidianSystemPages(project, vaultRoot, projectSlug);
+  const systemPages = writeObsidianSystemPages(project, vaultRoot, projectSlug, options.systemPages);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
@@ -57,7 +65,7 @@ export const writeProjectGraphObsidianProjection = (
   writeProjectGraphTextFileAtomically(graphPath, `${JSON.stringify(graph, null, 2)}\n`);
   writeObsidianProjectionIndex(vaultRoot, projectSlug, [
     { key: 'project-graph', path: reportPath, role: 'project-graph', priority: 100 },
-    ...systemPaths.map((filePath, index) => ({ key: `system:${path.basename(filePath, '.md')}`, path: filePath, role: 'system', priority: 95 - index })),
+    ...systemPages.map((page, index) => ({ key: `system:${page.key}`, path: page.path, role: 'system', priority: 95 - index })),
     ...flowAndBindingPaths.map((filePath) => ({
       key: `relationship:${path.basename(filePath, '.md')}`,
       path: filePath,
@@ -88,6 +96,10 @@ export const writeProjectGraphObsidianProjection = (
   };
 };
 
+export interface ProjectGraphObsidianProjectionOptions {
+  systemPages?: SystemPageDefinition[];
+}
+
 const SYSTEM_PAGE_NAMES = [
   '00-overview.md',
   '01-runtime-lifecycle.md',
@@ -97,6 +109,14 @@ const SYSTEM_PAGE_NAMES = [
   '05-validation-playbook.md',
   '06-common-change-playbooks.md',
   '07-risky-files.md',
+  '00-总览.md',
+  '01-运行时生命周期.md',
+  '02-cpp-typescript-桥接.md',
+  '03-插件边界.md',
+  '04-生成文件.md',
+  '05-验证手册.md',
+  '06-常见变更手册.md',
+  '07-高风险文件.md',
 ];
 
 const importExistingSystemPageOverlays = (
@@ -104,9 +124,10 @@ const importExistingSystemPageOverlays = (
   projectName: string,
   vaultRoot: string,
   projectSlug: string,
+  plannedPageNames: string[] = [],
 ): void => {
   const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
-  for (const pageName of SYSTEM_PAGE_NAMES) {
+  for (const pageName of new Set([...SYSTEM_PAGE_NAMES, ...plannedPageNames])) {
     const pagePath = path.join(architectureDir, pageName);
     if (fs.existsSync(pagePath)) importProjectGraphOverlayBlock(store, projectName, fs.readFileSync(pagePath, 'utf8'));
   }
@@ -130,23 +151,28 @@ const writeObsidianSystemPages = (
   project: DetectedProject,
   vaultRoot: string,
   projectSlug: string,
-): string[] => {
+  plannedPages?: SystemPageDefinition[],
+): Array<{ key: string; path: string }> => {
   const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
-  const paths: string[] = [];
-  for (const page of systemPageDefinitions(project)) {
+  const pages: Array<{ key: string; path: string }> = [];
+  for (const page of plannedPages && plannedPages.length > 0 ? plannedPages : systemPageDefinitions(project)) {
     const pagePath = path.join(architectureDir, page.name);
     const existing = fs.existsSync(pagePath) ? fs.readFileSync(pagePath, 'utf8') : '';
     writeProjectGraphTextFileAtomically(pagePath, renderSystemPage(page, existing));
-    paths.push(pagePath);
+    pages.push({ key: page.key, path: pagePath });
   }
-  return paths;
+  return pages;
 };
 
-interface SystemPageDefinition {
+export interface SystemPageDefinition {
+  key: string;
   name: string;
   title: string;
   body: string[];
   overlays: string[];
+  userNotesPlaceholder: string;
+  userNotesTitle: string;
+  overlayTitle: string;
 }
 
 interface ObsidianProjectionIndexEntry {
@@ -204,10 +230,20 @@ const relativePath = (root: string, filePath: string): string =>
   path.relative(root, filePath).split(path.sep).join('/');
 
 const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[] => {
+  const locale = resolveProjectGraphLocale();
   const generatedRoots = project.graphHints?.generatedRoots ?? ['Binaries', 'Intermediate', 'Saved', 'DerivedDataCache', 'TypeScript/Typing'];
+  if (locale === 'zh') return zhSystemPageDefinitions(project, generatedRoots);
+  return enSystemPageDefinitions(project, generatedRoots);
+};
+
+const enSystemPageDefinitions = (project: DetectedProject, generatedRoots: string[]): SystemPageDefinition[] => {
   const validationIntro = 'Replace placeholder commands with the project-approved command once confirmed by a human maintainer.';
+  const userNotesPlaceholder = '- Add project-specific confirmations, corrections, or open questions here.';
+  const userNotesTitle = 'User Notes';
+  const overlayTitle = 'Structured Overlay';
   return [
     {
+      key: '00-overview',
       name: '00-overview.md',
       title: `${project.name} Architecture Overview`,
       body: [
@@ -227,13 +263,19 @@ const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[]
         '## Editing Rule',
         '',
         '- For non-trivial changes, query `before-edit` and `impact` before editing exact files.',
+        '',
+        ...renderProjectOperationManualSections(project),
       ],
       overlays: [
         '- kind: convention',
         '  content: Use system architecture pages before raw graph node pages when planning non-trivial edits.',
       ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
     },
     {
+      key: '01-runtime-lifecycle',
       name: '01-runtime-lifecycle.md',
       title: 'Runtime Lifecycle',
       body: [
@@ -253,8 +295,12 @@ const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[]
         '  target: .uproject',
         '  content: Project manifest changes can alter enabled plugins and startup behavior; query impact before editing.',
       ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
     },
     {
+      key: '02-cpp-typescript-bridge',
       name: '02-cpp-typescript-bridge.md',
       title: 'C++ To TypeScript Bridge',
       body: [
@@ -276,8 +322,12 @@ const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[]
         '  target: TypeScript/Typing',
         '  content: TypeScript/Typing is generated output. Do not edit it manually; edit C++ reflection source or UnrealSharp generator/configuration instead.',
       ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
     },
     {
+      key: '03-plugin-boundaries',
       name: '03-plugin-boundaries.md',
       title: 'Plugin And Module Boundaries',
       body: [
@@ -296,8 +346,12 @@ const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[]
         '  target: *.uplugin',
         '  content: Plugin module type, loading phase, and dependency changes are high-impact; validate editor/runtime startup after changing them.',
       ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
     },
     {
+      key: '04-generated-files',
       name: '04-generated-files.md',
       title: 'Generated Files And Source Of Truth',
       body: [
@@ -315,8 +369,12 @@ const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[]
         '  target: generated-roots',
         '  content: Binaries, Intermediate, Saved, DerivedDataCache, and TypeScript/Typing are generated or local output areas and should not be edited manually.',
       ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
     },
     {
+      key: '05-validation-playbook',
       name: '05-validation-playbook.md',
       title: 'Validation Playbook',
       body: [
@@ -333,8 +391,12 @@ const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[]
         '- kind: convention',
         '  content: Validation commands must be selected from the affected chain, not from the edited file extension alone.',
       ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
     },
     {
+      key: '06-common-change-playbooks',
       name: '06-common-change-playbooks.md',
       title: 'Common Change Playbooks',
       body: [
@@ -353,8 +415,12 @@ const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[]
         '- kind: convention',
         '  content: For known change types, follow the playbook before editing rather than relying on local file context only.',
       ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
     },
     {
+      key: '07-risky-files',
       name: '07-risky-files.md',
       title: 'Risky Files',
       body: [
@@ -371,6 +437,217 @@ const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[]
         '- kind: risk',
         '  content: High-risk targets require impact analysis and source-of-truth identification before editing.',
       ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
+    },
+  ];
+};
+
+const zhSystemPageDefinitions = (project: DetectedProject, generatedRoots: string[]): SystemPageDefinition[] => {
+  const validationIntro = '占位命令必须由维护者确认后替换为项目认可的验证命令。';
+  const userNotesPlaceholder = '- 在这里补充项目确认、修正或待确认问题。';
+  const userNotesTitle = '用户笔记';
+  const overlayTitle = '结构化 Overlay';
+  return [
+    {
+      key: '00-overview',
+      name: '00-总览.md',
+      title: `${project.name} 架构总览`,
+      body: [
+        '## 目的',
+        '',
+        '- 面向人的高价值项目架构入口。浏览原始图节点前先阅读这里。',
+        `- 框架：${project.framework ?? 'unknown'}。`,
+        `- 主要语言：${project.language ?? 'unknown'}。`,
+        '',
+        '## 主要区域',
+        '',
+        '- Source：C++ 运行时或应用模块。',
+        '- Plugins：项目插件、第三方扩展、编辑器工具和运行时子系统。',
+        '- Config：引擎、插件和游戏配置。',
+        '- Content：路径和引用敏感的 Unreal 资产。',
+        '',
+        '## 编辑规则',
+        '',
+        '- 非平凡变更前，先查询 `before-edit` 和 `impact`，再编辑具体文件。',
+        '',
+        ...renderProjectOperationManualSections(project),
+      ],
+      overlays: [
+        '- kind: convention',
+        '  content: 规划非平凡编辑时，先阅读系统架构页，再查看原始图节点页。',
+      ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
+    },
+    {
+      key: '01-runtime-lifecycle',
+      name: '01-运行时生命周期.md',
+      title: '运行时生命周期',
+      body: [
+        '## 流程',
+        '',
+        '- `.uproject` 定义启用插件和项目级模块可见性。',
+        '- `.uplugin` 定义插件模块、模块类型、加载阶段和插件依赖。',
+        '- `*.Build.cs` 定义模块级 public/private 依赖。',
+        '- 运行时启动会加载兼容的 runtime 模块；编辑器启动还可能加载 editor-only 模块。',
+        '',
+        '## 编辑前',
+        '',
+        '- 修改 `.uproject`、`.uplugin` 或 `*.Build.cs` 时，先检查模块依赖方向和 Runtime/Editor 边界。',
+      ],
+      overlays: [
+        '- kind: risk',
+        '  target: .uproject',
+        '  content: 项目 manifest 变更会影响启用插件和启动行为；编辑前先查询影响面。',
+      ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
+    },
+    {
+      key: '02-cpp-typescript-bridge',
+      name: '02-cpp-typescript-桥接.md',
+      title: 'C++ 到 TypeScript 桥接',
+      body: [
+        '## 变更链路',
+        '',
+        '- C++ UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY 声明是反射源头。',
+        '- UnrealHeaderTool 生成反射元数据。',
+        '- UnrealSharp generator 消费反射元数据和配置。',
+        '- `TypeScript/Typing` 接收生成的声明。',
+        '- TypeScript 业务代码消费这些生成声明。',
+        '',
+        '## Source Of Truth',
+        '',
+        '- C++ 反射源和 UnrealSharp generator/configuration。',
+        '- 生成的 TypeScript 声明是输出，不是源头。',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  target: TypeScript/Typing',
+        '  content: TypeScript/Typing 是生成输出。不要手工编辑；应修改 C++ 反射源或 UnrealSharp generator/configuration。',
+      ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
+    },
+    {
+      key: '03-plugin-boundaries',
+      name: '03-插件边界.md',
+      title: '插件和模块边界',
+      body: [
+        '## 关键边界',
+        '',
+        '- Runtime 模块不能依赖 editor-only 模块。',
+        '- Editor 模块可以在编辑器工具扩展运行时数据时依赖 runtime 模块。',
+        '- `.uplugin` 插件依赖和 `*.Build.cs` 模块依赖必须保持一致。',
+        '- Public dependencies 会成为消费模块接口面的一部分；private dependencies 应保持实现细节。',
+      ],
+      overlays: [
+        '- kind: risk',
+        '  target: *.Build.cs',
+        '  content: Build.cs 依赖变更可能破坏 Runtime/Editor 边界。编辑前检查 public/private 依赖方向和 .uplugin 插件依赖。',
+        '- kind: risk',
+        '  target: *.uplugin',
+        '  content: 插件模块类型、加载阶段和依赖变更影响面高；修改后验证 editor/runtime 启动。',
+      ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
+    },
+    {
+      key: '04-generated-files',
+      name: '04-生成文件.md',
+      title: '生成文件和 Source Of Truth',
+      body: [
+        '## 生成根目录',
+        '',
+        ...generatedRoots.map((root) => `- ${root}`),
+        '',
+        '## 规则',
+        '',
+        '- 如果目标位于生成根目录下，停止编辑并先识别上游 source of truth。',
+        '- 生成声明漂移应通过修改源元数据或 generator 行为解决。',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  target: generated-roots',
+        '  content: Binaries、Intermediate、Saved、DerivedDataCache 和 TypeScript/Typing 是生成或本地输出区域，不要手工编辑。',
+      ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
+    },
+    {
+      key: '05-validation-playbook',
+      name: '05-验证手册.md',
+      title: '验证手册',
+      body: [
+        '## 验证策略',
+        '',
+        `- ${validationIntro}`,
+        '- C++ 源码或 Build.cs 变更：运行受影响 target 的 Unreal build compile。',
+        '- C++ 反射或绑定变更：运行 Unreal build、类型生成、生成声明检查和 TS 类型验证。',
+        '- `.uproject` 或 `.uplugin` 变更：验证插件依赖一致性和 editor/runtime 启动。',
+        '- Config 变更：验证配置加载和读取该配置的子系统。',
+        '- Content 路径变更：用 Unreal-aware 工具验证资产引用。',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  content: 验证命令必须从受影响链路选择，不能只根据被编辑文件扩展名决定。',
+      ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
+    },
+    {
+      key: '06-common-change-playbooks',
+      name: '06-常见变更手册.md',
+      title: '常见变更手册',
+      body: [
+        '## 面向 TypeScript 的 C++ 反射 API',
+        '',
+        '- 编辑前：查询图影响面、检查生成声明、搜索 TS consumers、检查所属 Build.cs。',
+        '- 编辑：修改 C++ source/header 或 generator 配置；不要手工编辑 TypeScript/Typing。',
+        '- 验证：构建 C++、运行 generator、检查声明、运行 TS 验证。',
+        '',
+        '## 插件或构建依赖',
+        '',
+        '- 编辑前：检查 `.uproject`、`.uplugin`、`*.Build.cs`、模块类型、加载阶段和 Runtime/Editor 边界。',
+        '- 验证：构建受影响 target，并验证 editor/runtime 启动。',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  content: 对已知变更类型，应先按 playbook 执行，而不是只依赖局部文件上下文。',
+      ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
+    },
+    {
+      key: '07-risky-files',
+      name: '07-高风险文件.md',
+      title: '高风险文件',
+      body: [
+        '## 高风险目标',
+        '',
+        '- `.uproject`：启用插件和项目级启动行为。',
+        '- `.uplugin`：模块类型、加载阶段、依赖声明。',
+        '- `*.Build.cs`：public/private 模块依赖图。',
+        '- `TypeScript/Typing`：生成声明输出。',
+        '- `Content/**`：路径敏感的 Unreal 资产和引用。',
+        '- `Config/**`：启动和子系统配置。',
+      ],
+      overlays: [
+        '- kind: risk',
+        '  content: 高风险目标在编辑前必须做影响面分析并识别 source of truth。',
+      ],
+      userNotesPlaceholder,
+      userNotesTitle,
+      overlayTitle,
     },
   ];
 };
@@ -382,13 +659,13 @@ const renderSystemPage = (page: SystemPageDefinition, existing: string): string 
   ...page.body,
   '<!-- mindstrate:project-graph:system-generated:end -->',
   '',
-  '## User Notes',
+  `## ${page.userNotesTitle}`,
   '',
   '<!-- mindstrate:project-graph:user-notes:start -->',
-  preserveProjectGraphBlock(existing, 'user-notes') || '- Add project-specific confirmations, corrections, or open questions here.',
+  preserveProjectGraphBlock(existing, 'user-notes') || page.userNotesPlaceholder,
   '<!-- mindstrate:project-graph:user-notes:end -->',
   '',
-  '## Structured Overlay',
+  `## ${page.overlayTitle}`,
   '',
   '<!-- mindstrate:project-graph:overlay:start -->',
   preserveProjectGraphBlock(existing, 'overlay') || page.overlays.join('\n'),

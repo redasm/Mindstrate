@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ChangeSource, type ProjectLayer } from '@mindstrate/protocol/models';
-import type { DetectedProject } from './detector.js';
+import type { DetectedProject, ProjectOperationManual } from './detector.js';
 import { safeJson } from './detection-support.js';
 
 type RuleSource = 'project' | 'builtin';
@@ -47,6 +47,7 @@ interface ProjectDetectionRule {
   manifests?: string[];
   riskHints?: string[];
   layers?: RuleProjectLayer[];
+  operationManual?: ProjectOperationManual;
 }
 
 interface RuleProjectLayer {
@@ -110,6 +111,7 @@ export const detectProjectByRules = (root: string): DetectedProject | null => {
       manifests: rule.manifests,
       riskHints: rule.riskHints,
       layers: normalizeLayers(rule.layers),
+      operationManual: rule.operationManual,
     },
   };
 };

@@ -25,6 +25,7 @@ import {
   detectProjectGraphChangeSet,
   estimateProjectGraphScanScope,
   indexProjectGraph,
+  planProjectGraphSystemPagesWithLlm,
   summarizeProjectGraphWithLlm,
   type ProjectGraphEnrichmentInput,
   type ProjectGraphEnrichmentResult,
@@ -38,6 +39,8 @@ import {
   writeProjectGraphArtifacts,
   writeProjectGraphObsidianProjection,
   type ProjectGraphArtifactResult,
+  type ProjectGraphObsidianProjectionOptions,
+  type SystemPageDefinition,
 } from '../project-graph/index.js';
 import {
   createProjectGraphOverlay,
@@ -214,6 +217,22 @@ export class MindstrateContextGraphApi {
     });
   }
 
+  async planProjectGraphSystemPages(project: DetectedProject): Promise<SystemPageDefinition[] | null> {
+    if (!this.services.config.openaiApiKey) return null;
+    const client = await getOpenAIClient(this.services.config.openaiApiKey, this.services.config.openaiBaseUrl);
+    if (!client) return null;
+    return planProjectGraphSystemPagesWithLlm({
+      client,
+      model: this.services.config.llmModel,
+      project,
+      extractedNodes: this.services.contextGraphStore.listNodes({
+        project: project.name,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+      }),
+    });
+  }
+
   estimateProjectGraphScanScope(
     project: DetectedProject,
     options?: Pick<ProjectGraphIndexOptions, 'onScanProgress'>,
@@ -235,8 +254,12 @@ export class MindstrateContextGraphApi {
     return writeProjectGraphArtifacts(this.services.contextGraphStore, project);
   }
 
-  writeProjectGraphObsidianProjection(project: DetectedProject, vaultRoot: string): ProjectGraphArtifactResult {
-    return writeProjectGraphObsidianProjection(this.services.contextGraphStore, project, vaultRoot);
+  writeProjectGraphObsidianProjection(
+    project: DetectedProject,
+    vaultRoot: string,
+    options?: ProjectGraphObsidianProjectionOptions,
+  ): ProjectGraphArtifactResult {
+    return writeProjectGraphObsidianProjection(this.services.contextGraphStore, project, vaultRoot, options);
   }
 
   createProjectGraphOverlay(input: CreateProjectGraphOverlayInput): ProjectGraphOverlay {

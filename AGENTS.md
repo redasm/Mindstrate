@@ -46,6 +46,18 @@ Mindstrate 当前处于允许 breaking changes 的开发阶段。实施时优先
 - 不使用破坏性 git 命令，如 `git reset --hard` 或 `git checkout --`，除非用户明确要求。
 - 提交前只 stage 本次任务相关文件。
 
+## 编辑前工作流
+
+非平凡代码变更前，必须先建立项目级影响面，避免只看局部文件直接修改：
+
+- 运行或查询 Mindstrate 上下文装配，确认当前项目、相关规则和高优先级上下文。
+- 运行 `mindstrate graph task before-edit "<目标文件/模块/子系统>"`。
+- 运行 `mindstrate graph task impact "<目标文件/模块/子系统>"`。
+- 阅读即将编辑的精确文件。
+- 搜索直接调用方、生成输出、配置引用和 TypeScript 消费方。
+- 如果变更跨越 C++ / TypeScript / plugin / config / asset 边界，编辑前必须说明受影响链路。
+- 如果影响链路包含 generated files、assets、build files、plugins 或 TypeScript bindings，必须先识别 source of truth，再编辑。
+
 ## 验证要求
 
 按影响范围选择最小但足够的验证：

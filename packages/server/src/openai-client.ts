@@ -38,7 +38,7 @@ export interface OpenAIClient {
         temperature?: number;
         max_tokens?: number;
         response_format?: { type: string };
-      }): Promise<{
+      }, options?: { timeout?: number }): Promise<{
         choices: Array<{
           message?: { content?: string | null };
         }>;

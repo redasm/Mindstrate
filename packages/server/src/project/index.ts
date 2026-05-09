@@ -3,6 +3,11 @@ export {
   findProjectRoot,
   type DetectedProject,
   type DetectedDependency,
+  type ProjectChangeFlow,
+  type ProjectChangePlaybook,
+  type ProjectModuleResponsibility,
+  type ProjectOperationManual,
+  type ProjectValidationCommand,
 } from './detector.js';
 
 export {

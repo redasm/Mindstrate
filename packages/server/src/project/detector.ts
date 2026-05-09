@@ -79,6 +79,49 @@ export interface DetectedProject {
   graphHints?: ProjectGraphHints;
 }
 
+export interface ProjectOperationManual {
+  architecture?: string[];
+  beforeEditWorkflow?: string[];
+  criticalInvariants?: string[];
+  conventions?: string[];
+  moduleResponsibilities?: ProjectModuleResponsibility[];
+  flows?: ProjectChangeFlow[];
+  playbooks?: ProjectChangePlaybook[];
+  validationCommands?: ProjectValidationCommand[];
+}
+
+export interface ProjectModuleResponsibility {
+  path: string;
+  role: string;
+  owns?: string[];
+  doesNotOwn?: string[];
+  runtimeImpact?: string;
+  generatedOutputs?: string[];
+  editingRules?: string[];
+}
+
+export interface ProjectChangeFlow {
+  name: string;
+  appliesTo?: string[];
+  steps: string[];
+  validation?: string[];
+}
+
+export interface ProjectChangePlaybook {
+  changeType: string;
+  appliesTo?: string[];
+  beforeEdit?: string[];
+  edit?: string[];
+  verify?: string[];
+}
+
+export interface ProjectValidationCommand {
+  name: string;
+  command?: string;
+  appliesTo?: string[];
+  note?: string;
+}
+
 export interface ProjectGraphHints {
   parserAdapters?: string[];
   queryPacks?: string[];
@@ -89,6 +132,7 @@ export interface ProjectGraphHints {
   manifests?: string[];
   riskHints?: string[];
   layers?: ProjectLayer[];
+  operationManual?: ProjectOperationManual;
 }
 
 const PROJECT_DETECTORS: ProjectDetector[] = [
