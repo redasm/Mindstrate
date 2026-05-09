@@ -304,11 +304,53 @@ describe('project graph report export', () => {
       expect(fs.readFileSync(appNodePagePath!, 'utf8')).toContain('## Outgoing Relations');
       expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'flows', 'execution-flow.md'))).toBe(true);
       expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'bindings', 'native-script.md'))).toBe(true);
+      const generatedFilesPage = fs.readFileSync(path.join(vaultRoot, 'demo-report', 'architecture', '04-generated-files.md'), 'utf8');
+      expect(generatedFilesPage).toContain('# Generated Files And Source Of Truth');
+      expect(generatedFilesPage).toContain('<!-- mindstrate:project-graph:overlay:start -->');
+      expect(generatedFilesPage).toContain('TypeScript/Typing');
+      expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', '06-common-change-playbooks.md'))).toBe(true);
       const records = memory.projections.listProjectionRecords({
         target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
         limit: 10,
       });
       expect(records[0].targetRef).toBe(result.reportPath);
+    } finally {
+      removeTempDir(vaultRoot);
+    }
+  });
+
+  it('preserves editable system page notes and imports their overlays', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'system-pages-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    const vaultRoot = createTempDir('mindstrate-project-graph-system-vault-');
+
+    try {
+      const project = detectProject(root)!;
+      memory.context.indexProjectGraph(project);
+      memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+      const pagePath = path.join(vaultRoot, 'system-pages-demo', 'architecture', '03-plugin-boundaries.md');
+      let page = fs.readFileSync(pagePath, 'utf8');
+      page = page.replace(
+        '- Add project-specific confirmations, corrections, or open questions here.',
+        '- Plugin boundary ownership has been reviewed.',
+      ).replace(
+        'Build.cs dependency changes can break Runtime/Editor boundaries. Check public/private dependency direction and .uplugin plugin dependencies before editing.',
+        'Imported Build.cs risk from system page.',
+      );
+      fs.writeFileSync(pagePath, page, 'utf8');
+
+      memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+
+      const nextPage = fs.readFileSync(pagePath, 'utf8');
+      const overlays = memory.context.listProjectGraphOverlays({ project: 'system-pages-demo' });
+      expect(nextPage).toContain('- Plugin boundary ownership has been reviewed.');
+      expect(overlays).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          kind: ProjectGraphOverlayKind.RISK,
+          target: '*.Build.cs',
+          content: 'Imported Build.cs risk from system page.',
+        }),
+      ]));
     } finally {
       removeTempDir(vaultRoot);
     }

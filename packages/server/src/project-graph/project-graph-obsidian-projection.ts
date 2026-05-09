@@ -22,7 +22,7 @@ import {
   renderEditableObsidianProjection,
   renderProjectGraphReport,
 } from './project-graph-report-renderer.js';
-import { slugifyProjectGraphValue } from './project-graph-report-shared.js';
+import { preserveProjectGraphBlock, slugifyProjectGraphValue } from './project-graph-report-shared.js';
 import type { ProjectGraphArtifactResult } from './project-graph-report-types.js';
 import { collectProjectGraphStats } from './project-graph-stats.js';
 import { resolveProjectGraphLocale } from './project-graph-locale.js';
@@ -38,6 +38,7 @@ export const writeProjectGraphObsidianProjection = (
   const graphPath = path.join(project.root, '.mindstrate', 'project-graph.graph.json');
   const existing = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
   importProjectGraphOverlayBlock(store, project.name, existing);
+  importExistingSystemPageOverlays(store, project.name, vaultRoot, projectSlug);
   const stats = collectProjectGraphStats(store, project);
   const generated = renderProjectGraphReport(project, stats);
   const overlays = listProjectGraphOverlays(store, { project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT });
@@ -46,6 +47,7 @@ export const writeProjectGraphObsidianProjection = (
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
   const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug, overlays);
   writeObsidianFlowAndBindingPages(graph, vaultRoot, projectSlug);
+  writeObsidianSystemPages(project, vaultRoot, projectSlug);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
@@ -73,6 +75,243 @@ export const writeProjectGraphObsidianProjection = (
     edges: stats.edges,
   };
 };
+
+const SYSTEM_PAGE_NAMES = [
+  '00-overview.md',
+  '01-runtime-lifecycle.md',
+  '02-cpp-typescript-bridge.md',
+  '03-plugin-boundaries.md',
+  '04-generated-files.md',
+  '05-validation-playbook.md',
+  '06-common-change-playbooks.md',
+  '07-risky-files.md',
+];
+
+const importExistingSystemPageOverlays = (
+  store: ContextGraphStore,
+  projectName: string,
+  vaultRoot: string,
+  projectSlug: string,
+): void => {
+  const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
+  for (const pageName of SYSTEM_PAGE_NAMES) {
+    const pagePath = path.join(architectureDir, pageName);
+    if (fs.existsSync(pagePath)) importProjectGraphOverlayBlock(store, projectName, fs.readFileSync(pagePath, 'utf8'));
+  }
+};
+
+const writeObsidianSystemPages = (
+  project: DetectedProject,
+  vaultRoot: string,
+  projectSlug: string,
+): void => {
+  const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
+  for (const page of systemPageDefinitions(project)) {
+    const pagePath = path.join(architectureDir, page.name);
+    const existing = fs.existsSync(pagePath) ? fs.readFileSync(pagePath, 'utf8') : '';
+    writeProjectGraphTextFileAtomically(pagePath, renderSystemPage(page, existing));
+  }
+};
+
+interface SystemPageDefinition {
+  name: string;
+  title: string;
+  body: string[];
+  overlays: string[];
+}
+
+const systemPageDefinitions = (project: DetectedProject): SystemPageDefinition[] => {
+  const generatedRoots = project.graphHints?.generatedRoots ?? ['Binaries', 'Intermediate', 'Saved', 'DerivedDataCache', 'TypeScript/Typing'];
+  const validationIntro = 'Replace placeholder commands with the project-approved command once confirmed by a human maintainer.';
+  return [
+    {
+      name: '00-overview.md',
+      title: `${project.name} Architecture Overview`,
+      body: [
+        '## Purpose',
+        '',
+        '- High-value human entry point for the project architecture. Use this before browsing raw graph nodes.',
+        `- Framework: ${project.framework ?? 'unknown'}.`,
+        `- Primary language: ${project.language ?? 'unknown'}.`,
+        '',
+        '## Primary Areas',
+        '',
+        '- Source: C++ runtime or application modules.',
+        '- Plugins: project plugins, third-party extensions, editor tools, and runtime subsystems.',
+        '- Config: engine, plugin, and game configuration.',
+        '- Content: Unreal assets whose paths may be reference-sensitive.',
+        '',
+        '## Editing Rule',
+        '',
+        '- For non-trivial changes, query `before-edit` and `impact` before editing exact files.',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  content: Use system architecture pages before raw graph node pages when planning non-trivial edits.',
+      ],
+    },
+    {
+      name: '01-runtime-lifecycle.md',
+      title: 'Runtime Lifecycle',
+      body: [
+        '## Flow',
+        '',
+        '- `.uproject` defines enabled plugins and project-level module visibility.',
+        '- `.uplugin` files define plugin modules, module type, loading phase, and plugin dependencies.',
+        '- `*.Build.cs` files define module-level public and private dependencies.',
+        '- Runtime startup loads compatible runtime modules; editor startup can also load editor-only modules.',
+        '',
+        '## Before Editing',
+        '',
+        '- If changing `.uproject`, `.uplugin`, or `*.Build.cs`, inspect module dependency direction and runtime/editor boundaries.',
+      ],
+      overlays: [
+        '- kind: risk',
+        '  target: .uproject',
+        '  content: Project manifest changes can alter enabled plugins and startup behavior; query impact before editing.',
+      ],
+    },
+    {
+      name: '02-cpp-typescript-bridge.md',
+      title: 'C++ To TypeScript Bridge',
+      body: [
+        '## Change Flow',
+        '',
+        '- C++ UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY declarations are the reflected source.',
+        '- UnrealHeaderTool produces reflection metadata.',
+        '- UnrealSharp generator consumes reflection metadata and configuration.',
+        '- `TypeScript/Typing` receives generated declarations.',
+        '- TypeScript business code consumes generated declarations.',
+        '',
+        '## Source Of Truth',
+        '',
+        '- C++ reflection source and UnrealSharp generator/configuration.',
+        '- Generated TypeScript declarations are outputs, not source.',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  target: TypeScript/Typing',
+        '  content: TypeScript/Typing is generated output. Do not edit it manually; edit C++ reflection source or UnrealSharp generator/configuration instead.',
+      ],
+    },
+    {
+      name: '03-plugin-boundaries.md',
+      title: 'Plugin And Module Boundaries',
+      body: [
+        '## Critical Boundaries',
+        '',
+        '- Runtime modules must not depend on editor-only modules.',
+        '- Editor modules may depend on runtime modules when the editor tool extends runtime data.',
+        '- `.uplugin` plugin dependencies and `*.Build.cs` module dependencies must remain consistent.',
+        '- Public dependencies become part of the consuming module surface; private dependencies should stay implementation-only.',
+      ],
+      overlays: [
+        '- kind: risk',
+        '  target: *.Build.cs',
+        '  content: Build.cs dependency changes can break Runtime/Editor boundaries. Check public/private dependency direction and .uplugin plugin dependencies before editing.',
+        '- kind: risk',
+        '  target: *.uplugin',
+        '  content: Plugin module type, loading phase, and dependency changes are high-impact; validate editor/runtime startup after changing them.',
+      ],
+    },
+    {
+      name: '04-generated-files.md',
+      title: 'Generated Files And Source Of Truth',
+      body: [
+        '## Generated Roots',
+        '',
+        ...generatedRoots.map((root) => `- ${root}`),
+        '',
+        '## Rule',
+        '',
+        '- If a target is under a generated root, stop and identify the upstream source of truth before editing.',
+        '- Generated declaration drift should be fixed by changing source metadata or generator behavior.',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  target: generated-roots',
+        '  content: Binaries, Intermediate, Saved, DerivedDataCache, and TypeScript/Typing are generated or local output areas and should not be edited manually.',
+      ],
+    },
+    {
+      name: '05-validation-playbook.md',
+      title: 'Validation Playbook',
+      body: [
+        '## Validation Policy',
+        '',
+        `- ${validationIntro}`,
+        '- C++ source or Build.cs changes: run Unreal build compile for the affected target.',
+        '- C++ reflection or binding changes: run Unreal build, type generation, generated declaration inspection, and TS type validation.',
+        '- `.uproject` or `.uplugin` changes: validate plugin dependency consistency and editor/runtime startup.',
+        '- Config changes: validate config load and the subsystem that reads it.',
+        '- Content path changes: validate asset references with Unreal-aware tooling.',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  content: Validation commands must be selected from the affected chain, not from the edited file extension alone.',
+      ],
+    },
+    {
+      name: '06-common-change-playbooks.md',
+      title: 'Common Change Playbooks',
+      body: [
+        '## C++ Reflected API For TypeScript',
+        '',
+        '- Before edit: query graph impact, check generated declaration, search TS consumers, inspect owning Build.cs.',
+        '- Edit: change C++ source/header or generator configuration; do not hand-edit TypeScript/Typing.',
+        '- Verify: build C++, run generator, inspect declaration, run TS validation.',
+        '',
+        '## Plugin Or Build Dependency',
+        '',
+        '- Before edit: inspect `.uproject`, `.uplugin`, `*.Build.cs`, module type, loading phase, and runtime/editor boundary.',
+        '- Verify: build affected target and validate editor/runtime startup.',
+      ],
+      overlays: [
+        '- kind: convention',
+        '  content: For known change types, follow the playbook before editing rather than relying on local file context only.',
+      ],
+    },
+    {
+      name: '07-risky-files.md',
+      title: 'Risky Files',
+      body: [
+        '## High-Risk Targets',
+        '',
+        '- `.uproject`: enabled plugins and project-level startup behavior.',
+        '- `.uplugin`: module type, loading phase, dependency declarations.',
+        '- `*.Build.cs`: public/private module dependency graph.',
+        '- `TypeScript/Typing`: generated declaration output.',
+        '- `Content/**`: path-sensitive Unreal assets and references.',
+        '- `Config/**`: startup and subsystem configuration.',
+      ],
+      overlays: [
+        '- kind: risk',
+        '  content: High-risk targets require impact analysis and source-of-truth identification before editing.',
+      ],
+    },
+  ];
+};
+
+const renderSystemPage = (page: SystemPageDefinition, existing: string): string => [
+  '<!-- mindstrate:project-graph:system-generated:start -->',
+  `# ${page.title}`,
+  '',
+  ...page.body,
+  '<!-- mindstrate:project-graph:system-generated:end -->',
+  '',
+  '## User Notes',
+  '',
+  '<!-- mindstrate:project-graph:user-notes:start -->',
+  preserveProjectGraphBlock(existing, 'user-notes') || '- Add project-specific confirmations, corrections, or open questions here.',
+  '<!-- mindstrate:project-graph:user-notes:end -->',
+  '',
+  '## Structured Overlay',
+  '',
+  '<!-- mindstrate:project-graph:overlay:start -->',
+  preserveProjectGraphBlock(existing, 'overlay') || page.overlays.join('\n'),
+  '<!-- mindstrate:project-graph:overlay:end -->',
+  '',
+].join('\n');
 
 const writeObsidianFlowAndBindingPages = (
   graph: ProjectGraphArtifact,
