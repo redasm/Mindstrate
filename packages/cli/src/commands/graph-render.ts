@@ -45,6 +45,7 @@ export const buildGraphChangeResultLines = (result: {
   doNotEdit?: string[];
   requiredSearches?: string[];
   recommendedValidation?: string[];
+  safetyIssues?: { severity: string; code: string; message: string; evidence?: string[] }[];
   riskHints: string[];
   suggestedQueries: string[];
 }): string[] => [
@@ -66,6 +67,12 @@ export const buildGraphChangeResultLines = (result: {
     : []),
   ...(result.recommendedValidation && result.recommendedValidation.length > 0
     ? ['', 'Recommended validation:', ...result.recommendedValidation.map((validation) => `  - ${validation}`)]
+    : []),
+  ...(result.safetyIssues && result.safetyIssues.length > 0
+    ? ['', 'Safety issues:', ...result.safetyIssues.flatMap((issue) => [
+      `  - [${issue.severity}] ${issue.code}: ${issue.message}`,
+      ...(issue.evidence && issue.evidence.length > 0 ? [`    Evidence: ${issue.evidence.join(', ')}`] : []),
+    ])]
     : []),
   '',
   'Suggested queries:',

@@ -225,6 +225,38 @@ test('buildGraphChangeResultLines renders external changeset analysis', () => {
   ]);
 });
 
+test('buildGraphChangeResultLines renders safety issues', () => {
+  const lines = buildGraphChangeResultLines({
+    changeSet: {
+      source: ChangeSource.MANUAL,
+      files: [{ path: 'TypeScript/Typing/Foo.d.ts', status: 'modified' }],
+    },
+    affectedNodeIds: [],
+    affectedLayers: [],
+    riskHints: [],
+    safetyIssues: [{
+      severity: 'error',
+      code: 'generated-file-edited',
+      message: 'TypeScript/Typing/Foo.d.ts is generated output.',
+      evidence: ['TypeScript/Typing/Foo.d.ts'],
+    }],
+    suggestedQueries: [],
+  });
+
+  assert.deepEqual(lines, [
+    'Source: manual',
+    'Files: 1',
+    'Affected nodes: 0',
+    'Affected layers: (none)',
+    '',
+    'Safety issues:',
+    '  - [error] generated-file-edited: TypeScript/Typing/Foo.d.ts is generated output.',
+    '    Evidence: TypeScript/Typing/Foo.d.ts',
+    '',
+    'Suggested queries:',
+  ]);
+});
+
 test('buildGraphEvaluationDatasetExportLines renders published dataset locations', () => {
   const lines = buildGraphEvaluationDatasetExportLines({
     reportPath: path.join('out', 'project-graph-evaluation-dataset.md'),

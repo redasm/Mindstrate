@@ -3,6 +3,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   ChangeSource,
+  checkGeneratedEditSafety,
+  checkUnrealModuleBoundaryConsistency,
+  checkUnrealPluginDependencyConsistency,
   ContextDomainType,
   PROJECT_GRAPH_METADATA_KEYS,
   ProjectionTarget,
@@ -269,7 +272,10 @@ contextGraphCommand.command('ingest')
     const project = detectProject(options.cwd ?? process.cwd());
     if (!project) throw new Error('Could not detect project.');
     const result = memory.context.ingestProjectGraphChangeSet(project, parseExternalChangeSetJson(readTextInput(options.changes)));
-    for (const line of buildGraphChangeResultLines(result)) console.log(line);
+    for (const line of buildGraphChangeResultLines({
+      ...result,
+      safetyIssues: collectGraphSafetyIssues(project, memory, result.changeSet.files.map((file) => file.path)),
+    })) console.log(line);
   }));
 
 contextGraphCommand.command('changes')
@@ -283,7 +289,10 @@ contextGraphCommand.command('changes')
     const source = parseChangeSource(options.source);
     const files = source === ChangeSource.GIT ? gitChangedFiles(project.root) : options.files ?? [];
     const result = memory.context.detectProjectGraphChanges(project, { source, files });
-    for (const line of buildGraphChangeResultLines(result)) console.log(line);
+    for (const line of buildGraphChangeResultLines({
+      ...result,
+      safetyIssues: collectGraphSafetyIssues(project, memory, files),
+    })) console.log(line);
   }));
 
 const projectGraphProjectionTargets = new Set<ProjectionTarget>([
@@ -313,6 +322,29 @@ const findProjectGraphNode = (memory: ReturnType<typeof createMemory>, id: strin
   if (direct && direct.metadata?.[PROJECT_GRAPH_METADATA_KEYS.projectGraph] === true) return direct;
   return projectGraphNodes(memory.context.listContextNodes({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }))
     .find((entry) => entry.title === id) ?? null;
+};
+
+const collectGraphSafetyIssues = (
+  project: NonNullable<ReturnType<typeof detectProject>>,
+  memory: ReturnType<typeof createMemory>,
+  changedFiles: string[],
+): { severity: string; code: string; message: string; evidence?: string[] }[] => {
+  const nodes = memory.context.listContextNodes({
+    project: project.name,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: PROJECT_GRAPH_CLI_QUERY_LIMIT,
+  });
+  const edges = memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT });
+  return [
+    ...checkGeneratedEditSafety({
+      changedFiles,
+      nodes,
+      edges,
+      generatedRoots: project.graphHints?.generatedRoots,
+    }),
+    ...checkUnrealPluginDependencyConsistency({ nodes, edges }),
+    ...checkUnrealModuleBoundaryConsistency({ nodes, edges }),
+  ];
 };
 
 const withMemory = async (
