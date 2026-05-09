@@ -8,8 +8,10 @@ export interface QueryPack {
 
 const sourceQuery = `
   (import_statement source: (string) @import.source)
+  (export_statement source: (string) @export.source)
   (function_declaration name: (identifier) @function.name)
   (call_expression function: (identifier) @call.function)
+  (call_expression function: (member_expression) @call.function)
 `;
 
 const jsxQuery = `

@@ -10,9 +10,11 @@ describe('tree-sitter source parser', () => {
       content: [
         'import React, { useState } from "react";',
         'import { Button } from "./Button";',
+        'export { formatCount } from "./format";',
         '',
         'export function App() {',
         '  const [count, setCount] = useState(0);',
+        '  analytics.track(String(count));',
         '  return <Button label={String(count)} />;',
         '}',
       ].join('\n'),
@@ -22,10 +24,12 @@ describe('tree-sitter source parser', () => {
     expect(result.captures).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'import.source', text: '"react"', startLine: 1 }),
       expect.objectContaining({ name: 'import.source', text: '"./Button"', startLine: 2 }),
-      expect.objectContaining({ name: 'function.name', text: 'App', startLine: 4 }),
-      expect.objectContaining({ name: 'react.component', text: 'App', startLine: 4 }),
-      expect.objectContaining({ name: 'react.hook', text: 'useState', startLine: 5 }),
-      expect.objectContaining({ name: 'jsx.component', text: 'Button', startLine: 6 }),
+      expect.objectContaining({ name: 'export.source', text: '"./format"', startLine: 3 }),
+      expect.objectContaining({ name: 'function.name', text: 'App', startLine: 5 }),
+      expect.objectContaining({ name: 'react.component', text: 'App', startLine: 5 }),
+      expect.objectContaining({ name: 'react.hook', text: 'useState', startLine: 6 }),
+      expect.objectContaining({ name: 'call.function', text: 'analytics.track', startLine: 7 }),
+      expect.objectContaining({ name: 'jsx.component', text: 'Button', startLine: 8 }),
     ]));
   });
 

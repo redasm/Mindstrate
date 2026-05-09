@@ -233,9 +233,11 @@ describe('project graph service', () => {
     write(root, 'package.json', JSON.stringify({ name: 'call-chain-demo' }));
     write(root, 'src/App.tsx', [
       'import { useState } from "react";',
+      'export { formatCount } from "./format";',
       'function loadData() { return 1; }',
       'export function App() {',
       '  const [count] = useState(loadData());',
+      '  analytics.track(count);',
       '  return <main>{count}</main>;',
       '}',
     ].join('\n'));
@@ -248,8 +250,11 @@ describe('project graph service', () => {
     const edges = store.listEdges({ limit: 200 });
 
     expect(nodes.find((node) => node.title === 'loadData')).toBeDefined();
+    expect(nodes.find((node) => node.title === './format')).toBeDefined();
+    expect(nodes.find((node) => node.title === 'analytics.track')).toBeDefined();
     expect(edges.some((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CALLS)).toBe(true);
     expect(edges.some((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.USES_HOOK)).toBe(true);
+    expect(edges.some((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.EXPORTS)).toBe(true);
   });
 
   it('links native Unreal symbols to script-side UE calls', () => {

@@ -487,6 +487,8 @@ const addSourceFacts = (
   for (const capture of captures) {
     if (capture.name === 'import.source') {
       addDependencyFact(project, filePath, stripQuotes(capture.text), nodes, edges, ProjectGraphEdgeKind.IMPORTS, capture);
+    } else if (capture.name === 'export.source') {
+      addDependencyFact(project, filePath, stripQuotes(capture.text), nodes, edges, ProjectGraphEdgeKind.EXPORTS, capture);
     } else if (capture.name === 'function.name') {
       addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
     } else if (capture.name === 'class.name') {
