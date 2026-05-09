@@ -108,6 +108,11 @@ export {
   type ProjectGraphTaskQueryResult,
 } from './analysis.js';
 export {
+  checkUnrealPluginDependencyConsistency,
+  type UnrealPluginDependencyConsistencyInput,
+  type UnrealPluginDependencyConsistencyIssue,
+} from './unreal-consistency.js';
+export {
   createProjectGraphOverlay,
   listProjectGraphOverlays,
   parseProjectGraphOverlayBlock,
