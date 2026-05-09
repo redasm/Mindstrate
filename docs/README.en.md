@@ -15,5 +15,5 @@ The root README is intentionally short. Detailed manuals live in this directory.
 - [Architecture](architecture.en.md): package boundaries and import rules.
 - [Repo Scanner](repo-scanner.en.md): external repository collection boundary and workflows.
 - [Project Graph](project-graph.en.md): parser-first project graph pipeline and query surface.
-- [ECS Memory Architecture](ecs-memory.en.md): graph-first memory substrate and metabolism model.
+- [ECS Memory Architecture](ecs-memory.en.md): evolvable context substrate, experience compression lineage, and memory metabolism model.
 - [Context Engineering](context-engineering.en.md): working-context assembly policy.

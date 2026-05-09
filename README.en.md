@@ -2,7 +2,9 @@
 
 Language: [English](README.en.md) | [中文](README.zh-CN.md)
 
-Mindstrate is a memory and context substrate for AI coding agents. It turns project knowledge, session continuity, external engineering signals, and project graph facts into searchable, editable, shareable context for MCP, CLI, Team Server, Web UI, and Obsidian workflows.
+Mindstrate is an Evolvable Context Substrate (ECS) for AI coding agents. It treats memory as a metabolizing compression lineage: raw work episodes enter the system, then mature through usage, feedback, and pattern recognition into snapshots, summaries, patterns, skills, and rules, while stale or low-value context is archived, down-ranked, or forgotten.
+
+Mindstrate is not only a vector retrieval backend and not only an endlessly growing file substrate. It turns project knowledge, session continuity, external engineering signals, and project graph facts into evidence-backed, governed, projectable working context for MCP, CLI, Team Server, Web UI, and Obsidian workflows.
 
 Mindstrate supports two operating modes:
 
@@ -11,7 +13,8 @@ Mindstrate supports two operating modes:
 
 ## Why Mindstrate
 
-- **Reusable engineering memory**: bug fixes, conventions, architecture decisions, gotchas, workflows, and session summaries.
+- **ECS memory lineage**: bug fixes, conventions, architecture decisions, gotchas, workflows, session summaries, skills, and rules are governed in one compression spectrum.
+- **Memory metabolism engine**: Digest, Assimilate, Compress, Prune, and Reflect let memory absorb, merge, upgrade, down-rank, forget, and resolve conflicts.
 - **Project graph context**: parser-first graph facts for files, dependencies, components, risk hints, evidence paths, and editable overlays.
 - **External data collection**: Git, Perforce, hooks, daemon polling, and custom collectors live in `repo-scanner`; the framework receives standard `event`, `ChangeSet`, and `bundle` inputs.
 - **Agent-friendly MCP tools**: search, write knowledge, assemble context, restore sessions, query the project graph, and record feedback.
@@ -119,7 +122,7 @@ mindstrate-scan daemon
 - [Deployment Guide](docs/deployment-guide.en.md): deployment modes and operations guide.
 - [Repo Scanner](docs/repo-scanner.en.md): external repository collection boundary and workflows.
 - [Project Graph](docs/project-graph.en.md): parser-first project graph pipeline and query surface.
-- [ECS Memory Architecture](docs/ecs-memory.en.md): graph-first memory substrate and metabolism model.
+- [ECS Memory Architecture](docs/ecs-memory.en.md): evolvable context substrate, experience compression lineage, and memory metabolism model.
 - [Context Engineering](docs/context-engineering.en.md): working-context assembly policy.
 
 ## Runtime API Shape

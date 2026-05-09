@@ -2,7 +2,9 @@
 
 语言：[中文](README.zh-CN.md) | [English](README.en.md)
 
-Mindstrate 是面向 AI Coding Agent 的记忆与上下文基底。它把项目知识、会话连续性、外部工程信号和项目图谱沉淀为可检索、可编辑、可共享的工作上下文，并通过 MCP、CLI、Team Server、Web UI 和 Obsidian 投影提供给 AI 工具使用。
+Mindstrate 是面向 AI Coding Agent 的可演化上下文基底（Evolvable Context Substrate, ECS）。它把记忆视为持续代谢的经验压缩谱系：原始工作 episode 先进入系统，再随使用频率、反馈和模式识别逐步演化为 snapshot、summary、pattern、skill 和 rule，同时低价值或过期上下文会被归档、降权或遗忘。
+
+Mindstrate 不只是向量检索后端，也不只是无限累积的文件堆。它把项目知识、会话连续性、外部工程信号和项目图谱沉淀为带证据、可治理、可投影的工作上下文，并通过 MCP、CLI、Team Server、Web UI 和 Obsidian 提供给 AI 工具使用。
 
 Mindstrate 支持两种运行模式：
 
@@ -11,7 +13,8 @@ Mindstrate 支持两种运行模式：
 
 ## 为什么需要 Mindstrate
 
-- **可复用工程记忆**：Bug 修复、项目约定、架构决策、踩坑记录、工作流和会话摘要。
+- **ECS 记忆谱系**：Bug 修复、项目约定、架构决策、踩坑记录、工作流、会话摘要、技能和规则在同一压缩谱系中治理。
+- **记忆代谢引擎**：Digest、Assimilate、Compress、Prune、Reflect 让记忆能吸收、合并、升级、降权、遗忘和冲突反思。
 - **项目图谱上下文**：parser-first 的项目图谱，包含文件、依赖、组件、风险提示、证据路径和可编辑 overlays。
 - **外部数据采集**：Git、Perforce、hook、daemon 和自定义 collector 统一放在 `repo-scanner`；框架只接收标准 `event`、`ChangeSet`、`bundle` 输入。
 - **Agent 友好的 MCP 工具**：搜索、写入知识、组装上下文、恢复会话、查询项目图谱、记录反馈。
@@ -119,7 +122,7 @@ mindstrate-scan daemon
 - [部署指南](docs/deployment-guide.zh-CN.md)：部署模式和运维说明。
 - [Repo Scanner](docs/repo-scanner.zh-CN.md)：外部仓库采集边界和工作流。
 - [项目图谱](docs/project-graph.zh-CN.md)：parser-first 项目图谱 pipeline 和查询接口。
-- [ECS 记忆架构](docs/ecs-memory.zh-CN.md)：graph-first 记忆基底和代谢模型。
+- [ECS 记忆架构](docs/ecs-memory.zh-CN.md)：可演化上下文基底、经验压缩谱系和记忆代谢模型。
 - [上下文工程](docs/context-engineering.zh-CN.md)：工作上下文装配策略。
 
 ## Runtime API 形态

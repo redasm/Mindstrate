@@ -15,5 +15,5 @@
 - [架构](architecture.zh-CN.md)：包边界和 import 规则。
 - [Repo Scanner](repo-scanner.zh-CN.md)：外部仓库采集边界和工作流。
 - [项目图谱](project-graph.zh-CN.md)：parser-first 项目图谱 pipeline 和查询接口。
-- [ECS 记忆架构](ecs-memory.zh-CN.md)：graph-first 记忆基底和代谢模型。
+- [ECS 记忆架构](ecs-memory.zh-CN.md)：可演化上下文基底、经验压缩谱系和记忆代谢模型。
 - [上下文工程](context-engineering.zh-CN.md)：工作上下文装配策略。
