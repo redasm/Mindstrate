@@ -35,7 +35,11 @@ describe('project graph service', () => {
   it('records scan-plan structure for deep, metadata-only, and generated roots', () => {
     write(root, 'Client.uproject', '{"FileVersion":3}');
     write(root, 'Source/Game/Player.cpp', 'void Fire() {}');
-    write(root, 'Config/DefaultGame.ini', '[/Script/EngineSettings.GeneralProjectSettings]');
+    write(root, 'Config/DefaultGame.ini', [
+      '[/Script/EngineSettings.GeneralProjectSettings]',
+      'GameInstanceClass=/Script/Client.ClientGameInstance',
+      '+ActivePlugins=CommonUI',
+    ].join('\n'));
     write(root, 'Content/UI/WBP_MainMenu.uasset', 'binary');
     write(root, 'TypeScript/Typing/ue/generated/Script/Engine/Actor.d.ts', 'declare class Actor {}');
     write(root, 'TypeScript/Typing/Game/Foo.d.ts', 'declare class Foo {}');
@@ -70,7 +74,11 @@ describe('project graph service', () => {
       Modules: [{ Name: 'Client', Type: 'Runtime', LoadingPhase: 'Default' }],
       Plugins: [{ Name: 'EnhancedInput', Enabled: true }],
     }));
-    write(root, 'Config/DefaultGame.ini', '[/Script/EngineSettings.GeneralProjectSettings]');
+    write(root, 'Config/DefaultGame.ini', [
+      '[/Script/EngineSettings.GeneralProjectSettings]',
+      'GameInstanceClass=/Script/Client.ClientGameInstance',
+      '+ActivePlugins=CommonUI',
+    ].join('\n'));
     fs.mkdirSync(path.join(root, 'Content'), { recursive: true });
     write(root, 'Plugins/Inventory/Inventory.uplugin', JSON.stringify({
       FileVersion: 3,
@@ -102,8 +110,8 @@ describe('project graph service', () => {
     expect(project).not.toBeNull();
     indexProjectGraph(store, project!);
 
-    const nodes = store.listNodes({ project: 'Client', limit: 100 });
-    const edges = store.listEdges({ limit: 100 });
+    const nodes = store.listNodes({ project: 'Client', limit: 500 });
+    const edges = store.listEdges({ limit: 500 });
 
     expect(nodes.find((node) => node.title === 'APlayerCharacter')?.metadata).toMatchObject({
       kind: ProjectGraphNodeKind.CLASS,
@@ -133,6 +141,8 @@ describe('project graph service', () => {
     const gameplayAbilities = nodes.find((node) => node.title === 'GameplayAbilities');
     const engine = nodes.find((node) => node.title === 'Engine');
     const slate = nodes.find((node) => node.title === 'Slate');
+    const configuredClass = nodes.find((node) => node.title === 'ClientGameInstance');
+    const configuredPlugin = nodes.find((node) => node.title === 'CommonUI');
 
     expect(clientModule?.metadata).toMatchObject({
       unrealModule: true,
@@ -165,6 +175,12 @@ describe('project graph service', () => {
       edge.targetId === enhancedInput?.id
       && edge.evidence?.dependencyKind === 'unreal-plugin'
       && edge.evidence?.enabled === true
+    )).toBe(true);
+    expect(configuredClass?.metadata).toMatchObject({ configReferenceKind: 'unreal.config.class' });
+    expect(configuredPlugin?.metadata).toMatchObject({ configReferenceKind: 'unreal.config.plugin' });
+    expect(edges.some((edge) =>
+      edge.targetId === configuredClass?.id
+      && edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CONFIGURES
     )).toBe(true);
   });
 
@@ -343,8 +359,8 @@ describe('project graph service', () => {
     expect(project).not.toBeNull();
     indexProjectGraph(store, project!);
 
-    const nodes = store.listNodes({ project: 'Client', limit: 200 });
-    const edges = store.listEdges({ limit: 200 });
+    const nodes = store.listNodes({ project: 'Client', limit: 500 });
+    const edges = store.listEdges({ limit: 500 });
     const menu = nodes.find((node) => node.title === '/Game/UI/WBP_MainMenu');
     const parent = nodes.find((node) => node.title === 'UUserWidget');
     const theme = nodes.find((node) => node.title === '/Game/Data/DA_MenuTheme');

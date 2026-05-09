@@ -34,6 +34,7 @@ import {
 import {
   extractUnrealBuildModuleInfo,
   extractUnrealBuildModuleDependencies,
+  extractUnrealConfigReferences,
   extractUnrealManifestInfo,
 } from './unreal-extractor.js';
 import { readUnrealAssetRegistryExport } from './unreal-asset-registry-importer.js';
@@ -108,7 +109,7 @@ const buildProjectGraphExtraction = (
 ): ProjectGraphExtractionWithStats => {
   let skippedFiles = 0;
   const scanOptions = {
-    sourceRoots: project.graphHints?.sourceRoots,
+    sourceRoots: projectGraphDeepRoots(project),
     ignore: project.graphHints?.ignore,
     generatedRoots: project.graphHints?.generatedRoots,
     metadataOnlyRoots: project.graphHints?.layers
@@ -233,6 +234,10 @@ const extractFileFacts = (
     const content = readSourceFile(file.absolutePath);
     if (content !== null) addUnrealBuildFacts(project, file.path, content, nodes, edges);
   }
+  if (isUnrealConfigFile(file.path)) {
+    const content = readSourceFile(file.absolutePath);
+    if (content !== null) addUnrealConfigFacts(project, file.path, content, nodes, edges);
+  }
   const matchingParsers = file.language
     ? parserAdapters.filter((parser) => parser.languages.includes(file.language as never))
     : [];
@@ -265,6 +270,16 @@ const parseFileFacts = (
   } catch {
     return null;
   }
+};
+
+const projectGraphDeepRoots = (project: DetectedProject): string[] | undefined => {
+  const roots = [
+    ...(project.graphHints?.sourceRoots ?? []),
+    ...(project.graphHints?.layers ?? [])
+      .filter((layer) => !layer.generated && !layer.parserAdapters.includes('unreal-asset-metadata'))
+      .flatMap((layer) => layer.roots),
+  ];
+  return roots.length > 0 ? uniqueStrings(roots) : undefined;
 };
 
 const addUnrealAssetRegistryFacts = (
@@ -403,6 +418,22 @@ const addUnrealManifestFacts = (
       dependencyKind: 'unreal-plugin',
       enabled: plugin.enabled,
     }));
+  }
+};
+
+const addUnrealConfigFacts = (
+  project: DetectedProject,
+  filePath: string,
+  content: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  for (const capture of extractUnrealConfigReferences({ path: filePath, content })) {
+    if (capture.name === 'unreal.config.class') {
+      addConfigReferenceFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
+    } else {
+      addConfigReferenceFact(project, filePath, capture.text, ProjectGraphNodeKind.DEPENDENCY, nodes, edges, capture);
+    }
   }
 };
 
@@ -559,6 +590,26 @@ const addUnrealModuleDependencyFact = (
   addEdge(edges, makeEdge(moduleNodeId, dependency.id, ProjectGraphEdgeKind.DEPENDS_ON, evidence(filePath, capture), edgeMetadata));
 };
 
+const addConfigReferenceFact = (
+  project: DetectedProject,
+  filePath: string,
+  name: string,
+  kind: ProjectGraphNodeKind.CLASS | ProjectGraphNodeKind.DEPENDENCY,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+  capture: ParserCapture,
+): void => {
+  if (!name) return;
+  const target = makeNode(project, kind, `${capture.name}:${name}`, name, evidence(filePath, capture), {
+    configuredBy: filePath,
+    configReferenceKind: capture.name,
+  });
+  addNode(nodes, target);
+  addEdge(edges, makeEdge(fileNodeId(project, filePath), target.id, ProjectGraphEdgeKind.CONFIGURES, evidence(filePath, capture), {
+    configReferenceKind: capture.name,
+  }));
+};
+
 const addSymbolFact = (
   project: DetectedProject,
   filePath: string,
@@ -691,6 +742,9 @@ const isUnrealBuildFile = (filePath: string): boolean =>
 const isUnrealManifestFile = (filePath: string): boolean =>
   filePath.endsWith('.uproject') || filePath.endsWith('.uplugin');
 
+const isUnrealConfigFile = (filePath: string): boolean =>
+  filePath.endsWith('.ini') && (filePath.startsWith('Config/') || filePath.includes('/Config/'));
+
 const dependencyScopeFromCapture = (capture: ParserCapture): 'public' | 'private' =>
   capture.name.includes('.private-') ? 'private' : 'public';
 
@@ -709,3 +763,5 @@ const generatedBindingMatches = (bindingName: string, symbolName: string): boole
 };
 
 const normalizeSymbolName = (value: string): string => value.replace(/[^a-z0-9]/gi, '').toLowerCase();
+
+const uniqueStrings = (values: string[]): string[] => Array.from(new Set(values));

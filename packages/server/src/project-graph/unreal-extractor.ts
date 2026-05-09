@@ -69,6 +69,42 @@ export const extractUnrealBuildModuleDependencies = (input: {
   return captures;
 };
 
+export const extractUnrealConfigReferences = (input: {
+  path: string;
+  content: string;
+}): ParserCapture[] => {
+  const captures: ParserCapture[] = [];
+  const scriptReference = /\/Script\/([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)/g;
+  for (const match of input.content.matchAll(scriptReference)) {
+    const index = match.index ?? 0;
+    captures.push({
+      name: 'unreal.config.module',
+      text: match[1] ?? '',
+      ...lineRangeForIndex(input.content, index),
+      path: input.path,
+      extractorId: 'unreal-config-regex',
+    });
+    captures.push({
+      name: 'unreal.config.class',
+      text: match[2] ?? '',
+      ...lineRangeForIndex(input.content, index),
+      path: input.path,
+      extractorId: 'unreal-config-regex',
+    });
+  }
+  const pluginReference = /^\s*[+.]?(?:ActivePlugins|EnabledPlugins|Plugins?)\s*=\s*"?([^"\r\n]+)"?\s*$/gm;
+  for (const match of input.content.matchAll(pluginReference)) {
+    captures.push({
+      name: 'unreal.config.plugin',
+      text: match[1]?.trim() ?? '',
+      ...lineRangeForIndex(input.content, match.index ?? 0),
+      path: input.path,
+      extractorId: 'unreal-config-regex',
+    });
+  }
+  return captures.filter((capture) => capture.text.length > 0);
+};
+
 export const extractUnrealBuildModuleInfo = (input: {
   path: string;
   content: string;
