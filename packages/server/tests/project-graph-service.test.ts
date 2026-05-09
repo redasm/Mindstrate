@@ -137,6 +137,9 @@ describe('project graph service', () => {
 
     const clientModule = nodes.find((node) => node.title === 'Client' && node.metadata?.kind === ProjectGraphNodeKind.MODULE);
     const inventoryModule = nodes.find((node) => node.title === 'Inventory' && node.metadata?.kind === ProjectGraphNodeKind.MODULE);
+    const projectManifest = nodes.find((node) => node.title === 'Client.uproject');
+    const buildFile = nodes.find((node) => node.title === 'Source/Client/Client.Build.cs');
+    const configFile = nodes.find((node) => node.title === 'Config/DefaultGame.ini');
     const enhancedInput = nodes.find((node) => node.title === 'EnhancedInput');
     const gameplayAbilities = nodes.find((node) => node.title === 'GameplayAbilities');
     const engine = nodes.find((node) => node.title === 'Engine');
@@ -150,12 +153,27 @@ describe('project graph service', () => {
       moduleType: 'Runtime',
       loadingPhase: 'Default',
       dependencySurface: { public: ['Core', 'Engine', 'UMG'], private: ['Slate'] },
+      runtimeModule: true,
+      impactTags: expect.arrayContaining(['runtime-module']),
     });
     expect(inventoryModule?.metadata).toMatchObject({
       unrealModule: true,
       manifestType: 'plugin',
       moduleType: 'Runtime',
       loadingPhase: 'PreDefault',
+      runtimeModule: true,
+    });
+    expect(projectManifest?.metadata).toMatchObject({
+      buildCritical: true,
+      impactTags: expect.arrayContaining(['project-manifest', 'build-critical']),
+    });
+    expect(buildFile?.metadata).toMatchObject({
+      buildCritical: true,
+      impactTags: expect.arrayContaining(['build-critical']),
+    });
+    expect(configFile?.metadata).toMatchObject({
+      configSensitive: true,
+      impactTags: expect.arrayContaining(['config-sensitive']),
     });
     expect(enhancedInput?.metadata).toMatchObject({ unrealPlugin: true, enabled: true });
     expect(gameplayAbilities?.metadata).toMatchObject({ unrealPlugin: true, enabled: true });
@@ -325,6 +343,7 @@ describe('project graph service', () => {
       generated: true,
       doNotEdit: true,
       metadataOnly: true,
+      impactTags: expect.arrayContaining(['generated', 'do-not-edit']),
       sourceGeneratedFrom: expect.any(String),
     });
     expect(generatedEdges.map((edge) => [labelsById.get(edge.sourceId), labelsById.get(edge.targetId)])).toContainEqual([
@@ -366,7 +385,12 @@ describe('project graph service', () => {
     const theme = nodes.find((node) => node.title === '/Game/Data/DA_MenuTheme');
     const music = nodes.find((node) => node.title === '/Game/Audio/DA_MenuMusic');
 
-    expect(menu?.metadata).toMatchObject({ assetClass: 'WidgetBlueprint', scanMode: 'metadata-only' });
+    expect(menu?.metadata).toMatchObject({
+      assetClass: 'WidgetBlueprint',
+      scanMode: 'metadata-only',
+      assetReferenceSensitive: true,
+      impactTags: expect.arrayContaining(['asset-reference-sensitive']),
+    });
     expect(parent?.metadata).toMatchObject({ kind: ProjectGraphNodeKind.CLASS });
     expect(theme?.metadata).toMatchObject({ assetClass: 'DataAsset', scanMode: 'metadata-only' });
     expect(edges.some((edge) =>

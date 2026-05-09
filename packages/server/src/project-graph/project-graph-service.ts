@@ -293,6 +293,8 @@ const addUnrealAssetRegistryFacts = (
     const assetNode = makeNode(project, ProjectGraphNodeKind.COMPONENT, asset.path, asset.path, evidence(asset.path), {
       assetClass: asset.class,
       scanMode: 'metadata-only',
+      assetReferenceSensitive: true,
+      ...impactTags('asset-reference-sensitive'),
     });
     addNode(nodes, assetNode);
     if (asset.parent) {
@@ -305,6 +307,8 @@ const addUnrealAssetRegistryFacts = (
     for (const reference of asset.references ?? []) {
       const referenceNode = makeNode(project, ProjectGraphNodeKind.COMPONENT, reference.path, reference.path, evidence(asset.path), {
         scanMode: 'metadata-only',
+        assetReferenceSensitive: true,
+        ...impactTags('asset-reference-sensitive'),
       });
       addNode(nodes, referenceNode);
       addEdge(edges, makeEdge(assetNode.id, referenceNode.id, ProjectGraphEdgeKind.REFERENCES_ASSET, evidence(asset.path), {
@@ -603,6 +607,8 @@ const addConfigReferenceFact = (
   const target = makeNode(project, kind, `${capture.name}:${name}`, name, evidence(filePath, capture), {
     configuredBy: filePath,
     configReferenceKind: capture.name,
+    configSensitive: true,
+    ...impactTags('config-sensitive'),
   });
   addNode(nodes, target);
   addEdge(edges, makeEdge(fileNodeId(project, filePath), target.id, ProjectGraphEdgeKind.CONFIGURES, evidence(filePath, capture), {
@@ -632,6 +638,7 @@ const makeFileNode = (
   scanPlan?: ProjectGraphScanPlan,
 ): ProjectGraphNodeDto => makeNode(project, ProjectGraphNodeKind.FILE, filePath, filePath, evidence(filePath), {
   ownedByFile: filePath,
+  ...fileImpactMetadata(filePath),
   ...generatedFileMetadata(filePath, scanPlan),
 });
 
@@ -644,8 +651,49 @@ const generatedFileMetadata = (
     generated: true,
     doNotEdit: true,
     metadataOnly: true,
+    ...impactTags('generated', 'do-not-edit'),
   };
 };
+
+const fileImpactMetadata = (filePath: string): Record<string, unknown> => {
+  if (isUnrealBuildFile(filePath)) {
+    return {
+      buildCritical: true,
+      ...impactTags('build-critical'),
+    };
+  }
+  if (isUnrealManifestFile(filePath)) {
+    return {
+      buildCritical: true,
+      ...impactTags(filePath.endsWith('.uplugin') ? 'plugin-manifest' : 'project-manifest', 'build-critical'),
+    };
+  }
+  if (isUnrealConfigFile(filePath)) {
+    return {
+      configSensitive: true,
+      ...impactTags('config-sensitive'),
+    };
+  }
+  if (filePath.startsWith('Content/') || filePath.includes('/Content/')) {
+    return {
+      assetReferenceSensitive: true,
+      ...impactTags('asset-reference-sensitive'),
+    };
+  }
+  return {};
+};
+
+const unrealModuleImpactMetadata = (moduleType: unknown): Record<string, unknown> => {
+  if (typeof moduleType !== 'string') return {};
+  const editorOnly = moduleType.toLowerCase().includes('editor');
+  return {
+    runtimeModule: !editorOnly,
+    editorOnly,
+    ...impactTags(editorOnly ? 'editor-only' : 'runtime-module'),
+  };
+};
+
+const impactTags = (...tags: string[]): { impactTags: string[] } => ({ impactTags: Array.from(new Set(tags)) });
 
 const makeNode = (
   project: DetectedProject,
@@ -671,6 +719,7 @@ const makeUnrealModuleNode = (
   metadata?: Record<string, unknown>,
 ): ProjectGraphNodeDto => makeNode(project, ProjectGraphNodeKind.MODULE, `unreal-module:${name}`, name, nodeEvidence, {
   unrealModule: true,
+  ...unrealModuleImpactMetadata(metadata?.['moduleType']),
   ...(metadata ?? {}),
 });
 
