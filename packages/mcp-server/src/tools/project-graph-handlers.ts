@@ -9,6 +9,7 @@ import {
   isProjectGraphNode,
   type ContextEdge,
   type ContextNode,
+  type ProjectGraphOverlay,
   type ProjectGraphOverlayKind,
 } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
@@ -52,6 +53,18 @@ export async function handleProjectGraphTaskQuery(
   const matching = nodes.filter((node) => !query || node.title.toLowerCase().includes(query) || node.id.toLowerCase().includes(query));
   const selected = selectTaskNodes(input.task, nodes, edges, matching).slice(0, input.limit ?? 10);
   const evidence = Array.from(new Set(selected.flatMap(evidencePaths))).slice(0, input.limit ?? 10);
+  if (input.task === 'before-edit' || input.task === 'impact') {
+    const overlays = await api.listProjectGraphOverlays({ project: input.project, limit: 100 });
+    const report = buildBeforeEditReport({
+      task: input.task,
+      query: input.query,
+      selected,
+      evidence,
+      overlays,
+      limit: input.limit ?? 10,
+    });
+    return { content: [{ type: 'text', text: report }] };
+  }
   const compactJson = {
     task: input.task,
     query: input.query,
@@ -238,6 +251,236 @@ const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
 
 const findProjectGraphNodeInList = (nodes: ContextNode[], id: string): ContextNode | undefined =>
   nodes.find((node) => node.id === id || node.title === id || node.sourceRef === id);
+
+interface ProjectGraphTaskReportInput {
+  task: string;
+  query: unknown;
+  selected: ContextNode[];
+  evidence: string[];
+  overlays: ProjectGraphOverlay[];
+  limit: number;
+}
+
+interface ProjectGraphTaskReport {
+  classifications: string[];
+  constraints: string[];
+  affectedChains: string[];
+  sourceOfTruth: string[];
+  doNotEdit: string[];
+  requiredSearches: string[];
+  recommendedVerification: string[];
+  overlays: ProjectGraphOverlay[];
+}
+
+const GENERATED_ROOTS = [
+  'Binaries',
+  'Intermediate',
+  'Saved',
+  'DerivedDataCache',
+  'TypeScript/Typing',
+];
+
+const buildBeforeEditReport = (input: ProjectGraphTaskReportInput): string => {
+  const report = analyzeProjectGraphTask(input);
+  const compactJson = {
+    task: input.task,
+    query: input.query,
+    classifications: report.classifications,
+    nodeIds: input.selected.map((node) => node.id),
+    evidence: input.evidence,
+    sourceOfTruth: report.sourceOfTruth,
+    doNotEdit: report.doNotEdit,
+    requiredSearches: report.requiredSearches,
+    recommendedVerification: report.recommendedVerification,
+    suggestedNextQueries: input.selected.slice(0, 3).map((node) => `impact ${node.title}`),
+  };
+  return [
+    `### ${input.task === 'impact' ? 'Impact Report' : 'Before Edit Report'}`,
+    '',
+    `Target: ${typeof input.query === 'string' && input.query.length > 0 ? input.query : '(not specified)'}`,
+    '',
+    '### Classification',
+    formatList(report.classifications),
+    '',
+    '### Known Constraints',
+    formatList(report.constraints),
+    '',
+    '### Affected Chains',
+    formatList(report.affectedChains),
+    '',
+    '### Source Of Truth',
+    formatList(report.sourceOfTruth),
+    '',
+    '### Do Not Edit Directly',
+    formatList(report.doNotEdit),
+    '',
+    '### Required Searches Before Editing',
+    formatList(report.requiredSearches),
+    '',
+    '### Recommended Verification',
+    formatList(report.recommendedVerification),
+    '',
+    '### Relevant Overlays',
+    formatProjectGraphOverlays(report.overlays),
+    '',
+    '### Matching Nodes',
+    formatProjectGraphNodes(input.selected),
+    '',
+    '### Compact JSON',
+    '```json',
+    JSON.stringify(compactJson, null, 2),
+    '```',
+  ].join('\n');
+};
+
+const analyzeProjectGraphTask = (input: ProjectGraphTaskReportInput): ProjectGraphTaskReport => {
+  const targetText = collectTargetText(input);
+  const classifications = classifyTargets(input.selected, targetText);
+  const overlays = relevantOverlays(input.overlays, targetText).slice(0, input.limit);
+  return {
+    classifications,
+    constraints: taskConstraints(classifications),
+    affectedChains: affectedChains(classifications),
+    sourceOfTruth: sourceOfTruth(classifications),
+    doNotEdit: doNotEditTargets(classifications),
+    requiredSearches: requiredSearches(classifications),
+    recommendedVerification: recommendedVerification(classifications),
+    overlays,
+  };
+};
+
+const collectTargetText = (input: ProjectGraphTaskReportInput): string[] => uniqueStrings([
+  typeof input.query === 'string' ? input.query : undefined,
+  ...input.evidence,
+  ...input.selected.flatMap((node) => [node.id, node.title, node.sourceRef, ...evidencePaths(node)]),
+]);
+
+const classifyTargets = (nodes: ContextNode[], targetText: string[]): string[] => {
+  const lower = targetText.map((value) => value.replace(/\\/g, '/').toLowerCase());
+  const has = (predicate: (value: string) => boolean): boolean => lower.some(predicate);
+  const classes = new Set<string>();
+  if (nodes.some((node) => node.metadata?.['generated'] === true || node.metadata?.['doNotEdit'] === true)
+    || GENERATED_ROOTS.some((root) => has((value) => value === root.toLowerCase() || value.startsWith(`${root.toLowerCase()}/`) || value.includes(`/${root.toLowerCase()}/`)))) {
+    classes.add('generated-output');
+  }
+  if (has((value) => value.endsWith('.uproject'))) classes.add('project-manifest');
+  if (has((value) => value.endsWith('.uplugin'))) classes.add('plugin-manifest');
+  if (has((value) => value.endsWith('.build.cs'))) classes.add('build-module');
+  if (has((value) => value.includes('/config/') || value.endsWith('.ini'))) classes.add('config-sensitive');
+  if (has((value) => value.includes('/content/'))) classes.add('asset-reference-sensitive');
+  if (has((value) => value.includes('/typescript/') || value.endsWith('.ts') || value.endsWith('.tsx'))) classes.add('typescript-consumer');
+  if (has((value) => value.includes('/source/') && (value.endsWith('.h') || value.endsWith('.cpp')))
+    || nodes.some((node) => node.metadata?.['kind'] === ProjectGraphNodeKind.CLASS || node.metadata?.['kind'] === ProjectGraphNodeKind.TYPE || node.metadata?.['kind'] === ProjectGraphNodeKind.FUNCTION)) {
+    classes.add('cpp-source');
+  }
+  if (nodes.some(hasUnrealReflectionEvidence)
+    || has((value) => /\bu(class|struct|enum|function|property)\b/.test(value))) {
+    classes.add('native-script-binding');
+  }
+  if (has((value) => value.includes('editor'))) classes.add('editor-boundary');
+  if (classes.size === 0) classes.add('general-source');
+  return Array.from(classes);
+};
+
+const taskConstraints = (classifications: string[]): string[] => {
+  const values = new Set<string>();
+  if (classifications.includes('generated-output')) values.add('Generated outputs are not source of truth; identify and edit the upstream source before changing them.');
+  if (classifications.includes('plugin-manifest') || classifications.includes('project-manifest')) values.add('Project and plugin manifests control enabled plugins, module type, and load phase; treat them as high-impact changes.');
+  if (classifications.includes('build-module')) values.add('Build.cs changes can alter public/private module dependencies and Runtime/Editor boundaries.');
+  if (classifications.includes('editor-boundary')) values.add('Runtime modules must not depend on editor-only modules.');
+  if (classifications.includes('asset-reference-sensitive')) values.add('Content asset paths may be referenced by soft or hard references; do not rename as plain files.');
+  if (classifications.includes('native-script-binding')) values.add('Generated TypeScript declarations must be driven by C++ reflection metadata or generator configuration.');
+  return Array.from(values);
+};
+
+const affectedChains = (classifications: string[]): string[] => {
+  const values = new Set<string>();
+  if (classifications.includes('native-script-binding')) values.add('C++ UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY -> UHT reflection -> UnrealSharp generator -> TypeScript/Typing -> TypeScript consumers.');
+  if (classifications.includes('plugin-manifest') || classifications.includes('build-module') || classifications.includes('project-manifest')) values.add('.uproject/.uplugin -> module declaration -> Build.cs dependencies -> module load phase -> runtime/editor target.');
+  if (classifications.includes('config-sensitive')) values.add('Config .ini -> class/module/plugin settings -> runtime/editor startup -> C++/script consumers.');
+  if (classifications.includes('asset-reference-sensitive')) values.add('Content asset path -> soft/hard references -> configs/blueprints/assets -> runtime load.');
+  if (classifications.includes('typescript-consumer')) values.add('TypeScript source -> generated declarations/imports -> UnrealSharp runtime binding -> native API.');
+  if (values.size === 0) values.add('Target file -> direct imports/callers -> owning module -> validation command.');
+  return Array.from(values);
+};
+
+const sourceOfTruth = (classifications: string[]): string[] => {
+  const values = new Set<string>();
+  if (classifications.includes('generated-output') || classifications.includes('native-script-binding')) {
+    values.add('C++ reflection source and UnrealSharp generator/configuration.');
+  }
+  if (classifications.includes('plugin-manifest')) values.add('.uplugin module and plugin dependency declarations.');
+  if (classifications.includes('project-manifest')) values.add('.uproject enabled plugin and project module declarations.');
+  if (classifications.includes('build-module')) values.add('Owning *.Build.cs and corresponding .uplugin module metadata.');
+  if (classifications.includes('config-sensitive')) values.add('Config source plus the C++ class or subsystem that reads it.');
+  if (classifications.includes('asset-reference-sensitive')) values.add('Unreal asset registry, source asset, and Unreal-aware rename/reference tooling.');
+  if (values.size === 0) values.add('Exact source file and its direct callers/importers.');
+  return Array.from(values);
+};
+
+const doNotEditTargets = (classifications: string[]): string[] => {
+  const values = new Set<string>();
+  if (classifications.includes('generated-output') || classifications.includes('native-script-binding')) {
+    for (const root of GENERATED_ROOTS) values.add(root);
+  }
+  if (classifications.includes('asset-reference-sensitive')) values.add('Content asset paths through plain filesystem rename.');
+  return Array.from(values);
+};
+
+const requiredSearches = (classifications: string[]): string[] => {
+  const values = new Set<string>(['direct callers/importers of the target']);
+  if (classifications.includes('native-script-binding') || classifications.includes('generated-output')) {
+    values.add('corresponding generated TypeScript declaration');
+    values.add('TypeScript consumers of the native API');
+    values.add('UnrealSharp generator/configuration entries');
+  }
+  if (classifications.includes('build-module') || classifications.includes('plugin-manifest') || classifications.includes('project-manifest')) {
+    values.add('owning .uplugin and .uproject declarations');
+    values.add('public/private Build.cs dependency users');
+    values.add('Runtime versus Editor module boundaries');
+  }
+  if (classifications.includes('config-sensitive')) values.add('Config readers and referenced class/module/plugin names');
+  if (classifications.includes('asset-reference-sensitive')) values.add('Asset Registry soft/hard references and config/blueprint references');
+  return Array.from(values);
+};
+
+const recommendedVerification = (classifications: string[]): string[] => {
+  const values = new Set<string>();
+  if (classifications.includes('cpp-source') || classifications.includes('native-script-binding') || classifications.includes('build-module')) values.add('Unreal build compile for the affected target.');
+  if (classifications.includes('native-script-binding') || classifications.includes('generated-output')) values.add('Run UnrealSharp/type generation and inspect generated declarations.');
+  if (classifications.includes('typescript-consumer') || classifications.includes('native-script-binding')) values.add('Run TypeScript type check or the project script validation.');
+  if (classifications.includes('plugin-manifest') || classifications.includes('project-manifest')) values.add('Validate editor/runtime startup with the changed plugin set.');
+  if (classifications.includes('asset-reference-sensitive')) values.add('Run Unreal-aware asset reference validation.');
+  if (classifications.includes('config-sensitive')) values.add('Run config load/startup validation for the affected target.');
+  if (values.size === 0) values.add('Run the smallest build/test command covering the changed module.');
+  return Array.from(values);
+};
+
+const relevantOverlays = (overlays: ProjectGraphOverlay[], targetText: string[]): ProjectGraphOverlay[] => {
+  const lowerTargets = targetText.map((value) => value.toLowerCase());
+  return overlays.filter((overlay) => {
+    const target = overlay.target ?? overlay.targetNodeId ?? overlay.targetEdgeId;
+    if (!target) return true;
+    const lowerTarget = target.toLowerCase();
+    return lowerTargets.some((value) => value.includes(lowerTarget) || lowerTarget.includes(value));
+  });
+};
+
+const hasUnrealReflectionEvidence = (node: ContextNode): boolean => {
+  const evidence = node.metadata?.['evidence'];
+  return Array.isArray(evidence) && evidence.some((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    const extractorId = 'extractorId' in entry ? String(entry.extractorId) : '';
+    const captureName = 'captureName' in entry ? String(entry.captureName) : '';
+    return extractorId === 'unreal-cpp-reflection' || captureName.startsWith('unreal.');
+  });
+};
+
+const formatList = (values: string[]): string =>
+  values.length === 0 ? '- None' : values.map((value) => `- ${value}`).join('\n');
+
+const uniqueStrings = (values: Array<string | undefined>): string[] =>
+  Array.from(new Set(values.filter((value): value is string => typeof value === 'string' && value.length > 0)));
 
 const selectTaskNodes = (
   task: string,
