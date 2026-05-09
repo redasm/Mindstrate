@@ -33,6 +33,31 @@ mindstrate --help
 
 Local mode stores project data under the current project `.mindstrate/` directory and can optionally write Obsidian projections.
 
+Mindstrate supports two deployment modes:
+
+```text
++-------------------------------------------------------------+
+| Local mode                       Team mode                  |
+|                                                             |
+| Member A                         Member A  Member B Member C|
+|   |                              |         |         |       |
+|   v                              v         v         v       |
+| +--------+                    +-----+   +-----+   +-----+   |
+| | MCP    |                    | MCP |   | MCP |   | MCP |   |
+| | Server |                    +-----+   +-----+   +-----+   |
+| +--------+                       |         |         |       |
+|   |                              +---------+---------+       |
+|   v                                        |                 |
+| +--------+                                 v                 |
+| | Local  |                           +-------------+         |
+| | SQLite |                           | Team Server |         |
+| +--------+                           | :3388       |         |
+|                                      +-------------+         |
+| Data stays local                   Centralized, shared data  |
+| Best for personal use              Best for teams            |
++-------------------------------------------------------------+
+```
+
 ```bash
 cd /path/to/project
 mindstrate setup --mode local --tool opencode --yes
