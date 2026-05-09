@@ -13,6 +13,36 @@
 
 `protocol` 是共享契约层。`client` 是 Team Server HTTP 客户端。`server` 是本地核心运行时和领域实现。应用层 package 通过公开 API 组合为 CLI、MCP、Team Server、Web UI、Obsidian 投影和 repo scanner。
 
+更具体的依赖方向如下：
+
+```text
+                         @mindstrate/protocol
+
+                       (zero runtime deps, types only)
+
+                                   ^
+                                   |
+                            used by everyone
+                                   |
+                  +----------------+----------------+
+                  |                                 |
+                  v                                 v
+          @mindstrate/client                @mindstrate/server
+
+         (HTTP client, fetch only)      (SQLite + OpenAI + ingestion
+                                          + retrieval + quality)
+                  ^                                 ^
+                  |                                 |
+         +--------+--------+              +---------+---------+
+         |                 |              |         |         |
+         v                 v              v         v         v
+     mcp-server       any 3rd party      cli   team-server  web-ui
+                      using the HTTP API                     |
+                                                             v
+                                                        obsidian-sync
+                                                        (uses server)
+```
+
 ## Package 职责
 
 | Package | 职责 | 边界 |

@@ -13,6 +13,36 @@ This document is the formal package-boundary guide for Mindstrate. It defines wh
 
 `protocol` is the shared contract layer. `client` is the Team Server HTTP client. `server` is the local runtime and canonical domain implementation. Applications compose those public APIs into user-facing commands, tools, services, and projections.
 
+The detailed dependency direction is:
+
+```text
+                         @mindstrate/protocol
+
+                       (zero runtime deps, types only)
+
+                                   ^
+                                   |
+                            used by everyone
+                                   |
+                  +----------------+----------------+
+                  |                                 |
+                  v                                 v
+          @mindstrate/client                @mindstrate/server
+
+         (HTTP client, fetch only)      (SQLite + OpenAI + ingestion
+                                          + retrieval + quality)
+                  ^                                 ^
+                  |                                 |
+         +--------+--------+              +---------+---------+
+         |                 |              |         |         |
+         v                 v              v         v         v
+     mcp-server       any 3rd party      cli   team-server  web-ui
+                      using the HTTP API                     |
+                                                             v
+                                                        obsidian-sync
+                                                        (uses server)
+```
+
 ## Package Responsibilities
 
 | Package | Responsibility | Boundary |
