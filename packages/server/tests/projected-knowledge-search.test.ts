@@ -114,4 +114,60 @@ describe('ProjectedKnowledgeSearch', () => {
     expect(results[0].view.id).toBe(rule.id);
     expect(results[0].matchReason).toContain('supported by related summary');
   });
+
+  it('matches architecture rules by full content, tags, and source reference', () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'Generated Files',
+      content: 'Generated declarations are not manually edited.\n\nTypeScript/Typing is generated output. Edit C++ reflection source and run UnrealSharp generation.',
+      project: 'client',
+      status: ContextNodeStatus.VERIFIED,
+      tags: ['obsidian-architecture', 'generated-output'],
+      sourceRef: 'client/architecture/04-generated-files.md',
+      qualityScore: 90,
+      confidence: 0.9,
+    });
+
+    const results = search.search('UnrealSharp TypeScript/Typing generated output source of truth', {
+      project: 'client',
+      topK: 5,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].view.title).toBe('Generated Files');
+  });
+
+  it('does not let a small caller limit hide relevant lower-priority candidates', () => {
+    for (let index = 0; index < 8; index += 1) {
+      graphStore.createNode({
+        substrateType: SubstrateType.AXIOM,
+        domainType: ContextDomainType.CONVENTION,
+        title: `Unrelated axiom ${index}`,
+        content: 'Stable but unrelated operational knowledge.',
+        project: 'client',
+        status: ContextNodeStatus.VERIFIED,
+        qualityScore: 100,
+        confidence: 1,
+      });
+    }
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'Runtime Editor Boundary',
+      content: 'Runtime modules must not depend on editor-only modules.',
+      project: 'client',
+      status: ContextNodeStatus.VERIFIED,
+      qualityScore: 80,
+      confidence: 0.8,
+    });
+
+    const results = search.search('Runtime editor module boundary', {
+      project: 'client',
+      limit: 5,
+      topK: 3,
+    });
+
+    expect(results.map((result) => result.view.title)).toContain('Runtime Editor Boundary');
+  });
 });

@@ -170,6 +170,8 @@ export const initCommand = new Command('init')
       // 7) Optional: Obsidian vault
       if (options.withVault) {
         await initVault(memory, options.withVault, project);
+        const architectureImport = importVaultArchitecturePages(memory, project, options.withVault);
+        console.log(`  Architecture knowledge: ${formatArchitectureImportSummary(architectureImport)}`);
       }
 
       // 8) Optional: MCP config
@@ -216,9 +218,65 @@ export function writeLocalProjectGraphArtifacts(
     : memory.context.writeProjectGraphArtifacts(project);
 }
 
+export interface ArchitectureImportSummary {
+  imported: number;
+  unchanged: number;
+  skipped: number;
+  failed: number;
+}
+
+export function importVaultArchitecturePages(
+  memory: Mindstrate,
+  project: DetectedProject,
+  vaultPath?: string,
+): ArchitectureImportSummary {
+  const resolvedVaultPath = normalizeOptionalPath(vaultPath);
+  if (!resolvedVaultPath) return emptyArchitectureImportSummary();
+
+  const architectureDir = path.join(path.resolve(resolvedVaultPath), projectGraphProjectSlug(project.name), 'architecture');
+  if (!fs.existsSync(architectureDir) || !fs.statSync(architectureDir).isDirectory()) {
+    return emptyArchitectureImportSummary();
+  }
+
+  const summary = emptyArchitectureImportSummary();
+  for (const entry of fs.readdirSync(architectureDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !isImportableArchitectureMarkdown(entry.name)) continue;
+    try {
+      const result = memory.projections.importObsidianProjectionFile(path.join(architectureDir, entry.name));
+      if (result.changed) {
+        summary.imported += 1;
+      } else if (result.sourceNodeId || result.candidateNode) {
+        summary.unchanged += 1;
+      } else {
+        summary.skipped += 1;
+      }
+    } catch {
+      summary.failed += 1;
+    }
+  }
+  return summary;
+}
+
+export function formatArchitectureImportSummary(summary: ArchitectureImportSummary): string {
+  return `${summary.imported} imported, ${summary.unchanged} unchanged, ${summary.skipped} skipped, ${summary.failed} failed`;
+}
+
 function normalizeOptionalPath(input: string | undefined): string | undefined {
   const trimmed = input?.trim();
   return trimmed || undefined;
+}
+
+function emptyArchitectureImportSummary(): ArchitectureImportSummary {
+  return { imported: 0, unchanged: 0, skipped: 0, failed: 0 };
+}
+
+function isImportableArchitectureMarkdown(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith('.md') && lower !== 'project-graph.md' && !lower.endsWith('.generated.md');
+}
+
+function projectGraphProjectSlug(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 }
 
 export const buildProjectGraphAnalysisLines = (

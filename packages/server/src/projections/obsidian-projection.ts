@@ -1,4 +1,5 @@
 import {
+  ContextDomainType,
   ContextEventType,
   ContextNodeStatus,
   ContextRelationType,
@@ -70,7 +71,7 @@ export class ObsidianProjectionMaterializer {
 
   importFile(filePath: string): ObsidianProjectionImportResult {
     const parsed = parseObsidianNodeMarkdown(fs.readFileSync(filePath, 'utf8'));
-    if (!parsed.id) return { changed: false };
+    if (!parsed.id) return this.importPlainArchitectureMarkdown(filePath, parsed);
 
     const source = this.graphStore.getNodeById(parsed.id);
     if (!source) return { sourceNodeId: parsed.id, changed: false };
@@ -125,6 +126,67 @@ export class ObsidianProjectionMaterializer {
     };
   }
 
+  private importPlainArchitectureMarkdown(
+    filePath: string,
+    parsed: { title: string; content: string },
+  ): ObsidianProjectionImportResult {
+    const architectureSource = architectureSourceFromPath(filePath);
+    if (!architectureSource) return { changed: false };
+
+    const sourceRef = normalizePath(filePath);
+    const id = `obsidian-architecture:${architectureSource.project}:${slugifyAscii(architectureSource.relativePath)}`;
+    const tags = architectureTags(parsed.content);
+    const existing = this.graphStore.getNodeById(id) ?? this.graphStore.listNodes({
+      project: architectureSource.project,
+      sourceRef,
+      limit: 1,
+    })[0];
+
+    if (!existing) {
+      const node = this.graphStore.createNode({
+        id,
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: parsed.title,
+        content: parsed.content,
+        tags,
+        project: architectureSource.project,
+        compressionLevel: 0.1,
+        confidence: 0.9,
+        qualityScore: 90,
+        status: ContextNodeStatus.VERIFIED,
+        sourceRef,
+        metadata: {
+          importer: 'obsidian-architecture-markdown',
+          relativePath: architectureSource.relativePath,
+        },
+      });
+      return { sourceNodeId: node.id, candidateNode: node, changed: true };
+    }
+
+    if (existing.title === parsed.title && existing.content.trim() === parsed.content.trim()) {
+      return { sourceNodeId: existing.id, candidateNode: existing, changed: false };
+    }
+
+    const node = this.graphStore.updateNode(existing.id, {
+      title: parsed.title,
+      content: parsed.content,
+      tags,
+      project: architectureSource.project,
+      confidence: Math.max(existing.confidence, 0.9),
+      qualityScore: Math.max(existing.qualityScore, 90),
+      status: ContextNodeStatus.VERIFIED,
+      sourceRef,
+      metadata: {
+        ...(existing.metadata ?? {}),
+        importer: 'obsidian-architecture-markdown',
+        relativePath: architectureSource.relativePath,
+      },
+    });
+
+    return { sourceNodeId: node?.id ?? existing.id, candidateNode: node ?? existing, changed: true };
+  }
+
   private loadProjectableNodes(options: ObsidianProjectionOptions): ContextNode[] {
     return [
       ...this.loadStableNodes(SubstrateType.RULE, options),
@@ -159,6 +221,33 @@ const serializeObsidianNode = (node: ContextNode): string => [
   node.content,
   '',
 ].filter((line) => line !== undefined).join('\n');
+
+const architectureSourceFromPath = (filePath: string): { project: string; relativePath: string } | null => {
+  const normalized = normalizePath(filePath);
+  if (!normalized.toLowerCase().endsWith('.md')) return null;
+  const parts = normalized.split('/').filter(Boolean);
+  const architectureIndex = parts.findIndex((part) => part.toLowerCase() === 'architecture');
+  if (architectureIndex <= 0) return null;
+  const project = parts[architectureIndex - 1];
+  return {
+    project,
+    relativePath: parts.slice(architectureIndex - 1).join('/'),
+  };
+};
+
+const architectureTags = (content: string): string[] => {
+  const normalized = content.toLowerCase();
+  const tags = new Set(['obsidian-architecture', 'architecture']);
+  if (normalized.includes('typescript/typing') || normalized.includes('generated')) tags.add('generated-output');
+  if (normalized.includes('do not edit') || normalized.includes('never edit') || normalized.includes('不能') || normalized.includes('不要')) tags.add('do-not-edit');
+  if (normalized.includes('runtime') && normalized.includes('editor')) tags.add('runtime-editor-boundary');
+  if (normalized.includes('source of truth') || normalized.includes('source-of-truth')) tags.add('source-of-truth');
+  if (normalized.includes('validation') || normalized.includes('verify') || normalized.includes('验证')) tags.add('validation');
+  if (normalized.includes('high-risk') || normalized.includes('高风险')) tags.add('high-risk');
+  return Array.from(tags);
+};
+
+const normalizePath = (filePath: string): string => filePath.replace(/\\/g, '/');
 
 const parseObsidianNodeMarkdown = (text: string): { id?: string; title: string; content: string } => {
   const normalized = text.replace(/\r\n/g, '\n');

@@ -22,9 +22,10 @@ export class ProjectedKnowledgeSearch {
   }
 
   search(query: string, options: ProjectedKnowledgeSearchOptions = {}): GraphKnowledgeSearchResult[] {
+    const topK = options.topK ?? 10;
     const candidates = this.projector.project({
       project: options.project,
-      limit: options.limit ?? 50,
+      limit: Math.max(options.limit ?? 0, topK * 10, 50),
       includeStatuses: options.includeStatuses,
     });
 
@@ -32,7 +33,7 @@ export class ProjectedKnowledgeSearch {
       .map((view) => this.scoreView(query, view))
       .filter((result) => result.relevanceScore > 0)
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
-      .slice(0, options.topK ?? 10);
+      .slice(0, topK);
   }
 
   private scoreView(query: string, view: GraphKnowledgeView): GraphKnowledgeSearchResult {
@@ -74,7 +75,15 @@ export class ProjectedKnowledgeSearch {
 }
 
 function computeProjectionMatchScore(query: string, view: GraphKnowledgeView): number {
-  const haystack = `${view.title}\n${view.summary}`.toLowerCase();
+  const haystack = [
+    view.title,
+    view.summary,
+    view.content,
+    view.sourceRef,
+    view.tags.join(' '),
+    view.domainType,
+    view.substrateType,
+  ].filter(Boolean).join('\n').toLowerCase();
   const lexicalScore = computeTextMatchScore(query, haystack);
   if (lexicalScore === 0) return 0;
 

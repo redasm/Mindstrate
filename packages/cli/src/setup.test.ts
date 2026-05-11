@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { detectProject } from '@mindstrate/server';
+import { detectProject, Mindstrate } from '@mindstrate/server';
 import { initializeLocalProject, applySetupLlmEnvironment, setupMindstrateConfig } from './commands/setup.js';
 
 test('initializeLocalProject writes the project graph to Obsidian when a vault is configured', async () => {
@@ -27,6 +27,18 @@ test('initializeLocalProject writes the project graph to Obsidian when a vault i
 
   assert.equal(fs.existsSync(path.join(vaultDir, 'setup-graph-demo', 'architecture', 'project-graph.md')), true);
   assert.equal(fs.existsSync(path.join(root, '.mindstrate', 'project-graph.json')), true);
+
+  const memory = new Mindstrate({ dataDir });
+  await memory.init();
+  try {
+    const results = memory.context.queryGraphKnowledge('before-edit generated output validation', {
+      project: 'setup-graph-demo',
+      topK: 10,
+    });
+    assert.ok(results.some((result) => result.view.sourceRef?.replace(/\\/g, '/').includes('/setup-graph-demo/architecture/')));
+  } finally {
+    memory.close();
+  }
 });
 
 test('initializeLocalProject writes local project graph artifacts when vault is skipped', async () => {

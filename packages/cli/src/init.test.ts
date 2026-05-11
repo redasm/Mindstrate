@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { Mindstrate, detectProject } from '@mindstrate/server';
 import {
   buildProjectGraphAnalysisLines,
+  importVaultArchitecturePages,
   publishProjectGraphToTeamServer,
   runProjectGraphEnrichment,
   writeLocalProjectGraphArtifacts,
@@ -51,6 +52,48 @@ test('writeLocalProjectGraphArtifacts falls back to local output for blank vault
     assert.equal(fs.existsSync(result.reportPath), true);
     assert.equal(fs.existsSync(path.join(root, '.mindstrate', 'project-graph.json')), true);
     assert.equal(fs.existsSync(path.join(root, 'init-local-graph-demo', 'architecture', 'project-graph.md')), false);
+  } finally {
+    memory.close();
+  }
+});
+
+test('importVaultArchitecturePages imports top-level architecture markdown idempotently', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-init-import-'));
+  const vaultDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-init-import-vault-'));
+  fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 'init-import-demo' }), 'utf8');
+  const architectureDir = path.join(vaultDir, 'init-import-demo', 'architecture');
+  fs.mkdirSync(architectureDir, { recursive: true });
+  fs.writeFileSync(path.join(architectureDir, '04-generated-files.md'), [
+    '# Generated Files',
+    '',
+    'TypeScript/Typing is generated output from UnrealSharp declarations.',
+  ].join('\n'), 'utf8');
+  fs.writeFileSync(path.join(architectureDir, 'project-graph.md'), '# Project Graph\n', 'utf8');
+
+  const memory = new Mindstrate({ dataDir: path.join(root, '.mindstrate') });
+  await memory.init();
+  try {
+    const project = detectProject(root);
+    assert.ok(project);
+
+    assert.deepEqual(importVaultArchitecturePages(memory, project, vaultDir), {
+      imported: 1,
+      unchanged: 0,
+      skipped: 0,
+      failed: 0,
+    });
+    assert.deepEqual(importVaultArchitecturePages(memory, project, vaultDir), {
+      imported: 0,
+      unchanged: 1,
+      skipped: 0,
+      failed: 0,
+    });
+
+    const results = memory.context.queryGraphKnowledge('UnrealSharp TypeScript/Typing generated output', {
+      project: 'init-import-demo',
+      topK: 5,
+    });
+    assert.equal(results[0]?.view.title, 'Generated Files');
   } finally {
     memory.close();
   }
