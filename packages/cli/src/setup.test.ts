@@ -35,7 +35,11 @@ test('initializeLocalProject writes the project graph to Obsidian when a vault i
       project: 'setup-graph-demo',
       topK: 10,
     });
-    assert.ok(results.some((result) => result.view.sourceRef?.replace(/\\/g, '/').includes('/setup-graph-demo/architecture/')));
+    // The system-page internalizer creates RULE nodes with
+    // `sourceRef = "system-page:<page-key>"`. At least one of the canonical
+    // 8 architecture pages must be recallable through graph knowledge
+    // search after the projection write.
+    assert.ok(results.some((result) => result.view.sourceRef?.startsWith('system-page:')));
   } finally {
     memory.close();
   }

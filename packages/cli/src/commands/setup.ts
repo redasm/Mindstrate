@@ -25,7 +25,7 @@ import {
   type SetupTool,
 } from '../cli-config.js';
 import { askOptional, chooseOption } from '../cli-wizard.js';
-import { buildProjectGraphAnalysisLines, formatArchitectureImportSummary, importVaultArchitecturePages } from './init.js';
+import { buildProjectGraphAnalysisLines } from './init.js';
 import { writeMcpConfig } from './setup-mcp.js';
 
 type SetupExperience = 'local' | 'team-client' | 'team-deploy';
@@ -205,9 +205,6 @@ export async function initializeLocalProject(
         systemPages: systemPages ?? undefined,
       })
       : memory.context.writeProjectGraphArtifacts(project));
-    const architectureImport = vaultPath
-      ? runSetupStage('importing architecture knowledge', () => importVaultArchitecturePages(memory, project, vaultPath))
-      : null;
     options.onProgress?.('Saving project metadata');
     runSetupStage('saving project metadata', () => saveProjectMeta(project.root, {
       version: 1,
@@ -227,7 +224,6 @@ export async function initializeLocalProject(
     console.log(`  Project snapshot: ${result.changed ? 'updated' : 'up-to-date'} (${result.view.id})`);
     console.log(`  Project graph enrichment: ${formatSetupEnrichment(enrichment)}`);
     console.log(`  Project graph: ${graph.filesScanned} files, ${graph.nodesCreated + graph.nodesUpdated} nodes (${artifacts.reportPath})`);
-    if (architectureImport) console.log(`  Architecture knowledge: ${formatArchitectureImportSummary(architectureImport)}`);
     console.log(`  Meta: ${metaPath(project.root)}`);
   } finally {
     memory.close();

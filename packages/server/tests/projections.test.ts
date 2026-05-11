@@ -136,35 +136,4 @@ describe('ECS projections', () => {
     expect(result.candidateNode?.content).toContain('edited markdown should become a candidate');
     expect(result.event?.type).toBe('user_edit');
   });
-
-  it('imports plain Obsidian architecture markdown as searchable ECS knowledge', () => {
-    const architectureDir = path.join(tempDir, 'client', 'architecture');
-    fs.mkdirSync(architectureDir, { recursive: true });
-    const filePath = path.join(architectureDir, '04-generated-files.md');
-    fs.writeFileSync(filePath, [
-      '# 04 Generated Files',
-      '',
-      'TypeScript/Typing is generated output from UnrealSharp declarations.',
-      'Do not edit generated declarations directly; update C++ reflection source instead.',
-    ].join('\n'), 'utf8');
-
-    const materializer = new ObsidianProjectionMaterializer(graphStore);
-    const result = materializer.importFile(filePath);
-
-    expect(result.changed).toBe(true);
-    expect(result.candidateNode).toMatchObject({
-      substrateType: SubstrateType.RULE,
-      domainType: ContextDomainType.ARCHITECTURE,
-      status: ContextNodeStatus.VERIFIED,
-      project: 'client',
-      title: '04 Generated Files',
-      sourceRef: filePath.replace(/\\/g, '/'),
-    });
-    expect(result.candidateNode?.tags).toEqual(expect.arrayContaining(['obsidian-architecture', 'architecture']));
-
-    const secondImport = materializer.importFile(filePath);
-
-    expect(secondImport.changed).toBe(false);
-    expect(graphStore.listNodes({ project: 'client', domainType: ContextDomainType.ARCHITECTURE, limit: 10 })).toHaveLength(1);
-  });
 });

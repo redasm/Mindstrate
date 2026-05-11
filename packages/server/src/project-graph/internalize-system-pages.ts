@@ -48,7 +48,18 @@ export interface InternalizeSystemPagesResult {
   updated: ContextNode[];
   /** RULE nodes that already matched the page definition exactly. */
   unchanged: ContextNode[];
+  /**
+   * RULE nodes from the deprecated `obsidian-architecture:<project>:*`
+   * importer (an earlier two-way bridge that has been removed). They are
+   * pruned here because their continued presence used to cause
+   * `obsidian-sync`'s VaultExporter to emit duplicate
+   * `<title>--<idHash>.md` files in the vault root next to the
+   * canonical `00-overview.md` ... `07-risky-files.md` system pages.
+   */
+  prunedLegacy: string[];
 }
+
+const LEGACY_OBSIDIAN_ARCHITECTURE_ID_PREFIX = 'obsidian-architecture:';
 
 /**
  * Upsert one `RULE` + `ARCHITECTURE` node per system page.
@@ -67,6 +78,7 @@ export const internalizeSystemPagesAsRules = (
     created: [],
     updated: [],
     unchanged: [],
+    prunedLegacy: pruneLegacyArchitectureRules(store, projectName),
   };
 
   for (const page of pages) {
@@ -181,4 +193,27 @@ const stableJson = (value: Record<string, unknown>): string => {
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(value).sort()) sorted[key] = value[key];
   return JSON.stringify(sorted);
+};
+
+/**
+ * Prune RULE nodes that the removed `importPlainArchitectureMarkdown`
+ * pathway used to create. Their ids look like
+ * `obsidian-architecture:<project>:*` and they used to compete with the
+ * canonical `architecture:system-page:<project>:*` nodes, doubling up
+ * the architecture book in the vault every time `obsidian-sync`
+ * exported.
+ */
+const pruneLegacyArchitectureRules = (store: ContextGraphStore, projectName: string): string[] => {
+  const candidates = store.listNodes({
+    project: projectName,
+    substrateType: SubstrateType.RULE,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: 1000,
+  });
+  const pruned: string[] = [];
+  for (const node of candidates) {
+    if (!node.id.startsWith(LEGACY_OBSIDIAN_ARCHITECTURE_ID_PREFIX)) continue;
+    if (store.deleteNode(node.id)) pruned.push(node.id);
+  }
+  return pruned;
 };

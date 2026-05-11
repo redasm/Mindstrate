@@ -136,4 +136,33 @@ describe('internalizeSystemPagesAsRules', () => {
     expect(node?.metadata?.['classifications']).toBeUndefined();
     expect(node?.metadata?.['systemPage']).toBe(true);
   });
+
+  it('prunes legacy obsidian-architecture:* RULE nodes left over from the removed importer', () => {
+    // Simulate a stale node created by the deprecated
+    // `importPlainArchitectureMarkdown` codepath.
+    const legacyId = `obsidian-architecture:${PROJECT}:client-architecture-01-md`;
+    store.createNode({
+      id: legacyId,
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'Stale Legacy Node',
+      content: 'Body left over from the previous importer.',
+      tags: ['architecture', 'obsidian-architecture'],
+      project: PROJECT,
+      compressionLevel: 0.1,
+      confidence: 0.9,
+      qualityScore: 90,
+      status: ContextNodeStatus.VERIFIED,
+      sourceRef: 'D:/some/old/architecture/01-runtime.md',
+      metadata: { importer: 'obsidian-architecture-markdown' },
+    });
+
+    const result = internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+
+    expect(result.prunedLegacy).toContain(legacyId);
+    expect(store.getNodeById(legacyId)).toBeNull();
+    // A second run should report no further prunes — the cleanup is idempotent.
+    const second = internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+    expect(second.prunedLegacy).toHaveLength(0);
+  });
 });
