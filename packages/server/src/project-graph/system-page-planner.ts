@@ -13,7 +13,7 @@ import {
   type ProjectGraphLlmRequestPolicy,
 } from './llm-request-policy.js';
 import { projectGraphLanguageInstruction, resolveProjectGraphLocale } from './project-graph-locale.js';
-import type { SystemPageDefinition } from './project-graph-obsidian-projection.js';
+import type { SystemPageDefinition } from './obsidian-system-page-types.js';
 
 // System page planner 一次性产出多页章节，必须看到足够多的 facts 才能聚类；但对
 // DashScope 等严格 TPS/TPM provider，payload 太大会让请求排队或超时。因此它默认

@@ -90,8 +90,8 @@ export type {
 export {
   writeProjectGraphObsidianProjection,
   type ProjectGraphObsidianProjectionOptions,
-  type SystemPageDefinition,
 } from './project-graph-obsidian-projection.js';
+export type { SystemPageDefinition } from './obsidian-system-page-types.js';
 export {
   detectProjectGraphChangeSet,
   detectProjectGraphChanges,
