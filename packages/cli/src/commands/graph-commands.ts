@@ -23,7 +23,7 @@ import {
 } from '@mindstrate/server';
 import { readProjectCliConfig } from '../cli-config.js';
 import { createMemory } from '../memory-factory.js';
-import { publishProjectGraphToTeamServer } from './init.js';
+import { formatProjectGraphEnrichment, publishProjectGraphToTeamServer, runProjectGraphEnrichment } from './init.js';
 import { gitChangedFiles, parseChangeSource, parseExternalChangeSetJson } from './graph-parsers.js';
 import {
   buildGraphChangeResultLines,
@@ -146,12 +146,12 @@ contextGraphCommand.command('sync')
     const notes = extractProjectGraphUserNotes(fs.readFileSync(plan.obsidianFile, 'utf8'));
     const created = notes ? upsertObsidianProjectGraphNoteOverlay(memory, project.name, notes) : false;
     const graph = memory.context.indexProjectGraph(project);
-    const enrichment = await memory.context.enrichProjectGraph(project);
+    const enrichment = await runProjectGraphEnrichment(memory, project);
     const vaultRoot = path.dirname(path.dirname(path.dirname(plan.obsidianFile)));
     const artifacts = memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultRoot));
     console.log(`Obsidian sync: ${created ? 'overlay updated' : 'no user notes to import'}`);
     console.log(`Graph index: ${graph.filesScanned} files, ${graph.nodesCreated + graph.nodesUpdated} nodes, ${graph.edgesCreated + graph.edgesUpdated} edges`);
-    console.log(`LLM enrichment: ${enrichment.status}`);
+    console.log(`LLM enrichment: ${formatProjectGraphEnrichment(enrichment)}`);
     console.log(`Projection: ${artifacts.reportPath}`);
   }));
 

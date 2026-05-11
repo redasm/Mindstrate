@@ -7,6 +7,7 @@ import { Mindstrate, detectProject } from '@mindstrate/server';
 import {
   buildProjectGraphAnalysisLines,
   publishProjectGraphToTeamServer,
+  runProjectGraphEnrichment,
   writeLocalProjectGraphArtifacts,
 } from './commands/init.js';
 
@@ -84,6 +85,21 @@ test('publishProjectGraphToTeamServer sends a project-scoped graph bundle', asyn
   } finally {
     memory.close();
   }
+});
+
+test('runProjectGraphEnrichment degrades provider failures to failed status', async () => {
+  const project = { name: 'demo', root: process.cwd(), dependencies: [], entryPoints: [] } as unknown as NonNullable<ReturnType<typeof detectProject>>;
+  const memory = {
+    context: {
+      enrichProjectGraph: async () => {
+        throw new Error('provider unavailable');
+      },
+    },
+  } as unknown as Mindstrate;
+
+  const result = await runProjectGraphEnrichment(memory, project);
+
+  assert.deepEqual(result, { status: 'failed', message: 'provider unavailable' });
 });
 
 test('buildProjectGraphAnalysisLines explains scan scope and LLM enrichment', () => {

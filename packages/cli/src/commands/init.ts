@@ -138,7 +138,7 @@ export const initCommand = new Command('init')
         console.log('  [1/3] Extracting deterministic parser/config facts');
         const graph = memory.context.indexProjectGraph(project);
         console.log('  [2/3] Running optional LLM enrichment');
-        const enrichment = await memory.context.enrichProjectGraph(project);
+        const enrichment = await runProjectGraphEnrichment(memory, project);
         console.log(`  Enrichment: ${formatProjectGraphEnrichment(enrichment)}`);
         console.log('  [3/3] Writing graph projections');
         console.log(`  Files: ${graph.filesScanned}`);
@@ -249,9 +249,23 @@ const formatBytes = (bytes: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const formatProjectGraphEnrichment = (
-  enrichment: Awaited<ReturnType<Mindstrate['context']['enrichProjectGraph']>>,
+type ProjectGraphEnrichmentOutcome = Awaited<ReturnType<Mindstrate['context']['enrichProjectGraph']>> | { status: 'failed'; message: string };
+
+export const runProjectGraphEnrichment = async (
+  memory: Mindstrate,
+  project: DetectedProject,
+): Promise<ProjectGraphEnrichmentOutcome> => {
+  try {
+    return await memory.context.enrichProjectGraph(project);
+  } catch (error) {
+    return { status: 'failed', message: errorMessage(error) };
+  }
+};
+
+export const formatProjectGraphEnrichment = (
+  enrichment: ProjectGraphEnrichmentOutcome,
 ): string => {
+  if (enrichment.status === 'failed') return `failed (${enrichment.message})`;
   if (enrichment.status === 'skipped') {
     return enrichment.reason === 'llm_not_configured'
       ? 'skipped (no LLM provider configured)'
