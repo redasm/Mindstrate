@@ -1,7 +1,7 @@
 {
   "name": "@mindstrate/server",
   "version": "0.1.0",
-  "description": "Server-side runtime for Mindstrate: storage, embedding, retrieval, quality engine, project detection. Used by team-server, cli, web-ui and obsidian-sync.",
+  "description": "Server-side runtime for Mindstrate: storage, embedding, quality engine, project detection, and project graph. Used by team-server, cli, web-ui and obsidian-sync.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {

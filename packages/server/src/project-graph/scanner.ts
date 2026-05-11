@@ -250,7 +250,6 @@ const walkProject = (input: WalkProjectInput): void => {
     const rel = normalizePath(relDir ? path.join(relDir, dirent.name) : dirent.name);
     if (isIgnored(rel, dirent.isDirectory(), ignoreRules)) continue;
 
-    const abs = path.join(root, rel);
     if (dirent.isDirectory()) {
       walkProject({ ...input, relDir: rel });
       continue;

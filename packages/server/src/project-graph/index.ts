@@ -73,15 +73,25 @@ export {
 } from './clustering.js';
 export {
   collectProjectGraphArtifact,
-  collectProjectGraphStats,
-  writeProjectGraphTextFileAtomically,
+} from './project-graph-artifact-collector.js';
+export {
   writeProjectGraphArtifacts,
+} from './project-graph-artifact-writer.js';
+export {
+  writeProjectGraphTextFileAtomically,
+} from './project-graph-file-io.js';
+export {
+  collectProjectGraphStats,
+} from './project-graph-stats.js';
+export type {
+  ProjectGraphArtifactResult,
+  ProjectGraphStatsExport,
+} from './project-graph-report-types.js';
+export {
   writeProjectGraphObsidianProjection,
-  type ProjectGraphArtifactResult,
   type ProjectGraphObsidianProjectionOptions,
-  type ProjectGraphStatsExport,
   type SystemPageDefinition,
-} from './project-graph-report.js';
+} from './project-graph-obsidian-projection.js';
 export {
   detectProjectGraphChangeSet,
   detectProjectGraphChanges,

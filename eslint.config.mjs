@@ -133,4 +133,63 @@ export default [
       }],
     },
   },
+
+  // ------------ Layer guard: cli must drive server through sub-domain APIs ------------
+  // The CLI is allowed to import the @mindstrate/server barrel (it depends on
+  // better-sqlite3 anyway), but it must NOT reach into deep server modules nor
+  // bypass the Mindstrate facade. Raw helper functions like
+  // `enrichProjectGraph` / `findProjectGraphPath` / `checkGeneratedEditSafety`
+  // were previously exported from the server barrel and called directly from
+  // CLI commands; that bypassed `memory.context.*` / `memory.evaluation.*`
+  // and is now blocked at lint time.
+  {
+    files: ['packages/cli/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: [
+              '@mindstrate/server/dist/**',
+              '@mindstrate/server/src/**',
+              '@mindstrate/team-server',
+              '@mindstrate/mcp-server',
+              '@mindstrate/web-ui',
+            ],
+            message:
+              'cli must not reach into server internals or other application packages. ' +
+              'Use the @mindstrate/server barrel and the Mindstrate facade ' +
+              '(memory.context, memory.evaluation, ...) instead.',
+          },
+        ],
+      }],
+    },
+  },
+
+  // ------------ Layer guard: obsidian-sync must use the Mindstrate facade ------------
+  // obsidian-sync may import @mindstrate/server (it consumes `Mindstrate`
+  // and protocol types). It MUST NOT depend on other application packages
+  // (cli, mcp-server, team-server, web-ui) — that would create a cross-app
+  // dependency cycle.
+  {
+    files: ['packages/obsidian-sync/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          {
+            group: [
+              '@mindstrate/server/dist/**',
+              '@mindstrate/server/src/**',
+              '@mindstrate/cli',
+              '@mindstrate/mcp-server',
+              '@mindstrate/team-server',
+              '@mindstrate/web-ui',
+            ],
+            message:
+              'obsidian-sync must depend only on @mindstrate/protocol, @mindstrate/client, ' +
+              'and the @mindstrate/server barrel. Cross-application imports are forbidden.',
+          },
+        ],
+      }],
+    },
+  },
 ];

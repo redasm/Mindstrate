@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import type { DetectedProject } from './detector.js';
-import { truncateText } from '../text-format.js';
+import { truncateText } from '@mindstrate/protocol/text';
 import {
   PRESERVE_CLOSE,
   PRESERVE_OPEN,

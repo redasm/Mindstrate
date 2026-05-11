@@ -11,7 +11,7 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
-import { slugifyAscii } from '../text-format.js';
+import { slugifyAscii } from '../processing/slug.js';
 
 export interface ObsidianProjectionOptions {
   project?: string;

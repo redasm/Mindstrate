@@ -17,7 +17,7 @@ import {
 } from '../prompts.js';
 import { LLMError } from '@mindstrate/protocol';
 import { getOpenAIClient } from '../openai-client.js';
-import { errorMessage, truncateText } from '../text-format.js';
+import { errorMessage, truncateText } from '@mindstrate/protocol/text';
 
 export interface CommitInfo {
   hash: string;

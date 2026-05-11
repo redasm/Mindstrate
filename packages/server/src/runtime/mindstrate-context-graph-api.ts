@@ -24,16 +24,34 @@ import {
   detectProjectGraphChanges,
   detectProjectGraphChangeSet,
   estimateProjectGraphScanScope,
+  estimateProjectGraphBlastRadius,
+  findProjectGraphPath,
   indexProjectGraph,
   planProjectGraphSystemPagesWithLlm,
+  queryProjectGraphTask,
   summarizeProjectGraphWithLlm,
+  checkGeneratedEditSafety,
+  checkUnrealModuleBoundaryConsistency,
+  checkUnrealPluginDependencyConsistency,
+  type GeneratedEditSafetyInput,
+  type GeneratedEditSafetyIssue,
+  type ProjectGraphBlastRadiusInput,
+  type ProjectGraphBlastRadiusResult,
   type ProjectGraphEnrichmentInput,
   type ProjectGraphEnrichmentResult,
   type ProjectGraphIndexOptions,
   type ProjectGraphIndexResult,
+  type ProjectGraphPathInput,
+  type ProjectGraphPathResult,
   type ProjectGraphScanScope,
   type ProjectGraphChangeDetectionResult,
   type ProjectGraphChangeDetectionInput,
+  type ProjectGraphTaskQueryInput,
+  type ProjectGraphTaskQueryResult,
+  type UnrealModuleBoundaryConsistencyInput,
+  type UnrealModuleBoundaryConsistencyIssue,
+  type UnrealPluginDependencyConsistencyInput,
+  type UnrealPluginDependencyConsistencyIssue,
 } from '../project-graph/index.js';
 import {
   writeProjectGraphArtifacts,
@@ -269,6 +287,93 @@ export class MindstrateContextGraphApi {
 
   listProjectGraphOverlays(input?: ListProjectGraphOverlayInput): ProjectGraphOverlay[] {
     return listProjectGraphOverlays(this.services.contextGraphStore, input);
+  }
+
+  /**
+   * Find the shortest bounded path between two project graph nodes.
+   *
+   * Loads `nodes`/`edges` for `projectScope` (a project name) automatically
+   * when the caller does not provide them.
+   */
+  findProjectGraphPath(input: Omit<ProjectGraphPathInput, 'nodes' | 'edges'> & {
+    projectScope?: string;
+    nodes?: ProjectGraphPathInput['nodes'];
+    edges?: ProjectGraphPathInput['edges'];
+  }): ProjectGraphPathResult {
+    const { projectScope, ...rest } = input;
+    const { nodes, edges } = this.loadGraphForAnalysis(projectScope, input.nodes, input.edges);
+    return findProjectGraphPath({ ...rest, nodes, edges });
+  }
+
+  /** Estimate blast radius around a project graph node. */
+  estimateProjectGraphBlastRadius(input: Omit<ProjectGraphBlastRadiusInput, 'nodes' | 'edges'> & {
+    projectScope?: string;
+    nodes?: ProjectGraphBlastRadiusInput['nodes'];
+    edges?: ProjectGraphBlastRadiusInput['edges'];
+  }): ProjectGraphBlastRadiusResult {
+    const { projectScope, ...rest } = input;
+    const { nodes, edges } = this.loadGraphForAnalysis(projectScope, input.nodes, input.edges);
+    return estimateProjectGraphBlastRadius({ ...rest, nodes, edges });
+  }
+
+  /** Run a task-oriented project graph query template. */
+  queryProjectGraphTask(input: Omit<ProjectGraphTaskQueryInput, 'nodes' | 'edges'> & {
+    projectScope?: string;
+    nodes?: ProjectGraphTaskQueryInput['nodes'];
+    edges?: ProjectGraphTaskQueryInput['edges'];
+  }): ProjectGraphTaskQueryResult {
+    const { projectScope, ...rest } = input;
+    const { nodes, edges } = this.loadGraphForAnalysis(projectScope, input.nodes, input.edges);
+    return queryProjectGraphTask({ ...rest, nodes, edges });
+  }
+
+  /** Detect generated-edit safety issues against the current graph. */
+  checkGeneratedEditSafety(input: Omit<GeneratedEditSafetyInput, 'nodes' | 'edges'> & {
+    projectScope?: string;
+    nodes?: GeneratedEditSafetyInput['nodes'];
+    edges?: GeneratedEditSafetyInput['edges'];
+  }): GeneratedEditSafetyIssue[] {
+    const { projectScope, ...rest } = input;
+    const { nodes, edges } = this.loadGraphForAnalysis(projectScope, input.nodes, input.edges);
+    return checkGeneratedEditSafety({ ...rest, nodes, edges });
+  }
+
+  /** Detect Unreal plugin-dependency consistency issues. */
+  checkUnrealPluginDependencyConsistency(input?: {
+    projectScope?: string;
+    nodes?: UnrealPluginDependencyConsistencyInput['nodes'];
+    edges?: UnrealPluginDependencyConsistencyInput['edges'];
+  }): UnrealPluginDependencyConsistencyIssue[] {
+    const { nodes, edges } = this.loadGraphForAnalysis(input?.projectScope, input?.nodes, input?.edges);
+    return checkUnrealPluginDependencyConsistency({ nodes, edges });
+  }
+
+  /** Detect Unreal module-boundary consistency issues. */
+  checkUnrealModuleBoundaryConsistency(input?: {
+    projectScope?: string;
+    nodes?: UnrealModuleBoundaryConsistencyInput['nodes'];
+    edges?: UnrealModuleBoundaryConsistencyInput['edges'];
+  }): UnrealModuleBoundaryConsistencyIssue[] {
+    const { nodes, edges } = this.loadGraphForAnalysis(input?.projectScope, input?.nodes, input?.edges);
+    return checkUnrealModuleBoundaryConsistency({ nodes, edges });
+  }
+
+  private loadGraphForAnalysis(
+    projectScope: string | undefined,
+    nodes: ContextNode[] | undefined,
+    edges: ContextEdge[] | undefined,
+  ): { nodes: ContextNode[]; edges: ContextEdge[] } {
+    if (nodes && edges) return { nodes, edges };
+    return {
+      nodes: nodes ?? this.services.contextGraphStore.listNodes({
+        project: projectScope,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+      }),
+      edges: edges ?? this.services.contextGraphStore.listEdges({
+        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+      }),
+    };
   }
 
   private tryIngestDerivedEvent(work: () => void): void {

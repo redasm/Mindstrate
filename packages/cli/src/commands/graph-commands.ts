@@ -3,21 +3,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   ChangeSource,
-  checkGeneratedEditSafety,
-  checkUnrealModuleBoundaryConsistency,
-  checkUnrealPluginDependencyConsistency,
   ContextDomainType,
   PROJECT_GRAPH_METADATA_KEYS,
   ProjectionTarget,
   detectProject,
   errorMessage,
-  estimateProjectGraphBlastRadius,
-  findProjectGraphPath,
-  listProjectGraphEvaluationFixtures,
-  listProjectGraphEvaluationTasks,
-  materializeProjectGraphEvaluationFixture,
-  renderProjectGraphEvaluationDatasetMarkdown,
-  queryProjectGraphTask,
   type ContextNode,
   type ProjectGraphTaskQuery,
 } from '@mindstrate/server';
@@ -196,9 +186,8 @@ contextGraphCommand.command('path <from> <to>')
   .option('-p, --project <project>', 'Project scope')
   .option('-d, --max-depth <number>', 'Maximum path depth', '6')
   .action(async (from: string, to: string, options) => withMemory('Graph path failed', options.cwd, async (memory) => {
-    const result = findProjectGraphPath({
-      nodes: memory.context.listContextNodes({ project: options.project, domainType: ContextDomainType.ARCHITECTURE, limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
-      edges: memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
+    const result = memory.context.findProjectGraphPath({
+      projectScope: options.project,
       from,
       to,
       maxDepth: parseInt(options.maxDepth, 10),
@@ -217,9 +206,8 @@ contextGraphCommand.command('impact <id>')
   .option('-d, --depth <number>', 'Neighbor depth', '1')
   .option('-l, --limit <number>', 'Maximum affected nodes', '20')
   .action(async (id: string, options) => withMemory('Graph impact failed', options.cwd, async (memory) => {
-    const result = estimateProjectGraphBlastRadius({
-      nodes: memory.context.listContextNodes({ project: options.project, domainType: ContextDomainType.ARCHITECTURE, limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
-      edges: memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
+    const result = memory.context.estimateProjectGraphBlastRadius({
+      projectScope: options.project,
       id,
       depth: parseInt(options.depth, 10),
       limit: parseInt(options.limit, 10),
@@ -243,10 +231,9 @@ contextGraphCommand.command('task <task> [query]')
   .action(async (task: string, query: string | undefined, options) => withMemory('Graph task query failed', options.cwd, async (memory) => {
     const graphTask = parseGraphTask(task);
     const project = detectProject(path.resolve(options.cwd ?? process.cwd())) ?? undefined;
-    const result = queryProjectGraphTask({
+    const result = memory.context.queryProjectGraphTask({
+      projectScope: options.project,
       project,
-      nodes: memory.context.listContextNodes({ project: options.project, domainType: ContextDomainType.ARCHITECTURE, limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
-      edges: memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
       task: graphTask,
       query,
       limit: parseInt(options.limit, 10),
@@ -257,21 +244,17 @@ contextGraphCommand.command('task <task> [query]')
 contextGraphCommand.command('eval-dataset')
   .description('Export the project graph evaluation dataset report and fixtures')
   .requiredOption('--out <dir>', 'Output directory for the report and fixtures')
-  .action((options) => {
-    try {
-      const outDir = path.resolve(options.out);
-      const fixturesDir = path.join(outDir, 'fixtures');
-      const fixtures = listProjectGraphEvaluationFixtures();
-      const tasks = listProjectGraphEvaluationTasks();
-      fs.mkdirSync(fixturesDir, { recursive: true });
-      for (const fixture of fixtures) materializeProjectGraphEvaluationFixture(fixture.id, path.join(fixturesDir, fixture.id));
-      const reportPath = path.join(outDir, 'project-graph-evaluation-dataset.md');
-      fs.writeFileSync(reportPath, renderProjectGraphEvaluationDatasetMarkdown({ fixtures, tasks }), 'utf8');
-      for (const line of buildGraphEvaluationDatasetExportLines({ reportPath, fixturesDir, fixtureCount: fixtures.length, taskCount: tasks.length })) console.log(line);
-    } catch (error) {
-      fail('Graph evaluation dataset export failed', error);
-    }
-  });
+  .action(async (options) => withMemory('Graph evaluation dataset export failed', undefined, async (memory) => {
+    const outDir = path.resolve(options.out);
+    const fixturesDir = path.join(outDir, 'fixtures');
+    const fixtures = memory.evaluation.listProjectGraphFixtures();
+    const tasks = memory.evaluation.listProjectGraphTasks();
+    fs.mkdirSync(fixturesDir, { recursive: true });
+    for (const fixture of fixtures) memory.evaluation.materializeProjectGraphFixture(fixture.id, path.join(fixturesDir, fixture.id));
+    const reportPath = path.join(outDir, 'project-graph-evaluation-dataset.md');
+    fs.writeFileSync(reportPath, memory.evaluation.renderProjectGraphDatasetMarkdown({ fixtures, tasks }), 'utf8');
+    for (const line of buildGraphEvaluationDatasetExportLines({ reportPath, fixturesDir, fixtureCount: fixtures.length, taskCount: tasks.length })) console.log(line);
+  }));
 
 contextGraphCommand.command('ingest')
   .description('Ingest external project graph input from repo-scanner or a custom collector')
@@ -338,21 +321,14 @@ const collectGraphSafetyIssues = (
   memory: ReturnType<typeof createMemory>,
   changedFiles: string[],
 ): { severity: string; code: string; message: string; evidence?: string[] }[] => {
-  const nodes = memory.context.listContextNodes({
-    project: project.name,
-    domainType: ContextDomainType.ARCHITECTURE,
-    limit: PROJECT_GRAPH_CLI_QUERY_LIMIT,
-  });
-  const edges = memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT });
   return [
-    ...checkGeneratedEditSafety({
+    ...memory.context.checkGeneratedEditSafety({
+      projectScope: project.name,
       changedFiles,
-      nodes,
-      edges,
       generatedRoots: project.graphHints?.generatedRoots,
     }),
-    ...checkUnrealPluginDependencyConsistency({ nodes, edges }),
-    ...checkUnrealModuleBoundaryConsistency({ nodes, edges }),
+    ...memory.context.checkUnrealPluginDependencyConsistency({ projectScope: project.name }),
+    ...memory.context.checkUnrealModuleBoundaryConsistency({ projectScope: project.name }),
   ];
 };
 

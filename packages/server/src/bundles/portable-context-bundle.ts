@@ -11,7 +11,7 @@ import type {
   PublishBundleResult,
 } from '@mindstrate/protocol';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
-import { slugifyAscii } from '../text-format.js';
+import { slugifyAscii } from '../processing/slug.js';
 import {
   type InstallBundleFromRegistryOptions,
   publishBundleToRegistry,

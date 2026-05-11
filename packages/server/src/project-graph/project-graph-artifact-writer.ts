@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { ProjectionTarget } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
-import { collectProjectGraphArtifact } from './project-graph-artifact.js';
+import { collectProjectGraphArtifact } from './project-graph-artifact-collector.js';
 import { writeProjectGraphTextFileAtomically } from './project-graph-file-io.js';
 import { renderProjectGraphRepoEntry } from './project-graph-report-renderer.js';
 import { collectProjectGraphStats } from './project-graph-stats.js';

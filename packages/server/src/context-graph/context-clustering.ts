@@ -1,4 +1,4 @@
-import { cosineSimilarity } from '../math.js';
+import { cosineSimilarity } from '../processing/vector-distance.js';
 import type { Embedder } from '../processing/embedder.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import {

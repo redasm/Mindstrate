@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { IVectorStore, VectorDocument, VectorSearchResult } from './vector-store-interface.js';
-import { cosineSimilarity } from '../math.js';
+import { cosineSimilarity } from '../processing/vector-distance.js';
 import { StorageError } from '@mindstrate/protocol';
 
 interface StoredDocument {

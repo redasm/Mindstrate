@@ -1,7 +1,7 @@
 import type { ContextGraphStore } from './context-graph-store.js';
 import { ContextNodeStatus, SubstrateType, type ContextNode } from '@mindstrate/protocol/models';
 import type { RetrievalContext } from '@mindstrate/protocol';
-import { cosineSimilarity } from '../math.js';
+import { cosineSimilarity } from '../processing/vector-distance.js';
 
 export interface ContextPrioritySelection {
   rules: ContextNode[];
