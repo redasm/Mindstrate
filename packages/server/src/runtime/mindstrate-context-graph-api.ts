@@ -380,7 +380,7 @@ export class MindstrateContextGraphApi {
     try {
       work();
     } catch (err) {
-      console.warn(
+      this.services.logger.warn(
         `[Mindstrate] derived event ingestion failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }

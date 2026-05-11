@@ -6,7 +6,7 @@
  */
 
 import pino from 'pino';
-import { Mindstrate } from '@mindstrate/server';
+import { Mindstrate, consoleLogger } from '@mindstrate/server';
 import { createApp } from './app.js';
 import type { TeamApiKey } from './http/auth-middleware.js';
 
@@ -16,7 +16,7 @@ const logger = pino({
 
 const port = parseInt(process.env['TEAM_PORT'] ?? '3388', 10);
 const apiKey = process.env['TEAM_API_KEY'] ?? '';
-const memory = new Mindstrate();
+const memory = new Mindstrate({ logger: consoleLogger });
 const authKeys = readTeamApiKeys();
 const app = createApp({ apiKey, authKeys, memory });
 

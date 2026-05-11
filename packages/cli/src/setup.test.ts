@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { detectProject, Mindstrate } from '@mindstrate/server';
+import { detectProject, Mindstrate, consoleLogger } from '@mindstrate/server';
 import { initializeLocalProject, applySetupLlmEnvironment, setupMindstrateConfig } from './commands/setup.js';
 
 test('initializeLocalProject writes the project graph to Obsidian when a vault is configured', async () => {
@@ -101,6 +101,7 @@ test('setupMindstrateConfig applies LLM values collected during setup', () => {
     openaiBaseUrl: 'https://llm.example/v1',
     llmModel: 'chat-model',
     embeddingModel: 'embedding-model',
+    logger: consoleLogger,
   });
 });
 

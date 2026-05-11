@@ -11,7 +11,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Command } from 'commander';
-import { KnowledgeType, Mindstrate, type GraphKnowledgeView } from '@mindstrate/server';
+import { KnowledgeType, Mindstrate, consoleLogger, type GraphKnowledgeView } from '@mindstrate/server';
 import {
   SyncManager,
   VaultLayout,
@@ -78,7 +78,7 @@ const exportCmd = new Command('export')
   .action(async (vaultPath: string | undefined, options: { dataDir?: string }) => {
     const root = resolveVaultPath(vaultPath);
     const dataDir = resolveProjectDataDir(process.cwd(), options.dataDir);
-    const memory = new Mindstrate(dataDir ? { dataDir } : undefined);
+    const memory = new Mindstrate({ ...(dataDir ? { dataDir } : {}), logger: consoleLogger });
     await memory.init();
     writeProjectCliConfig(process.cwd(), {
       ...(readProjectCliConfig(process.cwd()) ?? {}),
@@ -105,7 +105,7 @@ const watchCmd = new Command('watch')
   .action(async (vaultPath: string | undefined, options) => {
     const root = resolveVaultPath(vaultPath);
     const dataDir = resolveProjectDataDir(process.cwd(), options.dataDir);
-    const memory = new Mindstrate(dataDir ? { dataDir } : undefined);
+    const memory = new Mindstrate({ ...(dataDir ? { dataDir } : {}), logger: consoleLogger });
     await memory.init();
     writeProjectCliConfig(process.cwd(), {
       ...(readProjectCliConfig(process.cwd()) ?? {}),
@@ -158,7 +158,7 @@ const statusCmd = new Command('status')
       console.log('Last full sync:  never (run `mindstrate vault export` first)');
     }
     const dataDir = resolveProjectDataDir(process.cwd(), options.dataDir);
-    const memory = new Mindstrate(dataDir ? { dataDir } : undefined);
+    const memory = new Mindstrate({ ...(dataDir ? { dataDir } : {}), logger: consoleLogger });
     await memory.init();
     const stats = await memory.maintenance.getStats();
     const graphKnowledge = memory.context.readGraphKnowledge({ limit: 100000 });

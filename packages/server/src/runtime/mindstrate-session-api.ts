@@ -20,7 +20,7 @@ export class MindstrateSessionApi {
         try {
           await this.autoCompressSession(active.id);
         } catch (err) {
-          console.warn(
+          this.services.logger.warn(
             `[Mindstrate] Failed to auto-compress session ${active.id}: ${err instanceof Error ? err.message : String(err)}`,
           );
         }

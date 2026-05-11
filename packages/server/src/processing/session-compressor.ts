@@ -13,16 +13,19 @@ import {
   buildSessionCompressionUserPrompt,
 } from '../prompts.js';
 import { getOpenAIClient } from '../openai-client.js';
+import { noopLogger, type Logger } from '../runtime/logger.js';
 
 export class SessionCompressor {
   private apiKey: string;
   private baseURL?: string;
   private model: string;
+  private logger: Logger;
 
-  constructor(apiKey: string = '', model: string = 'gpt-4o-mini', baseURL?: string) {
+  constructor(apiKey: string = '', model: string = 'gpt-4o-mini', baseURL?: string, logger: Logger = noopLogger) {
     this.apiKey = apiKey;
     this.baseURL = baseURL;
     this.model = model;
+    this.logger = logger;
   }
 
   /** 压缩会话为结构化摘要 */
@@ -81,7 +84,7 @@ export class SessionCompressor {
       };
     } catch (err) {
       // LLM compression failed, fall back to rule-based
-      console.warn(
+      this.logger.warn(
         `[SessionCompressor] LLM compression failed, using rule-based fallback: ${err instanceof Error ? err.message : String(err)}`
       );
       return this.ruleCompress(session, observations);

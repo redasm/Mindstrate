@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { Command } from 'commander';
 import {
   Mindstrate,
+  consoleLogger,
   detectProject,
   errorMessage,
   loadProjectMeta,
@@ -240,6 +241,7 @@ export function setupMindstrateConfig(
     openaiBaseUrl: llmEnv?.['OPENAI_BASE_URL'],
     llmModel: llmEnv?.['MINDSTRATE_LLM_MODEL'],
     embeddingModel: llmEnv?.['MINDSTRATE_EMBEDDING_MODEL'],
+    logger: consoleLogger,
   };
 }
 
@@ -305,7 +307,7 @@ async function exportVault(dataDir: string, vaultPath: string, onProgress?: Setu
   const root = path.resolve(vaultPath);
   const layout = new VaultLayout({ vaultRoot: root });
   layout.ensureRoot();
-  const memory = new Mindstrate({ dataDir });
+  const memory = new Mindstrate({ dataDir, logger: consoleLogger });
   await memory.init();
   onProgress?.('Exporting vault markdown');
   const sync = new SyncManager(memory, { vaultRoot: root });

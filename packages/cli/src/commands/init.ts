@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import {
   Mindstrate,
+  consoleLogger,
   detectProject,
   errorMessage,
   loadProjectMeta,
@@ -67,7 +68,7 @@ export const initCommand = new Command('init')
 
       // 2) Initialize the data store (default per-project under ./.mindstrate)
       const dataDir = options.dataDir ?? path.join(project.root, '.mindstrate');
-      const memory = new Mindstrate({ dataDir });
+      const memory = new Mindstrate({ dataDir, logger: consoleLogger });
       await memory.init();
 
       const config = memory.getConfig();

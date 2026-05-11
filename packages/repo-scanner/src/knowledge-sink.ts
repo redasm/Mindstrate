@@ -5,6 +5,7 @@ import {
   ContextDomainType,
   ContextEventType,
   Mindstrate,
+  consoleLogger,
   type AddKnowledgeResult,
 } from '@mindstrate/server';
 
@@ -31,7 +32,7 @@ export function createKnowledgeSink(memory?: Mindstrate): KnowledgeSink {
     return new TeamServerSink(teamServerUrl);
   }
 
-  return new LocalMemorySink(new Mindstrate(), true);
+  return new LocalMemorySink(new Mindstrate({ logger: consoleLogger }), true);
 }
 
 export function defaultScannerDbPath(): string {

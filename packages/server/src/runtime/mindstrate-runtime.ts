@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import { loadConfig, type MindstrateConfig } from '../config.js';
+import { noopLogger, type Logger } from './logger.js';
 import { DatabaseStore } from '../storage/database-store.js';
 import { VectorStore } from '../storage/vector-store.js';
 import { QdrantVectorStore } from '../storage/qdrant-vector-store.js';
@@ -32,6 +33,7 @@ import { PortableContextBundleManager } from '../bundles/index.js';
 
 export interface MindstrateRuntime {
   config: MindstrateConfig;
+  logger: Logger;
   databaseStore: DatabaseStore;
   contextGraphStore: ContextGraphStore;
   contextInternalizer: ContextInternalizer;
@@ -69,6 +71,7 @@ export function createMindstrateRuntime(
   queryGraphKnowledgeIds: (query: string, options: { topK: number }) => string[],
 ): MindstrateRuntime {
   const config = loadConfig(configOverrides);
+  const logger = config.logger ?? noopLogger;
 
   if (!fs.existsSync(config.dataDir)) {
     fs.mkdirSync(config.dataDir, { recursive: true });
@@ -111,13 +114,14 @@ export function createMindstrateRuntime(
   const vectorStore = configOverrides?.vectorStore ?? createVectorStore(config, embedder);
   const sessionStore = new SessionStore(databaseStore.getDb());
   const bundleManager = new PortableContextBundleManager(contextGraphStore);
-  const sessionCompressor = new SessionCompressor(config.openaiApiKey, config.llmModel, llmBaseUrl);
+  const sessionCompressor = new SessionCompressor(config.openaiApiKey, config.llmModel, llmBaseUrl, logger);
   const feedbackLoop = new FeedbackLoop(databaseStore.getDb());
   const qualityGate = new KnowledgeQualityGate();
   const evaluator = new RetrievalEvaluator(databaseStore.getDb(), queryGraphKnowledgeIds);
 
   return {
     config,
+    logger,
     databaseStore,
     contextGraphStore,
     contextInternalizer,

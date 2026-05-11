@@ -1,13 +1,13 @@
 /**
  * Server-side singleton: Mindstrate instance
  */
-import { Mindstrate } from '@mindstrate/server';
+import { Mindstrate, consoleLogger } from '@mindstrate/server';
 
 let instance: Mindstrate | null = null;
 
 export function getMemory(): Mindstrate {
   if (!instance) {
-    instance = new Mindstrate();
+    instance = new Mindstrate({ logger: consoleLogger });
   }
   return instance;
 }

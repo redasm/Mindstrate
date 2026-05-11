@@ -7,7 +7,7 @@
  * files.
  */
 
-import { Mindstrate, detectProject } from '@mindstrate/server';
+import { Mindstrate, consoleLogger, detectProject } from '@mindstrate/server';
 import { loadProjectEnv } from './cli-config.js';
 
 /**
@@ -19,11 +19,13 @@ import { loadProjectEnv } from './cli-config.js';
  * - 探测不到项目（比如全局调用、无 `package.json` 等）：跳过 env 加载，但仍返回
  *   一个使用 shell env / 全局默认的 `Mindstrate`，因此 mcp-server 等无项目场景也能用。
  *
- * 注意：本工厂**依赖 cwd**，不再是“纯工厂”——`createMemory()` 与 `createMemory('/x')`
+ * 注意：本工厂**依赖 cwd**，不再是"纯工厂"——`createMemory()` 与 `createMemory('/x')`
  * 可能加载不同的 .env，从而影响后续 `Mindstrate` 实例的 LLM/embedding 配置。
+ *
+ * CLI 是面向人类终端的入口，库内部诊断走 `consoleLogger`。
  */
 export function createMemory(cwd = process.cwd()): Mindstrate {
   const project = detectProject(cwd);
   if (project) loadProjectEnv(project.root);
-  return new Mindstrate();
+  return new Mindstrate({ logger: consoleLogger });
 }

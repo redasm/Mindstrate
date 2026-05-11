@@ -22,6 +22,10 @@ export { Mindstrate } from './mindstrate.js';
 // Config
 export { loadConfig, type MindstrateConfig } from './config.js';
 
+// Logger contract — applications inject a console-backed logger; mcp-server
+// keeps the noop default to avoid corrupting its JSON-RPC stdio channel.
+export { noopLogger, consoleLogger, type Logger } from './runtime/logger.js';
+
 // Errors
 export {
   MindstrateError,

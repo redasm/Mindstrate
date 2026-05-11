@@ -104,7 +104,7 @@ export class MindstrateSnapshotApi {
         },
       });
     } catch (err) {
-      console.warn(
+      this.services.logger.warn(
         `[Mindstrate] project snapshot embedding failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }

@@ -6,6 +6,7 @@
 
 import * as path from 'node:path';
 import * as os from 'node:os';
+import type { Logger } from './runtime/logger.js';
 
 export interface MindstrateConfig {
   /** 数据存储目录 */
@@ -86,6 +87,14 @@ export interface MindstrateConfig {
     requestDelayMs: number;
     requestTimeoutMs: number;
   };
+
+  /**
+   * Optional logger for runtime warnings/errors. Library code never writes
+   * to stdio directly; when omitted, diagnostics are silently dropped
+   * (`noopLogger`). CLI / web-ui / team-server install a console logger;
+   * mcp-server keeps the noop default to protect the JSON-RPC stream.
+   */
+  logger?: Logger;
 }
 
 /** 默认数据目录：用户 home 下的 .mindstrate */
@@ -151,6 +160,7 @@ export function loadConfig(overrides?: Partial<MindstrateConfig>): MindstrateCon
         ?? positiveIntegerEnv(process.env['MINDSTRATE_PROJECT_GRAPH_LLM_TIMEOUT_MS'])
         ?? 60000,
     },
+    logger: overrides?.logger,
   };
 }
 
