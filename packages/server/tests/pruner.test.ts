@@ -206,4 +206,30 @@ describe('Pruner', () => {
     expect(result.archiveCandidates).not.toContain(critical.id);
     expect(graphStore.getNodeById(critical.id)?.status).toBe(ContextNodeStatus.ACTIVE);
   });
+
+  it('never archives the LLM enrichment cache node, even when it looks like a stale snapshot', () => {
+    // The enrichment-cache writer always tags the node with
+    // `llm-enrichment-cache`. Pruning it would burn LLM tokens on every
+    // subsequent enrichment run, so the tag must be a hard exemption.
+    const cacheNode = graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'Project graph LLM enrichment cache',
+      content: 'inputHash: deadbeef',
+      tags: ['project-graph', 'llm-enrichment-cache'],
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 80,
+      metadata: { inputHash: 'deadbeef' },
+    });
+    graphStore.updateNode(cacheNode.id, {
+      lastAccessedAt: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString(),
+      accessCount: 0,
+    });
+
+    const result = pruner.prune({ project: 'mindstrate', apply: true });
+
+    expect(result.archiveCandidates).not.toContain(cacheNode.id);
+    expect(graphStore.getNodeById(cacheNode.id)?.status).toBe(ContextNodeStatus.ACTIVE);
+  });
 });

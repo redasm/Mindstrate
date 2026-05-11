@@ -6,6 +6,7 @@ import {
   type ContextNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
+import { LLM_ENRICHMENT_CACHE_TAG } from '../project-graph/enrichment-cache.js';
 
 export interface PruneOptions {
   project?: string;
@@ -140,6 +141,12 @@ export class Pruner {
 
 function isProtected(node: ContextNode): boolean {
   if (node.status === ContextNodeStatus.VERIFIED) return true;
+  // The LLM enrichment cache is a SNAPSHOT-substrate node by storage shape,
+  // but logically it is bookkeeping for the project graph summarizer's
+  // idempotence check. Pruning it would force every subsequent enrichment
+  // run to re-spend tokens, so the tag is treated as a hard
+  // pruning-exemption signal.
+  if (node.tags?.includes(LLM_ENRICHMENT_CACHE_TAG)) return true;
   return node.metadata?.['pinned'] === true
     || node.metadata?.['critical'] === true
     || node.metadata?.['retentionPolicy'] === 'keep';
