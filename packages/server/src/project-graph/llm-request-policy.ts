@@ -13,6 +13,7 @@
 export interface ProjectGraphLlmRequestPolicy {
   factBatchSize?: number;
   requestDelayMs?: number;
+  requestTimeoutMs?: number;
 }
 
 const DEFAULT_FACT_BATCH_SIZE = 20;

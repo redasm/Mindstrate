@@ -77,12 +77,14 @@ export interface MindstrateConfig {
    * - `factBatchSize`: 每次发送给 LLM 的 extracted-fact 数量上限。
    * - `requestDelayMs`: 相邻 LLM 请求之间的最小间隔（全 process 队列），用于规避
    *   provider 的 TPS/TPM 配额（如 DashScope AllocationQuota）。
+   * - `requestTimeoutMs`: 单次 project graph LLM 请求超时。
    *
-   * 留空时使用内置默认值（batch=20，delay=1500ms）。
+   * 留空时使用内置默认值（batch=20，delay=1500ms，timeout=60000ms）。
    */
   projectGraphLlm: {
     factBatchSize: number;
     requestDelayMs: number;
+    requestTimeoutMs: number;
   };
 }
 
@@ -145,6 +147,9 @@ export function loadConfig(overrides?: Partial<MindstrateConfig>): MindstrateCon
       requestDelayMs: overrides?.projectGraphLlm?.requestDelayMs
         ?? nonNegativeIntegerEnv(process.env['MINDSTRATE_PROJECT_GRAPH_LLM_DELAY_MS'])
         ?? 1500,
+      requestTimeoutMs: overrides?.projectGraphLlm?.requestTimeoutMs
+        ?? positiveIntegerEnv(process.env['MINDSTRATE_PROJECT_GRAPH_LLM_TIMEOUT_MS'])
+        ?? 60000,
     },
   };
 }

@@ -14,6 +14,9 @@ describe('loadConfig — OpenAI-compatible provider settings', () => {
     'OPENAI_EMBEDDING_BASE_URL',
     'MINDSTRATE_EMBEDDING_MODEL',
     'MINDSTRATE_LLM_MODEL',
+    'MINDSTRATE_PROJECT_GRAPH_LLM_FACT_BATCH_SIZE',
+    'MINDSTRATE_PROJECT_GRAPH_LLM_DELAY_MS',
+    'MINDSTRATE_PROJECT_GRAPH_LLM_TIMEOUT_MS',
   ];
   const saved: Record<string, string | undefined> = {};
 
@@ -72,5 +75,19 @@ describe('loadConfig — OpenAI-compatible provider settings', () => {
     const cfg = loadConfig();
     expect('openaiBaseUrl' in cfg).toBe(true);
     expect(cfg.openaiBaseUrl).toBeUndefined();
+  });
+
+  it('reads project graph LLM throttling and timeout settings', () => {
+    process.env['MINDSTRATE_PROJECT_GRAPH_LLM_FACT_BATCH_SIZE'] = '10';
+    process.env['MINDSTRATE_PROJECT_GRAPH_LLM_DELAY_MS'] = '6000';
+    process.env['MINDSTRATE_PROJECT_GRAPH_LLM_TIMEOUT_MS'] = '30000';
+
+    const cfg = loadConfig();
+
+    expect(cfg.projectGraphLlm).toEqual({
+      factBatchSize: 10,
+      requestDelayMs: 6000,
+      requestTimeoutMs: 30000,
+    });
   });
 });

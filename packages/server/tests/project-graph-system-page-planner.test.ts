@@ -104,6 +104,25 @@ describe('project graph LLM system page planner', () => {
     })).resolves.toBeNull();
   });
 
+  it('uses request policy to bound system page payloads and timeout', async () => {
+    let payload = '';
+    let timeout: number | undefined;
+
+    await planProjectGraphSystemPagesWithLlm({
+      client: fakeChatClient(JSON.stringify({ pages: [] }), (body, options) => {
+        payload = String(body.messages[1]?.content ?? '');
+        timeout = options?.timeout;
+      }),
+      model: 'test-model',
+      project: { name: 'planner-demo', root: process.cwd(), dependencies: [], entryPoints: [] } as never,
+      requestPolicy: { factBatchSize: 10, requestDelayMs: 0, requestTimeoutMs: 30000 },
+      extractedNodes: Array.from({ length: 30 }, (_, index) => projectGraphNode(`src/file-${index}.ts`)),
+    });
+
+    expect(JSON.parse(payload).facts).toHaveLength(10);
+    expect(timeout).toBe(30000);
+  });
+
   it('writes planned pages through the Obsidian projection fallback boundary', async () => {
     const root = createTempDir('mindstrate-project-graph-planned-pages-');
     const dataDir = createTempDir('mindstrate-project-graph-planned-pages-data-');
@@ -174,13 +193,19 @@ const projectGraphNode = (filePath: string): ContextNode => ({
   },
 });
 
-const fakeChatClient = (content: string): OpenAIClient => ({
+const fakeChatClient = (
+  content: string,
+  onCreate?: (body: { messages: Array<{ content?: string }> }, options?: { timeout?: number }) => void,
+): OpenAIClient => ({
   embeddings: {
     create: async () => ({ data: [] }),
   },
   chat: {
     completions: {
-      create: async () => ({ choices: [{ message: { content } }] }),
+      create: async (body, options) => {
+        onCreate?.(body as { messages: Array<{ content?: string }> }, options as { timeout?: number });
+        return { choices: [{ message: { content } }] };
+      },
     },
   },
 });
