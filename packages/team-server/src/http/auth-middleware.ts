@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { RequestHandler } from 'express';
 
 export type TeamScope = 'read' | 'write' | 'admin';
@@ -24,13 +24,18 @@ declare global {
   }
 }
 
-const safeCompare = (left: string, right: string): boolean => {
-  if (left.length !== right.length) {
-    timingSafeEqual(Buffer.from(left), Buffer.from(left));
-    return false;
-  }
-
-  return timingSafeEqual(Buffer.from(left), Buffer.from(right));
+/**
+ * Constant-time string compare that does not leak the length of either side.
+ *
+ * Both inputs are first folded into a fixed-size SHA-256 digest so the
+ * subsequent `timingSafeEqual` always operates on equal-length buffers and
+ * its runtime is independent of attacker-controlled input length and of the
+ * configured key length.
+ */
+export const safeCompare = (left: string, right: string): boolean => {
+  const a = createHash('sha256').update(left).digest();
+  const b = createHash('sha256').update(right).digest();
+  return timingSafeEqual(a, b);
 };
 
 const readBearerToken = (authorization: string | undefined): string | undefined => (
