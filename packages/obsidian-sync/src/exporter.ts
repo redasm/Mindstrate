@@ -21,6 +21,7 @@
  */
 
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   type GraphKnowledgeView,
   type Mindstrate,
@@ -31,7 +32,7 @@ import {
   computeBodyHash,
 } from './markdown.js';
 import { errorMessage, readTextIfExists } from './file-io.js';
-import { VaultLayout, type VaultIndex } from './vault-layout.js';
+import { META_FOLDER, VaultLayout, type VaultIndex } from './vault-layout.js';
 
 /**
  * Architecture system-page RULE nodes carry this tag. They have an
@@ -127,6 +128,17 @@ export class VaultExporter {
         }
       }
     }
+
+    // Sweep for previously-exported architecture system pages whose
+    // tracking entries are missing from the index (e.g. the index was
+    // rewritten by an older code path or got out of sync). Without this,
+    // a damaged vault keeps `<title>--<idHash>.md` siblings of the
+    // canonical `00-overview.md` ... pages forever, since the orphan
+    // pass above only deletes files we still have an id mapping for.
+    const sweptOrphans = pruneStaleSystemPageExports(this.layout, newIndex, (err) => {
+      result.errors.push({ id: 'system-page-orphan', error: errorMessage(err) });
+    });
+    result.removed += sweptOrphans;
 
     this.layout.saveIndex(newIndex);
     if (!this.silent) {
@@ -237,4 +249,94 @@ function writeFileAtomically(filePath: string, text: string): void {
   const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   fs.writeFileSync(tmpPath, text, 'utf8');
   fs.renameSync(tmpPath, filePath);
+}
+
+/**
+ * Frontmatter id prefixes whose presence in a `<title>--<idHash>.md`
+ * file proves it was emitted by a previous broken architecture export
+ * (either the deprecated `obsidian-architecture:*` importer or the
+ * pre-fix system-page export). They are safe to delete because:
+ *   - Both id namespaces are owned by Mindstrate and never produced by
+ *     a human.
+ *   - The canonical replacements (`<NN>-overview.md`, ..., the system
+ *     page files) live in the same directory.
+ *
+ * We deliberately do NOT prune by filename pattern alone: a real
+ * project might have a knowledge file that happens to look like
+ * `note--abcdef0123ab.md`. Frontmatter id is the strict guard.
+ */
+const STALE_ARCHITECTURE_ID_PREFIXES = [
+  'architecture:system-page:',
+  'obsidian-architecture:',
+];
+
+const SYSTEM_PAGE_FILENAME_PATTERN = /--[a-f0-9]{12}\.md$/i;
+
+/**
+ * Walk every `<vault>/<project>/architecture/` directory and delete
+ * files that look like architecture-page exports AND whose frontmatter
+ * id confirms they came from one of the known stale exporters. Skips
+ * any path currently tracked by `liveIndex.files` so the active export
+ * cycle is never disturbed. Returns the number of files removed.
+ */
+function pruneStaleSystemPageExports(
+  layout: VaultLayout,
+  liveIndex: VaultIndex,
+  onError: (err: unknown) => void,
+): number {
+  const root = layout.root;
+  if (!fs.existsSync(root)) return 0;
+
+  const liveAbsolutePaths = new Set<string>();
+  for (const rel of Object.values(liveIndex.files)) {
+    liveAbsolutePaths.add(layout.absolutePath(rel));
+  }
+
+  let removed = 0;
+  let projectEntries: fs.Dirent[];
+  try {
+    projectEntries = fs.readdirSync(root, { withFileTypes: true });
+  } catch (err) {
+    onError(err);
+    return 0;
+  }
+
+  for (const projectEntry of projectEntries) {
+    if (!projectEntry.isDirectory()) continue;
+    if (projectEntry.name === META_FOLDER) continue;
+    const architectureDir = path.join(root, projectEntry.name, 'architecture');
+    if (!fs.existsSync(architectureDir) || !fs.statSync(architectureDir).isDirectory()) continue;
+
+    let pageEntries: fs.Dirent[];
+    try {
+      pageEntries = fs.readdirSync(architectureDir, { withFileTypes: true });
+    } catch (err) {
+      onError(err);
+      continue;
+    }
+
+    for (const pageEntry of pageEntries) {
+      if (!pageEntry.isFile()) continue;
+      if (!SYSTEM_PAGE_FILENAME_PATTERN.test(pageEntry.name)) continue;
+
+      const abs = path.join(architectureDir, pageEntry.name);
+      if (liveAbsolutePaths.has(abs)) continue;
+
+      try {
+        const text = readTextIfExists(abs);
+        if (!text) continue;
+        const parsed = parseMarkdown(text);
+        const id = parsed?.frontmatter.id;
+        if (!id) continue;
+        if (!STALE_ARCHITECTURE_ID_PREFIXES.some((prefix) => id.startsWith(prefix))) continue;
+
+        fs.unlinkSync(abs);
+        removed++;
+      } catch (err) {
+        onError(err);
+      }
+    }
+  }
+
+  return removed;
 }

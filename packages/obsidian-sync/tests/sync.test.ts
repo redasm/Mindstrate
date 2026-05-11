@@ -363,4 +363,81 @@ describe('SyncManager (integration)', () => {
       removeTempDir(projectRoot);
     }
   });
+
+  it('cleans up untracked stale architecture exports left by an older code path', async () => {
+    // Simulate a vault that was previously polluted by a broken
+    // exporter: the filesystem holds `<title>--<idHash>.md` siblings
+    // of the canonical system pages, but `_meta/index.json` does NOT
+    // know about them (the orphan-removal branch in `exportAll`
+    // therefore cannot reach them). The prune sweep must still remove
+    // them as long as their frontmatter id confirms they came from
+    // one of the deprecated architecture exporters.
+    const architectureDir = path.join(vaultDir, 'demo-untracked', 'architecture');
+    fs.mkdirSync(architectureDir, { recursive: true });
+    fs.mkdirSync(path.join(vaultDir, '_meta'), { recursive: true });
+    fs.writeFileSync(path.join(vaultDir, '_meta', 'index.json'), JSON.stringify({
+      files: {},
+      projectGraphPages: {},
+      version: 1,
+    }), 'utf8');
+
+    // A stale file from the deprecated `obsidian-architecture:*` importer.
+    fs.writeFileSync(path.join(architectureDir, 'high-risk-files--abcdef012345.md'), [
+      '---',
+      'id: obsidian-architecture:demo-untracked:client-architecture-07-md',
+      'type: architecture',
+      'tags:',
+      '  - architecture',
+      'status: verified',
+      '---',
+      '# 高风险文件',
+      'stale body',
+      '',
+    ].join('\n'), 'utf8');
+
+    // A stale file from the pre-fix system-page export.
+    fs.writeFileSync(path.join(architectureDir, 'overview--0123456789ab.md'), [
+      '---',
+      'id: architecture:system-page:demo-untracked:00-overview',
+      'type: architecture',
+      'tags:',
+      '  - architecture',
+      '  - system-page',
+      'status: verified',
+      '---',
+      '# Overview',
+      'stale body',
+      '',
+    ].join('\n'), 'utf8');
+
+    // A user-authored note that happens to match the filename pattern.
+    // It must NOT be deleted: its id does not start with one of the
+    // known stale exporter prefixes.
+    fs.writeFileSync(path.join(architectureDir, 'design-decision--112233445566.md'), [
+      '---',
+      'id: user:design:my-note',
+      'type: architecture',
+      'tags:',
+      '  - architecture',
+      'status: verified',
+      '---',
+      '# Personal architecture note',
+      'human-written content',
+      '',
+    ].join('\n'), 'utf8');
+
+    // A stray markdown file with no frontmatter must also be left alone.
+    fs.writeFileSync(path.join(architectureDir, 'random-note--ffffffffffff.md'), '# just a note\n', 'utf8');
+
+    const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+    await sync.exportAll();
+
+    const remaining = fs.readdirSync(architectureDir).sort();
+    // The two stale architecture exports are gone; the user note and
+    // the no-frontmatter file remain untouched.
+    expect(remaining).toContain('design-decision--112233445566.md');
+    expect(remaining).toContain('random-note--ffffffffffff.md');
+    expect(remaining).not.toContain('high-risk-files--abcdef012345.md');
+    expect(remaining).not.toContain('overview--0123456789ab.md');
+  });
 });
