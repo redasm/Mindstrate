@@ -53,6 +53,7 @@ import { lspDiagnosticCommand } from './commands/lsp-diagnostic.js';
 import { testResultCommand } from './commands/test-result.js';
 import { terminalOutputCommand } from './commands/terminal-output.js';
 import { vaultCommand } from './commands/vault.js';
+import { systemPagesCommand } from './commands/system-pages.js';
 
 const program = new Command();
 
@@ -74,6 +75,7 @@ program.addCommand(setupMcpCommand);
 program.addCommand(webCommand);
 program.addCommand(maintainCommand);
 program.addCommand(vaultCommand);
+program.addCommand(systemPagesCommand);
 program.addCommand(contextGraphCommand);
 program.addCommand(conflictsCommand);
 program.addCommand(metabolismCommand);

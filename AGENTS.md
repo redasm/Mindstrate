@@ -63,7 +63,8 @@ Mindstrate 当前处于允许 breaking changes 的开发阶段。实施时优先
 
 - `mindstrate setup` / `mindstrate init` 会把项目架构总览（00-总览到 07-高风险文件）写到 Obsidian vault 的 `<vault>/<project>/architecture/` 下，**同时**把每页内化为 `RULE` + `ARCHITECTURE` 的 ECS 节点（id 形如 `architecture:system-page:<project>:<page-key>`），由 MCP `context_assemble` / `query_project_graph_task before-edit` / `search_graph_knowledge` 自动召回。
 - 如果对项目尚不熟悉、或要改 C++ 反射 / UnrealSharp 生成 / TypeScript bindings / `.uproject` / `.uplugin` / `*.Build.cs` / `Content/**` / `Config/**`，先调用 `mindstrate_search_graph_knowledge` 或读 `<vault>/<project>/architecture/` 下的页，再开始编辑。
-- 改了架构页之后，下一次 `setup` / `init` 会自动把新的 `metadata`（`classifications`、`knownConstraints`、`doNotEditTargets`、`affectedChain`、`recommendedVerification`）刷进 ECS RULE 节点；不需要手动再 import。
+- 改了架构页之后，下一次 `setup` / `init` 会自动把新的 `metadata`（`classifications`、`knownConstraints`、`doNotEditTargets`、`affectedChain`、`sourceOfTruth`、`recommendedVerification`）刷进 ECS RULE 节点；不需要手动再 import。
+- 业务系统级（战斗、UI、地图、配置、资源加载、网络等）规则**项目自己补**：在 `<project>/.mindstrate/system-pages/` 下放 JSON 文件，下次 `setup` / `init` 会自动把它们和内置 8 页一起内化为 RULE 节点。`mindstrate system-pages init <key>` 帮你生成模板（含 `classifications` / `knownConstraints` / `doNotEditTargets` / `sourceOfTruth` / `recommendedVerification` 字段）。`mindstrate system-pages list` 查看现有自定义页。
 
 ## 验证要求
 

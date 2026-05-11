@@ -142,7 +142,7 @@ const analyzeProjectGraphTask = (input: ProjectGraphTaskReportInput): ProjectGra
     classifications,
     constraints: mergeUnique(fromSystemPages.knownConstraints, taskConstraints(classifications)),
     affectedChains: mergeUnique(fromSystemPages.affectedChains, affectedChains(classifications)),
-    sourceOfTruth: sourceOfTruth(classifications),
+    sourceOfTruth: mergeUnique(fromSystemPages.sourceOfTruth, sourceOfTruth(classifications)),
     doNotEdit: mergeUnique(fromSystemPages.doNotEditTargets, doNotEditTargets(classifications)),
     requiredSearches: requiredSearches(classifications),
     recommendedVerification: mergeUnique(fromSystemPages.recommendedVerification, recommendedVerification(classifications)),
@@ -155,6 +155,7 @@ interface SystemPageContributions {
   knownConstraints: string[];
   doNotEditTargets: string[];
   affectedChains: string[];
+  sourceOfTruth: string[];
   recommendedVerification: string[];
 }
 
@@ -166,6 +167,7 @@ const collectSystemPageContributions = (
     knownConstraints: [],
     doNotEditTargets: [],
     affectedChains: [],
+    sourceOfTruth: [],
     recommendedVerification: [],
   };
   if (systemPageRules.length === 0) return result;
@@ -184,6 +186,7 @@ const collectSystemPageContributions = (
     if (ruleClassifications.length > 0) {
       pushAll(result.knownConstraints, readStringArray(metadata['knownConstraints']));
       pushAll(result.doNotEditTargets, readStringArray(metadata['doNotEditTargets']));
+      pushAll(result.sourceOfTruth, readStringArray(metadata['sourceOfTruth']));
       const chain = metadata['affectedChain'];
       if (typeof chain === 'string' && chain.length > 0) result.affectedChains.push(chain);
     }

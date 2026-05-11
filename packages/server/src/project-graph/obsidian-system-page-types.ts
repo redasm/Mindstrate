@@ -49,6 +49,13 @@ export interface SystemPageMetadata {
   doNotEditTargets?: string[];
   /** Sentence pasted into "Affected Chains". */
   affectedChain?: string;
+  /**
+   * Sentences pasted into "Source Of Truth". When present, the
+   * project-specific phrasing wins over the generic
+   * "Exact source file and its direct callers/importers." fallback
+   * computed from `classifications` alone.
+   */
+  sourceOfTruth?: string[];
   /** Sentences pasted into "Recommended Verification". */
   recommendedVerification?: string[];
   /** Free-form tags appended to the internalized RULE node. */
@@ -70,4 +77,11 @@ export interface SystemPageDefinition {
    * before-edit / impact reports.
    */
   metadata?: SystemPageMetadata;
+  /**
+   * Custom pages loaded from `<project>/.mindstrate/system-pages/*.json`
+   * remember the source filename so error messages and CLI output can
+   * point a human back to the right file. Built-in pages leave it
+   * undefined.
+   */
+  sourceFile?: string;
 }

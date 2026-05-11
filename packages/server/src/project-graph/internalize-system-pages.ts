@@ -154,6 +154,7 @@ const renderSystemPageRule = (projectName: string, page: SystemPageDefinition): 
   if (pageMetadata.knownConstraints?.length) metadata['knownConstraints'] = pageMetadata.knownConstraints;
   if (pageMetadata.doNotEditTargets?.length) metadata['doNotEditTargets'] = pageMetadata.doNotEditTargets;
   if (pageMetadata.affectedChain) metadata['affectedChain'] = pageMetadata.affectedChain;
+  if (pageMetadata.sourceOfTruth?.length) metadata['sourceOfTruth'] = pageMetadata.sourceOfTruth;
   if (pageMetadata.recommendedVerification?.length) metadata['recommendedVerification'] = pageMetadata.recommendedVerification;
 
   return {

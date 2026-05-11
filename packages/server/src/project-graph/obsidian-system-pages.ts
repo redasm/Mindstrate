@@ -19,6 +19,7 @@ import type { DetectedProject } from '../project/index.js';
 import { enSystemPageDefinitions } from './obsidian-system-pages-en.js';
 import { zhSystemPageDefinitions } from './obsidian-system-pages-zh.js';
 import type { SystemPageDefinition } from './obsidian-system-page-types.js';
+import { loadCustomSystemPages, mergeSystemPages } from './custom-system-pages.js';
 import { writeProjectGraphTextFileAtomically } from './project-graph-file-io.js';
 import { importProjectGraphOverlayBlock } from './project-graph-overlay-import.js';
 import { preserveProjectGraphBlock } from './project-graph-report-shared.js';
@@ -31,22 +32,27 @@ export interface WrittenSystemPage {
 
 export const systemPageDefinitionsForProject = (project: DetectedProject): SystemPageDefinition[] => {
   const generatedRoots = project.graphHints?.generatedRoots ?? ['Binaries', 'Intermediate', 'Saved', 'DerivedDataCache', 'TypeScript/Typing'];
-  return resolveProjectGraphLocale() === 'zh'
+  const builtIn = resolveProjectGraphLocale() === 'zh'
     ? zhSystemPageDefinitions(project, generatedRoots)
     : enSystemPageDefinitions(project, generatedRoots);
+  const custom = loadCustomSystemPages(project);
+  return mergeSystemPages(builtIn, custom);
 };
 
 /**
  * Names of every Markdown page the system-page writer is allowed to touch
- * for `projectSlug`. Derived from the locale generators at call time so
- * adding/renaming a page in `obsidian-system-pages-{en,zh}.ts` is picked up
- * here without a second hardcoded list to keep in sync.
+ * for `projectSlug`. Derived from the locale generators **plus** any
+ * custom pages from `<project>/.mindstrate/system-pages/`, so renaming
+ * a page in either source is picked up here without a second hardcoded
+ * list to keep in sync.
  */
 export const knownSystemPageNames = (project: DetectedProject): Set<string> => {
   const generatedRoots = project.graphHints?.generatedRoots ?? [];
+  const custom = loadCustomSystemPages(project);
   return new Set([
     ...enSystemPageDefinitions(project, generatedRoots).map((page) => page.name),
     ...zhSystemPageDefinitions(project, generatedRoots).map((page) => page.name),
+    ...custom.map((page) => page.name),
   ]);
 };
 

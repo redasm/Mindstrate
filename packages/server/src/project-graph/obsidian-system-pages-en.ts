@@ -82,6 +82,11 @@ export const enSystemPageDefinitions = (
           'Build.cs changes can alter public/private module dependencies and Runtime/Editor boundaries.',
         ],
         affectedChain: '.uproject/.uplugin -> module declaration -> Build.cs dependencies -> module load phase -> runtime/editor target.',
+        sourceOfTruth: [
+          '.uproject for project-level enabled plugins and module declarations.',
+          '.uplugin for plugin module type, loading phase, and plugin dependency declarations.',
+          '*.Build.cs for module-level public/private C++ dependencies.',
+        ],
         recommendedVerification: [
           'Validate editor/runtime startup with the changed plugin set.',
           'Unreal build compile for the affected target.',
@@ -123,6 +128,9 @@ export const enSystemPageDefinitions = (
         ],
         doNotEditTargets: ['TypeScript/Typing'],
         affectedChain: 'C++ UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY -> UHT reflection -> UnrealSharp generator -> TypeScript/Typing -> TypeScript consumers.',
+        sourceOfTruth: [
+          'C++ reflection source (UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY) and UnrealSharp generator/configuration.',
+        ],
         recommendedVerification: [
           'Run UnrealSharp/type generation and inspect generated declarations.',
           'Run TypeScript type check or the project script validation.',
@@ -164,6 +172,10 @@ export const enSystemPageDefinitions = (
           'Public dependencies of an editor module from a runtime module.',
         ],
         affectedChain: '.uplugin module declaration -> Build.cs public/private dependencies -> module load phase -> runtime/editor target.',
+        sourceOfTruth: [
+          '.uplugin module declarations (module type, loading phase, plugin dependencies).',
+          'Owning *.Build.cs for the actual public/private C++ dependency surface.',
+        ],
         recommendedVerification: [
           'Validate editor/runtime startup with the changed plugin set.',
           'Unreal build compile for the affected target.',
@@ -200,6 +212,9 @@ export const enSystemPageDefinitions = (
         ],
         doNotEditTargets: generatedRoots,
         affectedChain: 'Generator source/config -> generated output under one of the generated roots -> downstream consumers.',
+        sourceOfTruth: [
+          'The generator source code, configuration, or upstream input that produces files under the generated roots.',
+        ],
         recommendedVerification: [
           'Re-run the generator (UnrealSharp/UHT/build) and inspect the diff in the generated root.',
         ],
@@ -267,6 +282,9 @@ export const enSystemPageDefinitions = (
           'For known change types, follow the playbook before editing rather than relying on local file context only.',
         ],
         affectedChain: 'Targeted change -> playbook step list -> verification command set.',
+        sourceOfTruth: [
+          'The change-type playbook step list (this page) plus the system page that owns the change subject.',
+        ],
         recommendedVerification: [
           'Follow the playbook step ordering exactly; do not skip the verification step.',
         ],
@@ -306,6 +324,9 @@ export const enSystemPageDefinitions = (
           'TypeScript/Typing (generated; edit upstream reflection or generator)',
           'Content/** (path-sensitive; use Unreal-aware rename)',
           'Config/** (subsystem-sensitive; verify config load)',
+        ],
+        sourceOfTruth: [
+          'For each high-risk target, see the matching system page (01 runtime-lifecycle, 02 cpp-typescript-bridge, 03 plugin-boundaries, 04 generated-files).',
         ],
         recommendedVerification: [
           'Before editing a high-risk target, run impact analysis through the project graph.',

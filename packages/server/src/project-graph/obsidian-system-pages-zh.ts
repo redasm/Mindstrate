@@ -81,6 +81,11 @@ export const zhSystemPageDefinitions = (
           'Build.cs 变更可能改变 public/private 模块依赖和 Runtime/Editor 边界。',
         ],
         affectedChain: '.uproject/.uplugin -> 模块声明 -> Build.cs 依赖 -> 模块加载阶段 -> runtime/editor target。',
+        sourceOfTruth: [
+          '.uproject 用于项目级启用插件和模块声明。',
+          '.uplugin 用于插件模块类型、加载阶段和插件依赖声明。',
+          '*.Build.cs 用于模块级 public/private C++ 依赖。',
+        ],
         recommendedVerification: [
           '验证编辑器/运行时启动后插件集合行为符合预期。',
           '运行受影响 target 的 Unreal build compile。',
@@ -122,6 +127,9 @@ export const zhSystemPageDefinitions = (
         ],
         doNotEditTargets: ['TypeScript/Typing'],
         affectedChain: 'C++ UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY -> UHT 反射 -> UnrealSharp generator -> TypeScript/Typing -> TypeScript consumers。',
+        sourceOfTruth: [
+          'C++ 反射源（UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY）以及 UnrealSharp generator/configuration。',
+        ],
         recommendedVerification: [
           '运行 UnrealSharp/类型生成并检查生成声明。',
           '运行 TypeScript 类型检查或项目脚本验证。',
@@ -163,6 +171,10 @@ export const zhSystemPageDefinitions = (
           'Runtime 模块对 editor 模块的 public 依赖。',
         ],
         affectedChain: '.uplugin 模块声明 -> Build.cs public/private 依赖 -> 模块加载阶段 -> runtime/editor target。',
+        sourceOfTruth: [
+          '.uplugin 模块声明（模块类型、加载阶段、插件依赖）。',
+          '所属 *.Build.cs 中实际的 public/private C++ 依赖面。',
+        ],
         recommendedVerification: [
           '验证编辑器/运行时启动后插件集合行为符合预期。',
           '运行受影响 target 的 Unreal build compile。',
@@ -199,6 +211,9 @@ export const zhSystemPageDefinitions = (
         ],
         doNotEditTargets: generatedRoots,
         affectedChain: 'Generator 源/配置 -> 生成根目录下的输出 -> 下游消费方。',
+        sourceOfTruth: [
+          '产出生成根目录文件的 generator 源代码、配置或上游输入。',
+        ],
         recommendedVerification: [
           '重跑 generator (UnrealSharp/UHT/build) 并检查生成根目录的差异。',
         ],
@@ -262,6 +277,9 @@ export const zhSystemPageDefinitions = (
           '对已知变更类型，应先按 playbook 执行，而不是只依赖局部文件上下文。',
         ],
         affectedChain: '目标变更 -> playbook 步骤列表 -> 验证命令集合。',
+        sourceOfTruth: [
+          '变更类型 playbook 步骤列表（本页）以及拥有该变更主题的对应系统页。',
+        ],
         recommendedVerification: [
           '严格按 playbook 顺序执行，不要跳过验证步骤。',
         ],
@@ -301,6 +319,9 @@ export const zhSystemPageDefinitions = (
           'TypeScript/Typing（生成输出；改上游反射或 generator）',
           'Content/**（路径敏感；用 Unreal-aware rename）',
           'Config/**（子系统敏感；验证配置加载）',
+        ],
+        sourceOfTruth: [
+          '每个高风险目标的 source of truth 见对应系统页（01 运行时生命周期、02 cpp-typescript 桥接、03 插件边界、04 生成文件）。',
         ],
         recommendedVerification: [
           '编辑高风险目标前，先通过 project graph 跑影响面分析。',

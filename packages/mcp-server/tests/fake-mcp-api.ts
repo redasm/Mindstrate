@@ -216,6 +216,7 @@ interface SystemPageRuleFixtureOptions {
   doNotEditTargets?: string[];
   affectedChain?: string;
   recommendedVerification?: string[];
+  sourceOfTruth?: string[];
 }
 
 /**
@@ -251,5 +252,6 @@ export const systemPageRule = (input: SystemPageRuleFixtureOptions): ContextNode
     doNotEditTargets: input.doNotEditTargets,
     affectedChain: input.affectedChain,
     recommendedVerification: input.recommendedVerification,
+    sourceOfTruth: input.sourceOfTruth,
   },
 });

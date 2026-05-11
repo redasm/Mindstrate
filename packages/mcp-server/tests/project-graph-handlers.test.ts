@@ -357,4 +357,36 @@ describe('handleProjectGraphTaskQuery system-page metadata integration', () => {
 
     expect(response.content[0].text).toContain('Select validation commands from the affected chain.');
   });
+
+  it('reports a project-specific Source Of Truth from system-page metadata when available', async () => {
+    // Reproduces Gap B from the post-rollout review: a query for
+    // "TypeScript/Typing" used to receive only the generic fallback
+    // ("Exact source file and its direct callers/importers.") even
+    // when the cpp-typescript-bridge system page rule was loaded,
+    // because `analyzeProjectGraphTask` did not thread system-page
+    // `sourceOfTruth` through the merge step.
+    const api = createFakeMcpApi({
+      contextNodes: [],
+      contextEdges: [],
+      overlays: [],
+      systemPageRules: [systemPageRule({
+        pageKey: '02-cpp-typescript-bridge',
+        classifications: ['native-script-binding', 'generated-output', 'typescript-consumer'],
+        knownConstraints: ['Generated TypeScript declarations must be driven by C++ reflection metadata.'],
+        doNotEditTargets: ['TypeScript/Typing'],
+        sourceOfTruth: ['C++ reflection source or UnrealSharp generator/configuration.'],
+      })],
+    });
+
+    const response = await handleProjectGraphTaskQuery(api, { task: 'before-edit', query: 'TypeScript/Typing' });
+
+    const text = response.content[0].text;
+    // The do-not-edit target should be the project-specific one,
+    // pulled in through the metadata-merge path before any generic
+    // fallback that lists every generated root.
+    expect(text).toMatch(/### Do Not Edit Directly[\s\S]*TypeScript\/Typing/);
+    // Source Of Truth must include the project-specific sentence,
+    // not just the generic "Exact source file ..." fallback.
+    expect(text).toContain('C++ reflection source or UnrealSharp generator/configuration.');
+  });
 });
