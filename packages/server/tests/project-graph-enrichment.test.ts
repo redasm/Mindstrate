@@ -12,6 +12,7 @@ import {
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { Mindstrate } from '../src/mindstrate.js';
 import { enrichProjectGraph, summarizeProjectGraphWithLlm } from '../src/project-graph/enrichment.js';
+import { resetProjectGraphLlmRequestPolicyForTests } from '../src/project-graph/llm-request-policy.js';
 import type { OpenAIClient } from '../src/openai-client.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
@@ -20,6 +21,7 @@ describe('project graph LLM enrichment boundary', () => {
   let store: ContextGraphStore;
 
   beforeEach(() => {
+    resetProjectGraphLlmRequestPolicyForTests();
     tempDir = createTempDir('mindstrate-project-graph-enrichment-');
     store = new ContextGraphStore(path.join(tempDir, 'context-graph.db'));
   });
@@ -201,6 +203,7 @@ describe('project graph LLM enrichment boundary', () => {
       client,
       model: 'test-model',
       project: 'demo',
+      requestPolicy: { requestDelayMs: 0 },
       extractedNodes: [{
         id: 'pg:demo:file:src/App.tsx',
         substrateType: SubstrateType.SNAPSHOT,
@@ -257,6 +260,7 @@ describe('project graph LLM enrichment boundary', () => {
       client,
       model: 'test-model',
       project: 'demo',
+      requestPolicy: { requestDelayMs: 0 },
       extractedNodes: [projectGraphNode('src/App.tsx'), projectGraphNode('src/routes.ts')],
     });
 
@@ -272,23 +276,27 @@ describe('project graph LLM enrichment boundary', () => {
   });
 
   it('sends salient extracted facts to the LLM before applying the cap', async () => {
-    let payload = '';
+    const payloads: string[] = [];
     const client = fakeChatClient(JSON.stringify({ summaries: [] }), (content) => {
-      payload = content;
+      payloads.push(content);
     });
 
     await summarizeProjectGraphWithLlm({
       client,
       model: 'test-model',
       project: 'demo',
+      requestPolicy: { factBatchSize: 20, requestDelayMs: 0 },
       extractedNodes: [
         ...Array.from({ length: 80 }, (_, index) => projectGraphNode(`src/low-${index}.ts`, { accessCount: 0 })),
         projectGraphNode('src/App.tsx', { accessCount: 10, positiveFeedback: 5 }),
       ],
     });
 
-    const parsed = JSON.parse(payload) as { extractedFacts: Array<{ title: string }> };
-    const titles = parsed.extractedFacts.map((fact) => fact.title);
+    const titles = payloads.flatMap((payload) => {
+      const parsed = JSON.parse(payload) as { extractedFacts: Array<{ title: string }> };
+      return parsed.extractedFacts.map((fact) => fact.title);
+    });
+    expect(payloads).toHaveLength(4);
     expect(titles).toHaveLength(80);
     expect(titles).toContain('src/App.tsx');
     expect(titles.filter((title) => title.startsWith('src/low-'))).toHaveLength(79);

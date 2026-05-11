@@ -27,7 +27,7 @@ import {
   type ProjectGraphScanScope,
 } from '@mindstrate/server';
 import { writeMcpConfig } from './setup-mcp.js';
-import { writeProjectCliConfig } from '../cli-config.js';
+import { loadProjectEnv, writeProjectCliConfig } from '../cli-config.js';
 
 interface InitOptions {
   dataDir?: string;
@@ -63,6 +63,7 @@ export const initCommand = new Command('init')
         process.exit(1);
       }
       printDetected(project);
+      loadProjectEnv(project.root);
 
       // 2) Initialize the data store (default per-project under ./.mindstrate)
       const dataDir = options.dataDir ?? path.join(project.root, '.mindstrate');

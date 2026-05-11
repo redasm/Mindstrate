@@ -16,7 +16,14 @@ import {
   type MindstrateConfig,
 } from '@mindstrate/server';
 import { SyncManager, VaultLayout } from '@mindstrate/obsidian-sync';
-import { buildSetupPlan, writeProjectCliConfig, type SetupMode, type SetupTool } from '../cli-config.js';
+import {
+  buildSetupPlan,
+  loadProjectEnv,
+  upsertProjectEnv,
+  writeProjectCliConfig,
+  type SetupMode,
+  type SetupTool,
+} from '../cli-config.js';
 import { askOptional, chooseOption } from '../cli-wizard.js';
 import { buildProjectGraphAnalysisLines } from './init.js';
 import { writeMcpConfig } from './setup-mcp.js';
@@ -62,6 +69,7 @@ export const setupCommand = new Command('setup')
         process.exit(1);
       }
 
+      loadProjectEnv(project.root);
       printBanner(project.root);
 
       const experience = await readExperience(rl, options);
@@ -100,6 +108,7 @@ export const setupCommand = new Command('setup')
         return;
       }
 
+      const envPath = applySetupLlmEnvironment(project.root, llmEnv);
       const configPath = writeProjectCliConfig(project.root, {
         mode,
         tool,
@@ -131,6 +140,7 @@ export const setupCommand = new Command('setup')
 
       console.log('\nMindstrate ready:');
       console.log(`  Config:  ${configPath}`);
+      if (envPath) console.log(`  Env:     ${envPath}`);
       console.log(`  MCP:     ${mcp.generated.join(', ')}`);
       console.log(`  Server:  ${mcp.serverPath}`);
       if (mode === 'team' && (!teamServerUrl || !teamApiKey)) {
@@ -231,6 +241,13 @@ export function setupMindstrateConfig(
     llmModel: llmEnv?.['MINDSTRATE_LLM_MODEL'],
     embeddingModel: llmEnv?.['MINDSTRATE_EMBEDDING_MODEL'],
   };
+}
+
+export function applySetupLlmEnvironment(projectRoot: string, llmEnv: Record<string, string>): string | null {
+  if (Object.keys(llmEnv).length === 0) return null;
+  const envPath = upsertProjectEnv(projectRoot, llmEnv);
+  for (const [key, value] of Object.entries(llmEnv)) process.env[key] = value;
+  return envPath;
 }
 
 async function runLlmEnrichment(

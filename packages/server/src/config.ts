@@ -70,6 +70,20 @@ export interface MindstrateConfig {
 
   /** 是否在 add/update/delete 后自动写入 vault（默认 true，需先配置 obsidianVaultPath） */
   obsidianAutoSync?: boolean;
+
+  /**
+   * Project graph LLM 调用节流策略。
+   *
+   * - `factBatchSize`: 每次发送给 LLM 的 extracted-fact 数量上限。
+   * - `requestDelayMs`: 相邻 LLM 请求之间的最小间隔（全 process 队列），用于规避
+   *   provider 的 TPS/TPM 配额（如 DashScope AllocationQuota）。
+   *
+   * 留空时使用内置默认值（batch=20，delay=1500ms）。
+   */
+  projectGraphLlm: {
+    factBatchSize: number;
+    requestDelayMs: number;
+  };
 }
 
 /** 默认数据目录：用户 home 下的 .mindstrate */
@@ -124,5 +138,25 @@ export function loadConfig(overrides?: Partial<MindstrateConfig>): MindstrateCon
       ?? (process.env['OBSIDIAN_AUTO_SYNC']
         ? process.env['OBSIDIAN_AUTO_SYNC'] !== 'false'
         : true),
+    projectGraphLlm: {
+      factBatchSize: overrides?.projectGraphLlm?.factBatchSize
+        ?? positiveIntegerEnv(process.env['MINDSTRATE_PROJECT_GRAPH_LLM_FACT_BATCH_SIZE'])
+        ?? 20,
+      requestDelayMs: overrides?.projectGraphLlm?.requestDelayMs
+        ?? nonNegativeIntegerEnv(process.env['MINDSTRATE_PROJECT_GRAPH_LLM_DELAY_MS'])
+        ?? 1500,
+    },
   };
+}
+
+function positiveIntegerEnv(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function nonNegativeIntegerEnv(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }

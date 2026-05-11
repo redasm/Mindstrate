@@ -7,10 +7,15 @@ import {
 } from '@mindstrate/protocol/models';
 import type { OpenAIClient } from '../openai-client.js';
 import type { DetectedProject } from '../project/index.js';
+import { scheduleProjectGraphLlmRequest, type ProjectGraphLlmRequestPolicy } from './llm-request-policy.js';
 import { projectGraphLanguageInstruction, resolveProjectGraphLocale } from './project-graph-locale.js';
 import type { SystemPageDefinition } from './project-graph-obsidian-projection.js';
 
-const SYSTEM_PAGE_FACT_CAP = 80;
+// 单次发给 LLM 的 fact 上限。这里采用比 enrichment 默认 batch（20）略大的 40：
+// system page planner 一次性产出多页章节，必须看到足够多的 facts 才能聚类，但太大
+// 又会撞 DashScope AllocationQuota 等单请求 token 上限；40 是经验折中。
+// 如需更高质量，请配套提升 MindstrateConfig.projectGraphLlm.requestDelayMs。
+const SYSTEM_PAGE_FACT_CAP = 40;
 const SYSTEM_PAGE_TIMEOUT_MS = 120000;
 const MAX_PAGES = 10;
 const MAX_SECTIONS_PER_PAGE = 8;
@@ -22,6 +27,7 @@ export interface PlanProjectGraphSystemPagesWithLlmInput {
   project: DetectedProject;
   extractedNodes: ContextNode[];
   timeoutMs?: number;
+  requestPolicy?: ProjectGraphLlmRequestPolicy;
 }
 
 export const planProjectGraphSystemPagesWithLlm = async (
@@ -30,7 +36,7 @@ export const planProjectGraphSystemPagesWithLlm = async (
   const evidencePaths = collectEvidencePaths(input.extractedNodes);
   if (evidencePaths.size === 0) return null;
 
-  const response = await input.client.chat.completions.create({
+  const response = await scheduleProjectGraphLlmRequest(() => input.client.chat.completions.create({
     model: input.model,
     temperature: 0.1,
     max_tokens: 3000,
@@ -52,7 +58,7 @@ export const planProjectGraphSystemPagesWithLlm = async (
         content: renderSystemPagePlanningInput(input.project, input.extractedNodes),
       },
     ],
-  }, { timeout: input.timeoutMs ?? SYSTEM_PAGE_TIMEOUT_MS });
+  }, { timeout: input.timeoutMs ?? SYSTEM_PAGE_TIMEOUT_MS }), input.requestPolicy);
 
   const content = response.choices[0]?.message?.content;
   if (!content) return null;

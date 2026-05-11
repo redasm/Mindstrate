@@ -230,6 +230,7 @@ export class MindstrateContextGraphApi {
         domainType: ContextDomainType.ARCHITECTURE,
         limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
       }),
+      requestPolicy: this.services.config.projectGraphLlm,
     });
   }
 
@@ -295,6 +296,7 @@ export class MindstrateContextGraphApi {
         domainType: ContextDomainType.ARCHITECTURE,
         limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
       }),
+      requestPolicy: this.services.config.projectGraphLlm,
     });
   }
 }

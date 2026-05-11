@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { detectProject } from '@mindstrate/server';
-import { initializeLocalProject, setupMindstrateConfig } from './commands/setup.js';
+import { initializeLocalProject, applySetupLlmEnvironment, setupMindstrateConfig } from './commands/setup.js';
 
 test('initializeLocalProject writes the project graph to Obsidian when a vault is configured', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-'));
@@ -87,3 +87,46 @@ test('setupMindstrateConfig applies LLM values collected during setup', () => {
     embeddingModel: 'embedding-model',
   });
 });
+
+test('applySetupLlmEnvironment writes project env and updates current process', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-env-'));
+  const previousApiKey = process.env['OPENAI_API_KEY'];
+  const previousBaseUrl = process.env['OPENAI_BASE_URL'];
+  fs.writeFileSync(path.join(root, '.env'), 'CUSTOM_VALUE=kept\nOPENAI_API_KEY=old\n', 'utf8');
+
+  try {
+    const envPath = applySetupLlmEnvironment(root, {
+      OPENAI_API_KEY: 'new-key',
+      OPENAI_BASE_URL: 'https://llm.example/v1',
+    });
+
+    assert.equal(envPath, path.join(root, '.env'));
+    assert.equal(process.env['OPENAI_API_KEY'], 'new-key');
+    assert.equal(process.env['OPENAI_BASE_URL'], 'https://llm.example/v1');
+    assert.equal(fs.readFileSync(path.join(root, '.env'), 'utf8'), [
+      'CUSTOM_VALUE=kept',
+      'OPENAI_API_KEY=new-key',
+      '',
+      'OPENAI_BASE_URL=https://llm.example/v1',
+      '',
+    ].join('\n'));
+  } finally {
+    restoreEnv('OPENAI_API_KEY', previousApiKey);
+    restoreEnv('OPENAI_BASE_URL', previousBaseUrl);
+  }
+});
+
+test('applySetupLlmEnvironment returns null and does not write when llmEnv is empty', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-env-empty-'));
+  const envPath = path.join(root, '.env');
+
+  const result = applySetupLlmEnvironment(root, {});
+
+  assert.equal(result, null);
+  assert.equal(fs.existsSync(envPath), false);
+});
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
+}

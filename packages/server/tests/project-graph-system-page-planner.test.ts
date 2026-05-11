@@ -11,6 +11,7 @@ import {
 } from '@mindstrate/protocol/models';
 import { Mindstrate, detectProject } from '../src/index.js';
 import type { OpenAIClient } from '../src/openai-client.js';
+import { resetProjectGraphLlmRequestPolicyForTests } from '../src/project-graph/llm-request-policy.js';
 import { planProjectGraphSystemPagesWithLlm } from '../src/project-graph/system-page-planner.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
@@ -24,6 +25,7 @@ describe('project graph LLM system page planner', () => {
   let previousLocale: string | undefined;
 
   beforeEach(() => {
+    resetProjectGraphLlmRequestPolicyForTests();
     previousLocale = process.env['MINDSTRATE_LOCALE'];
     process.env['MINDSTRATE_LOCALE'] = 'en';
   });
@@ -60,6 +62,7 @@ describe('project graph LLM system page planner', () => {
       })),
       model: 'test-model',
       project: { name: 'planner-demo', root: process.cwd(), dependencies: [], entryPoints: [] } as never,
+      requestPolicy: { requestDelayMs: 0 },
       extractedNodes: [projectGraphNode('src/App.tsx')],
     });
 
@@ -81,6 +84,7 @@ describe('project graph LLM system page planner', () => {
       client: fakeChatClient('not json'),
       model: 'test-model',
       project: { name: 'planner-demo', root: process.cwd(), dependencies: [], entryPoints: [] } as never,
+      requestPolicy: { requestDelayMs: 0 },
       extractedNodes: [projectGraphNode('src/App.tsx')],
     })).resolves.toBeNull();
 
@@ -95,6 +99,7 @@ describe('project graph LLM system page planner', () => {
       })),
       model: 'test-model',
       project: { name: 'planner-demo', root: process.cwd(), dependencies: [], entryPoints: [] } as never,
+      requestPolicy: { requestDelayMs: 0 },
       extractedNodes: [projectGraphNode('src/App.tsx')],
     })).resolves.toBeNull();
   });

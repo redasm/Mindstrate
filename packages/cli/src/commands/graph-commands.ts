@@ -51,7 +51,7 @@ export const contextGraphCommand = new Command('graph')
 contextGraphCommand.command('report')
   .description('Regenerate PROJECT_GRAPH.md and .mindstrate/project-graph.json')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
-  .action(async (options) => withMemory('Graph report failed', async (memory) => {
+  .action(async (options) => withMemory('Graph report failed', options.cwd, async (memory) => {
     const project = detectProject(options.cwd ?? process.cwd());
     if (!project) throw new Error('Could not detect project.');
     const result = memory.context.writeProjectGraphArtifacts(project);
@@ -64,7 +64,7 @@ contextGraphCommand.command('report')
 contextGraphCommand.command('index')
   .description('Index the project graph with scan and extraction progress, then write artifacts')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
-  .action(async (options) => withMemory('Graph index failed', async (memory) => {
+  .action(async (options) => withMemory('Graph index failed', options.cwd, async (memory) => {
     const project = detectProject(options.cwd ?? process.cwd());
     if (!project) throw new Error('Could not detect project.');
     const result = memory.context.indexProjectGraph(project, {
@@ -84,8 +84,9 @@ contextGraphCommand.command('index')
 
 contextGraphCommand.command('stats')
   .description('Print project graph health and coverage stats')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('-p, --project <project>', 'Project scope')
-  .action(async (options) => withMemory('Graph stats failed', async (memory) => {
+  .action(async (options) => withMemory('Graph stats failed', options.cwd, async (memory) => {
     const nodes = projectGraphNodes(memory.context.listContextNodes({
       project: options.project,
       domainType: ContextDomainType.ARCHITECTURE,
@@ -100,8 +101,9 @@ contextGraphCommand.command('stats')
 
 contextGraphCommand.command('status')
   .description('Show canonical project graph location and projection status')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('-p, --project <project>', 'Project scope')
-  .action(async (options) => withMemory('Graph status failed', async (memory) => {
+  .action(async (options) => withMemory('Graph status failed', options.cwd, async (memory) => {
     const nodes = projectGraphNodes(memory.context.listContextNodes({
       project: options.project,
       domainType: ContextDomainType.ARCHITECTURE,
@@ -125,7 +127,7 @@ contextGraphCommand.command('sync')
   .option('--vault <path>', 'Obsidian vault path for local mode')
   .option('--team-server-url <url>', 'Team Server URL for team mode')
   .option('--team-api-key <key>', 'Team API key for team mode')
-  .action(async (options) => withMemory('Graph sync failed', async (memory) => {
+  .action(async (options) => withMemory('Graph sync failed', options.cwd, async (memory) => {
     const project = detectProject(path.resolve(options.cwd ?? process.cwd()));
     if (!project) throw new Error('Could not detect project.');
     const config = readProjectCliConfig(project.root);
@@ -157,9 +159,10 @@ contextGraphCommand.command('sync')
 
 contextGraphCommand.command('query <query>')
   .description('Search focused project graph nodes')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('-p, --project <project>', 'Project scope')
   .option('-l, --limit <number>', 'Maximum number of nodes', '10')
-  .action(async (query: string, options) => withMemory('Graph query failed', async (memory) => {
+  .action(async (query: string, options) => withMemory('Graph query failed', options.cwd, async (memory) => {
     printNodes(projectGraphNodes(memory.context.queryContextGraph({
       query,
       project: options.project,
@@ -170,8 +173,9 @@ contextGraphCommand.command('query <query>')
 
 contextGraphCommand.command('context <id>')
   .description('Show a bounded 360-degree view around a project graph node')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('-l, --limit <number>', 'Maximum neighbor edges', '20')
-  .action(async (id: string, options) => withMemory('Graph context failed', async (memory) => {
+  .action(async (id: string, options) => withMemory('Graph context failed', options.cwd, async (memory) => {
     const node = findProjectGraphNode(memory, id);
     if (!node) {
       console.log('No project graph node matched.');
@@ -188,9 +192,10 @@ contextGraphCommand.command('context <id>')
 
 contextGraphCommand.command('path <from> <to>')
   .description('Show the shortest bounded project graph path between two nodes')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('-p, --project <project>', 'Project scope')
   .option('-d, --max-depth <number>', 'Maximum path depth', '6')
-  .action(async (from: string, to: string, options) => withMemory('Graph path failed', async (memory) => {
+  .action(async (from: string, to: string, options) => withMemory('Graph path failed', options.cwd, async (memory) => {
     const result = findProjectGraphPath({
       nodes: memory.context.listContextNodes({ project: options.project, domainType: ContextDomainType.ARCHITECTURE, limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
       edges: memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
@@ -207,10 +212,11 @@ contextGraphCommand.command('path <from> <to>')
 
 contextGraphCommand.command('impact <id>')
   .description('Estimate project graph blast radius around a node')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('-p, --project <project>', 'Project scope')
   .option('-d, --depth <number>', 'Neighbor depth', '1')
   .option('-l, --limit <number>', 'Maximum affected nodes', '20')
-  .action(async (id: string, options) => withMemory('Graph impact failed', async (memory) => {
+  .action(async (id: string, options) => withMemory('Graph impact failed', options.cwd, async (memory) => {
     const result = estimateProjectGraphBlastRadius({
       nodes: memory.context.listContextNodes({ project: options.project, domainType: ContextDomainType.ARCHITECTURE, limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
       edges: memory.context.listContextEdges({ limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
@@ -230,12 +236,13 @@ contextGraphCommand.command('impact <id>')
 
 contextGraphCommand.command('task <task> [query]')
   .description('Run a task-oriented project graph query template')
+  .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('-p, --project <project>', 'Project scope')
   .option('-l, --limit <number>', 'Maximum graph items', '10')
   .option('--json', 'Also print compact JSON for agents')
-  .action(async (task: string, query: string | undefined, options) => withMemory('Graph task query failed', async (memory) => {
+  .action(async (task: string, query: string | undefined, options) => withMemory('Graph task query failed', options.cwd, async (memory) => {
     const graphTask = parseGraphTask(task);
-    const project = detectProject(process.cwd()) ?? undefined;
+    const project = detectProject(path.resolve(options.cwd ?? process.cwd())) ?? undefined;
     const result = queryProjectGraphTask({
       project,
       nodes: memory.context.listContextNodes({ project: options.project, domainType: ContextDomainType.ARCHITECTURE, limit: PROJECT_GRAPH_CLI_QUERY_LIMIT }),
@@ -270,7 +277,7 @@ contextGraphCommand.command('ingest')
   .description('Ingest external project graph input from repo-scanner or a custom collector')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .requiredOption('--changes <file>', 'Path to a ChangeSet JSON file, or - for stdin')
-  .action(async (options) => withMemory('Graph ingest failed', async (memory) => {
+  .action(async (options) => withMemory('Graph ingest failed', options.cwd, async (memory) => {
     const project = detectProject(options.cwd ?? process.cwd());
     if (!project) throw new Error('Could not detect project.');
     const result = memory.context.ingestProjectGraphChangeSet(project, parseExternalChangeSetJson(readTextInput(options.changes)));
@@ -285,7 +292,7 @@ contextGraphCommand.command('changes')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .option('--source <source>', 'Change source: manual or git', 'manual')
   .option('--files <files...>', 'Explicit changed files for manual source')
-  .action(async (options) => withMemory('Graph changes failed', async (memory) => {
+  .action(async (options) => withMemory('Graph changes failed', options.cwd, async (memory) => {
     const project = detectProject(options.cwd ?? process.cwd());
     if (!project) throw new Error('Could not detect project.');
     const source = parseChangeSource(options.source);
@@ -351,9 +358,10 @@ const collectGraphSafetyIssues = (
 
 const withMemory = async (
   failurePrefix: string,
+  cwd: string | undefined,
   work: (memory: ReturnType<typeof createMemory>) => Promise<void> | void,
 ): Promise<void> => {
-  const memory = createMemory();
+  const memory = createMemory(cwd ? path.resolve(cwd) : process.cwd());
   try {
     await memory.init();
     await work(memory);
