@@ -10,6 +10,14 @@
  *  - We only touch the file when Mindstrate's body actually differs from what's on disk
  *    (compared via bodyHash), to avoid unnecessary file writes that would trigger
  *    the watcher and create a sync ping-pong.
+ *
+ * What VaultExporter does NOT export:
+ *  - Architecture system-page RULE nodes (tag `system-page`). They are
+ *    already written under the same `<vault>/<project>/architecture/`
+ *    directory by `writeProjectGraphObsidianProjection` using human
+ *    friendly filenames (`00-overview.md` ... `07-risky-files.md`); if
+ *    the exporter also emitted them via the generic `<title>--<idHash>.md`
+ *    pattern, every architecture page would appear twice in the vault.
  */
 
 import * as fs from 'node:fs';
@@ -24,6 +32,18 @@ import {
 } from './markdown.js';
 import { errorMessage, readTextIfExists } from './file-io.js';
 import { VaultLayout, type VaultIndex } from './vault-layout.js';
+
+/**
+ * Architecture system-page RULE nodes carry this tag. They have an
+ * authoritative on-disk representation written by the server's
+ * `writeProjectGraphObsidianProjection` and must be skipped by the
+ * generic graph-knowledge exporter to avoid duplicate
+ * `<title>--<idHash>.md` files in the same architecture folder.
+ */
+export const SYSTEM_PAGE_TAG = 'system-page';
+
+export const isExportableGraphView = (view: GraphKnowledgeView): boolean =>
+  !view.tags.includes(SYSTEM_PAGE_TAG);
 
 export interface ExportResult {
   written: number;
@@ -73,6 +93,7 @@ export class VaultExporter {
     const desiredAbsPaths = new Set<string>();
 
     for (const k of all) {
+      if (!isExportableGraphView(k)) continue;
       try {
         const rel = this.layout.relativePathForGraphView(k);
         const oldRel = idx.files[k.id];
@@ -118,6 +139,7 @@ export class VaultExporter {
   }
 
   exportGraphView(k: GraphKnowledgeView): 'written' | 'skipped' | 'moved' {
+    if (!isExportableGraphView(k)) return 'skipped';
     this.layout.ensureRoot();
     const idx = this.layout.loadIndex();
     const rel = this.layout.relativePathForGraphView(k);

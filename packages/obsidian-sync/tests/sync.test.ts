@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Mindstrate, KnowledgeType, CaptureSource } from '@mindstrate/server';
+import { Mindstrate, KnowledgeType, CaptureSource, detectProject } from '@mindstrate/server';
 import { SyncManager, parseMarkdown, VaultLayout } from '../src/index.js';
 import { createTempDir, removeTempDir } from '../../../tests/support/index.js';
 
@@ -328,5 +328,39 @@ describe('SyncManager (integration)', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(memory.context.listContextNodes({ limit: 100 }).some((node) => node.id === r.view!.id)).toBe(true);
+  });
+
+  it('does not duplicate system-page architecture pages as <title>--<idHash>.md after exportAll', async () => {
+    // Reproduce the production flow: a vault has the canonical
+    // `<vault>/<project>/architecture/00-overview.md` ... `07-risky-files.md`
+    // pages written by `writeProjectGraphObsidianProjection`, which also
+    // internalizes them into `architecture:system-page:<project>:<key>`
+    // RULE nodes. A subsequent `sync.exportAll()` must NOT re-emit each
+    // RULE as `<title>--<idHash>.md`, otherwise the user sees duplicate
+    // architecture pages in the same folder.
+    const projectRoot = createTempDir('mindstrate-system-pages-project-');
+    try {
+      fs.writeFileSync(path.join(projectRoot, 'package.json'), JSON.stringify({ name: 'sync-system-pages-demo' }), 'utf8');
+      fs.mkdirSync(path.join(projectRoot, 'src'));
+      fs.writeFileSync(path.join(projectRoot, 'src', 'App.tsx'), 'export function App() { return <main />; }', 'utf8');
+      const project = detectProject(projectRoot)!;
+
+      memory.context.indexProjectGraph(project);
+      memory.context.writeProjectGraphObsidianProjection(project, vaultDir);
+
+      const sync = new SyncManager(memory, { vaultRoot: vaultDir, silent: true });
+      await sync.exportAll();
+
+      const architectureDir = path.join(vaultDir, 'sync-system-pages-demo', 'architecture');
+      const allFiles = fs.readdirSync(architectureDir);
+      const duplicateLike = allFiles.filter((name) => /--[a-f0-9]{12}\.md$/i.test(name));
+      // The on-disk system pages keep their human-friendly names
+      // (00-overview.md, 01-runtime-lifecycle.md, ...). The RULE nodes
+      // produced by `internalize-system-pages.ts` must NOT also be
+      // exported as `<slug>--<idHash>.md` siblings of the canonical files.
+      expect(duplicateLike.filter((name) => !name.startsWith('project-snapshot-'))).toEqual([]);
+    } finally {
+      removeTempDir(projectRoot);
+    }
   });
 });
