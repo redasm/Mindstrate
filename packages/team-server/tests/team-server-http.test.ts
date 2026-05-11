@@ -12,9 +12,9 @@ import {
   ProjectGraphOverlaySource,
   ProjectionTarget,
   SubstrateType,
-} from '../src/index.js';
-import { createApp } from '../../team-server/src/app.js';
-import { TeamClient } from '../../client/src/team-client.js';
+} from '@mindstrate/server';
+import { createApp } from '../src/app.js';
+import { TeamClient } from '@mindstrate/client';
 import { createTempDir, makeKnowledgeInput, removeTempDir } from './test-support.js';
 
 interface RunningTeamServer {
