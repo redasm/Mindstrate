@@ -180,7 +180,7 @@ const buildProjectGraphExtraction = (
     }
     for (const node of fileExtraction.nodes) addNode(nodes, node);
     for (const edge of fileExtraction.edges) addEdge(edges, edge);
-    emitIndexProgress(options.onIndexProgress, {
+    options.onIndexProgress?.({
       phase: 'extracting',
       filesProcessed: index + 1,
       filesTotal: files.length,
@@ -193,7 +193,7 @@ const buildProjectGraphExtraction = (
     });
   });
   addUnrealAssetRegistryFacts(project, nodes, edges);
-  emitIndexProgress(options.onIndexProgress, {
+  options.onIndexProgress?.({
     phase: 'binding',
     filesProcessed: files.length,
     filesTotal: files.length,
@@ -205,7 +205,7 @@ const buildProjectGraphExtraction = (
   });
   addBindingFacts(nodes, edges);
   addGeneratedBindingFacts(nodes, edges);
-  emitIndexProgress(options.onIndexProgress, {
+  options.onIndexProgress?.({
     phase: 'cache',
     filesProcessed: files.length,
     filesTotal: files.length,
@@ -226,13 +226,6 @@ const buildProjectGraphExtraction = (
     nodes: Array.from(nodes.values()),
     edges: Array.from(edges.values()),
   };
-};
-
-const emitIndexProgress = (
-  onIndexProgress: ProjectGraphIndexOptions['onIndexProgress'],
-  event: ProjectGraphIndexProgress,
-): void => {
-  onIndexProgress?.(event);
 };
 
 const extractFileFacts = (
@@ -400,38 +393,54 @@ const addSourceFacts = (
   edges: Map<string, ProjectGraphEdgeDto>,
 ): void => {
   for (const capture of captures) {
-    if (capture.name === 'import.source') {
-      addDependencyFact(project, filePath, stripQuotes(capture.text), nodes, edges, ProjectGraphEdgeKind.IMPORTS, capture);
-    } else if (capture.name === 'export.source') {
-      addDependencyFact(project, filePath, stripQuotes(capture.text), nodes, edges, ProjectGraphEdgeKind.EXPORTS, capture);
-    } else if (capture.name === 'function.name') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
-    } else if (capture.name === 'class.name') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
-    } else if (capture.name === 'call.function') {
-      addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
-    } else if (capture.name === 'react.component') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.COMPONENT, nodes, edges, capture);
-    } else if (capture.name === 'react.hook') {
-      addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.USES_HOOK, capture);
-    } else if (capture.name === 'unreal.class') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
-    } else if (capture.name === 'unreal.struct' || capture.name === 'unreal.enum') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.TYPE, nodes, edges, capture);
-    } else if (capture.name === 'unreal.function') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
-    } else if (capture.name === 'unreal.property') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CONFIG, nodes, edges, capture);
-    } else if (capture.name === 'script.import') {
-      addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.IMPORTS, capture);
-    } else if (capture.name === 'script.class') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.CLASS, nodes, edges, capture);
-    } else if (capture.name === 'script.function') {
-      addSymbolFact(project, filePath, capture.text, ProjectGraphNodeKind.FUNCTION, nodes, edges, capture);
-    } else if (capture.name === 'script.ue-call') {
-      addDependencyFact(project, filePath, capture.text, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
-    }
+    SOURCE_FACT_HANDLERS[capture.name]?.(project, filePath, capture, nodes, edges);
   }
+};
+
+type SourceFactHandler = (
+  project: DetectedProject,
+  filePath: string,
+  capture: ParserCapture,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+) => void;
+
+const dependencyHandler = (kind: ProjectGraphEdgeKind, options: { stripQuotes?: boolean } = {}): SourceFactHandler =>
+  (project, filePath, capture, nodes, edges) => {
+    const text = options.stripQuotes ? stripQuotes(capture.text) : capture.text;
+    addDependencyFact(project, filePath, text, nodes, edges, kind, capture);
+  };
+
+const symbolHandler = (kind: ProjectGraphNodeKind): SourceFactHandler =>
+  (project, filePath, capture, nodes, edges) => {
+    addSymbolFact(project, filePath, capture.text, kind, nodes, edges, capture);
+  };
+
+/**
+ * Capture-name -> handler dispatch for `addSourceFacts`.
+ *
+ * New parser adapters (`tree-sitter-source-parser`,
+ * `unreal-cpp-parser-adapter`, `script-parser-adapter`, ...) plug new
+ * captures in by adding an entry here. Captures the table does not name
+ * are silently ignored, matching the previous if/else fallthrough.
+ */
+const SOURCE_FACT_HANDLERS: Record<string, SourceFactHandler> = {
+  'import.source':   dependencyHandler(ProjectGraphEdgeKind.IMPORTS, { stripQuotes: true }),
+  'export.source':   dependencyHandler(ProjectGraphEdgeKind.EXPORTS, { stripQuotes: true }),
+  'function.name':   symbolHandler(ProjectGraphNodeKind.FUNCTION),
+  'class.name':      symbolHandler(ProjectGraphNodeKind.CLASS),
+  'call.function':   dependencyHandler(ProjectGraphEdgeKind.CALLS),
+  'react.component': symbolHandler(ProjectGraphNodeKind.COMPONENT),
+  'react.hook':      dependencyHandler(ProjectGraphEdgeKind.USES_HOOK),
+  'unreal.class':    symbolHandler(ProjectGraphNodeKind.CLASS),
+  'unreal.struct':   symbolHandler(ProjectGraphNodeKind.TYPE),
+  'unreal.enum':     symbolHandler(ProjectGraphNodeKind.TYPE),
+  'unreal.function': symbolHandler(ProjectGraphNodeKind.FUNCTION),
+  'unreal.property': symbolHandler(ProjectGraphNodeKind.CONFIG),
+  'script.import':   dependencyHandler(ProjectGraphEdgeKind.IMPORTS),
+  'script.class':    symbolHandler(ProjectGraphNodeKind.CLASS),
+  'script.function': symbolHandler(ProjectGraphNodeKind.FUNCTION),
+  'script.ue-call':  dependencyHandler(ProjectGraphEdgeKind.CALLS),
 };
 
 const addDependencyFact = (
