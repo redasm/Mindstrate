@@ -10,6 +10,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { readJsonFile } from '../storage/json-file.js';
 
 export const PROJECT_META_DIRNAME = '.mindstrate';
 export const PROJECT_META_FILENAME = 'project.json';
@@ -37,15 +38,9 @@ export function metaPath(projectRoot: string): string {
 }
 
 export function loadProjectMeta(projectRoot: string): ProjectMeta | null {
-  const p = metaPath(projectRoot);
-  if (!fs.existsSync(p)) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
-    if (!parsed || typeof parsed !== 'object') return null;
-    return parsed as ProjectMeta;
-  } catch {
-    return null;
-  }
+  const parsed = readJsonFile<unknown>(metaPath(projectRoot));
+  if (!parsed || typeof parsed !== 'object') return null;
+  return parsed as ProjectMeta;
 }
 
 export function saveProjectMeta(projectRoot: string, meta: ProjectMeta): void {

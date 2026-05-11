@@ -53,6 +53,7 @@ export * from '@mindstrate/protocol';
 // alternative vector backends or open shared SQLite databases.
 export type { IVectorStore, VectorDocument, VectorSearchResult } from './storage/vector-store-interface.js';
 export { openSqliteDatabase } from './storage/sqlite-database.js';
+export { readJsonFile, readJsonFileOrThrow } from './storage/json-file.js';
 
 // Capture utility used by repo-scanner to turn raw commits into knowledge
 // candidates before they are funneled back through `memory.knowledge.add`.

@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ProjectGraphEdgeDto, ProjectGraphNodeDto } from '@mindstrate/protocol/models';
+import { readJsonFile } from '../storage/json-file.js';
 
 export interface ProjectGraphFileExtractionCacheEntry {
   path: string;
@@ -18,14 +19,11 @@ const CACHE_PATH = path.join('.mindstrate', 'project-graph-extract-cache.json');
 
 export const readProjectGraphExtractionCache = (projectRoot: string): ProjectGraphFileExtractionCache => {
   const cachePath = path.join(projectRoot, CACHE_PATH);
-  if (!fs.existsSync(cachePath)) return emptyCache();
-  try {
-    const parsed = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as Partial<ProjectGraphFileExtractionCache>;
-    if (parsed.version !== 2 || !parsed.files || typeof parsed.files !== 'object') return emptyCache();
-    return { version: 2, files: parsed.files };
-  } catch {
+  const parsed = readJsonFile<Partial<ProjectGraphFileExtractionCache>>(cachePath);
+  if (!parsed || parsed.version !== 2 || !parsed.files || typeof parsed.files !== 'object') {
     return emptyCache();
   }
+  return { version: 2, files: parsed.files };
 };
 
 export const writeProjectGraphExtractionCache = (

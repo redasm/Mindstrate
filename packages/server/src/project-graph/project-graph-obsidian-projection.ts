@@ -11,6 +11,7 @@ import {
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
+import { readJsonFile } from '../storage/json-file.js';
 import { collectProjectGraphModules } from './clustering.js';
 import { listProjectGraphOverlays } from './overlay.js';
 import { projectGraphOverlayProjectionForNode } from './overlay-application.js';
@@ -214,13 +215,10 @@ const writeObsidianProjectionIndex = (
 };
 
 const readObsidianIndex = (indexPath: string): Record<string, unknown> => {
-  if (!fs.existsSync(indexPath)) return { files: {}, version: 1 };
-  try {
-    const parsed = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : { files: {}, version: 1 };
-  } catch {
-    return { files: {}, version: 1 };
-  }
+  const parsed = readJsonFile<unknown>(indexPath);
+  return parsed && typeof parsed === 'object'
+    ? parsed as Record<string, unknown>
+    : { files: {}, version: 1 };
 };
 
 const isProjectGraphPageForProject = (value: unknown, projectSlug: string): boolean =>

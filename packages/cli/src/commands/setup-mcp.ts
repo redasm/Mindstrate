@@ -10,6 +10,7 @@
 import { Command } from 'commander';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import { readJsonFile } from '@mindstrate/server';
 
 export interface SetupMcpResult {
   generated: string[];
@@ -146,9 +147,7 @@ setupMcpCommand
   });
 
 function readJsonOrEmpty(p: string): any {
-  if (!fs.existsSync(p)) return {};
-  try { return JSON.parse(fs.readFileSync(p, 'utf-8')); }
-  catch { return {}; }
+  return readJsonFile<any>(p) ?? {};
 }
 
 function findServerPath(): string | null {

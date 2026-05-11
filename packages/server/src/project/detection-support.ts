@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import { readJsonFile } from '../storage/json-file.js';
 
 export const MAX_DEPS = 40;
 export const README_EXCERPT_MAX = 600;
@@ -40,13 +41,7 @@ export const pickFramework = (depNames: string[]): string | undefined => {
   return undefined;
 };
 
-export const safeJson = (filePath: string): any | null => {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-  } catch {
-    return null;
-  }
-};
+export const safeJson = (filePath: string): any | null => readJsonFile(filePath);
 
 export const safeRead = (filePath: string): string | null => {
   try {

@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { readJsonFile } from '@mindstrate/server';
 
 export type SetupMode = 'local' | 'team';
 export type SetupTool = 'cursor' | 'opencode' | 'claude-desktop' | 'all';
@@ -84,14 +85,8 @@ export const projectCliConfigPath = (projectRoot: string): string =>
   path.join(projectRoot, CONFIG_DIR, CONFIG_FILE);
 
 export const readProjectCliConfig = (projectRoot: string): ProjectCliConfig | null => {
-  const configPath = projectCliConfigPath(projectRoot);
-  if (!fs.existsSync(configPath)) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed as ProjectCliConfig : null;
-  } catch {
-    return null;
-  }
+  const parsed = readJsonFile<unknown>(projectCliConfigPath(projectRoot));
+  return parsed && typeof parsed === 'object' ? parsed as ProjectCliConfig : null;
 };
 
 export const writeProjectCliConfig = (

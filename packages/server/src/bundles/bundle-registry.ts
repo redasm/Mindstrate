@@ -7,6 +7,7 @@ import type { PortableContextBundle } from '@mindstrate/protocol/models';
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { readJsonFile, readJsonFileOrThrow } from '../storage/json-file.js';
 
 interface BundleRegistryIndex {
   bundles: BundleRegistryEntry[];
@@ -70,7 +71,7 @@ export const readBundleFromRegistry = async (
 
   if (isLocalRegistry(registry)) {
     const bundlePath = path.join(registry, entry.bundlePath);
-    return JSON.parse(fs.readFileSync(bundlePath, 'utf-8')) as PortableContextBundle;
+    return readJsonFileOrThrow<PortableContextBundle>(bundlePath);
   }
 
   return fetchRemoteBundle(registry, entry.bundlePath);
@@ -103,13 +104,9 @@ const writeBundleToLocalRegistry = (
 
 const readRegistryIndex = (registry: string): BundleRegistryIndex => {
   const indexPath = path.join(registry, 'index.json');
-  if (!fs.existsSync(indexPath)) {
-    return { bundles: [] };
-  }
-
-  const parsed = JSON.parse(fs.readFileSync(indexPath, 'utf-8')) as Partial<BundleRegistryIndex>;
+  const parsed = readJsonFile<Partial<BundleRegistryIndex>>(indexPath);
   return {
-    bundles: Array.isArray(parsed.bundles) ? parsed.bundles : [],
+    bundles: Array.isArray(parsed?.bundles) ? parsed.bundles : [],
   };
 };
 

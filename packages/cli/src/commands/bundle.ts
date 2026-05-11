@@ -8,7 +8,7 @@ import { Command } from 'commander';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { PortableContextBundle } from '@mindstrate/protocol/models';
-import { errorMessage } from '@mindstrate/server';
+import { errorMessage, readJsonFileOrThrow } from '@mindstrate/server';
 import { createMemory } from '../memory-factory.js';
 
 export const bundleCommand = new Command('bundle')
@@ -67,7 +67,7 @@ bundleCommand
 
     try {
       await memory.init();
-      const bundle = JSON.parse(fs.readFileSync(file, 'utf-8')) as PortableContextBundle;
+      const bundle = readJsonFileOrThrow<PortableContextBundle>(file);
       const result = memory.bundles.validateBundle(bundle);
       if (!result.valid) {
         console.error('Bundle validation failed:');
@@ -100,7 +100,7 @@ bundleCommand
       await memory.init();
       const result = fs.statSync(inputPath).isDirectory()
         ? memory.bundles.installEditableBundleDirectory(inputPath)
-        : memory.bundles.installBundle(JSON.parse(fs.readFileSync(inputPath, 'utf-8')) as PortableContextBundle);
+        : memory.bundles.installBundle(readJsonFileOrThrow<PortableContextBundle>(inputPath));
       console.log('Bundle installed.');
       console.log(`  Installed nodes: ${result.installedNodes}`);
       console.log(`  Updated nodes:   ${result.updatedNodes}`);
@@ -155,7 +155,7 @@ bundleCommand
 
     try {
       await memory.init();
-      const bundle = JSON.parse(fs.readFileSync(file, 'utf-8')) as PortableContextBundle;
+      const bundle = readJsonFileOrThrow<PortableContextBundle>(file);
       const result = memory.bundles.publishBundle(bundle, {
         registry: options.registry,
         visibility: options.visibility,

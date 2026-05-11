@@ -1,5 +1,5 @@
-import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { readJsonFile } from '../storage/json-file.js';
 
 export interface UnrealAssetRegistryAsset {
   path: string;
@@ -21,18 +21,13 @@ export const UNREAL_ASSET_REGISTRY_EXPORT = '.mindstrate/unreal-asset-registry.j
 
 export const readUnrealAssetRegistryExport = (projectRoot: string): UnrealAssetRegistryImport | null => {
   const exportPath = path.join(projectRoot, UNREAL_ASSET_REGISTRY_EXPORT);
-  if (!fs.existsSync(exportPath)) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(exportPath, 'utf8')) as unknown;
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { assets?: unknown }).assets)) return null;
-    return {
-      assets: (parsed as { assets: unknown[] }).assets
-        .map(normalizeAsset)
-        .filter((asset): asset is UnrealAssetRegistryAsset => asset !== null),
-    };
-  } catch {
-    return null;
-  }
+  const parsed = readJsonFile<unknown>(exportPath);
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { assets?: unknown }).assets)) return null;
+  return {
+    assets: (parsed as { assets: unknown[] }).assets
+      .map(normalizeAsset)
+      .filter((asset): asset is UnrealAssetRegistryAsset => asset !== null),
+  };
 };
 
 const normalizeAsset = (value: unknown): UnrealAssetRegistryAsset | null => {
