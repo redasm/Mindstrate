@@ -46,6 +46,9 @@ export const zhSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        tags: ['architecture-overview'],
+      },
     },
     {
       key: '01-runtime-lifecycle',
@@ -71,6 +74,19 @@ export const zhSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['project-manifest', 'plugin-manifest', 'build-module'],
+        knownConstraints: [
+          '项目和插件 manifest 控制启用插件、模块类型和加载阶段，是高影响面变更。',
+          'Build.cs 变更可能改变 public/private 模块依赖和 Runtime/Editor 边界。',
+        ],
+        affectedChain: '.uproject/.uplugin -> 模块声明 -> Build.cs 依赖 -> 模块加载阶段 -> runtime/editor target。',
+        recommendedVerification: [
+          '验证编辑器/运行时启动后插件集合行为符合预期。',
+          '运行受影响 target 的 Unreal build compile。',
+        ],
+        tags: ['runtime-lifecycle', 'manifest', 'build-module'],
+      },
     },
     {
       key: '02-cpp-typescript-bridge',
@@ -98,6 +114,21 @@ export const zhSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['native-script-binding', 'generated-output', 'typescript-consumer'],
+        knownConstraints: [
+          '生成的 TypeScript 声明必须由 C++ 反射元数据或 generator 配置驱动。',
+          '生成输出不是 source of truth；编辑前先识别上游源头。',
+        ],
+        doNotEditTargets: ['TypeScript/Typing'],
+        affectedChain: 'C++ UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY -> UHT 反射 -> UnrealSharp generator -> TypeScript/Typing -> TypeScript consumers。',
+        recommendedVerification: [
+          '运行 UnrealSharp/类型生成并检查生成声明。',
+          '运行 TypeScript 类型检查或项目脚本验证。',
+          '运行受影响 target 的 Unreal build compile。',
+        ],
+        tags: ['cpp-typescript-bridge', 'reflection', 'generated-output'],
+      },
     },
     {
       key: '03-plugin-boundaries',
@@ -122,6 +153,22 @@ export const zhSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['build-module', 'plugin-manifest', 'editor-boundary'],
+        knownConstraints: [
+          'Runtime 模块不能依赖 editor-only 模块。',
+          'Build.cs 变更可能改变 public/private 模块依赖和 Runtime/Editor 边界。',
+        ],
+        doNotEditTargets: [
+          'Runtime 模块对 editor 模块的 public 依赖。',
+        ],
+        affectedChain: '.uplugin 模块声明 -> Build.cs public/private 依赖 -> 模块加载阶段 -> runtime/editor target。',
+        recommendedVerification: [
+          '验证编辑器/运行时启动后插件集合行为符合预期。',
+          '运行受影响 target 的 Unreal build compile。',
+        ],
+        tags: ['plugin-boundary', 'build-module', 'runtime-editor'],
+      },
     },
     {
       key: '04-generated-files',
@@ -145,6 +192,18 @@ export const zhSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['generated-output'],
+        knownConstraints: [
+          '生成输出不是 source of truth；编辑前先识别上游源头。',
+        ],
+        doNotEditTargets: generatedRoots,
+        affectedChain: 'Generator 源/配置 -> 生成根目录下的输出 -> 下游消费方。',
+        recommendedVerification: [
+          '重跑 generator (UnrealSharp/UHT/build) 并检查生成根目录的差异。',
+        ],
+        tags: ['generated-output', 'do-not-edit'],
+      },
     },
     {
       key: '05-validation-playbook',
@@ -167,6 +226,12 @@ export const zhSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        recommendedVerification: [
+          '验证命令从受影响链路选择 (build / type-gen / 插件启动 / 资产校验 / 配置加载)，不能只根据被编辑文件扩展名决定。',
+        ],
+        tags: ['validation', 'playbook'],
+      },
     },
     {
       key: '06-common-change-playbooks',
@@ -191,6 +256,17 @@ export const zhSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['native-script-binding', 'build-module'],
+        knownConstraints: [
+          '对已知变更类型，应先按 playbook 执行，而不是只依赖局部文件上下文。',
+        ],
+        affectedChain: '目标变更 -> playbook 步骤列表 -> 验证命令集合。',
+        recommendedVerification: [
+          '严格按 playbook 顺序执行，不要跳过验证步骤。',
+        ],
+        tags: ['playbook', 'change-type'],
+      },
     },
     {
       key: '07-risky-files',
@@ -213,6 +289,24 @@ export const zhSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['project-manifest', 'plugin-manifest', 'build-module', 'asset-reference-sensitive', 'config-sensitive', 'generated-output'],
+        knownConstraints: [
+          '高风险目标在编辑前必须做影响面分析并识别 source of truth。',
+        ],
+        doNotEditTargets: [
+          '.uproject（依赖/启动评审通过后再改）',
+          '.uplugin（依赖/启动评审通过后再改）',
+          '*.Build.cs（Runtime/Editor 边界评审通过后再改）',
+          'TypeScript/Typing（生成输出；改上游反射或 generator）',
+          'Content/**（路径敏感；用 Unreal-aware rename）',
+          'Config/**（子系统敏感；验证配置加载）',
+        ],
+        recommendedVerification: [
+          '编辑高风险目标前，先通过 project graph 跑影响面分析。',
+        ],
+        tags: ['high-risk', 'impact-required'],
+      },
     },
   ];
 };

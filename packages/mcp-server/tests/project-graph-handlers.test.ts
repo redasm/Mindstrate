@@ -30,6 +30,7 @@ import {
   createFakeMcpApi,
   projectGraphEdge,
   projectGraphNode,
+  systemPageRule,
 } from './fake-mcp-api.js';
 
 describe('handleProjectGraphQuery', () => {
@@ -73,6 +74,16 @@ describe('handleProjectGraphTaskQuery', () => {
 
     expect(response.content[0].text).toContain('Before Edit Report');
     expect(api.calls.some((call) => call.method === 'listProjectGraphOverlays')).toBe(true);
+  });
+
+  it('classifies high-risk target paths even when no graph node matches', async () => {
+    const api = createFakeMcpApi({ contextNodes: [], contextEdges: [], overlays: [] });
+
+    const response = await handleProjectGraphTaskQuery(api, { task: 'before-edit', query: 'TypeScript/Typing/UObject.d.ts' });
+
+    expect(response.content[0].text).toContain('Generated outputs are not source of truth');
+    expect(response.content[0].text).toContain('TypeScript/Typing');
+    expect(response.content[0].text).toContain('Run UnrealSharp/type generation');
   });
 
   it('emits a generic node listing for non-report tasks', async () => {
@@ -252,5 +263,98 @@ describe('handleProjectGraphAddOverlay', () => {
     });
     expect(response.content[0].text).toContain('Project graph overlay added.');
     expect(response.content[0].text).toContain('overlay:created');
+  });
+});
+
+describe('handleProjectGraphTaskQuery system-page metadata integration', () => {
+  it('surfaces project-specific Known Constraints when a system-page rule matches the classification', async () => {
+    // Build a node whose evidence carries the Unreal reflection extractor
+    // marker, so `classifyTargets` adds 'native-script-binding'.
+    const node = projectGraphNode({
+      id: 'pg:demo:file:Source/MixedBindings/Public/Inventory.h',
+      title: 'Source/MixedBindings/Public/Inventory.h',
+      kind: ProjectGraphNodeKind.CLASS,
+      evidencePaths: ['Source/MixedBindings/Public/Inventory.h'],
+    });
+    // Inject the reflection evidence record the classifier looks for.
+    node.metadata = {
+      ...node.metadata,
+      evidence: [{ path: 'Source/MixedBindings/Public/Inventory.h', extractorId: 'unreal-cpp-reflection' }],
+    };
+    const api = createFakeMcpApi({
+      contextNodes: [node],
+      contextEdges: [],
+      overlays: [],
+      systemPageRules: [systemPageRule({
+        pageKey: '02-cpp-typescript-bridge',
+        classifications: ['native-script-binding', 'generated-output', 'typescript-consumer'],
+        knownConstraints: [
+          'Generated TypeScript declarations must be driven by C++ reflection metadata or generator configuration.',
+        ],
+        doNotEditTargets: ['TypeScript/Typing'],
+        affectedChain: 'C++ UCLASS -> UHT -> UnrealSharp generator -> TypeScript/Typing -> consumers.',
+        recommendedVerification: ['Run UnrealSharp/type generation and inspect generated declarations.'],
+      })],
+    });
+
+    const response = await handleProjectGraphTaskQuery(api, { task: 'before-edit', query: 'Inventory.h' });
+
+    const text = response.content[0].text;
+    expect(text).toContain('### Known Constraints');
+    expect(text).toContain('Generated TypeScript declarations must be driven by C++ reflection metadata');
+    expect(text).toContain('### Do Not Edit Directly');
+    expect(text).toContain('TypeScript/Typing');
+    expect(text).toContain('### Affected Chains');
+    expect(text).toContain('C++ UCLASS -> UHT -> UnrealSharp generator -> TypeScript/Typing -> consumers.');
+    expect(text).toContain('### Recommended Verification');
+    expect(text).toContain('Run UnrealSharp/type generation');
+  });
+
+  it('falls back to generic constraints when no system-page rule matches the classification', async () => {
+    const node = projectGraphNode({
+      id: 'pg:demo:file:src/random.ts',
+      title: 'src/random.ts',
+      evidencePaths: ['src/random.ts'],
+    });
+    const api = createFakeMcpApi({
+      contextNodes: [node],
+      contextEdges: [],
+      overlays: [],
+      systemPageRules: [systemPageRule({
+        pageKey: '03-plugin-boundaries',
+        classifications: ['build-module', 'plugin-manifest'],
+        knownConstraints: ['Project-specific plugin rule.'],
+      })],
+    });
+
+    const response = await handleProjectGraphTaskQuery(api, { task: 'before-edit', query: 'random.ts' });
+
+    const text = response.content[0].text;
+    // The classification picked up 'typescript-consumer' from the .ts
+    // suffix, which the supplied system-page does not cover, so its
+    // project-specific constraint must NOT appear.
+    expect(text).not.toContain('Project-specific plugin rule.');
+  });
+
+  it('still applies a global system-page (no classifications) for recommendedVerification', async () => {
+    const node = projectGraphNode({
+      id: 'pg:demo:file:src/random.ts',
+      title: 'src/random.ts',
+      evidencePaths: ['src/random.ts'],
+    });
+    const api = createFakeMcpApi({
+      contextNodes: [node],
+      contextEdges: [],
+      overlays: [],
+      systemPageRules: [systemPageRule({
+        pageKey: '05-validation-playbook',
+        // intentionally no classifications -> a global page
+        recommendedVerification: ['Select validation commands from the affected chain.'],
+      })],
+    });
+
+    const response = await handleProjectGraphTaskQuery(api, { task: 'before-edit', query: 'random.ts' });
+
+    expect(response.content[0].text).toContain('Select validation commands from the affected chain.');
   });
 });

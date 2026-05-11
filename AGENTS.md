@@ -52,11 +52,18 @@ Mindstrate 当前处于允许 breaking changes 的开发阶段。实施时优先
 
 - 运行或查询 Mindstrate 上下文装配，确认当前项目、相关规则和高优先级上下文。
 - 运行 `mindstrate graph task before-edit "<目标文件/模块/子系统>"`。
+  现在 before-edit 报告会从 Obsidian 投影出去的架构页（已被内化为 `RULE` 节点）回拉项目特有的 `Known Constraints` / `Do Not Edit Directly` / `Affected Chains` / `Recommended Verification`，不再只输出泛化文案。
 - 运行 `mindstrate graph task impact "<目标文件/模块/子系统>"`。
 - 阅读即将编辑的精确文件。
 - 搜索直接调用方、生成输出、配置引用和 TypeScript 消费方。
 - 如果变更跨越 C++ / TypeScript / plugin / config / asset 边界，编辑前必须说明受影响链路。
 - 如果影响链路包含 generated files、assets、build files、plugins 或 TypeScript bindings，必须先识别 source of truth，再编辑。
+
+## 项目架构页
+
+- `mindstrate setup` / `mindstrate init` 会把项目架构总览（00-总览到 07-高风险文件）写到 Obsidian vault 的 `<vault>/<project>/architecture/` 下，**同时**把每页内化为 `RULE` + `ARCHITECTURE` 的 ECS 节点（id 形如 `architecture:system-page:<project>:<page-key>`），由 MCP `context_assemble` / `query_project_graph_task before-edit` / `search_graph_knowledge` 自动召回。
+- 如果对项目尚不熟悉、或要改 C++ 反射 / UnrealSharp 生成 / TypeScript bindings / `.uproject` / `.uplugin` / `*.Build.cs` / `Content/**` / `Config/**`，先调用 `mindstrate_search_graph_knowledge` 或读 `<vault>/<project>/architecture/` 下的页，再开始编辑。
+- 改了架构页之后，下一次 `setup` / `init` 会自动把新的 `metadata`（`classifications`、`knownConstraints`、`doNotEditTargets`、`affectedChain`、`recommendedVerification`）刷进 ECS RULE 节点；不需要手动再 import。
 
 ## 验证要求
 

@@ -47,6 +47,9 @@ export const enSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        tags: ['architecture-overview'],
+      },
     },
     {
       key: '01-runtime-lifecycle',
@@ -72,6 +75,19 @@ export const enSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['project-manifest', 'plugin-manifest', 'build-module'],
+        knownConstraints: [
+          'Project and plugin manifests control enabled plugins, module type, and load phase; treat them as high-impact changes.',
+          'Build.cs changes can alter public/private module dependencies and Runtime/Editor boundaries.',
+        ],
+        affectedChain: '.uproject/.uplugin -> module declaration -> Build.cs dependencies -> module load phase -> runtime/editor target.',
+        recommendedVerification: [
+          'Validate editor/runtime startup with the changed plugin set.',
+          'Unreal build compile for the affected target.',
+        ],
+        tags: ['runtime-lifecycle', 'manifest', 'build-module'],
+      },
     },
     {
       key: '02-cpp-typescript-bridge',
@@ -99,6 +115,21 @@ export const enSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['native-script-binding', 'generated-output', 'typescript-consumer'],
+        knownConstraints: [
+          'Generated TypeScript declarations must be driven by C++ reflection metadata or generator configuration.',
+          'Generated outputs are not source of truth; identify and edit the upstream source before changing them.',
+        ],
+        doNotEditTargets: ['TypeScript/Typing'],
+        affectedChain: 'C++ UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY -> UHT reflection -> UnrealSharp generator -> TypeScript/Typing -> TypeScript consumers.',
+        recommendedVerification: [
+          'Run UnrealSharp/type generation and inspect generated declarations.',
+          'Run TypeScript type check or the project script validation.',
+          'Unreal build compile for the affected target.',
+        ],
+        tags: ['cpp-typescript-bridge', 'reflection', 'generated-output'],
+      },
     },
     {
       key: '03-plugin-boundaries',
@@ -123,6 +154,22 @@ export const enSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['build-module', 'plugin-manifest', 'editor-boundary'],
+        knownConstraints: [
+          'Runtime modules must not depend on editor-only modules.',
+          'Build.cs changes can alter public/private module dependencies and Runtime/Editor boundaries.',
+        ],
+        doNotEditTargets: [
+          'Public dependencies of an editor module from a runtime module.',
+        ],
+        affectedChain: '.uplugin module declaration -> Build.cs public/private dependencies -> module load phase -> runtime/editor target.',
+        recommendedVerification: [
+          'Validate editor/runtime startup with the changed plugin set.',
+          'Unreal build compile for the affected target.',
+        ],
+        tags: ['plugin-boundary', 'build-module', 'runtime-editor'],
+      },
     },
     {
       key: '04-generated-files',
@@ -146,6 +193,18 @@ export const enSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['generated-output'],
+        knownConstraints: [
+          'Generated outputs are not source of truth; identify and edit the upstream source before changing them.',
+        ],
+        doNotEditTargets: generatedRoots,
+        affectedChain: 'Generator source/config -> generated output under one of the generated roots -> downstream consumers.',
+        recommendedVerification: [
+          'Re-run the generator (UnrealSharp/UHT/build) and inspect the diff in the generated root.',
+        ],
+        tags: ['generated-output', 'do-not-edit'],
+      },
     },
     {
       key: '05-validation-playbook',
@@ -168,6 +227,16 @@ export const enSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        // No specific classification: the validation playbook is a global
+        // rule. The internalized RULE node is still valuable for assemble
+        // and graph_knowledge_search, just not as a per-classification
+        // overlay in task-report.
+        recommendedVerification: [
+          'Select validation commands from the affected chain (build, type-gen, plugin-startup, asset-validate, config-load), not from the edited file extension.',
+        ],
+        tags: ['validation', 'playbook'],
+      },
     },
     {
       key: '06-common-change-playbooks',
@@ -192,6 +261,17 @@ export const enSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['native-script-binding', 'build-module'],
+        knownConstraints: [
+          'For known change types, follow the playbook before editing rather than relying on local file context only.',
+        ],
+        affectedChain: 'Targeted change -> playbook step list -> verification command set.',
+        recommendedVerification: [
+          'Follow the playbook step ordering exactly; do not skip the verification step.',
+        ],
+        tags: ['playbook', 'change-type'],
+      },
     },
     {
       key: '07-risky-files',
@@ -214,6 +294,24 @@ export const enSystemPageDefinitions = (
       userNotesPlaceholder,
       userNotesTitle,
       overlayTitle,
+      metadata: {
+        classifications: ['project-manifest', 'plugin-manifest', 'build-module', 'asset-reference-sensitive', 'config-sensitive', 'generated-output'],
+        knownConstraints: [
+          'High-risk targets require impact analysis and source-of-truth identification before editing.',
+        ],
+        doNotEditTargets: [
+          '.uproject (touch only after dependency / startup review)',
+          '.uplugin (touch only after dependency / startup review)',
+          '*.Build.cs (touch only after Runtime/Editor boundary review)',
+          'TypeScript/Typing (generated; edit upstream reflection or generator)',
+          'Content/** (path-sensitive; use Unreal-aware rename)',
+          'Config/** (subsystem-sensitive; verify config load)',
+        ],
+        recommendedVerification: [
+          'Before editing a high-risk target, run impact analysis through the project graph.',
+        ],
+        tags: ['high-risk', 'impact-required'],
+      },
     },
   ];
 };

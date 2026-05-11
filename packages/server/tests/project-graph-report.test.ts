@@ -613,4 +613,60 @@ describe('project graph report export', () => {
     expect(fs.readFileSync(target, 'utf8')).toBe('second');
     expect(fs.readdirSync(root).filter((name) => name.includes('.tmp-'))).toEqual([]);
   });
+
+  it('internalizes system pages into RULE+ARCHITECTURE nodes that MCP retrieval can recall', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'system-pages-rule-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    const vaultRoot = createTempDir('mindstrate-project-graph-rule-vault-');
+
+    try {
+      const project = detectProject(root)!;
+      memory.context.indexProjectGraph(project);
+      memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+
+      const ruleNodes = memory.context.listContextNodes({
+        project: 'system-pages-rule-demo',
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: 100,
+      }).filter((node) => node.metadata?.['systemPage'] === true);
+
+      expect(ruleNodes.length).toBeGreaterThanOrEqual(8);
+      const cppBridge = ruleNodes.find((node) => node.metadata?.['pageKey'] === '02-cpp-typescript-bridge');
+      expect(cppBridge).toBeDefined();
+      expect(cppBridge?.metadata?.['classifications']).toEqual(expect.arrayContaining(['native-script-binding', 'generated-output']));
+      expect(cppBridge?.metadata?.['knownConstraints']).toEqual(expect.arrayContaining([
+        expect.stringContaining('TypeScript declarations'),
+      ]));
+      expect(cppBridge?.tags).toContain('system-page');
+    } finally {
+      removeTempDir(vaultRoot);
+    }
+  });
+
+  it('does not duplicate system page rule nodes on repeated projection writes', () => {
+    write(root, 'package.json', JSON.stringify({ name: 'system-pages-idempotent-demo' }));
+    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    const vaultRoot = createTempDir('mindstrate-project-graph-rule-idempotent-vault-');
+
+    try {
+      const project = detectProject(root)!;
+      memory.context.indexProjectGraph(project);
+      memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+      memory.context.writeProjectGraphObsidianProjection(project, vaultRoot);
+
+      const ruleNodes = memory.context.listContextNodes({
+        project: 'system-pages-idempotent-demo',
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.ARCHITECTURE,
+        limit: 100,
+      }).filter((node) => node.metadata?.['systemPage'] === true);
+
+      const idCounts = new Map<string, number>();
+      for (const node of ruleNodes) idCounts.set(node.id, (idCounts.get(node.id) ?? 0) + 1);
+      for (const [id, count] of idCounts) expect(count, `duplicate rule node ${id}`).toBe(1);
+    } finally {
+      removeTempDir(vaultRoot);
+    }
+  });
 });

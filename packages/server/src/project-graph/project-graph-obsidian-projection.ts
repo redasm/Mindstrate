@@ -21,6 +21,7 @@ import { enSystemPageDefinitions } from './obsidian-system-pages-en.js';
 import { zhSystemPageDefinitions } from './obsidian-system-pages-zh.js';
 import type { SystemPageDefinition } from './obsidian-system-page-types.js';
 export type { SystemPageDefinition } from './obsidian-system-page-types.js';
+import { internalizeSystemPagesAsRules } from './internalize-system-pages.js';
 import {
   renderEditableModulePage,
   renderEditableObsidianProjection,
@@ -42,13 +43,21 @@ export const writeProjectGraphObsidianProjection = (
   const statsPath = path.join(project.root, '.mindstrate', 'project-graph.json');
   const graphPath = path.join(project.root, '.mindstrate', 'project-graph.graph.json');
   const existing = fs.existsSync(reportPath) ? fs.readFileSync(reportPath, 'utf8') : '';
+  const plannedSystemPages = options.systemPages && options.systemPages.length > 0
+    ? options.systemPages
+    : systemPageDefinitions(project);
+  // Internalize the planned system pages into ECS RULE nodes BEFORE the
+  // overlay re-import sweep, so MCP retrieval (assemble / before-edit /
+  // search_graph_knowledge) sees them as project-specific architecture
+  // rules rather than orphan Markdown files.
+  internalizeSystemPagesAsRules(store, project.name, plannedSystemPages);
   importProjectGraphOverlayBlock(store, project.name, existing);
   importExistingSystemPageOverlays(
     store,
     project.name,
     vaultRoot,
     projectSlug,
-    options.systemPages?.map((page) => page.name),
+    plannedSystemPages.map((page) => page.name),
   );
   importExistingSummaryPageOverlays(store, project.name, vaultRoot, projectSlug);
   const stats = collectProjectGraphStats(store, project);
@@ -59,7 +68,7 @@ export const writeProjectGraphObsidianProjection = (
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
   const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug, overlays);
   const flowAndBindingPaths = writeObsidianFlowAndBindingPages(graph, vaultRoot, projectSlug);
-  const systemPages = writeObsidianSystemPages(project, vaultRoot, projectSlug, options.systemPages);
+  const systemPages = writeObsidianSystemPages(vaultRoot, projectSlug, plannedSystemPages);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });
@@ -151,14 +160,13 @@ const importExistingSummaryPageOverlays = (
 };
 
 const writeObsidianSystemPages = (
-  project: DetectedProject,
   vaultRoot: string,
   projectSlug: string,
-  plannedPages?: SystemPageDefinition[],
+  plannedPages: SystemPageDefinition[],
 ): Array<{ key: string; path: string }> => {
   const architectureDir = path.join(vaultRoot, projectSlug, 'architecture');
   const pages: Array<{ key: string; path: string }> = [];
-  for (const page of plannedPages && plannedPages.length > 0 ? plannedPages : systemPageDefinitions(project)) {
+  for (const page of plannedPages) {
     const pagePath = path.join(architectureDir, page.name);
     const existing = fs.existsSync(pagePath) ? fs.readFileSync(pagePath, 'utf8') : '';
     writeProjectGraphTextFileAtomically(pagePath, renderSystemPage(page, existing));

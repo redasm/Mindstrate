@@ -47,8 +47,26 @@ export interface FakeMcpApi extends McpApi {
 export interface FakeMcpApiOptions {
   contextNodes?: ContextNode[];
   contextEdges?: ContextEdge[];
+  /**
+   * Architecture system-page RULE nodes that should be returned alongside
+   * `contextNodes` from `queryContextGraph` (the same call serves both).
+   * The handler-utils `loadSystemPageRules` filter uses
+   * `metadata.systemPage === true` to pick these out.
+   */
+  systemPageRules?: ContextNode[];
   overlays?: ProjectGraphOverlay[];
   createOverlay?: (input: unknown) => ProjectGraphOverlay;
+  /**
+   * Override the result `importObsidianProjectionFile` returns. Lets
+   * tests exercise the three handler branches (changed, unchanged
+   * already-in-sync, not importable) without standing up a real store.
+   */
+  importObsidianProjectionFileResult?: {
+    changed: boolean;
+    sourceNodeId?: string;
+    candidateNode?: { id?: string };
+    event?: { id?: string };
+  };
 }
 
 export const createFakeMcpApi = (options: FakeMcpApiOptions = {}): FakeMcpApi => {
@@ -87,7 +105,10 @@ export const createFakeMcpApi = (options: FakeMcpApiOptions = {}): FakeMcpApi =>
     ingestContextEvent: notImplemented('ingestContextEvent'),
     async queryContextGraph(query) {
       record('queryContextGraph', query);
-      return options.contextNodes ?? [];
+      return [
+        ...(options.contextNodes ?? []),
+        ...(options.systemPageRules ?? []),
+      ];
     },
     async listContextEdges(query) {
       record('listContextEdges', query);
@@ -121,7 +142,10 @@ export const createFakeMcpApi = (options: FakeMcpApiOptions = {}): FakeMcpApi =>
     generateInternalizationSuggestions: notImplemented('generateInternalizationSuggestions'),
     acceptInternalizationSuggestions: notImplemented('acceptInternalizationSuggestions'),
     writeObsidianProjectionFiles: notImplemented('writeObsidianProjectionFiles'),
-    importObsidianProjectionFile: notImplemented('importObsidianProjectionFile'),
+    importObsidianProjectionFile: async (filePath: string) => {
+      record('importObsidianProjectionFile', filePath);
+      return options.importObsidianProjectionFileResult ?? { changed: false };
+    },
   } satisfies FakeMcpApi;
 };
 
@@ -179,5 +203,53 @@ export const projectGraphEdge = (input: ProjectGraphEdgeFixtureOptions): Context
   evidence: {
     [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true,
     [PROJECT_GRAPH_METADATA_KEYS.kind]: input.kind ?? ProjectGraphEdgeKind.RELATED_TO,
+  },
+});
+
+interface SystemPageRuleFixtureOptions {
+  pageKey: string;
+  title?: string;
+  content?: string;
+  project?: string;
+  classifications?: string[];
+  knownConstraints?: string[];
+  doNotEditTargets?: string[];
+  affectedChain?: string;
+  recommendedVerification?: string[];
+}
+
+/**
+ * Build a fake architecture system-page RULE node — the kind produced by
+ * `internalize-system-pages.ts` in the server package. Tests use these
+ * to verify that `before-edit` reports surface project-specific
+ * constraints / chains / verification text rather than the generic
+ * fallbacks.
+ */
+export const systemPageRule = (input: SystemPageRuleFixtureOptions): ContextNode => ({
+  id: `architecture:system-page:${input.project ?? 'demo'}:${input.pageKey}`,
+  title: input.title ?? `System page ${input.pageKey}`,
+  content: input.content ?? `Body for ${input.pageKey}`,
+  tags: ['architecture', 'system-page', `system-page:${input.pageKey}`, ...(input.classifications ?? [])],
+  substrateType: 'rule' as never,
+  domainType: ContextDomainType.ARCHITECTURE,
+  project: input.project ?? 'demo',
+  status: 'verified' as never,
+  qualityScore: 95,
+  confidence: 0.95,
+  compressionLevel: 0.1,
+  accessCount: 0,
+  positiveFeedback: 0,
+  negativeFeedback: 0,
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-01T00:00:00.000Z',
+  sourceRef: `system-page:${input.pageKey}`,
+  metadata: {
+    systemPage: true,
+    pageKey: input.pageKey,
+    classifications: input.classifications,
+    knownConstraints: input.knownConstraints,
+    doNotEditTargets: input.doNotEditTargets,
+    affectedChain: input.affectedChain,
+    recommendedVerification: input.recommendedVerification,
   },
 });

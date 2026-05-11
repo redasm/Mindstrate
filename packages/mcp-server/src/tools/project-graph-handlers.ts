@@ -15,6 +15,7 @@ import {
   collectBlastRadius,
   findProjectGraphNode,
   findProjectGraphNodeInList,
+  loadSystemPageRules,
   projectGraphEdges,
   projectGraphNodes,
   shortestProjectGraphPath,
@@ -59,6 +60,7 @@ export async function handleProjectGraphTaskQuery(
   const evidence = Array.from(new Set(selected.flatMap(evidencePaths))).slice(0, input.limit ?? 10);
   if (input.task === 'before-edit' || input.task === 'impact') {
     const overlays = await api.listProjectGraphOverlays({ project: input.project, limit: 100 });
+    const systemPageRules = await loadSystemPageRules(api, input.project);
     const report = buildBeforeEditReport({
       task: input.task,
       query: input.query,
@@ -67,6 +69,7 @@ export async function handleProjectGraphTaskQuery(
       selected,
       evidence,
       overlays,
+      systemPageRules,
       limit: input.limit ?? 10,
     });
     return { content: [{ type: 'text', text: report }] };

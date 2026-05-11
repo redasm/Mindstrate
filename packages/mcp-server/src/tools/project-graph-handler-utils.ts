@@ -49,6 +49,23 @@ export const findProjectGraphNode = async (
   return findProjectGraphNodeInList(nodes, id) ?? null;
 };
 
+/**
+ * Load the architecture system-page RULE nodes (the ones produced by
+ * `internalize-system-pages.ts`). These are intentionally NOT
+ * project-graph nodes (they describe the project at a higher level than
+ * file-by-file extraction), so the regular `projectGraphNodes` filter
+ * drops them. The task report consumes them to render project-specific
+ * "Known Constraints" / "Do Not Edit Directly" / etc.
+ */
+export const loadSystemPageRules = async (api: McpApi, project?: string): Promise<ContextNode[]> => {
+  const nodes = await api.queryContextGraph({
+    project,
+    domainType: ContextDomainType.ARCHITECTURE,
+    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  });
+  return nodes.filter((node) => node.metadata?.['systemPage'] === true);
+};
+
 // ============================================================
 // Neighborhood traversal
 // ============================================================

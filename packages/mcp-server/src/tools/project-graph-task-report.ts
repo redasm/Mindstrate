@@ -35,6 +35,15 @@ interface ProjectGraphTaskReportInput {
   selected: ContextNode[];
   evidence: string[];
   overlays: ProjectGraphOverlay[];
+  /**
+   * Architecture system-page RULE nodes (produced by
+   * `internalize-system-pages.ts` in the server package). When present,
+   * their structured metadata seeds project-specific "Known Constraints",
+   * "Do Not Edit Directly", "Affected Chains" and "Recommended
+   * Verification" lines, which take precedence over the generic
+   * fallbacks computed from `classifications` alone.
+   */
+  systemPageRules?: ContextNode[];
   limit: number;
 }
 
@@ -126,17 +135,80 @@ const analyzeProjectGraphTask = (input: ProjectGraphTaskReportInput): ProjectGra
   const targetText = collectTargetText(input);
   const classifications = classifyTargets(input.selected, targetText);
   const overlays = relevantOverlays(input.overlays, targetText).slice(0, input.limit);
+  const fromSystemPages = collectSystemPageContributions(input.systemPageRules ?? [], classifications);
+  // System-page metadata wins (project-specific guidance comes first), then
+  // generic fallbacks fill any classification the project hasn't documented.
   return {
     classifications,
-    constraints: taskConstraints(classifications),
-    affectedChains: affectedChains(classifications),
+    constraints: mergeUnique(fromSystemPages.knownConstraints, taskConstraints(classifications)),
+    affectedChains: mergeUnique(fromSystemPages.affectedChains, affectedChains(classifications)),
     sourceOfTruth: sourceOfTruth(classifications),
-    doNotEdit: doNotEditTargets(classifications),
+    doNotEdit: mergeUnique(fromSystemPages.doNotEditTargets, doNotEditTargets(classifications)),
     requiredSearches: requiredSearches(classifications),
-    recommendedVerification: recommendedVerification(classifications),
+    recommendedVerification: mergeUnique(fromSystemPages.recommendedVerification, recommendedVerification(classifications)),
     safetyIssues: collectSafetyIssues(input.nodes, input.edges, input.selected, targetText),
     overlays,
   };
+};
+
+interface SystemPageContributions {
+  knownConstraints: string[];
+  doNotEditTargets: string[];
+  affectedChains: string[];
+  recommendedVerification: string[];
+}
+
+const collectSystemPageContributions = (
+  systemPageRules: ContextNode[],
+  classifications: string[],
+): SystemPageContributions => {
+  const result: SystemPageContributions = {
+    knownConstraints: [],
+    doNotEditTargets: [],
+    affectedChains: [],
+    recommendedVerification: [],
+  };
+  if (systemPageRules.length === 0) return result;
+
+  const wanted = new Set(classifications);
+  for (const rule of systemPageRules) {
+    const metadata = rule.metadata ?? {};
+    const ruleClassifications = readStringArray(metadata['classifications']);
+    // A rule with no `classifications` is a global page (e.g. validation
+    // playbook) — apply its recommendedVerification universally but skip
+    // its other fields so it doesn't drown out targeted guidance.
+    const matches = ruleClassifications.length === 0
+      || ruleClassifications.some((value) => wanted.has(value));
+    if (!matches) continue;
+
+    if (ruleClassifications.length > 0) {
+      pushAll(result.knownConstraints, readStringArray(metadata['knownConstraints']));
+      pushAll(result.doNotEditTargets, readStringArray(metadata['doNotEditTargets']));
+      const chain = metadata['affectedChain'];
+      if (typeof chain === 'string' && chain.length > 0) result.affectedChains.push(chain);
+    }
+    pushAll(result.recommendedVerification, readStringArray(metadata['recommendedVerification']));
+  }
+  return result;
+};
+
+const readStringArray = (value: unknown): string[] => Array.isArray(value)
+  ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+  : [];
+
+const pushAll = (target: string[], values: string[]): void => {
+  for (const value of values) target.push(value);
+};
+
+const mergeUnique = (primary: string[], fallback: string[]): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of [...primary, ...fallback]) {
+    if (seen.has(value)) continue;
+    seen.add(value);
+    result.push(value);
+  }
+  return result;
 };
 
 const collectSafetyIssues = (
