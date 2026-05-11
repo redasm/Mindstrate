@@ -1,52 +1,46 @@
+/**
+ * `mindstrate setup` command entry.
+ *
+ * Thin wrapper around the focused setup modules:
+ *   - `setup-prompts`: interactive readers + small input helpers
+ *   - `setup-progress`: throttled stdout printers for long-running steps
+ *   - `setup-local`: local Mindstrate bootstrap + `.env` plumbing
+ *   - `setup-team-deploy`: deploy/.env.deploy generator
+ *
+ * This file should stay almost mechanical: parse flags, drive prompts,
+ * delegate the actual work, then print a final summary.
+ */
+
 import * as readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Command } from 'commander';
-import {
-  Mindstrate,
-  consoleLogger,
-  detectProject,
-  errorMessage,
-  loadProjectMeta,
-  saveProjectMeta,
-  dependencyFingerprint,
-  metaPath,
-  type ProjectGraphIndexProgress,
-  type ProjectGraphScanProgress,
-  type MindstrateConfig,
-} from '@mindstrate/server';
-import { SyncManager, VaultLayout } from '@mindstrate/obsidian-sync';
+import { detectProject, errorMessage } from '@mindstrate/server';
 import {
   buildSetupPlan,
   loadProjectEnv,
-  upsertProjectEnv,
   writeProjectCliConfig,
-  type SetupMode,
-  type SetupTool,
 } from '../cli-config.js';
-import { askOptional, chooseOption } from '../cli-wizard.js';
-import { buildProjectGraphAnalysisLines } from './init.js';
 import { writeMcpConfig } from './setup-mcp.js';
-
-type SetupExperience = 'local' | 'team-client' | 'team-deploy';
-
-interface SetupOptions {
-  mode?: SetupMode | 'team-client' | 'team-deploy';
-  tool?: SetupTool;
-  vault?: string;
-  teamServerUrl?: string;
-  teamApiKey?: string;
-  openaiApiKey?: string;
-  openaiBaseUrl?: string;
-  llmModel?: string;
-  embeddingModel?: string;
-  yes?: boolean;
-}
-
-type SetupProgress = (message: string) => void;
-type ScanProgress = (event: ProjectGraphScanProgress) => void;
-type IndexProgress = (event: ProjectGraphIndexProgress) => void;
+import {
+  confirm,
+  normalizeOptionalPath,
+  printBanner,
+  readExperience,
+  readLlmEnvironment,
+  readOptionalVaultPath,
+  readTool,
+  readValue,
+  type SetupOptions,
+} from './setup-prompts.js';
+import {
+  exportVaultDuringSetup,
+  initializeLocalProject,
+  injectLlmEnvIntoProcess,
+  writeProjectLlmEnv,
+} from './setup-local.js';
+import { runTeamDeployWizard } from './setup-team-deploy.js';
+import { printStepProgress } from './setup-progress.js';
 
 export const setupCommand = new Command('setup')
   .description('Step-by-step setup wizard for local personal use or team deployment')
@@ -79,7 +73,7 @@ export const setupCommand = new Command('setup')
         return;
       }
 
-      const mode: SetupMode = experience === 'team-client' ? 'team' : 'local';
+      const mode = experience === 'team-client' ? 'team' : 'local';
       const tool = await readTool(rl, options);
       const vaultPath = mode === 'local' ? normalizeOptionalPath(await readOptionalVaultPath(rl, options)) : undefined;
       const resolvedVaultPath = vaultPath ? path.resolve(vaultPath) : undefined;
@@ -109,7 +103,8 @@ export const setupCommand = new Command('setup')
         return;
       }
 
-      const envPath = applySetupLlmEnvironment(project.root, llmEnv);
+      const envPath = writeProjectLlmEnv(project.root, llmEnv);
+      injectLlmEnvIntoProcess(llmEnv);
       const configPath = writeProjectCliConfig(project.root, {
         mode,
         tool,
@@ -136,7 +131,7 @@ export const setupCommand = new Command('setup')
       });
 
       if (resolvedVaultPath && mode === 'local') {
-        await exportVault(plan.dataDir, resolvedVaultPath, printStepProgress(2, 'Vault export'));
+        await exportVaultDuringSetup(plan.dataDir, resolvedVaultPath, printStepProgress(2, 'Vault export'));
       }
 
       console.log('\nMindstrate ready:');
@@ -156,364 +151,3 @@ export const setupCommand = new Command('setup')
       rl.close();
     }
   });
-
-export async function initializeLocalProject(
-  project: NonNullable<ReturnType<typeof detectProject>>,
-  dataDir: string,
-  options: { vaultPath?: string; llmEnv?: Record<string, string>; onProgress?: SetupProgress } = {},
-): Promise<void> {
-  const vaultPath = normalizeOptionalPath(options.vaultPath);
-  options.onProgress?.('Opening local memory database');
-  const memory = new Mindstrate(setupMindstrateConfig(dataDir, options.llmEnv));
-  try {
-    await runSetupStageAsync('opening local memory database', () => memory.init());
-    options.onProgress?.('Writing project snapshot');
-    const previousMeta = loadProjectMeta(project.root);
-    const now = new Date().toISOString();
-    const result = await runSetupStageAsync('writing project snapshot', () =>
-      memory.snapshots.upsertProjectSnapshot(project, { author: 'mindstrate-setup' }));
-    options.onProgress?.('Scanning project graph scope');
-    const scanScopeProgress = printScanProgress('Scan scope');
-    const scope = runSetupStage('scanning project graph scope', () => {
-      const result = memory.context.estimateProjectGraphScanScope(project, {
-        onScanProgress: scanScopeProgress,
-      });
-      scanScopeProgress.flush();
-      return result;
-    });
-    for (const line of buildProjectGraphAnalysisLines({
-      projectName: project.name,
-      ...scope,
-    })) console.log(`  ${line}`);
-    options.onProgress?.('Indexing project graph');
-    const indexProgress = printScanProgress('Index graph');
-    const extractionProgress = printIndexProgress('Index graph');
-    const graph = runSetupStage('indexing project graph', () => {
-      const result = memory.context.indexProjectGraph(project, {
-        onScanProgress: indexProgress,
-        onIndexProgress: extractionProgress,
-      });
-      indexProgress.flush();
-      extractionProgress.flush();
-      return result;
-    });
-    options.onProgress?.('Running optional LLM enrichment');
-    const enrichment = await runLlmEnrichment(memory, project);
-    const systemPages = vaultPath ? await runLlmSystemPagePlanning(memory, project) : null;
-    options.onProgress?.('Writing project graph artifacts');
-    const artifacts = runSetupStage('writing project graph artifacts', () => vaultPath
-      ? memory.context.writeProjectGraphObsidianProjection(project, path.resolve(vaultPath), {
-        systemPages: systemPages ?? undefined,
-      })
-      : memory.context.writeProjectGraphArtifacts(project));
-    options.onProgress?.('Saving project metadata');
-    runSetupStage('saving project metadata', () => saveProjectMeta(project.root, {
-      version: 1,
-      name: project.name,
-      rootHint: project.root,
-      language: project.language,
-      framework: project.framework,
-      snapshotKnowledgeId: result.view.id,
-      createdAt: previousMeta?.createdAt ?? now,
-      updatedAt: now,
-      fingerprint: dependencyFingerprint({
-        language: project.language,
-        framework: project.framework,
-        dependencies: project.dependencies,
-      }),
-    }));
-    console.log(`  Project snapshot: ${result.changed ? 'updated' : 'up-to-date'} (${result.view.id})`);
-    console.log(`  Project graph enrichment: ${formatSetupEnrichment(enrichment)}`);
-    console.log(`  Project graph: ${graph.filesScanned} files, ${graph.nodesCreated + graph.nodesUpdated} nodes (${artifacts.reportPath})`);
-    console.log(`  Meta: ${metaPath(project.root)}`);
-  } finally {
-    memory.close();
-  }
-}
-
-export function setupMindstrateConfig(
-  dataDir: string,
-  llmEnv: Record<string, string> | undefined,
-): Partial<MindstrateConfig> {
-  return {
-    dataDir,
-    openaiApiKey: llmEnv?.['OPENAI_API_KEY'],
-    openaiBaseUrl: llmEnv?.['OPENAI_BASE_URL'],
-    llmModel: llmEnv?.['MINDSTRATE_LLM_MODEL'],
-    embeddingModel: llmEnv?.['MINDSTRATE_EMBEDDING_MODEL'],
-    logger: consoleLogger,
-  };
-}
-
-export function applySetupLlmEnvironment(projectRoot: string, llmEnv: Record<string, string>): string | null {
-  if (Object.keys(llmEnv).length === 0) return null;
-  const envPath = upsertProjectEnv(projectRoot, llmEnv);
-  for (const [key, value] of Object.entries(llmEnv)) process.env[key] = value;
-  return envPath;
-}
-
-async function runLlmEnrichment(
-  memory: Mindstrate,
-  project: NonNullable<ReturnType<typeof detectProject>>,
-): Promise<Awaited<ReturnType<Mindstrate['context']['enrichProjectGraph']>> | { status: 'failed'; message: string }> {
-  try {
-    return await memory.context.enrichProjectGraph(project);
-  } catch (error) {
-    const message = errorMessage(error);
-    console.warn(`  Project graph enrichment skipped: ${message}`);
-    return { status: 'failed', message };
-  }
-}
-
-async function runLlmSystemPagePlanning(
-  memory: Mindstrate,
-  project: NonNullable<ReturnType<typeof detectProject>>,
-): Promise<Awaited<ReturnType<Mindstrate['context']['planProjectGraphSystemPages']>> | null> {
-  try {
-    return await memory.context.planProjectGraphSystemPages(project);
-  } catch (error) {
-    console.warn(`  Project graph system page planning skipped: ${errorMessage(error)}`);
-    return null;
-  }
-}
-
-function formatSetupEnrichment(
-  enrichment: Awaited<ReturnType<Mindstrate['context']['enrichProjectGraph']>> | { status: 'failed'; message: string },
-): string {
-  if (enrichment.status === 'failed') return `failed (${enrichment.message})`;
-  if (enrichment.status === 'skipped') return `skipped (${enrichment.reason})`;
-  if (enrichment.status === 'noop') return enrichment.reason ? `noop (${enrichment.reason})` : 'noop';
-  return `enriched (${enrichment.nodesCreated} created, ${enrichment.nodesUpdated} updated)`;
-}
-
-function runSetupStage<T>(stage: string, work: () => T): T {
-  try {
-    return work();
-  } catch (error) {
-    throw new Error(`${stage} failed: ${errorMessage(error)}`);
-  }
-}
-
-async function runSetupStageAsync<T>(stage: string, work: () => Promise<T>): Promise<T> {
-  try {
-    return await work();
-  } catch (error) {
-    throw new Error(`${stage} failed: ${errorMessage(error)}`);
-  }
-}
-
-async function exportVault(dataDir: string, vaultPath: string, onProgress?: SetupProgress): Promise<void> {
-  onProgress?.('Opening local memory database');
-  const root = path.resolve(vaultPath);
-  const layout = new VaultLayout({ vaultRoot: root });
-  layout.ensureRoot();
-  const memory = new Mindstrate({ dataDir, logger: consoleLogger });
-  await memory.init();
-  onProgress?.('Exporting vault markdown');
-  const sync = new SyncManager(memory, { vaultRoot: root });
-  const result = await sync.exportAll();
-  console.log(`  Vault export: ${result.written} written, ${result.skipped} skipped`);
-  memory.close();
-}
-
-function normalizeOptionalPath(input: string | undefined): string | undefined {
-  const trimmed = input?.trim();
-  return trimmed || undefined;
-}
-
-function printBanner(workspace: string): void {
-  console.log('');
-  console.log('Mindstrate Setup');
-  console.log(`Workspace: ${workspace}`);
-  console.log('');
-}
-
-async function readExperience(rl: readline.Interface, options: SetupOptions): Promise<SetupExperience> {
-  if (options.mode === 'local') return 'local';
-  if (options.mode === 'team' || options.mode === 'team-client') return 'team-client';
-  if (options.mode === 'team-deploy') return 'team-deploy';
-  if (options.yes) return 'local';
-  return chooseOption(rl, 'What do you want to set up?', [
-    {
-      label: 'Local personal use',
-      value: 'local',
-      description: 'SQLite data in this project, optional Obsidian vault',
-    },
-    {
-      label: 'Team member client',
-      value: 'team-client',
-      description: 'Connect this AI IDE to an existing Team Server',
-    },
-    {
-      label: 'Team server deployment',
-      value: 'team-deploy',
-      description: 'Prepare deploy/.env.deploy for Docker deployment',
-    },
-  ], 0);
-}
-
-async function readTool(rl: readline.Interface, options: SetupOptions): Promise<SetupTool> {
-  const valid = new Set(['opencode', 'cursor', 'claude-desktop', 'all']);
-  if (options.tool && valid.has(options.tool)) return options.tool;
-  if (options.yes) return 'opencode';
-  return chooseOption(rl, 'Which AI tool should Mindstrate configure?', [
-    { label: 'OpenCode', value: 'opencode', description: 'Project opencode.json' },
-    { label: 'Cursor', value: 'cursor', description: 'Project .cursor/mcp.json' },
-    { label: 'Claude Desktop', value: 'claude-desktop', description: 'Claude MCP config' },
-    { label: 'All supported tools', value: 'all', description: 'Write every supported config' },
-  ], 0);
-}
-
-async function readOptionalVaultPath(rl: readline.Interface, options: SetupOptions): Promise<string | undefined> {
-  if (options.vault) return normalizeOptionalPath(options.vault);
-  if (options.yes) return undefined;
-  const useVault = await chooseOption(rl, 'Connect an Obsidian vault?', [
-    { label: 'Skip for now', value: 'no', description: 'You can add it later with vault sync' },
-    { label: 'Yes, choose a vault path', value: 'yes', description: 'Export project knowledge as Markdown' },
-  ], 0);
-  if (useVault === 'no') return undefined;
-  return askOptional(rl, 'Vault path');
-}
-
-async function readValue(rl: readline.Interface, current: string | undefined, label: string): Promise<string | undefined> {
-  if (current) return current;
-  const answer = await rl.question(`${label}? Leave empty to fill later: `);
-  return answer.trim() || undefined;
-}
-
-async function readLlmEnvironment(rl: readline.Interface, options: SetupOptions): Promise<Record<string, string>> {
-  const env: Record<string, string> = {};
-  if (options.openaiApiKey) env.OPENAI_API_KEY = options.openaiApiKey;
-  if (options.openaiBaseUrl) env.OPENAI_BASE_URL = options.openaiBaseUrl;
-  if (options.llmModel) env.MINDSTRATE_LLM_MODEL = options.llmModel;
-  if (options.embeddingModel) env.MINDSTRATE_EMBEDDING_MODEL = options.embeddingModel;
-  if (options.yes || Object.keys(env).length > 0) return env;
-
-  const provider = await chooseOption(rl, 'Configure LLM now?', [
-    { label: 'Skip', value: 'skip', description: 'Use local hash embeddings and rule-based extraction' },
-    { label: 'OpenAI-compatible API', value: 'openai', description: 'OpenAI, DashScope, Moonshot, local Ollama/vLLM' },
-  ], 0);
-  if (provider === 'skip') return env;
-  const apiKey = await rl.question('OPENAI_API_KEY: ');
-  const baseUrl = await rl.question('OPENAI_BASE_URL [https://api.openai.com/v1]: ');
-  const llmModel = await rl.question('MINDSTRATE_LLM_MODEL [gpt-4o-mini]: ');
-  const embeddingModel = await rl.question('MINDSTRATE_EMBEDDING_MODEL [text-embedding-3-small]: ');
-  if (apiKey.trim()) env.OPENAI_API_KEY = apiKey.trim();
-  env.OPENAI_BASE_URL = baseUrl.trim() || 'https://api.openai.com/v1';
-  env.MINDSTRATE_LLM_MODEL = llmModel.trim() || 'gpt-4o-mini';
-  env.MINDSTRATE_EMBEDDING_MODEL = embeddingModel.trim() || 'text-embedding-3-small';
-  return env;
-}
-
-async function runTeamDeployWizard(rl: readline.Interface, options: SetupOptions): Promise<void> {
-  console.log('\nTeam server deployment');
-  const apiKey = options.teamApiKey
-    ?? await askOptional(rl, 'TEAM_API_KEY for the server');
-  const teamPort = await askOptional(rl, 'Team Server port [3388]') ?? '3388';
-  const webPort = await askOptional(rl, 'Web UI port [3377]') ?? '3377';
-  const openaiApiKey = options.openaiApiKey ?? await askOptional(rl, 'OPENAI_API_KEY for the server, leave empty for offline mode');
-  const openaiBaseUrl = options.openaiBaseUrl ?? await askOptional(rl, 'OPENAI_BASE_URL, leave empty for OpenAI default');
-
-  console.log('\nDeployment plan:');
-  console.log('  Mode:    Team server deployment');
-  console.log('  Compose: deploy/docker-compose.deploy.yml');
-  console.log(`  API key: ${apiKey ? 'provided' : 'missing'}`);
-  console.log(`  Team:    :${teamPort}`);
-  console.log(`  Web UI:  :${webPort}`);
-
-  if (!apiKey) {
-    console.log('\nTEAM_API_KEY is required before Docker deployment can start.');
-    return;
-  }
-
-  if (!options.yes && !(await confirm(rl, 'Write deployment config'))) {
-    console.log('Deployment setup cancelled.');
-    return;
-  }
-
-  const deployDir = path.resolve('deploy');
-  if (!fs.existsSync(path.join(deployDir, 'docker-compose.deploy.yml'))) {
-    console.log('\nCannot find deploy/docker-compose.deploy.yml in this workspace.');
-    console.log('Run this deployment setup from the Mindstrate repository root.');
-    return;
-  }
-
-  const envPath = path.join(deployDir, '.env.deploy');
-  const lines = [
-    'TEAM_API_KEY=' + apiKey,
-    'TEAM_PORT=' + teamPort,
-    'WEB_UI_PORT=' + webPort,
-    'TEAM_BIND=0.0.0.0',
-    'WEB_UI_BIND=0.0.0.0',
-    'OPENAI_API_KEY=' + (openaiApiKey ?? ''),
-    ...(openaiBaseUrl ? ['OPENAI_BASE_URL=' + openaiBaseUrl] : []),
-    'EMBEDDING_MODEL=' + (options.embeddingModel ?? 'text-embedding-3-small'),
-    'LLM_MODEL=' + (options.llmModel ?? 'gpt-4o-mini'),
-    'LOG_LEVEL=info',
-    'WEB_UI_LOCALE=zh',
-    '',
-  ];
-  fs.writeFileSync(envPath, lines.join('\n'), 'utf8');
-
-  console.log('\nTeam deployment config ready:');
-  console.log(`  Env:     ${envPath}`);
-  console.log('  Health:  http://<server>:' + teamPort + '/health');
-  console.log('  Web UI:  http://<server>:' + webPort);
-}
-
-async function confirm(rl: readline.Interface, prompt: string): Promise<boolean> {
-  const answer = await rl.question(`${prompt} Y/n: `);
-  return answer.trim().toLowerCase() !== 'n';
-}
-
-function printStepProgress(total: number, prefix = 'Setup'): SetupProgress {
-  let current = 0;
-  return (message) => {
-    current += 1;
-    console.log(`  [${current}/${total}] ${prefix}: ${message}...`);
-  };
-}
-
-function printScanProgress(prefix: string): ScanProgress & { flush: () => void } {
-  let lastOutputAt = 0;
-  let lastEvent: ProjectGraphScanProgress | undefined;
-  const print = (event: ProjectGraphScanProgress, force = false): void => {
-    lastEvent = event;
-    const now = Date.now();
-    if (!force && now - lastOutputAt < 1000 && event.files % 200 !== 0) return;
-    lastOutputAt = now;
-    const pathLabel = event.path.length > 90 ? `...${event.path.slice(-87)}` : event.path;
-    console.log(
-      `      ${prefix}: ${event.files} files, ${event.directories} dirs, `
-      + `${event.generatedFiles} generated, ${event.metadataOnlyFiles} metadata-only, `
-      + `${event.skippedFiles} skipped, ${event.phase} ${pathLabel}`,
-    );
-  };
-  const progress = ((event: ProjectGraphScanProgress) => print(event)) as ScanProgress & { flush: () => void };
-  progress.flush = () => {
-    if (lastEvent) print(lastEvent, true);
-  };
-  return progress;
-}
-
-function printIndexProgress(prefix: string): IndexProgress & { flush: () => void } {
-  let lastOutputAt = 0;
-  let lastEvent: ProjectGraphIndexProgress | undefined;
-  const print = (event: ProjectGraphIndexProgress, force = false): void => {
-    lastEvent = event;
-    const now = Date.now();
-    if (!force && now - lastOutputAt < 1000 && event.filesProcessed % 200 !== 0) return;
-    lastOutputAt = now;
-    const pathLabel = event.path ? ` ${event.path.length > 80 ? `...${event.path.slice(-77)}` : event.path}` : '';
-    console.log(
-      `      ${prefix}: ${event.phase} ${event.filesProcessed}/${event.filesTotal} files, `
-      + `${event.nodes} nodes, ${event.edges} edges, ${event.generatedFiles} generated, `
-      + `${event.metadataOnlyRoots} metadata-only roots, ${event.skippedFiles} skipped${pathLabel}`,
-    );
-  };
-  const progress = ((event: ProjectGraphIndexProgress) => print(event)) as IndexProgress & { flush: () => void };
-  progress.flush = () => {
-    if (lastEvent) print(lastEvent, true);
-  };
-  return progress;
-}

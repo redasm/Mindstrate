@@ -4,7 +4,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { detectProject, Mindstrate, consoleLogger } from '@mindstrate/server';
-import { initializeLocalProject, applySetupLlmEnvironment, setupMindstrateConfig } from './commands/setup.js';
+import {
+  initializeLocalProject,
+  injectLlmEnvIntoProcess,
+  setupMindstrateConfig,
+  writeProjectLlmEnv,
+} from './commands/setup-local.js';
 
 test('initializeLocalProject writes the project graph to Obsidian when a vault is configured', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-'));
@@ -105,21 +110,19 @@ test('setupMindstrateConfig applies LLM values collected during setup', () => {
   });
 });
 
-test('applySetupLlmEnvironment writes project env and updates current process', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-env-'));
+test('writeProjectLlmEnv merges values into the project .env without touching process.env', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-env-write-'));
   const previousApiKey = process.env['OPENAI_API_KEY'];
-  const previousBaseUrl = process.env['OPENAI_BASE_URL'];
   fs.writeFileSync(path.join(root, '.env'), 'CUSTOM_VALUE=kept\nOPENAI_API_KEY=old\n', 'utf8');
 
   try {
-    const envPath = applySetupLlmEnvironment(root, {
+    const envPath = writeProjectLlmEnv(root, {
       OPENAI_API_KEY: 'new-key',
       OPENAI_BASE_URL: 'https://llm.example/v1',
     });
 
     assert.equal(envPath, path.join(root, '.env'));
-    assert.equal(process.env['OPENAI_API_KEY'], 'new-key');
-    assert.equal(process.env['OPENAI_BASE_URL'], 'https://llm.example/v1');
+    assert.equal(process.env['OPENAI_API_KEY'], previousApiKey);
     assert.equal(fs.readFileSync(path.join(root, '.env'), 'utf8'), [
       'CUSTOM_VALUE=kept',
       'OPENAI_API_KEY=new-key',
@@ -129,18 +132,33 @@ test('applySetupLlmEnvironment writes project env and updates current process', 
     ].join('\n'));
   } finally {
     restoreEnv('OPENAI_API_KEY', previousApiKey);
-    restoreEnv('OPENAI_BASE_URL', previousBaseUrl);
   }
 });
 
-test('applySetupLlmEnvironment returns null and does not write when llmEnv is empty', () => {
+test('writeProjectLlmEnv returns null and does not write when llmEnv is empty', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-cli-setup-env-empty-'));
   const envPath = path.join(root, '.env');
 
-  const result = applySetupLlmEnvironment(root, {});
+  const result = writeProjectLlmEnv(root, {});
 
   assert.equal(result, null);
   assert.equal(fs.existsSync(envPath), false);
+});
+
+test('injectLlmEnvIntoProcess mutates process.env independently of any file write', () => {
+  const previousApiKey = process.env['OPENAI_API_KEY'];
+  const previousBaseUrl = process.env['OPENAI_BASE_URL'];
+  try {
+    injectLlmEnvIntoProcess({
+      OPENAI_API_KEY: 'in-process-key',
+      OPENAI_BASE_URL: 'https://llm.example/v2',
+    });
+    assert.equal(process.env['OPENAI_API_KEY'], 'in-process-key');
+    assert.equal(process.env['OPENAI_BASE_URL'], 'https://llm.example/v2');
+  } finally {
+    restoreEnv('OPENAI_API_KEY', previousApiKey);
+    restoreEnv('OPENAI_BASE_URL', previousBaseUrl);
+  }
 });
 
 function restoreEnv(key: string, value: string | undefined): void {
