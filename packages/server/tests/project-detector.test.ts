@@ -174,6 +174,20 @@ describe('detectProject', () => {
     expect(p.graphHints?.operationManual?.criticalInvariants).toContain('TypeScript/Typing is generated Unreal TypeScript declaration output and must not be edited manually.');
     expect(p.graphHints?.operationManual?.playbooks?.map((playbook) => playbook.changeType)).toContain('Modify C++ reflection API consumed by TypeScript');
     expect(p.graphHints?.layers?.map((layer) => layer.id)).toEqual(expect.arrayContaining(['gameplay-cpp', 'content-assets', 'config', 'generated']));
+    // Unreal projects should suggest a starter set of business-system pages.
+    // The keys must stay stable so `mindstrate system-pages init <key>`
+    // hits the matching pre-fill content from the rule.
+    const suggestedKeys = (p.graphHints?.suggestedSystemPages ?? []).map((entry) => entry.key);
+    expect(suggestedKeys).toEqual(expect.arrayContaining([
+      '10-gameplay-loop',
+      '20-network-replication',
+      '30-asset-loading',
+      '40-gameplay-ability-system',
+      '50-ui-umg',
+      '60-config-and-tuning',
+    ]));
+    const gas = p.graphHints?.suggestedSystemPages?.find((entry) => entry.key === '40-gameplay-ability-system');
+    expect(gas?.classifications).toEqual(expect.arrayContaining(['cpp-source', 'config-sensitive']));
   });
 
   it('loads project-local detection rules before built-ins', () => {
@@ -211,6 +225,37 @@ describe('detectProject', () => {
     expect(p.snapshotHints?.overview).toBe('This is a custom engine project.');
     expect(p.graphHints?.sourceRoots).toEqual(['GameSource']);
     expect(p.graphHints?.riskHints).toEqual(['Generated output is not source.']);
+  });
+
+  it('exposes project-local suggestedSystemPages on the detected project', () => {
+    write(root, '.mindstrate/rules/custom-engine-with-suggestions.json', JSON.stringify({
+      id: 'custom-engine-with-suggestions',
+      name: 'Custom Engine With Suggestions',
+      priority: 200,
+      match: { all: [{ dir: 'GameSource' }] },
+      detect: { language: 'cpp', framework: 'custom-engine' },
+      suggestedSystemPages: [
+        {
+          key: '10-combat',
+          title: 'Combat',
+          classifications: ['cpp-source'],
+          knownConstraints: ['Combat damage tables live in DataTable_Damage.csv.'],
+          sourceOfTruth: ['Source/Combat/Public/CombatComponent.h'],
+          tags: ['combat'],
+        },
+        {
+          // intentionally missing `key` — must be filtered out by the loader
+          title: 'No key — gets dropped',
+        },
+      ],
+    }));
+    fs.mkdirSync(path.join(root, 'GameSource'), { recursive: true });
+
+    const p = detectProject(root)!;
+
+    expect(p.framework).toBe('custom-engine');
+    expect(p.graphHints?.suggestedSystemPages?.map((entry) => entry.key)).toEqual(['10-combat']);
+    expect(p.graphHints?.suggestedSystemPages?.[0].sourceOfTruth).toEqual(['Source/Combat/Public/CombatComponent.h']);
   });
 
   it('ignores invalid project-local detection rule files', () => {

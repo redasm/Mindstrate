@@ -114,6 +114,40 @@ Unreal 示例：
 
 规则生成内容应位于 preserve block 外。用户笔记仍保留在 preserve block 中，并且必须跨多次 `mindstrate init` 保留。
 
+## 建议业务系统页（suggestedSystemPages）
+
+检测规则可以声明 `suggestedSystemPages` —— 该项目类型常见的业务系统级架构页"启动包"。例如 Unreal 规则建议了 gameplay loop / network replication / asset loading / GAS / UMG / config 共 6 张页。这些建议**完全 opt-in**：在用户运行 `mindstrate system-pages init <key>` 之前，不会向 ECS 图注入任何节点。
+
+```json
+{
+  "id": "unreal-project",
+  "suggestedSystemPages": [
+    {
+      "key": "10-gameplay-loop",
+      "title": "Gameplay Loop",
+      "classifications": ["cpp-source"],
+      "knownConstraints": ["..."],
+      "doNotEditTargets": ["..."],
+      "affectedChain": "AGameModeBase -> player controller -> pawn -> components.",
+      "sourceOfTruth": ["TODO: 项目的 gameplay loop 入口 header。"],
+      "recommendedVerification": ["在 PIE 跑 gameplay smoke test。"],
+      "tags": ["gameplay", "loop"]
+    }
+  ]
+}
+```
+
+字段语义：除 `key` 外其它字段均可选。`key` 是用户在 `<project>/.mindstrate/system-pages/` 下使用的文件名（不带 `.json`），它同时是内化后 ECS RULE 节点的确定 id (`architecture:system-page:<project>:<key>`)。
+
+工作流：
+
+1. `mindstrate system-pages list` 显示每个建议页 ✅ / ⬜，让用户看见哪些 starter 页还没填。
+2. `mindstrate system-pages init <key>` 在 `<project>/.mindstrate/system-pages/<key>.json` 写入模板。如果 `<key>` 命中了某条建议，模板用规则提供的 starter 内容（title / body / classifications / constraints / source-of-truth / recommendedVerification / tags）**预填**，不再是泛化 TODO。
+3. 用户把剩余的 TODO 替换为项目特定文本。
+4. `mindstrate setup`（或 `mindstrate graph sync`）将页内化为确定 id 的 RULE 节点，MCP 召回随之生效。
+
+`<project>/.mindstrate/rules/*.json` 中的项目本地规则也可以声明自己的 `suggestedSystemPages`。这适合团队级 starter 套件 —— 比如把工作室常用的全部业务子系统（战斗 / AI / 掉落 / 经济）列成建议页，新拉取代码的人 `mindstrate system-pages init combat` 一下就能拿到正确形状的页。
+
 ## 安全边界
 
 规则是数据，不是代码。Mindstrate 应验证 JSON，并避免：

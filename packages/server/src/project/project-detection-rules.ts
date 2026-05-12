@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ChangeSource, type ProjectLayer } from '@mindstrate/protocol/models';
-import type { DetectedProject, ProjectOperationManual } from './detector.js';
+import type { DetectedProject, ProjectOperationManual, SuggestedSystemPage } from './detector.js';
 import { safeJson } from './detection-support.js';
 
 type RuleSource = 'project' | 'builtin';
@@ -48,6 +48,7 @@ interface ProjectDetectionRule {
   riskHints?: string[];
   layers?: RuleProjectLayer[];
   operationManual?: ProjectOperationManual;
+  suggestedSystemPages?: SuggestedSystemPage[];
 }
 
 interface RuleProjectLayer {
@@ -112,8 +113,18 @@ export const detectProjectByRules = (root: string): DetectedProject | null => {
       riskHints: rule.riskHints,
       layers: normalizeLayers(rule.layers),
       operationManual: rule.operationManual,
+      suggestedSystemPages: normalizeSuggestedSystemPages(rule.suggestedSystemPages),
     },
   };
+};
+
+const normalizeSuggestedSystemPages = (
+  pages?: SuggestedSystemPage[],
+): SuggestedSystemPage[] | undefined => {
+  if (!pages || pages.length === 0) return undefined;
+  return pages
+    .filter((page) => typeof page?.key === 'string' && page.key.length > 0)
+    .map((page) => ({ ...page }));
 };
 
 const normalizeLayers = (layers?: RuleProjectLayer[]): ProjectLayer[] | undefined =>

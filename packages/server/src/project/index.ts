@@ -8,6 +8,7 @@ export {
   type ProjectModuleResponsibility,
   type ProjectOperationManual,
   type ProjectValidationCommand,
+  type SuggestedSystemPage,
 } from './detector.js';
 
 export {

@@ -133,6 +133,41 @@ export interface ProjectGraphHints {
   riskHints?: string[];
   layers?: ProjectLayer[];
   operationManual?: ProjectOperationManual;
+  /**
+   * Project-type level recommendations for business-system architecture
+   * pages a human or agent should consider authoring under
+   * `<project>/.mindstrate/system-pages/`. The detection rule (e.g.
+   * `unreal-project.json`) declares these so `mindstrate system-pages
+   * list` / `init` can show "this project type usually wants a combat
+   * page, an asset-loading page, ..." without forcing them into the
+   * graph (game genres differ too much for hardcoded injection).
+   */
+  suggestedSystemPages?: SuggestedSystemPage[];
+}
+
+/**
+ * A starter-kit description of one architecture page that this project
+ * type typically benefits from. Consumed by the system-pages CLI to:
+ *   - report which suggested pages already exist as files under
+ *     `.mindstrate/system-pages/` and which are still missing,
+ *   - pre-fill the JSON template with classification, source-of-truth,
+ *     and verification hints when the user runs
+ *     `mindstrate system-pages init <key>` for one of them.
+ *
+ * Every field is optional except `key`. Values left undefined fall back
+ * to the same generic placeholders the empty template uses.
+ */
+export interface SuggestedSystemPage {
+  key: string;
+  title?: string;
+  body?: string[];
+  classifications?: string[];
+  knownConstraints?: string[];
+  doNotEditTargets?: string[];
+  affectedChain?: string;
+  sourceOfTruth?: string[];
+  recommendedVerification?: string[];
+  tags?: string[];
 }
 
 const PROJECT_DETECTORS: ProjectDetector[] = [

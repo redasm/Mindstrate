@@ -127,6 +127,61 @@ Supported enrichment fields:
 The renderer should keep generated rule content outside preserve blocks. User
 notes still live inside existing preserve blocks and must survive re-runs.
 
+## Suggested System Pages
+
+A detection rule may declare `suggestedSystemPages` — a starter-kit list of
+business-system level architecture pages that this project type usually
+benefits from. The Unreal rule, for example, suggests pages for the
+gameplay loop, network replication, asset loading, the Gameplay Ability
+System, UMG, and config / tuning. Suggestions are deliberately
+**opt-in**: nothing is injected into the ECS graph until the user runs
+`mindstrate system-pages init <key>` for them.
+
+```json
+{
+  "id": "unreal-project",
+  "suggestedSystemPages": [
+    {
+      "key": "10-gameplay-loop",
+      "title": "Gameplay Loop",
+      "classifications": ["cpp-source"],
+      "knownConstraints": ["..."],
+      "doNotEditTargets": ["..."],
+      "affectedChain": "AGameModeBase -> player controller -> pawn -> components.",
+      "sourceOfTruth": ["TODO: project-specific gameplay loop entry header."],
+      "recommendedVerification": ["Run the gameplay smoke test in PIE."],
+      "tags": ["gameplay", "loop"]
+    }
+  ]
+}
+```
+
+Field semantics: every field except `key` is optional. `key` is the
+filename stem the user would use under `<project>/.mindstrate/system-pages/`,
+and the same key is reused as the deterministic id of the resulting ECS
+RULE node (`architecture:system-page:<project>:<key>`).
+
+Workflow:
+
+1. `mindstrate system-pages list` shows ✅ / ⬜ for each suggestion so
+   the user sees which starter pages are still missing.
+2. `mindstrate system-pages init <key>` writes
+   `<project>/.mindstrate/system-pages/<key>.json`. When `<key>`
+   matches a suggestion, the JSON template is **pre-filled** from the
+   rule's starter content (title, body, classifications, constraints,
+   source-of-truth, recommendedVerification, tags) instead of using
+   the generic TODO placeholders.
+3. The user replaces remaining TODOs with project-specific text.
+4. `mindstrate setup` (or `mindstrate graph sync`) internalizes the
+   page into a deterministic RULE node so MCP retrieval surfaces it.
+
+Project-local rules under `<project>/.mindstrate/rules/*.json` can
+declare their own `suggestedSystemPages`. Use this to ship a
+team-specific starter kit (for example: list every business subsystem
+your studio always documents — combat, AI, loot, economy — so a fresh
+checkout can run `mindstrate system-pages init combat` and get a
+correctly-shaped page).
+
 ## Security Boundary
 
 MVP rules are data, not code. Mindstrate should validate rule JSON before use.

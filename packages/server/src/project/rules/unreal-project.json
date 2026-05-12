@@ -260,5 +260,131 @@
       "parserAdapters": [],
       "generated": true
     }
+  ],
+  "suggestedSystemPages": [
+    {
+      "key": "10-gameplay-loop",
+      "title": "Gameplay Loop",
+      "classifications": ["cpp-source"],
+      "knownConstraints": [
+        "TODO: pin the actual gameplay loop entry (e.g. AGameModeBase / UGameInstance subclass) once confirmed."
+      ],
+      "doNotEditTargets": [
+        "TODO: list any auto-generated state-machine code or generated cue tables that must be regenerated rather than hand-edited."
+      ],
+      "affectedChain": "AGameModeBase / UGameInstance subclass -> player controller -> pawn / character -> per-system component activations.",
+      "sourceOfTruth": [
+        "TODO: name the canonical AGameModeBase / UGameInstance subclass header in Source/."
+      ],
+      "recommendedVerification": [
+        "Run the project-approved PIE / standalone smoke test for the gameplay loop after any change."
+      ],
+      "tags": ["gameplay", "loop"]
+    },
+    {
+      "key": "20-network-replication",
+      "title": "Network Replication",
+      "classifications": ["cpp-source"],
+      "knownConstraints": [
+        "Replicated UPROPERTY changes must be reviewed against bandwidth/relevancy or they regress at scale.",
+        "Server RPC ordering vs. multicast vs. client RPC must be deliberate; do not flip without re-validating authority assumptions."
+      ],
+      "doNotEditTargets": [
+        "TODO: list any frozen wire-format or cooked-build replication payloads that cannot be hand-edited."
+      ],
+      "affectedChain": "Replicated UPROPERTY / RPC declaration -> reflection -> dedicated/listen server -> client mispredict / rollback path.",
+      "sourceOfTruth": [
+        "TODO: name the authoritative replication contract location (e.g. Source/<Project>/Public/Net/<File>.h)."
+      ],
+      "recommendedVerification": [
+        "Run a multi-client PIE network smoke test with at least 2 clients.",
+        "Inspect the network profiler trace for the affected actor."
+      ],
+      "tags": ["network", "replication"]
+    },
+    {
+      "key": "30-asset-loading",
+      "title": "Asset Loading",
+      "classifications": ["asset-reference-sensitive", "config-sensitive"],
+      "knownConstraints": [
+        "Async asset loads must go through UAssetManager so primary asset lifetimes are consistent.",
+        "Soft references and DataAsset rows are path-sensitive; renames must use Unreal-aware reference validation."
+      ],
+      "doNotEditTargets": [
+        "TODO: list any cooked manifest or chunk layout file that must be regenerated rather than edited."
+      ],
+      "affectedChain": "DefaultGame.ini AssetManagerSettings -> UAssetManager -> primary asset class -> streaming / chunk / cook layout -> runtime load.",
+      "sourceOfTruth": [
+        "Config/DefaultGame.ini AssetManagerSettings, plus the project's UAssetManager subclass."
+      ],
+      "recommendedVerification": [
+        "Run the project-approved cook / chunk validation command after changing primary asset rules.",
+        "Run an in-PIE async load smoke test."
+      ],
+      "tags": ["asset-loading", "asset-manager"]
+    },
+    {
+      "key": "40-gameplay-ability-system",
+      "title": "Gameplay Ability System (GAS)",
+      "classifications": ["cpp-source", "config-sensitive"],
+      "knownConstraints": [
+        "GameplayAttributeSet members and GameplayEffect modifiers form the data contract; do not refactor without auditing every consumer.",
+        "GameplayTags must be defined in INI / DataTable; do not hardcode tag strings in C++ that diverge from the central registry."
+      ],
+      "doNotEditTargets": [
+        "TODO: list any generated attribute getters/setters (often produced by GAS macros) that must come from the macro expansion rather than hand edits."
+      ],
+      "affectedChain": "UAttributeSet declaration -> GameplayEffect / GameplayAbility -> AbilitySystemComponent on the avatar -> Blueprint widget bindings -> network replication.",
+      "sourceOfTruth": [
+        "TODO: name the central GameplayTags registry and the canonical UAttributeSet header location."
+      ],
+      "recommendedVerification": [
+        "Run combat / ability smoke tests in PIE.",
+        "Check GAS replication on a 2-client network PIE session if the change is replicated."
+      ],
+      "tags": ["combat", "gas", "ability-system"]
+    },
+    {
+      "key": "50-ui-umg",
+      "title": "UI (UMG / Slate)",
+      "classifications": ["asset-reference-sensitive"],
+      "knownConstraints": [
+        "UMG widget asset paths are referenced from C++ via TSoftClassPtr / class redirectors; renames must use Unreal-aware tooling.",
+        "Localization keys are part of the UI contract; changing a key without updating translation tables breaks localized builds."
+      ],
+      "doNotEditTargets": [
+        "TODO: list any generated UMG bindings or auto-generated text catalog files that must be regenerated."
+      ],
+      "affectedChain": "UMG widget asset -> WidgetTree binding -> ViewModel / controller -> gameplay-side data source.",
+      "sourceOfTruth": [
+        "TODO: name the project's UMG / ViewModel base classes and the localization manifest path."
+      ],
+      "recommendedVerification": [
+        "Run UMG smoke pass in PIE.",
+        "Run localization gather/cook check after changing visible strings."
+      ],
+      "tags": ["ui", "umg"]
+    },
+    {
+      "key": "60-config-and-tuning",
+      "title": "Config and Tuning",
+      "classifications": ["config-sensitive"],
+      "knownConstraints": [
+        "Config values flow through Engine/Game/Editor INI hierarchy; setting a value in the wrong layer can be silently overridden.",
+        "Hot-loaded config values must be subscribed via FCoreDelegates / OnConfigSectionsChanged; do not assume one-shot reads."
+      ],
+      "doNotEditTargets": [
+        "TODO: list any baked or cooked config artifact that should not be edited directly."
+      ],
+      "affectedChain": "Config/Default*.ini -> CDO defaults -> runtime read sites -> live tuning subscribers.",
+      "sourceOfTruth": [
+        "Config/Default*.ini for the affected category, plus the C++ class that reads it."
+      ],
+      "recommendedVerification": [
+        "Run the project-approved config validation step.",
+        "Run the gameplay smoke test that exercises the tuned subsystem."
+      ],
+      "tags": ["config", "tuning"]
+    }
   ]
 }

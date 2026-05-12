@@ -9,15 +9,24 @@
  * `<project-root>/.mindstrate/system-pages/`, which Mindstrate loads
  * on every projection write and internalizes into ECS RULE nodes.
  *
+ * Project type "starter kits" come from the matched detection rule's
+ * `suggestedSystemPages` field (see `packages/server/src/project/rules/`).
+ * For example, `unreal-project.json` proposes a handful of Unreal-shaped
+ * pages (gameplay loop, asset loading, GAS, networking, ...). The list
+ * sub-command shows which ones already exist and `init <key>` pre-fills
+ * the JSON template with the rule-supplied starter content when `<key>`
+ * matches a suggestion. Everything stays opt-in: the suggestions never
+ * silently inject ECS nodes by themselves.
+ *
  * Sub-commands:
- *   - `mindstrate system-pages list`        — list built-in + custom pages
+ *   - `mindstrate system-pages list`        — list built-in + custom + suggested
  *   - `mindstrate system-pages init <key>`  — scaffold a custom page file
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Command } from 'commander';
-import { detectProject, errorMessage } from '@mindstrate/server';
+import { detectProject, errorMessage, type SuggestedSystemPage } from '@mindstrate/server';
 
 const CUSTOM_DIR = path.join('.mindstrate', 'system-pages');
 
@@ -43,11 +52,22 @@ const KNOWN_CLASSIFICATIONS = [
   'general-source',
 ];
 
+const BUILTIN_PAGE_KEYS = [
+  '00-overview',
+  '01-runtime-lifecycle',
+  '02-cpp-typescript-bridge',
+  '03-plugin-boundaries',
+  '04-generated-files',
+  '05-validation-playbook',
+  '06-common-change-playbooks',
+  '07-risky-files',
+];
+
 export const systemPagesCommand = new Command('system-pages')
   .description('Manage project-specific architecture system pages');
 
 systemPagesCommand.command('list')
-  .description('List built-in + custom system pages found for this project')
+  .description('List built-in + custom + suggested system pages for this project')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
   .action((options) => {
     try {
@@ -59,15 +79,36 @@ systemPagesCommand.command('list')
       }
       const customDir = path.join(project.root, CUSTOM_DIR);
       const customFiles = fs.existsSync(customDir)
-        ? fs.readdirSync(customDir).filter((name) => name.toLowerCase().endsWith('.json')).sort()
-        : [];
+        ? new Set(fs.readdirSync(customDir).filter((name) => name.toLowerCase().endsWith('.json')).map((name) => name.replace(/\.json$/i, '')))
+        : new Set<string>();
+      const suggestions = project.graphHints?.suggestedSystemPages ?? [];
+
       console.log(`Project: ${project.name}`);
-      console.log('Built-in system pages: 00-overview, 01-runtime-lifecycle, 02-cpp-typescript-bridge, 03-plugin-boundaries, 04-generated-files, 05-validation-playbook, 06-common-change-playbooks, 07-risky-files');
+      console.log('');
+      console.log('Built-in system pages (always shipped):');
+      for (const key of BUILTIN_PAGE_KEYS) console.log(`  - ${key}`);
+      console.log('');
+
       console.log(`Custom pages directory: ${customDir}`);
-      if (customFiles.length === 0) {
-        console.log('  (no custom pages — drop a .json file in this directory or run `mindstrate system-pages init <key>`)');
+      if (customFiles.size === 0) {
+        console.log('  (none)');
       } else {
-        for (const file of customFiles) console.log(`  - ${file}`);
+        for (const file of [...customFiles].sort()) console.log(`  - ${file}.json`);
+      }
+      console.log('');
+
+      if (suggestions.length > 0) {
+        console.log(`Suggested for project type "${project.framework ?? project.language ?? 'detected'}":`);
+        for (const suggestion of suggestions) {
+          const tick = customFiles.has(suggestion.key) ? '✅' : '⬜';
+          const title = suggestion.title ? ` — ${suggestion.title}` : '';
+          console.log(`  ${tick} ${suggestion.key}${title}`);
+        }
+        const missing = suggestions.filter((entry) => !customFiles.has(entry.key));
+        if (missing.length > 0) {
+          console.log('');
+          console.log(`  Run \`mindstrate system-pages init <key>\` to scaffold one of the missing suggestions; the template is pre-filled with the rule-supplied starter metadata.`);
+        }
       }
     } catch (err) {
       console.error('Failed to list system pages:', errorMessage(err));
@@ -78,7 +119,7 @@ systemPagesCommand.command('list')
 systemPagesCommand.command('init <key>')
   .description('Scaffold a project-specific system page (writes a JSON template under .mindstrate/system-pages/)')
   .option('-C, --cwd <path>', 'Run as if invoked in this directory')
-  .option('--title <title>', 'Page title (defaults to the key)')
+  .option('--title <title>', 'Page title (defaults to the suggestion title or the key)')
   .option('--force', 'Overwrite the file if it already exists')
   .action((key: string, options) => {
     try {
@@ -98,9 +139,13 @@ systemPagesCommand.command('init <key>')
         console.error(`File already exists: ${filePath}\n  Re-run with --force to overwrite.`);
         process.exit(1);
       }
+      const suggestion = (project.graphHints?.suggestedSystemPages ?? []).find((entry) => entry.key === key);
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(filePath, renderTemplate(key, options.title), 'utf8');
+      fs.writeFileSync(filePath, renderTemplate(key, options.title, suggestion), 'utf8');
       console.log(`Created system page template: ${filePath}`);
+      if (suggestion) {
+        console.log(`  Pre-filled from project-rule suggestion (project type: ${project.framework ?? project.language ?? 'detected'}).`);
+      }
       console.log('');
       console.log('Available metadata.classifications (pick the ones that fit; unknown labels are dropped):');
       for (const value of KNOWN_CLASSIFICATIONS) console.log(`  - ${value}`);
@@ -117,53 +162,60 @@ systemPagesCommand.command('init <key>')
 
 const isValidKey = (key: string): boolean => /^[a-z0-9_-]+$/i.test(key);
 
-const renderTemplate = (key: string, titleOverride?: string): string => {
-  const title = titleOverride ?? key;
+const renderTemplate = (
+  key: string,
+  titleOverride: string | undefined,
+  suggestion: SuggestedSystemPage | undefined,
+): string => {
+  const title = titleOverride ?? suggestion?.title ?? key;
   const template = {
     _help: {
       schema: 'mindstrate.system-page.v1',
       fillIn: 'Replace every "TODO" line below. Empty arrays are fine — keep the field but leave it [].',
       classificationsHint: `Pick from: ${KNOWN_CLASSIFICATIONS.join(', ')}. Unknown labels are silently dropped.`,
-      readMore: 'mindstrate system-pages list — show built-in + custom pages',
+      readMore: 'mindstrate system-pages list — show built-in + custom + suggested pages',
+      seededFromSuggestion: suggestion ? `${suggestion.key} (project rule)` : null,
     },
     key,
     name: `${key}.md`,
     title,
-    body: [
-      '## Purpose',
-      '',
-      `- Project-specific architecture rules for the ${title} subsystem.`,
-      '',
-      '## Source Of Truth',
-      '',
-      '- (where the canonical definition lives, e.g. `Source/Combat/Public/*.h` or `Config/DefaultGame.ini`)',
-      '',
-      '## Editing Rules',
-      '',
-      '- (what must NOT be edited directly, what must be regenerated, etc.)',
-      '',
-      '## Verification',
-      '',
-      '- (how to verify a change works: smoke test, build target, type-gen step, ...)',
-    ],
+    body: suggestion?.body ?? defaultBody(title),
     overlays: [],
     metadata: {
-      classifications: [],
-      knownConstraints: [
+      classifications: suggestion?.classifications ?? [],
+      knownConstraints: suggestion?.knownConstraints ?? [
         'TODO: replace with real project-specific constraints (sentence per line).',
       ],
-      doNotEditTargets: [
+      doNotEditTargets: suggestion?.doNotEditTargets ?? [
         'TODO: list paths or symbols agents must not edit directly (e.g. generated headers, DataTable rows).',
       ],
-      affectedChain: 'TODO: describe the dependency chain (e.g. Source/Combat/*.h -> ASComponent -> Blueprint widgets).',
-      sourceOfTruth: [
+      affectedChain: suggestion?.affectedChain ?? 'TODO: describe the dependency chain (e.g. Source/Combat/*.h -> ASComponent -> Blueprint widgets).',
+      sourceOfTruth: suggestion?.sourceOfTruth ?? [
         'TODO: name the canonical source of truth file/symbol/system.',
       ],
-      recommendedVerification: [
+      recommendedVerification: suggestion?.recommendedVerification ?? [
         'TODO: list the verification command(s) that must be run after editing.',
       ],
-      tags: [key],
+      tags: suggestion?.tags ?? [key],
     },
   };
   return `${JSON.stringify(template, null, 2)}\n`;
 };
+
+const defaultBody = (title: string): string[] => [
+  '## Purpose',
+  '',
+  `- Project-specific architecture rules for the ${title} subsystem.`,
+  '',
+  '## Source Of Truth',
+  '',
+  '- (where the canonical definition lives, e.g. `Source/Combat/Public/*.h` or `Config/DefaultGame.ini`)',
+  '',
+  '## Editing Rules',
+  '',
+  '- (what must NOT be edited directly, what must be regenerated, etc.)',
+  '',
+  '## Verification',
+  '',
+  '- (how to verify a change works: smoke test, build target, type-gen step, ...)',
+];

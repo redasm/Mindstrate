@@ -111,6 +111,7 @@ export {
   type ProjectModuleResponsibility,
   type ProjectOperationManual,
   type ProjectValidationCommand,
+  type SuggestedSystemPage,
   type ProjectMeta,
 } from './project/index.js';
 
