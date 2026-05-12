@@ -389,4 +389,35 @@ describe('handleProjectGraphTaskQuery system-page metadata integration', () => {
     // not just the generic "Exact source file ..." fallback.
     expect(text).toContain('C++ reflection source or UnrealSharp generator/configuration.');
   });
+
+  it('returns "Do Not Edit Directly: TypeScript/Typing" for a bare TypeScript/Typing query (Gap A regression)', async () => {
+    // Pinned regression: a query of just "TypeScript/Typing" with no
+    // selected nodes and no evidence still has to surface the
+    // project-specific do-not-edit target. The classifier maps the
+    // query string itself to `generated-output` + `typescript-consumer`,
+    // so when a system-page rule for `02-cpp-typescript-bridge` is
+    // loaded, its `doNotEditTargets: ['TypeScript/Typing']` must be
+    // listed BEFORE the generic generated-roots fallback.
+    const api = createFakeMcpApi({
+      contextNodes: [],
+      contextEdges: [],
+      overlays: [],
+      systemPageRules: [systemPageRule({
+        pageKey: '02-cpp-typescript-bridge',
+        classifications: ['native-script-binding', 'generated-output', 'typescript-consumer'],
+        doNotEditTargets: ['TypeScript/Typing'],
+      })],
+    });
+
+    const response = await handleProjectGraphTaskQuery(api, { task: 'before-edit', query: 'TypeScript/Typing' });
+
+    const text = response.content[0].text;
+    const doNotEditSection = text.split('### Do Not Edit Directly')[1]?.split('### ')[0] ?? '';
+    expect(doNotEditSection).toContain('TypeScript/Typing');
+    // Order matters: the project-specific entry must come first so a
+    // human/agent reading the report sees it before the generic list
+    // of every generated root.
+    const lines = doNotEditSection.split('\n').map((line) => line.trim()).filter((line) => line.startsWith('- '));
+    expect(lines[0]).toBe('- TypeScript/Typing');
+  });
 });

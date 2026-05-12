@@ -183,4 +183,29 @@ describe('end-to-end: custom pages flow through to internalized RULE nodes', () 
       store.close();
     }
   });
+
+  it('silently ignores unknown top-level fields like the CLI template _help block', () => {
+    // The `mindstrate system-pages init` template embeds a `_help`
+    // object with hints (schema name, classification list, ...). The
+    // loader must accept the file unchanged and ignore the unknown
+    // field rather than failing or polluting the page metadata.
+    writeCustomPage('50-help', {
+      _help: {
+        schema: 'mindstrate.system-page.v1',
+        classificationsHint: 'pick from: generated-output, build-module, ...',
+      },
+      key: '50-help',
+      title: 'Page With Help Block',
+      metadata: { tags: ['help'] },
+    });
+    const project = detectProject(projectRoot)!;
+
+    const pages = loadCustomSystemPages(project);
+
+    expect(pages).toHaveLength(1);
+    expect(pages[0].key).toBe('50-help');
+    // _help is not surfaced on the SystemPageDefinition / metadata.
+    expect((pages[0] as Record<string, unknown>)._help).toBeUndefined();
+    expect(pages[0].metadata?.tags).toEqual(['help']);
+  });
 });

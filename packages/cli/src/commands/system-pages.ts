@@ -21,6 +21,28 @@ import { detectProject, errorMessage } from '@mindstrate/server';
 
 const CUSTOM_DIR = path.join('.mindstrate', 'system-pages');
 
+/**
+ * Classification labels the task-report's `classifyTargets` understands.
+ * Custom system pages may declare any of these in `metadata.classifications`
+ * to be matched when a `before-edit` query hits the same classification.
+ * Adding a label here that is NOT in the server-side
+ * `SystemPageClassification` union will be silently dropped by the loader,
+ * so keep this list aligned with `obsidian-system-page-types.ts`.
+ */
+const KNOWN_CLASSIFICATIONS = [
+  'generated-output',
+  'project-manifest',
+  'plugin-manifest',
+  'build-module',
+  'editor-boundary',
+  'asset-reference-sensitive',
+  'config-sensitive',
+  'native-script-binding',
+  'typescript-consumer',
+  'cpp-source',
+  'general-source',
+];
+
 export const systemPagesCommand = new Command('system-pages')
   .description('Manage project-specific architecture system pages');
 
@@ -79,8 +101,12 @@ systemPagesCommand.command('init <key>')
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(filePath, renderTemplate(key, options.title), 'utf8');
       console.log(`Created system page template: ${filePath}`);
+      console.log('');
+      console.log('Available metadata.classifications (pick the ones that fit; unknown labels are dropped):');
+      for (const value of KNOWN_CLASSIFICATIONS) console.log(`  - ${value}`);
+      console.log('');
       console.log('Next steps:');
-      console.log('  1. Fill in body, classifications, knownConstraints, doNotEditTargets, sourceOfTruth, recommendedVerification.');
+      console.log('  1. Replace every "TODO" line with project-specific text and pick real classifications.');
       console.log('  2. Run `mindstrate setup` (or `mindstrate graph sync`) to internalize the page into ECS RULE nodes.');
       console.log('  3. Verify recall via `mindstrate graph task before-edit "<your target>"` — your project-specific guidance should appear in the report.');
     } catch (err) {
@@ -94,6 +120,12 @@ const isValidKey = (key: string): boolean => /^[a-z0-9_-]+$/i.test(key);
 const renderTemplate = (key: string, titleOverride?: string): string => {
   const title = titleOverride ?? key;
   const template = {
+    _help: {
+      schema: 'mindstrate.system-page.v1',
+      fillIn: 'Replace every "TODO" line below. Empty arrays are fine — keep the field but leave it [].',
+      classificationsHint: `Pick from: ${KNOWN_CLASSIFICATIONS.join(', ')}. Unknown labels are silently dropped.`,
+      readMore: 'mindstrate system-pages list — show built-in + custom pages',
+    },
     key,
     name: `${key}.md`,
     title,
