@@ -1,6 +1,8 @@
 import type {
   AssembledContext,
+  AssembledRetrieval,
   CuratedContext,
+  ProjectGraphContextFact,
   RetrievalContext,
 } from '@mindstrate/protocol';
 import { SubstrateType, type ContextNode, type ConflictRecord } from '@mindstrate/protocol/models';
@@ -27,6 +29,30 @@ export interface ContextAssemblyDagDeps {
   loadGraphPatterns(project?: string): ContextNode[];
   loadGraphRules(project?: string): ContextNode[];
   loadGraphConflicts(project?: string): ConflictRecord[];
+  /**
+   * Surface project graph relationship facts (file / module / dependency
+   * / asset nodes plus 1-hop neighbors) for the assembled context.
+   * Returning an empty array is fine when the project has no graph yet
+   * or when nothing matched the seed selection.
+   */
+  loadProjectGraphFacts(
+    taskDescription: string,
+    project: string | undefined,
+    context: RetrievalContext | undefined,
+  ): ProjectGraphContextFact[];
+  /**
+   * Mint feedback retrieval IDs for every node we are about to surface,
+   * so the AI can later report which were actually used. Returning an
+   * empty array disables the loop (e.g. in tests with no DB).
+   */
+  trackAssemblyRetrievals(
+    nodes: Array<{
+      nodeId: string;
+      origin: AssembledRetrieval['origin'];
+    }>,
+    taskDescription: string,
+    sessionId: string | undefined,
+  ): AssembledRetrieval[];
   curateContext(
     taskDescription: string,
     context?: RetrievalContext,
@@ -113,11 +139,45 @@ export async function runContextAssemblyDag(
         return deps.loadGraphConflicts(project);
       },
     },
+    projectGraphFacts: {
+      deps: ['project', 'context'],
+      run: async (ctx) => {
+        const project = await ctx.get<string | undefined>('project');
+        const retrievalContext = await ctx.get<RetrievalContext | undefined>('context');
+        return deps.loadProjectGraphFacts(input.taskDescription, project, retrievalContext);
+      },
+    },
     curated: {
       deps: ['context'],
       run: async (ctx) => {
         const context = await ctx.get<RetrievalContext | undefined>('context');
         return deps.curateContext(input.taskDescription, context, input.sessionId);
+      },
+    },
+    retrievals: {
+      deps: ['graphRules', 'graphPatterns', 'graphSummaries', 'projectGraphFacts', 'curated'],
+      run: async (ctx) => {
+        const graphRules = await ctx.get<ContextNode[]>('graphRules');
+        const graphPatterns = await ctx.get<ContextNode[]>('graphPatterns');
+        const graphSummaries = await ctx.get<ContextNode[]>('graphSummaries');
+        const projectGraphFacts = await ctx.get<ProjectGraphContextFact[]>('projectGraphFacts');
+        const curated = await ctx.get<CuratedContext>('curated');
+        const surfaced: Array<{ nodeId: string; origin: AssembledRetrieval['origin'] }> = [];
+        for (const rule of graphRules) surfaced.push({ nodeId: rule.id, origin: 'graph-rule' });
+        for (const pattern of graphPatterns) surfaced.push({ nodeId: pattern.id, origin: 'graph-pattern' });
+        for (const summary of graphSummaries) surfaced.push({ nodeId: summary.id, origin: 'graph-summary' });
+        for (const fact of projectGraphFacts) surfaced.push({ nodeId: fact.nodeId, origin: 'project-graph' });
+        for (const knowledge of curated.knowledge) surfaced.push({ nodeId: knowledge.view.id, origin: 'curated-knowledge' });
+        // Deduplicate while preserving the first origin we saw, so the AI's
+        // back-report does not double-credit a node retrieved through two
+        // overlapping channels.
+        const seen = new Set<string>();
+        const unique = surfaced.filter((entry) => {
+          if (seen.has(entry.nodeId)) return false;
+          seen.add(entry.nodeId);
+          return true;
+        });
+        return deps.trackAssemblyRetrievals(unique, input.taskDescription, input.sessionId);
       },
     },
     summary: {
@@ -129,6 +189,7 @@ export async function runContextAssemblyDag(
         'graphPatterns',
         'graphRules',
         'graphConflicts',
+        'projectGraphFacts',
         'curated',
       ],
       run: async (ctx) => {
@@ -136,6 +197,7 @@ export async function runContextAssemblyDag(
         const graphPatterns = await ctx.get<ContextNode[]>('graphPatterns');
         const graphRules = await ctx.get<ContextNode[]>('graphRules');
         const graphConflicts = await ctx.get<ConflictRecord[]>('graphConflicts');
+        const projectGraphFacts = await ctx.get<ProjectGraphContextFact[]>('projectGraphFacts');
         const base = deps.formatSummary(
           input.taskDescription,
           await ctx.get<string | undefined>('project'),
@@ -158,6 +220,15 @@ export async function runContextAssemblyDag(
           prioritizedSections.push({
             priority: 90,
             content: formatSummarySection('Operational Rules', graphRules.slice(0, 5).map((node) => node.title)),
+          });
+        }
+        if (projectGraphFacts.length > 0) {
+          prioritizedSections.push({
+            priority: 70,
+            content: formatSummarySection(
+              'Project Graph Relationships',
+              projectGraphFacts.map(formatProjectGraphFactLine),
+            ),
           });
         }
         if (graphPatterns.length > 0) {
@@ -193,6 +264,8 @@ export async function runContextAssemblyDag(
         'graphPatterns',
         'graphRules',
         'graphConflicts',
+        'projectGraphFacts',
+        'retrievals',
         'curated',
         'summary',
       ],
@@ -204,6 +277,8 @@ export async function runContextAssemblyDag(
         const graphPatterns = await ctx.get<ContextNode[]>('graphPatterns');
         const graphRules = await ctx.get<ContextNode[]>('graphRules');
         const graphConflicts = await ctx.get<ConflictRecord[]>('graphConflicts');
+        const projectGraphFacts = await ctx.get<ProjectGraphContextFact[]>('projectGraphFacts');
+        const retrievals = await ctx.get<AssembledRetrieval[]>('retrievals');
         const curated = await ctx.get<CuratedContext>('curated');
 
         return {
@@ -215,6 +290,8 @@ export async function runContextAssemblyDag(
           graphPatterns: graphPatterns.map((node) => node.title),
           graphRules: graphRules.map((node) => node.title),
           graphConflicts: graphConflicts.map((record) => record.reason),
+          projectGraphContext: projectGraphFacts.length > 0 ? projectGraphFacts : undefined,
+          retrievals: retrievals.length > 0 ? retrievals : undefined,
           sessionContinuity: sessionContext ? {
             project,
             content: sessionContext,
@@ -249,3 +326,8 @@ export async function runContextAssemblyDag(
     executionOrder,
   };
 }
+
+const formatProjectGraphFactLine = (fact: ProjectGraphContextFact): string => {
+  const evidence = fact.evidence.length > 0 ? ` — evidence: ${fact.evidence.join(', ')}` : '';
+  return `${fact.label} (${fact.kind})${evidence}`;
+};

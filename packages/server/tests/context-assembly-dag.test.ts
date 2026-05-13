@@ -103,6 +103,18 @@ describe('runContextAssemblyDag', () => {
           calls.push('graphConflicts');
           return [makeConflict('Hydration rules disagree')];
         },
+        loadProjectGraphFacts() {
+          calls.push('projectGraphFacts');
+          return [];
+        },
+        trackAssemblyRetrievals(entries) {
+          calls.push(`trackRetrievals:${entries.length}`);
+          return entries.map((entry, index) => ({
+            retrievalId: `retrieval-${index}`,
+            nodeId: entry.nodeId,
+            origin: entry.origin,
+          }));
+        },
         async curateContext(taskDescription, context, sessionId) {
           calls.push(`curate:${taskDescription}:${context?.project}:${sessionId ?? 'none'}`);
           return curated;
@@ -164,7 +176,9 @@ describe('runContextAssemblyDag', () => {
       'graphRules',
       'graphConflicts',
       'context',
+      'projectGraphFacts',
       'curated',
+      'retrievals',
       'summary',
       'assembled',
     ]);
@@ -175,7 +189,9 @@ describe('runContextAssemblyDag', () => {
       'graphPatterns',
       'graphRules',
       'graphConflicts',
+      'projectGraphFacts',
       'curate:fix hydration mismatch:mindstrate:none',
+      'trackRetrievals:3',
       'summary:mindstrate',
     ]);
   });
@@ -202,6 +218,12 @@ describe('runContextAssemblyDag', () => {
           return [];
         },
         loadGraphConflicts() {
+          return [];
+        },
+        loadProjectGraphFacts() {
+          return [];
+        },
+        trackAssemblyRetrievals() {
           return [];
         },
         async curateContext(taskDescription, context) {
@@ -253,6 +275,12 @@ describe('runContextAssemblyDag', () => {
         },
         loadGraphConflicts() {
           return [makeConflict('Active conflict must stay visible')];
+        },
+        loadProjectGraphFacts() {
+          return [];
+        },
+        trackAssemblyRetrievals() {
+          return [];
         },
         async curateContext(taskDescription) {
           return {

@@ -285,7 +285,16 @@ describe('project graph service', () => {
 
     expect(nodes.find((node) => node.title === 'loadData')).toBeDefined();
     expect(nodes.find((node) => node.title === './format')).toBeDefined();
-    expect(nodes.find((node) => node.title === 'analytics.track')).toBeDefined();
+    // Method chain `analytics.track(count)` is captured at the leaf
+    // property identifier (`track`) rather than the full member-expression
+    // text (`analytics.track`). Capturing the entire member_expression text
+    // used to produce unbounded labels for chained calls like
+    // `bundleCommand.command(...).description(...).option(...)`, which
+    // poisoned the dependency node id, label, and Obsidian per-node page
+    // filename slug — the latter overflowing Windows MAX_PATH and killing
+    // the whole projection write. See `query-pack.ts` for the tightened
+    // tree-sitter query.
+    expect(nodes.find((node) => node.title === 'track')).toBeDefined();
     expect(edges.some((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CALLS)).toBe(true);
     expect(edges.some((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.USES_HOOK)).toBe(true);
     expect(edges.some((edge) => edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.EXPORTS)).toBe(true);

@@ -22,6 +22,7 @@ import { PatternCompressor } from '../context-graph/pattern-compressor.js';
 import { RuleCompressor } from '../context-graph/rule-compressor.js';
 import { SummaryCompressor } from '../context-graph/summary-compressor.js';
 import { HighOrderCompressor } from '../context-graph/high-order-compressor.js';
+import { FeedbackCooccurrenceCompressor } from '../context-graph/feedback-cooccurrence-compressor.js';
 import { MetabolismEngine, Pruner } from '../metabolism/index.js';
 import {
   KnowledgeProjectionMaterializer,
@@ -52,6 +53,7 @@ export interface MindstrateRuntime {
   ruleCompressor: RuleCompressor;
   summaryCompressor: SummaryCompressor;
   highOrderCompressor: HighOrderCompressor;
+  feedbackCooccurrenceCompressor: FeedbackCooccurrenceCompressor;
   vectorStore: IVectorStore;
   sessionStore: SessionStore;
   embedder: Embedder;
@@ -116,6 +118,10 @@ export function createMindstrateRuntime(
   const bundleManager = new PortableContextBundleManager(contextGraphStore);
   const sessionCompressor = new SessionCompressor(config.openaiApiKey, config.llmModel, llmBaseUrl, logger);
   const feedbackLoop = new FeedbackLoop(databaseStore.getDb());
+  const feedbackCooccurrenceCompressor = new FeedbackCooccurrenceCompressor(
+    contextGraphStore,
+    databaseStore.getDb(),
+  );
   const qualityGate = new KnowledgeQualityGate();
   const evaluator = new RetrievalEvaluator(databaseStore.getDb(), queryGraphKnowledgeIds);
 
@@ -140,6 +146,7 @@ export function createMindstrateRuntime(
     ruleCompressor,
     summaryCompressor,
     highOrderCompressor,
+    feedbackCooccurrenceCompressor,
     vectorStore,
     sessionStore,
     embedder,

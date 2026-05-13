@@ -74,7 +74,7 @@ export const contextTools = [
   }),
   defineTool({
     name: 'context_assemble',
-    description: 'Assemble a full working context for a task.',
+    description: 'Assemble a full working context for a task. Returned text includes a "Project Graph Relationships" section (file/module/dependency/asset facts seeded by `currentFile` plus 1-hop neighbours) and a "Retrieval Tickets" block; you MUST call `memory_feedback_auto` once per ticket after answering, marking each as adopted/partial/ignored/rejected so the graph learns which nodes actually informed your answer.',
     schema: ContextAssembleSchema,
     handler: (api, input) => handleContextAssemble(api, input),
   }),
