@@ -249,6 +249,14 @@ export const ContextAssembleSchema = z.object({
   project: z.string().optional(),
   language: z.string().optional(),
   framework: z.string().optional(),
+  /**
+   * Path of the file the AI is about to edit / read / discuss. When
+   * provided, the assembly seeds the project graph traversal directly
+   * from `pg:<project>:file:<currentFile>`, which is the highest-signal
+   * way to surface relationship facts (callers, callees, asset
+   * references, plugin/module dependencies) for that file.
+   */
+  currentFile: z.string().optional(),
 });
 
 export const ContextInternalizeSchema = z.object({

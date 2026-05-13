@@ -1,12 +1,21 @@
 import type {
   AssembledContext,
+  AssembledRetrieval,
   CuratedContext,
   GraphKnowledgeSearchResult,
+  ProjectGraphContextFact,
   RetrievalContext,
 } from '@mindstrate/protocol';
-import { ContextDomainType, SubstrateType, type ConflictRecord, type ContextNode } from '@mindstrate/protocol/models';
+import {
+  ContextDomainType,
+  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  SubstrateType,
+  type ConflictRecord,
+  type ContextNode,
+} from '@mindstrate/protocol/models';
 import { runContextAssemblyDag } from '../context-graph/context-assembly-dag.js';
 import { generateGraphCurationSummary } from '../context-graph/graph-curation-summary.js';
+import { selectProjectGraphAssemblyFacts } from '../context-graph/project-graph-assembly-selector.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateContextAssemblyApi {
@@ -93,6 +102,10 @@ export class MindstrateContextAssemblyApi {
         loadGraphPatterns: () => graphSelection.patterns,
         loadGraphRules: () => graphSelection.rules,
         loadGraphConflicts: (project) => this.listConflictRecords(project, 10),
+        loadProjectGraphFacts: (task, project, retrievalContext) =>
+          this.loadProjectGraphFacts(task, project, retrievalContext),
+        trackAssemblyRetrievals: (entries, task, sessionId) =>
+          this.trackAssemblyRetrievals(entries, task, sessionId),
         curateContext: (task, context, sessionId) => this.curateContext(task, context, sessionId),
         formatSummary: (
           task,
@@ -165,6 +178,72 @@ export class MindstrateContextAssemblyApi {
       domainType: ContextDomainType.PROJECT_SNAPSHOT,
       limit: 1,
     })[0] ?? null;
+  }
+
+  /**
+   * Pull project graph relationship facts for the assembled context. Loads
+   * the project-scoped subset of project graph nodes + edges (capped at
+   * `PROJECT_GRAPH_DEFAULT_QUERY_LIMIT`) and delegates the seed selection
+   * + 1-hop expansion to `selectProjectGraphAssemblyFacts`.
+   *
+   * Returns `[]` when no project is in scope; the upstream summary
+   * formatter then drops the section entirely instead of emitting an
+   * empty header.
+   */
+  private loadProjectGraphFacts(
+    taskDescription: string,
+    project: string | undefined,
+    retrievalContext: RetrievalContext | undefined,
+  ): ProjectGraphContextFact[] {
+    if (!project) return [];
+    const nodes = this.services.contextGraphStore.listNodes({
+      project,
+      domainType: ContextDomainType.ARCHITECTURE,
+      limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+    });
+    if (nodes.length === 0) return [];
+    const edges = this.services.contextGraphStore.listEdges({
+      limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+    });
+    return selectProjectGraphAssemblyFacts({
+      nodes,
+      edges,
+      taskDescription,
+      context: retrievalContext,
+    }).facts;
+  }
+
+  /**
+   * Mint a feedback retrieval ticket for every node we surfaced in the
+   * assembled context. The AI then closes the loop via
+   * `mindstrate_memory_feedback_auto({ retrievalId, signal })`, which
+   * lets `feedbackLoop.applyFeedbackToNode` increment
+   * positive / negative feedback counts that downstream selectors use
+   * for ranking. Without this step, the priority selector's feedback
+   * fields stay flat regardless of how the AI actually used the
+   * surfaced knowledge.
+   */
+  private trackAssemblyRetrievals(
+    entries: Array<{ nodeId: string; origin: AssembledRetrieval['origin'] }>,
+    taskDescription: string,
+    sessionId: string | undefined,
+  ): AssembledRetrieval[] {
+    const result: AssembledRetrieval[] = [];
+    for (const entry of entries) {
+      try {
+        const retrievalId = this.services.feedbackLoop.trackRetrieval(
+          entry.nodeId,
+          taskDescription,
+          sessionId,
+        );
+        result.push({ retrievalId, nodeId: entry.nodeId, origin: entry.origin });
+      } catch {
+        // A missing-node insert from a foreign-key violation just means
+        // the surfaced node was already removed mid-assembly. Skip
+        // silently rather than fail the whole assembly call.
+      }
+    }
+    return result;
   }
 
   private formatAssembledContext(

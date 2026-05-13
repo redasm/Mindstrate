@@ -10,6 +10,10 @@ import type { PatternCompressionOptions, PatternCompressionResult } from '../con
 import type { RuleCompressionOptions, RuleCompressionResult } from '../context-graph/rule-compressor.js';
 import type { SummaryCompressionOptions, SummaryCompressionResult } from '../context-graph/summary-compressor.js';
 import type {
+  FeedbackCooccurrenceCompressionOptions,
+  FeedbackCooccurrenceCompressionResult,
+} from '../context-graph/feedback-cooccurrence-compressor.js';
+import type {
   MetabolismSchedulerOptions,
   PruneOptions,
   PruneResult,
@@ -64,6 +68,28 @@ export class MindstrateMetabolismApi {
   async runRuleCompression(options?: RuleCompressionOptions): Promise<RuleCompressionResult> {
     await this.ensureInit();
     return this.services.ruleCompressor.compressProjectPatterns(options);
+  }
+
+  /**
+   * Compress co-used project graph nodes (file / module / dependency /
+   * asset facts the AI marked `adopted` or `partial` together via
+   * `memory_feedback_auto`) into a `PATTERN + ARCHITECTURE` node.
+   *
+   * Bridges raw project graph nodes (which are `SNAPSHOT + ARCHITECTURE`
+   * and therefore invisible to `ContextPrioritySelector`) into the
+   * substrate the assembly priority selector actually picks from. Each
+   * created PATTERN gets `SUPPORTS` edges back to its source nodes so
+   * `ProjectedKnowledgeSearch.findBestSupportingEvidence` can walk back
+   * to the underlying evidence.
+   *
+   * No-LLM, deterministic, and idempotent: same source set ⇒ same
+   * deterministic id ⇒ update-in-place across reruns.
+   */
+  async runFeedbackCooccurrenceCompression(
+    options?: FeedbackCooccurrenceCompressionOptions,
+  ): Promise<FeedbackCooccurrenceCompressionResult> {
+    await this.ensureInit();
+    return this.services.feedbackCooccurrenceCompressor.compress(options);
   }
 
   async runConflictDetection(options?: ConflictDetectionOptions): Promise<ConflictDetectionResult> {

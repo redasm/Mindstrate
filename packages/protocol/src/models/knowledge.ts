@@ -240,6 +240,21 @@ export interface AssembledContext {
   graphPatterns?: string[];
   graphRules?: string[];
   graphConflicts?: string[];
+  /**
+   * Project graph relationship facts pulled in via the project graph
+   * `impact` traversal seeded from `RetrievalContext.currentFile` (when
+   * provided) plus `taskDescription` token matching. Each entry is a
+   * human-readable line `<label> (<kind>); evidence: <path>...` so
+   * downstream MCP renderers can drop it straight into a Markdown list.
+   *
+   * This is the bridge that makes the architecture relationship network
+   * (the `D:\MindstrateOb\<project>\architecture\` pages and the file /
+   * module / dependency / asset nodes underneath) actually visible to
+   * the AI during context assembly, which the previous implementation
+   * silently skipped because `ContextPrioritySelector` only looked at
+   * `RULE` / `PATTERN` / `SUMMARY` substrate.
+   */
+  projectGraphContext?: ProjectGraphContextFact[];
   sessionContinuity?: {
     project?: string;
     content: string;
@@ -255,8 +270,43 @@ export interface AssembledContext {
   knownConflicts?: string[];
   warnings?: string[];
   evidenceTrail?: string[];
+  /**
+   * Per-assembled-node retrieval IDs minted via the feedback loop. The
+   * AI is expected to report back which of these were actually used via
+   * `mindstrate_memory_feedback_auto({ retrievalId, signal: 'adopted' | 'ignored' | ... })`,
+   * closing the loop between "what we surfaced" and
+   * "what actually informed the answer".
+   */
+  retrievals?: AssembledRetrieval[];
   curated: CuratedContext;
   summary: string;
+}
+
+/** A single project graph relationship fact materialized into the assembled context. */
+export interface ProjectGraphContextFact {
+  /** Stable id of the project graph node (`pg:<project>:<kind>:<...>`). */
+  nodeId: string;
+  /** Human-readable label (file path / symbol name / asset path). */
+  label: string;
+  /** Project graph node kind (file, function, component, dependency, asset, ...). */
+  kind: string;
+  /** Up to 3 evidence paths drawn from the node's source captures. */
+  evidence: string[];
+  /**
+   * Why this node was pulled in: `seed` (matched the seed selection
+   * directly), or `related` (reached via 1-hop graph traversal from a seed).
+   */
+  source: 'seed' | 'related';
+}
+
+/** Pending retrieval ticket the AI must report on to close the feedback loop. */
+export interface AssembledRetrieval {
+  /** Retrieval id minted by `feedbackLoop.trackRetrieval`. */
+  retrievalId: string;
+  /** The graph node whose surfacing this retrieval ticket tracks. */
+  nodeId: string;
+  /** Where in the assembled context this node appeared. */
+  origin: 'graph-rule' | 'graph-pattern' | 'graph-summary' | 'project-graph' | 'curated-knowledge';
 }
 
 // ============================================================
