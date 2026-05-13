@@ -8,6 +8,7 @@ The root README is intentionally short. Detailed manuals live in this directory.
 - [Data Collection Guide](data-collection.en.md): repo-scanner, Git/P4, hooks, daemon, custom collectors, standard changesets.
 - [Project Configuration](project-configuration.en.md): `.mindstrate/project.json`, `.mindstrate/config.json`, built-in and custom project rules.
 - [Project Detection Rules](project-detection-rules.en.md): rule schema and security boundary.
+- [System Pages](system-pages.en.md): three-layer architecture page customization (skeleton, stack preset, custom).
 - [Deployment Guide](deployment-guide.en.md): deployment modes and operations guide.
 
 ## Architecture And Design

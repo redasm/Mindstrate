@@ -1,9 +1,11 @@
 /**
  * Shared types for the Obsidian system page generators.
  *
- * Pulled out so the locale-specific generators (`obsidian-system-pages-en`,
- * `obsidian-system-pages-zh`) can stay free of cross-imports back into
- * `project-graph-obsidian-projection.ts`.
+ * The generic skeleton (`obsidian-system-pages-generic.ts`) and the
+ * stack architecture presets loaded from detection rule include files
+ * (e.g. `unreal-architecture-pages.json`) both materialize as
+ * `SystemPageDefinition` so the projection writer is locale-agnostic
+ * and stack-agnostic.
  *
  * `SystemPageDefinition` doubles as the source of truth for two
  * downstream consumers:

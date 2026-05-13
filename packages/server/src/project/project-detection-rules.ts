@@ -1,7 +1,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ChangeSource, type ProjectLayer } from '@mindstrate/protocol/models';
-import type { DetectedProject, ProjectOperationManual, SuggestedSystemPage } from './detector.js';
+import type {
+  DetectedProject,
+  ProjectOperationManual,
+  RuleSystemPagePreset,
+  SuggestedSystemPage,
+  SystemPagePresetLocale,
+} from './detector.js';
 import { safeJson } from './detection-support.js';
 
 type RuleSource = 'project' | 'builtin';
@@ -49,6 +55,15 @@ interface ProjectDetectionRule {
   layers?: RuleProjectLayer[];
   operationManual?: ProjectOperationManual;
   suggestedSystemPages?: SuggestedSystemPage[];
+  /**
+   * Path (relative to the rule file) of an external preset file that
+   * carries the **full architecture pages** for this project type. The
+   * file is shaped as `{ "en": RuleSystemPagePreset[], "zh": RuleSystemPagePreset[] }`
+   * and gets surfaced via `graphHints.systemPagePresets`. Splitting the
+   * pages out keeps detection rules under the AGENTS.md 200-line
+   * threshold and lets unrelated rules share the same preset.
+   */
+  systemPagesInclude?: string;
 }
 
 interface RuleProjectLayer {
@@ -79,7 +94,7 @@ export const detectProjectByRules = (root: string): DetectedProject | null => {
     .sort(compareRuleCandidates)[0];
   if (!match) return null;
 
-  const { rule, source } = match;
+  const { rule, source, ruleFilePath } = match;
   const manifestPath = resolveManifest(root, rule.detect?.manifest);
   return {
     name: manifestPath ? path.basename(manifestPath, path.extname(manifestPath)) : path.basename(root),
@@ -114,6 +129,7 @@ export const detectProjectByRules = (root: string): DetectedProject | null => {
       layers: normalizeLayers(rule.layers),
       operationManual: rule.operationManual,
       suggestedSystemPages: normalizeSuggestedSystemPages(rule.suggestedSystemPages),
+      systemPagePresets: loadSystemPagePresets(rule.systemPagesInclude, ruleFilePath),
     },
   };
 };
@@ -140,29 +156,107 @@ const toChangeSource = (source: 'git' | 'p4' | 'filesystem' | 'manual'): ChangeS
   return ChangeSource.MANUAL;
 };
 
-const loadRules = (root: string): Array<{ rule: ProjectDetectionRule; source: RuleSource }> => [
-  ...loadRulesFromDir(path.join(root, '.mindstrate', 'rules')).map((rule) => ({ rule, source: 'project' as const })),
-  ...loadRulesFromDir(BUILTIN_RULES_DIR).map((rule) => ({ rule, source: 'builtin' as const })),
+const loadRules = (root: string): Array<{ rule: ProjectDetectionRule; source: RuleSource; ruleFilePath: string }> => [
+  ...loadRulesFromDir(path.join(root, '.mindstrate', 'rules'))
+    .map(({ rule, ruleFilePath }) => ({ rule, source: 'project' as const, ruleFilePath })),
+  ...loadRulesFromDir(BUILTIN_RULES_DIR)
+    .map(({ rule, ruleFilePath }) => ({ rule, source: 'builtin' as const, ruleFilePath })),
 ];
 
-const loadRulesFromDir = (rulesDir: string): ProjectDetectionRule[] => {
+const loadRulesFromDir = (rulesDir: string): Array<{ rule: ProjectDetectionRule; ruleFilePath: string }> => {
   if (!fs.existsSync(rulesDir)) return [];
   try {
     return fs.readdirSync(rulesDir)
       .filter((name) => name.endsWith('.json'))
-      .map((name) => safeJson(path.join(rulesDir, name)))
-      .filter((rule): rule is ProjectDetectionRule => rule !== null);
+      .map((name) => {
+        const ruleFilePath = path.join(rulesDir, name);
+        const rule = safeJson(ruleFilePath);
+        return rule !== null ? { rule: rule as ProjectDetectionRule, ruleFilePath } : null;
+      })
+      .filter((entry): entry is { rule: ProjectDetectionRule; ruleFilePath: string } => entry !== null);
   } catch {
     return [];
   }
+};
+
+/**
+ * Load `{ en: [...], zh: [...] }` from the file pointed to by
+ * `systemPagesInclude` (resolved relative to the rule file). Returns
+ * `undefined` when the field is missing or the include file is not
+ * readable / not shaped correctly. Logging is intentionally silent so
+ * detection itself never fails on a malformed preset file — the system
+ * pages writer will just fall back to the generic skeleton.
+ */
+const loadSystemPagePresets = (
+  systemPagesInclude: string | undefined,
+  ruleFilePath: string,
+): Partial<Record<SystemPagePresetLocale, RuleSystemPagePreset[]>> | undefined => {
+  if (!systemPagesInclude || typeof systemPagesInclude !== 'string') return undefined;
+  // `..` is intentionally allowed: the include file usually sits next to
+  // the rule, but a project may legitimately share one preset between
+  // multiple rules under the same `rules/` tree.
+  const resolved = path.resolve(path.dirname(ruleFilePath), systemPagesInclude);
+  const raw = safeJson(resolved);
+  if (!raw || typeof raw !== 'object') return undefined;
+  const value = raw as Record<string, unknown>;
+  const result: Partial<Record<SystemPagePresetLocale, RuleSystemPagePreset[]>> = {};
+  for (const locale of ['en', 'zh'] as const) {
+    const localeValue = value[locale];
+    if (!Array.isArray(localeValue)) continue;
+    const parsed = localeValue
+      .map(parseRuleSystemPagePreset)
+      .filter((entry): entry is RuleSystemPagePreset => entry !== null);
+    if (parsed.length > 0) result[locale] = parsed;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const parseRuleSystemPagePreset = (raw: unknown): RuleSystemPagePreset | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const value = raw as Record<string, unknown>;
+  const key = typeof value['key'] === 'string' ? value['key'] : null;
+  const title = typeof value['title'] === 'string' ? value['title'] : null;
+  const name = typeof value['name'] === 'string' ? value['name'] : null;
+  if (!key || !title || !name) return null;
+  const stringArray = (key2: string): string[] => Array.isArray(value[key2])
+    ? (value[key2] as unknown[]).filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  return {
+    key,
+    name,
+    title,
+    body: stringArray('body'),
+    overlays: stringArray('overlays'),
+    userNotesPlaceholder: typeof value['userNotesPlaceholder'] === 'string' ? value['userNotesPlaceholder'] : '',
+    userNotesTitle: typeof value['userNotesTitle'] === 'string' ? value['userNotesTitle'] : 'User Notes',
+    overlayTitle: typeof value['overlayTitle'] === 'string' ? value['overlayTitle'] : 'Structured Overlay',
+    metadata: parseRuleSystemPageMetadata(value['metadata']),
+  };
+};
+
+const parseRuleSystemPageMetadata = (raw: unknown): RuleSystemPagePreset['metadata'] => {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const value = raw as Record<string, unknown>;
+  const stringArray = (key: string): string[] => Array.isArray(value[key])
+    ? (value[key] as unknown[]).filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  const result: NonNullable<RuleSystemPagePreset['metadata']> = {};
+  if (stringArray('classifications').length > 0) result.classifications = stringArray('classifications');
+  if (stringArray('knownConstraints').length > 0) result.knownConstraints = stringArray('knownConstraints');
+  if (stringArray('doNotEditTargets').length > 0) result.doNotEditTargets = stringArray('doNotEditTargets');
+  if (typeof value['affectedChain'] === 'string') result.affectedChain = value['affectedChain'];
+  if (stringArray('sourceOfTruth').length > 0) result.sourceOfTruth = stringArray('sourceOfTruth');
+  if (stringArray('recommendedVerification').length > 0) result.recommendedVerification = stringArray('recommendedVerification');
+  if (stringArray('tags').length > 0) result.tags = stringArray('tags');
+  return Object.keys(result).length > 0 ? result : undefined;
 };
 
 const isValidRule = (rule: ProjectDetectionRule): boolean =>
   !!rule.id && !!rule.name && !!rule.match && typeof rule.match === 'object';
 
 const compareRuleCandidates = (
-  left: { rule: ProjectDetectionRule; source: RuleSource },
-  right: { rule: ProjectDetectionRule; source: RuleSource },
+  left: { rule: ProjectDetectionRule; source: RuleSource; ruleFilePath: string },
+  right: { rule: ProjectDetectionRule; source: RuleSource; ruleFilePath: string },
 ): number => {
   const priority = (right.rule.priority ?? 0) - (left.rule.priority ?? 0);
   if (priority !== 0) return priority;

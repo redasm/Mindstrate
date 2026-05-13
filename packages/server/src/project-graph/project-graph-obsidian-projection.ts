@@ -83,7 +83,7 @@ export const writeProjectGraphObsidianProjection = (
   const modulePaths = writeObsidianModulePages(store, project, vaultRoot, projectSlug);
   const nodePaths = writeObsidianNodePages(graph, vaultRoot, projectSlug, overlays);
   const flowAndBindingPaths = writeObsidianFlowAndBindingPages(graph, vaultRoot, projectSlug);
-  const systemPages = writeObsidianSystemPages(vaultRoot, projectSlug, plannedSystemPages);
+  const systemPages = writeObsidianSystemPages(vaultRoot, projectSlug, plannedSystemPages, project);
 
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.mkdirSync(path.dirname(statsPath), { recursive: true });

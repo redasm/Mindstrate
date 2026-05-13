@@ -8,6 +8,7 @@
 - [数据采集指南](data-collection.zh-CN.md)：repo-scanner、Git/P4、hook、daemon、自定义 collector、标准 changeset。
 - [项目配置](project-configuration.zh-CN.md)：`.mindstrate/project.json`、`.mindstrate/config.json`、内置和自定义项目规则。
 - [项目检测规则](project-detection-rules.zh-CN.md)：规则 schema 和安全边界。
+- [系统页](system-pages.zh-CN.md)：架构页三层自定义模型（骨架、stack preset、custom）。
 - [部署指南](deployment-guide.zh-CN.md)：部署模式和运维说明。
 
 ## 架构与设计
