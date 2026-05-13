@@ -9,6 +9,8 @@ export {
   type ProjectOperationManual,
   type ProjectValidationCommand,
   type SuggestedSystemPage,
+  type RuleSystemPagePreset,
+  type SystemPagePresetLocale,
 } from './detector.js';
 
 export {

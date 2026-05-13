@@ -20,6 +20,21 @@ const write = (root: string, rel: string, content: string): void => {
   fs.writeFileSync(abs, content, 'utf8');
 };
 
+/**
+ * Lays out the minimum filesystem fixture that triggers the
+ * `unreal-project` detection rule (and therefore loads the 8-page
+ * architecture preset from `unreal-architecture-pages.json`). Callers
+ * who only need a generic React/Node project to exist must NOT use this
+ * helper; the layered selector intentionally only emits the Unreal
+ * pages for projects that look like Unreal projects.
+ */
+const seedUnrealProject = (root: string, projectName: string): void => {
+  write(root, `${projectName}.uproject`, JSON.stringify({ FileVersion: 3 }));
+  write(root, 'Content/.gitkeep', '');
+  write(root, 'Config/.gitkeep', '');
+  write(root, `Source/${projectName}/${projectName}.Build.cs`, '// stub');
+};
+
 describe('project graph report export', () => {
   let root: string;
   let dataDir: string;
@@ -349,10 +364,14 @@ describe('project graph report export', () => {
       expect(bindingSummary).toContain('TypeScript/Typing');
       expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'flows', 'execution-flow.generated.md'))).toBe(true);
       expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', 'bindings', 'native-script.generated.md'))).toBe(true);
-      const generatedFilesPage = fs.readFileSync(path.join(vaultRoot, 'demo-report', 'architecture', '04-generated-files.md'), 'utf8');
-      expect(generatedFilesPage).toContain('# Generated Files And Source Of Truth');
-      expect(generatedFilesPage).toContain('<!-- mindstrate:project-graph:overlay:start -->');
-      expect(generatedFilesPage).toContain('TypeScript/Typing');
+      // The generic skeleton always emits 00-overview; stack-specific
+      // pages (04-generated-files / 06-common-change-playbooks etc.)
+      // belong to the Unreal preset and only show up for Unreal-shaped
+      // projects (see "internalizes system pages..." below for that).
+      expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', '00-overview.md'))).toBe(true);
+      const overviewPage = fs.readFileSync(path.join(vaultRoot, 'demo-report', 'architecture', '00-overview.md'), 'utf8');
+      expect(overviewPage).toContain('# demo-report Architecture Overview');
+      expect(overviewPage).toContain('<!-- mindstrate:project-graph:overlay:start -->');
       const projectionIndex = JSON.parse(fs.readFileSync(path.join(vaultRoot, '_meta', 'index.json'), 'utf8')) as {
         projectGraphPages: Record<string, { project: string; path: string; role: string; priority: number }>;
       };
@@ -367,7 +386,6 @@ describe('project graph report export', () => {
         role: 'project-graph',
         priority: 100,
       });
-      expect(fs.existsSync(path.join(vaultRoot, 'demo-report', 'architecture', '06-common-change-playbooks.md'))).toBe(true);
       const records = memory.projections.listProjectionRecords({
         target: ProjectionTarget.PROJECT_GRAPH_OBSIDIAN,
         limit: 10,
@@ -379,8 +397,7 @@ describe('project graph report export', () => {
   });
 
   it('preserves editable system page notes and imports their overlays', () => {
-    write(root, 'package.json', JSON.stringify({ name: 'system-pages-demo' }));
-    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    seedUnrealProject(root, 'system-pages-demo');
     const vaultRoot = createTempDir('mindstrate-project-graph-system-vault-');
 
     try {
@@ -417,8 +434,7 @@ describe('project graph report export', () => {
 
   it('localizes Obsidian system pages for Chinese project graph locale', () => {
     process.env['MINDSTRATE_LOCALE'] = 'zh-CN';
-    write(root, 'package.json', JSON.stringify({ name: 'localized-system-pages-demo' }));
-    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    seedUnrealProject(root, 'localized-system-pages-demo');
     const vaultRoot = createTempDir('mindstrate-project-graph-localized-vault-');
 
     try {
@@ -615,8 +631,7 @@ describe('project graph report export', () => {
   });
 
   it('internalizes system pages into RULE+ARCHITECTURE nodes that MCP retrieval can recall', () => {
-    write(root, 'package.json', JSON.stringify({ name: 'system-pages-rule-demo' }));
-    write(root, 'src/App.tsx', 'export function App() { return <main />; }');
+    seedUnrealProject(root, 'system-pages-rule-demo');
     const vaultRoot = createTempDir('mindstrate-project-graph-rule-vault-');
 
     try {

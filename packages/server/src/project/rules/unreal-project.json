@@ -2,6 +2,7 @@
   "id": "unreal-project",
   "name": "Unreal Engine Project",
   "priority": 90,
+  "systemPagesInclude": "unreal-architecture-pages.json",
   "match": {
     "all": [
       { "glob": "*.uproject" },

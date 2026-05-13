@@ -143,6 +143,52 @@ export interface ProjectGraphHints {
    * graph (game genres differ too much for hardcoded injection).
    */
   suggestedSystemPages?: SuggestedSystemPage[];
+  /**
+   * Rule-provided **stack architecture pages** that fully replace the
+   * generic skeleton for this project type. Loaded from the file named
+   * by the rule's `"systemPagesInclude"` field (e.g.
+   * `unreal-architecture-pages.json`). The include file is shaped as
+   * `{ "en": SystemPageDefinition[], "zh": SystemPageDefinition[] }`.
+   *
+   * Layering at projection time (low -> high priority):
+   *   1. Built-in language-agnostic skeleton (00-overview / 01-entry / ...).
+   *   2. `systemPagePresets[locale]` from the matched detection rule
+   *      (a Unreal project gets the 8-page architecture book; a plain
+   *      Node / Python / Go project does not, and instead keeps the
+   *      skeleton).
+   *   3. `<project>/.mindstrate/system-pages/*.json` user pages.
+   *
+   * Same `key` at a higher layer overrides the lower layer entirely.
+   */
+  systemPagePresets?: Partial<Record<SystemPagePresetLocale, RuleSystemPagePreset[]>>;
+}
+
+/** Locales the include-file presets may carry. Mirrors `ProjectGraphLocale`. */
+export type SystemPagePresetLocale = 'en' | 'zh';
+
+/**
+ * Shape of a single page entry inside a `systemPagesInclude` file. It
+ * matches `SystemPageDefinition` but is duplicated here so the project
+ * detector layer does not have to depend on the project-graph layer.
+ */
+export interface RuleSystemPagePreset {
+  key: string;
+  name: string;
+  title: string;
+  body: string[];
+  overlays: string[];
+  userNotesPlaceholder: string;
+  userNotesTitle: string;
+  overlayTitle: string;
+  metadata?: {
+    classifications?: string[];
+    knownConstraints?: string[];
+    doNotEditTargets?: string[];
+    affectedChain?: string;
+    sourceOfTruth?: string[];
+    recommendedVerification?: string[];
+    tags?: string[];
+  };
 }
 
 /**
