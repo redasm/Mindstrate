@@ -11,7 +11,8 @@ const sourceQuery = `
   (export_statement source: (string) @export.source)
   (function_declaration name: (identifier) @function.name)
   (call_expression function: (identifier) @call.function)
-  (call_expression function: (member_expression) @call.function)
+  (call_expression function: (member_expression
+    property: (property_identifier) @call.function))
 `;
 
 const jsxQuery = `
@@ -26,6 +27,7 @@ const pythonQuery = `
   (function_definition name: (identifier) @script.function)
   (call function: (identifier) @call.function)
   (call function: (attribute) @python.call.attribute)
+  (call function: (attribute attribute: (identifier) @python.call.method))
 `;
 
 const csharpQuery = `
@@ -34,6 +36,7 @@ const csharpQuery = `
   (method_declaration name: (identifier) @script.function)
   (invocation_expression function: (identifier) @call.function)
   (invocation_expression function: (member_access_expression) @csharp.call.member)
+  (invocation_expression function: (member_access_expression name: (identifier) @csharp.call.method))
 `;
 
 const luaQuery = `
@@ -41,6 +44,7 @@ const luaQuery = `
   (function_declaration name: (dot_index_expression field: (identifier) @script.function))
   (function_call name: (identifier) @call.function)
   (function_call name: (dot_index_expression) @lua.call.member)
+  (function_call name: (dot_index_expression field: (identifier) @lua.call.method))
   (function_call name: (identifier) @lua.require arguments: (arguments (string content: (string_content) @script.import)))
 `;
 
@@ -53,6 +57,7 @@ const cppQuery = `
   (field_declaration declarator: (function_declarator declarator: (field_identifier) @function.name))
   (declaration declarator: (function_declarator declarator: (identifier) @function.name))
   (call_expression function: (identifier) @call.function)
+  (call_expression function: (field_expression field: (field_identifier) @call.function))
 `;
 
 export const BUILTIN_TREE_SITTER_QUERY_PACKS: QueryPack[] = [

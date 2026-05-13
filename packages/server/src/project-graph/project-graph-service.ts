@@ -441,6 +441,16 @@ const SOURCE_FACT_HANDLERS: Record<string, SourceFactHandler> = {
   'script.class':    symbolHandler(ProjectGraphNodeKind.CLASS),
   'script.function': symbolHandler(ProjectGraphNodeKind.FUNCTION),
   'script.ue-call':  dependencyHandler(ProjectGraphEdgeKind.CALLS),
+  // Member/attribute method calls: leaf identifier captures emitted alongside
+  // the full member-expression captures (which the namespace-derived UE
+  // detection in `tree-sitter-source-parser.ts` still needs). We intentionally
+  // ignore `csharp.call.member` / `lua.call.member` / `python.call.attribute`
+  // here so the full-text captures never produce dependency nodes — those
+  // captures' text spans entire chained expressions and would otherwise
+  // create unbounded labels (and unwritable filenames).
+  'csharp.call.method':    dependencyHandler(ProjectGraphEdgeKind.CALLS),
+  'lua.call.method':       dependencyHandler(ProjectGraphEdgeKind.CALLS),
+  'python.call.method':    dependencyHandler(ProjectGraphEdgeKind.CALLS),
 };
 
 const addDependencyFact = (
@@ -452,10 +462,37 @@ const addDependencyFact = (
   kind: ProjectGraphEdgeKind,
   capture?: ParserCapture,
 ): void => {
-  if (!name) return;
-  const dependency = makeNode(project, ProjectGraphNodeKind.DEPENDENCY, name, name, evidence(filePath, capture));
+  const sanitized = sanitizeDependencyName(name);
+  if (!sanitized) return;
+  const dependency = makeNode(project, ProjectGraphNodeKind.DEPENDENCY, sanitized, sanitized, evidence(filePath, capture));
   addNode(nodes, dependency);
   addEdge(edges, makeEdge(fileNodeId(project, filePath), dependency.id, kind, evidence(filePath, capture)));
+};
+
+/**
+ * Reject capture text that is not a single symbol-like token before it
+ * becomes a DEPENDENCY node label / id seed.
+ *
+ * Background: tree-sitter `member_expression` / `member_access_expression`
+ * / `dot_index_expression` / `attribute` capture text spans the entire
+ * chained call (`bundleCommand.command(...).description(...).option(...)`).
+ * Taking that as `name` poisoned the dependency node label, which is
+ * later used verbatim as the node id seed, the Obsidian per-node page
+ * filename slug, and the ECS retrieval haystack — and on Windows the
+ * resulting filename overflowed `MAX_PATH`, killing the whole projection
+ * write.
+ *
+ * We canonicalize "dependency name = a single symbol identifier", and
+ * any capture that would violate this contract is dropped at the source
+ * rather than written into the graph and patched downstream.
+ */
+const DEPENDENCY_NAME_MAX_LENGTH = 200;
+const sanitizeDependencyName = (rawName: string): string | null => {
+  const name = rawName.trim();
+  if (name.length === 0) return null;
+  if (name.length > DEPENDENCY_NAME_MAX_LENGTH) return null;
+  if (/[\s\r\n()\[\]{}<>;]/.test(name)) return null;
+  return name;
 };
 
 const addSymbolFact = (
