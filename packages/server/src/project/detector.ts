@@ -39,7 +39,7 @@ export interface DetectedProject {
   language?: string;
   /** Detected framework, if any */
   framework?: string;
-  /** Build/test runtime if detectable (e.g. "node@18", "python@3.11") */
+  /** Build/test runtime if detectable (e.g. "node@20", "python@3.11") */
   runtime?: string;
   /** Package manager */
   packageManager?: 'npm' | 'pnpm' | 'yarn' | 'pip' | 'poetry' | 'cargo' | 'go-mod' | string;

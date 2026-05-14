@@ -11,7 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [18, 20, 22]
+        # Node 18 was dropped: vitest 4.x and its rolldown dependency
+        # both require Node ^20.19.0 || >=22.12.0 (rolldown imports
+        # `styleText` from `node:util`, which is unavailable on Node 18
+        # and crashes module loading). Node 18 also reached EOL in
+        # April 2025, so the CI matrix tracks the actively supported
+        # LTS lines instead.
+        node-version: [20, 22]
 
     steps:
       - uses: actions/checkout@v4

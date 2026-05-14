@@ -12,7 +12,7 @@
 
 | 组件 | 要求 |
 | --- | --- |
-| Node.js | 18 或更新 |
+| Node.js | 20.19 或更新（Node 18 已于 2025-04 EOL，不再纳入测试） |
 | npm | 10 或更新 |
 | Git | 源码安装和 Git 采集需要 |
 | Docker | 仅 Team Server Docker 部署需要 |

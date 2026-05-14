@@ -6,7 +6,7 @@ This guide covers local personal setup, team member setup, Team Server deploymen
 
 | Component | Requirement |
 | --- | --- |
-| Node.js | 18 or newer |
+| Node.js | 20.19 or newer (Node 18 reached EOL in 2025-04 and is no longer tested) |
 | npm | 10 or newer |
 | Git | Required for source installation and Git collection |
 | Docker | Required only for Docker Team Server deployment |
