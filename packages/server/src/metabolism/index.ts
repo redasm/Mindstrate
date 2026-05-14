@@ -9,4 +9,5 @@ export { Assimilator } from './assimilator.js';
 export { MetabolicCompressor } from './compressor.js';
 export { Reflector, type ReflectionStageResult } from './reflector.js';
 export { Pruner, type PruneOptions, type PruneResult } from './pruner.js';
+export { EvolutionEngine, type RunEvolutionOptions } from './evolution-engine.js';
 export { MetabolismScheduler, type MetabolismSchedulerOptions } from './scheduler.js';
