@@ -130,6 +130,7 @@ const toSystemPageDefinition = (preset: RuleSystemPagePreset): SystemPageDefinit
   const metadata = preset.metadata
     ? {
       ...(classifications.length > 0 ? { classifications } : {}),
+      ...(preset.metadata.triggers ? { triggers: preset.metadata.triggers } : {}),
       ...(preset.metadata.knownConstraints ? { knownConstraints: preset.metadata.knownConstraints } : {}),
       ...(preset.metadata.doNotEditTargets ? { doNotEditTargets: preset.metadata.doNotEditTargets } : {}),
       ...(preset.metadata.affectedChain ? { affectedChain: preset.metadata.affectedChain } : {}),

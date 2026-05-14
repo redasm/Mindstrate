@@ -133,7 +133,16 @@ export const buildBeforeEditReport = (input: ProjectGraphTaskReportInput): strin
 
 const analyzeProjectGraphTask = (input: ProjectGraphTaskReportInput): ProjectGraphTaskReport => {
   const targetText = collectTargetText(input);
-  const classifications = classifyTargets(input.selected, targetText);
+  const baseClassifications = classifyTargets(input.selected, targetText);
+  // Allow system pages to extend the classification set: a stack
+  // architecture preset (e.g. `unreal-architecture-pages.json`) can
+  // declare `metadata.triggers.pathContains` / `pathSuffix` /
+  // `extensions` so a `typescript-consumer` page activates only for
+  // Unreal projects that actually wire TS consumers, instead of
+  // hardcoding "every .ts file is a typescript-consumer" in the task
+  // report itself.
+  const triggered = collectTriggeredClassifications(input.systemPageRules ?? [], targetText);
+  const classifications = mergeUnique(baseClassifications, triggered);
   const overlays = relevantOverlays(input.overlays, targetText).slice(0, input.limit);
   const fromSystemPages = collectSystemPageContributions(input.systemPageRules ?? [], classifications);
   // System-page metadata wins (project-specific guidance comes first), then
@@ -198,6 +207,55 @@ const collectSystemPageContributions = (
 const readStringArray = (value: unknown): string[] => Array.isArray(value)
   ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
   : [];
+
+/**
+ * Pull project-type classifications out of system-page metadata
+ * `triggers`, when the rule (or custom user page) declared one. A
+ * trigger lets a stack preset say "any target whose path ends in `.ts`
+ * or contains `/typescript/typing/` is a `typescript-consumer` for me",
+ * which keeps the stack-specific knowledge inside the rule instead of
+ * hardcoded in the task report itself.
+ *
+ * Trigger shape (all fields optional, all string arrays):
+ * ```
+ * "metadata": {
+ *   "classifications": ["typescript-consumer"],
+ *   "triggers": {
+ *     "extensions": [".ts", ".tsx"],
+ *     "pathContains": ["/typescript/typing/"],
+ *     "pathSuffix": [".generated.cs"]
+ *   }
+ * }
+ * ```
+ */
+const collectTriggeredClassifications = (
+  systemPageRules: ContextNode[],
+  targetText: string[],
+): string[] => {
+  const lower = targetText.map((value) => value.replace(/\\/g, '/').toLowerCase());
+  const matchesAny = (predicate: (value: string) => boolean): boolean => lower.some(predicate);
+  const result = new Set<string>();
+  for (const rule of systemPageRules) {
+    const metadata = rule.metadata ?? {};
+    const ruleClassifications = readStringArray(metadata['classifications']);
+    if (ruleClassifications.length === 0) continue;
+    const triggers = metadata['triggers'];
+    if (!triggers || typeof triggers !== 'object') continue;
+    const triggerObj = triggers as Record<string, unknown>;
+    const extensions = readStringArray(triggerObj['extensions']).map((value) => value.toLowerCase());
+    const pathContains = readStringArray(triggerObj['pathContains']).map((value) => value.toLowerCase());
+    const pathSuffix = readStringArray(triggerObj['pathSuffix']).map((value) => value.toLowerCase());
+    if (extensions.length + pathContains.length + pathSuffix.length === 0) continue;
+    const triggered = matchesAny((value) =>
+      extensions.some((ext) => value.endsWith(ext))
+      || pathContains.some((needle) => value.includes(needle))
+      || pathSuffix.some((suffix) => value.endsWith(suffix)),
+    );
+    if (!triggered) continue;
+    for (const value of ruleClassifications) result.add(value);
+  }
+  return Array.from(result);
+};
 
 const pushAll = (target: string[], values: string[]): void => {
   for (const value of values) target.push(value);
@@ -348,6 +406,14 @@ const classifyTargets = (nodes: ContextNode[], targetText: string[]): string[] =
   const lower = targetText.map((value) => value.replace(/\\/g, '/').toLowerCase());
   const has = (predicate: (value: string) => boolean): boolean => lower.some(predicate);
   const classes = new Set<string>();
+  // The classifications below are deliberately stack-agnostic file-shape
+  // detectors. Anything stack-specific (e.g. "this .ts file is a
+  // TypeScript consumer of a UnrealSharp binding") is contributed by
+  // the matching system page's `metadata.classifications`, which the
+  // detection rule (`*-architecture-pages.json`) controls. The previous
+  // implementation hardcoded `typescript-consumer` for every `.ts` file,
+  // which polluted non-Unreal projects (mindstrate, plain Node libs)
+  // with UnrealSharp-flavored Affected Chains.
   if (nodes.some((node) => node.metadata?.['generated'] === true || node.metadata?.['doNotEdit'] === true)
     || GENERATED_ROOTS.some((root) => has((value) => value === root.toLowerCase() || value.startsWith(`${root.toLowerCase()}/`) || value.includes(`/${root.toLowerCase()}/`)))) {
     classes.add('generated-output');
@@ -357,7 +423,6 @@ const classifyTargets = (nodes: ContextNode[], targetText: string[]): string[] =
   if (has((value) => value.endsWith('.build.cs'))) classes.add('build-module');
   if (has((value) => value.includes('/config/') || value.endsWith('.ini'))) classes.add('config-sensitive');
   if (has((value) => value.includes('/content/'))) classes.add('asset-reference-sensitive');
-  if (has((value) => value.includes('/typescript/') || value.endsWith('.ts') || value.endsWith('.tsx'))) classes.add('typescript-consumer');
   if (has((value) => value.includes('/source/') && (value.endsWith('.h') || value.endsWith('.cpp')))
     || nodes.some((node) => node.metadata?.['kind'] === ProjectGraphNodeKind.CLASS || node.metadata?.['kind'] === ProjectGraphNodeKind.TYPE || node.metadata?.['kind'] === ProjectGraphNodeKind.FUNCTION)) {
     classes.add('cpp-source');
@@ -372,77 +437,61 @@ const classifyTargets = (nodes: ContextNode[], targetText: string[]): string[] =
 };
 
 const taskConstraints = (classifications: string[]): string[] => {
+  // Project-type-specific constraints belong on system pages (their
+  // `metadata.knownConstraints`). The fallback below only surfaces the
+  // universally true sentence for `generated-output` since that
+  // classification reliably maps to "do not hand-edit generator output"
+  // in any stack.
   const values = new Set<string>();
-  if (classifications.includes('generated-output')) values.add('Generated outputs are not source of truth; identify and edit the upstream source before changing them.');
-  if (classifications.includes('plugin-manifest') || classifications.includes('project-manifest')) values.add('Project and plugin manifests control enabled plugins, module type, and load phase; treat them as high-impact changes.');
-  if (classifications.includes('build-module')) values.add('Build.cs changes can alter public/private module dependencies and Runtime/Editor boundaries.');
-  if (classifications.includes('editor-boundary')) values.add('Runtime modules must not depend on editor-only modules.');
-  if (classifications.includes('asset-reference-sensitive')) values.add('Content asset paths may be referenced by soft or hard references; do not rename as plain files.');
-  if (classifications.includes('native-script-binding')) values.add('Generated TypeScript declarations must be driven by C++ reflection metadata or generator configuration.');
+  if (classifications.includes('generated-output')) {
+    values.add('Generated outputs are not source of truth; identify and edit the upstream source before changing them.');
+  }
   return Array.from(values);
 };
 
 const affectedChains = (classifications: string[]): string[] => {
+  // Generic chain that applies to every project type; stack-specific
+  // chains (UnrealSharp / UMG / GAS, etc.) come from system pages.
   const values = new Set<string>();
-  if (classifications.includes('native-script-binding')) values.add('C++ UCLASS/USTRUCT/UENUM/UFUNCTION/UPROPERTY -> UHT reflection -> UnrealSharp generator -> TypeScript/Typing -> TypeScript consumers.');
-  if (classifications.includes('plugin-manifest') || classifications.includes('build-module') || classifications.includes('project-manifest')) values.add('.uproject/.uplugin -> module declaration -> Build.cs dependencies -> module load phase -> runtime/editor target.');
-  if (classifications.includes('config-sensitive')) values.add('Config .ini -> class/module/plugin settings -> runtime/editor startup -> C++/script consumers.');
-  if (classifications.includes('asset-reference-sensitive')) values.add('Content asset path -> soft/hard references -> configs/blueprints/assets -> runtime load.');
-  if (classifications.includes('typescript-consumer')) values.add('TypeScript source -> generated declarations/imports -> UnrealSharp runtime binding -> native API.');
-  if (values.size === 0) values.add('Target file -> direct imports/callers -> owning module -> validation command.');
+  if (classifications.includes('generated-output')) {
+    values.add('Generator source/config -> generated output -> downstream consumers.');
+  }
+  values.add('Target file -> direct imports/callers -> owning module -> validation command.');
   return Array.from(values);
 };
 
 const sourceOfTruth = (classifications: string[]): string[] => {
+  // Universal fallback. Stack-specific source-of-truth statements
+  // ("Owning *.Build.cs" etc.) come from system pages.
   const values = new Set<string>();
-  if (classifications.includes('generated-output') || classifications.includes('native-script-binding')) {
-    values.add('C++ reflection source and UnrealSharp generator/configuration.');
+  if (classifications.includes('generated-output')) {
+    values.add('The generator source code, configuration, or upstream input that produces this output.');
   }
-  if (classifications.includes('plugin-manifest')) values.add('.uplugin module and plugin dependency declarations.');
-  if (classifications.includes('project-manifest')) values.add('.uproject enabled plugin and project module declarations.');
-  if (classifications.includes('build-module')) values.add('Owning *.Build.cs and corresponding .uplugin module metadata.');
-  if (classifications.includes('config-sensitive')) values.add('Config source plus the C++ class or subsystem that reads it.');
-  if (classifications.includes('asset-reference-sensitive')) values.add('Unreal asset registry, source asset, and Unreal-aware rename/reference tooling.');
-  if (values.size === 0) values.add('Exact source file and its direct callers/importers.');
+  values.add('Exact source file and its direct callers/importers.');
   return Array.from(values);
 };
 
 const doNotEditTargets = (classifications: string[]): string[] => {
   const values = new Set<string>();
-  if (classifications.includes('generated-output') || classifications.includes('native-script-binding')) {
+  if (classifications.includes('generated-output')) {
     for (const root of GENERATED_ROOTS) values.add(root);
   }
-  if (classifications.includes('asset-reference-sensitive')) values.add('Content asset paths through plain filesystem rename.');
   return Array.from(values);
 };
 
 const requiredSearches = (classifications: string[]): string[] => {
-  const values = new Set<string>(['direct callers/importers of the target']);
-  if (classifications.includes('native-script-binding') || classifications.includes('generated-output')) {
-    values.add('corresponding generated TypeScript declaration');
-    values.add('TypeScript consumers of the native API');
-    values.add('UnrealSharp generator/configuration entries');
-  }
-  if (classifications.includes('build-module') || classifications.includes('plugin-manifest') || classifications.includes('project-manifest')) {
-    values.add('owning .uplugin and .uproject declarations');
-    values.add('public/private Build.cs dependency users');
-    values.add('Runtime versus Editor module boundaries');
-  }
-  if (classifications.includes('config-sensitive')) values.add('Config readers and referenced class/module/plugin names');
-  if (classifications.includes('asset-reference-sensitive')) values.add('Asset Registry soft/hard references and config/blueprint references');
-  return Array.from(values);
+  // Single universal entry. Stack-specific "search the .uplugin / search
+  // UnrealSharp generator" instructions are part of the matching system
+  // page (rendered via system-page knownConstraints / affectedChain).
+  return ['direct callers/importers of the target'];
 };
 
 const recommendedVerification = (classifications: string[]): string[] => {
-  const values = new Set<string>();
-  if (classifications.includes('cpp-source') || classifications.includes('native-script-binding') || classifications.includes('build-module')) values.add('Unreal build compile for the affected target.');
-  if (classifications.includes('native-script-binding') || classifications.includes('generated-output')) values.add('Run UnrealSharp/type generation and inspect generated declarations.');
-  if (classifications.includes('typescript-consumer') || classifications.includes('native-script-binding')) values.add('Run TypeScript type check or the project script validation.');
-  if (classifications.includes('plugin-manifest') || classifications.includes('project-manifest')) values.add('Validate editor/runtime startup with the changed plugin set.');
-  if (classifications.includes('asset-reference-sensitive')) values.add('Run Unreal-aware asset reference validation.');
-  if (classifications.includes('config-sensitive')) values.add('Run config load/startup validation for the affected target.');
-  if (values.size === 0) values.add('Run the smallest build/test command covering the changed module.');
-  return Array.from(values);
+  // Generic verification fallback. Project-specific commands flow in
+  // through the system-page `metadata.recommendedVerification`, which
+  // can use whatever language the project actually uses (`npm test`,
+  // `pytest`, `cargo test`, the project's own custom command, etc.).
+  return ['Run the smallest build/test command covering the changed module.'];
 };
 
 const relevantOverlays = (overlays: ProjectGraphOverlay[], targetText: string[]): ProjectGraphOverlay[] => {

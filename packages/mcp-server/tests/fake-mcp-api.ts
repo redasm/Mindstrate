@@ -217,6 +217,11 @@ interface SystemPageRuleFixtureOptions {
   affectedChain?: string;
   recommendedVerification?: string[];
   sourceOfTruth?: string[];
+  triggers?: {
+    extensions?: string[];
+    pathContains?: string[];
+    pathSuffix?: string[];
+  };
 }
 
 /**
@@ -253,5 +258,6 @@ export const systemPageRule = (input: SystemPageRuleFixtureOptions): ContextNode
     affectedChain: input.affectedChain,
     recommendedVerification: input.recommendedVerification,
     sourceOfTruth: input.sourceOfTruth,
+    triggers: input.triggers,
   },
 });

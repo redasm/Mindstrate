@@ -182,6 +182,11 @@ export interface RuleSystemPagePreset {
   overlayTitle: string;
   metadata?: {
     classifications?: string[];
+    triggers?: {
+      extensions?: string[];
+      pathContains?: string[];
+      pathSuffix?: string[];
+    };
     knownConstraints?: string[];
     doNotEditTargets?: string[];
     affectedChain?: string;

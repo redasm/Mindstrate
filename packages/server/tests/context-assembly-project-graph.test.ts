@@ -152,4 +152,54 @@ describe('assembleContext consumes project graph relationships', () => {
     expect(assembled.projectGraphContext).toBeUndefined();
     expect(assembled.summary).not.toContain('### Project Graph Relationships');
   });
+
+  it('matches currentFile by relative path even when the file node id is content-hashed', async () => {
+    // Regression for the seed selector previously matching by node id
+    // (which is `pg:<project>:file:<sha>`). Real project graph file node
+    // ids are content hashes — `idLower.endsWith(':file:<path>')` never
+    // hits, so currentFile seeding silently produced zero file nodes
+    // and the assembly only surfaced unrelated dependency nodes that
+    // happened to share tokens with the task description.
+    fs.writeFileSync(
+      path.join(projectRoot, 'package.json'),
+      JSON.stringify({ name: 'pg-currentfile-demo' }),
+    );
+    fs.mkdirSync(path.join(projectRoot, 'packages', 'server', 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, 'packages', 'server', 'src', 'feature.ts'),
+      'export const helper = () => 1;',
+    );
+    const project = detectProject(projectRoot);
+    memory.context.indexProjectGraph(project!);
+
+    // Sanity: the resulting node id is a hash, not the path. If this
+    // ever changes the regression is no longer interesting.
+    const fileNode = memory.context.listContextNodes({
+      project: 'pg-currentfile-demo',
+      domainType: 'architecture' as never,
+      limit: 200,
+    }).find((node) => node.title.endsWith('feature.ts'));
+    expect(fileNode).toBeDefined();
+    expect(fileNode!.id).toMatch(/^pg:pg-currentfile-demo:file:[a-f0-9]+$/);
+    expect(fileNode!.id.endsWith('packages/server/src/feature.ts')).toBe(false);
+
+    const assembled = await memory.assembly.assembleContext(
+      'review feature module',
+      {
+        project: 'pg-currentfile-demo',
+        context: {
+          project: 'pg-currentfile-demo',
+          // Use the workspace-relative path the way an editor would.
+          currentFile: 'packages/server/src/feature.ts',
+        },
+      },
+    );
+
+    const facts = assembled.projectGraphContext ?? [];
+    const seedFile = facts.find(
+      (fact) => fact.source === 'seed' && fact.label === 'packages/server/src/feature.ts',
+    );
+    expect(seedFile).toBeDefined();
+    expect(seedFile!.nodeId).toBe(fileNode!.id);
+  });
 });

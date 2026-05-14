@@ -108,6 +108,10 @@
       "overlayTitle": "Structured Overlay",
       "metadata": {
         "classifications": ["native-script-binding", "generated-output", "typescript-consumer"],
+        "triggers": {
+          "extensions": [".ts", ".tsx"],
+          "pathContains": ["/typescript/typing/"]
+        },
         "knownConstraints": [
           "Generated TypeScript declarations must be driven by C++ reflection metadata or generator configuration.",
           "Generated outputs are not source of truth; identify and edit the upstream source before changing them."
@@ -423,6 +427,10 @@
       "overlayTitle": "结构化 Overlay",
       "metadata": {
         "classifications": ["native-script-binding", "generated-output", "typescript-consumer"],
+        "triggers": {
+          "extensions": [".ts", ".tsx"],
+          "pathContains": ["/typescript/typing/"]
+        },
         "knownConstraints": [
           "生成的 TypeScript 声明必须由 C++ 反射元数据或 generator 配置驱动。",
           "生成输出不是 source of truth；编辑前先识别上游源头。"

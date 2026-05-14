@@ -27,6 +27,15 @@ export class ProjectedKnowledgeSearch {
       project: options.project,
       limit: Math.max(options.limit ?? 0, topK * 10, 50),
       includeStatuses: options.includeStatuses,
+      // Default-on for the search path: `graph_knowledge_search` /
+      // `memory_search` exist precisely to surface evidence-rich
+      // project graph facts (file/module/dependency/asset nodes), so
+      // the projector's "exclude project graph nodes" guard would make
+      // the tools return nothing for the most common queries. The
+      // assembly DAG, which calls into the same projector for the
+      // task-curation slice, sets this explicitly to `false` to keep
+      // its behavior unchanged.
+      includeProjectGraphNodes: options.includeProjectGraphNodes ?? true,
     });
 
     return candidates

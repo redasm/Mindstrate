@@ -105,6 +105,7 @@ silently dropped at load time.
 | Field                     | Used by `before-edit` / `impact` to populate           |
 | ------------------------- | ------------------------------------------------------ |
 | `classifications`         | Selecting which target categories this page applies to.|
+| `triggers`                | File-shape rules that promote `classifications` for matching paths. See below.|
 | `knownConstraints`        | "### Known Constraints" lines.                         |
 | `doNotEditTargets`        | "### Do Not Edit Directly" lines.                      |
 | `affectedChain`           | "### Affected Chains" line.                            |
@@ -116,6 +117,30 @@ A page with **no `classifications`** behaves as a global overlay: its
 `recommendedVerification` lines are appended to every `before-edit`
 report regardless of target classification. The other metadata fields
 on a global page are ignored to avoid drowning out targeted guidance.
+
+### Trigger rules (`metadata.triggers`)
+
+Triggers let a stack architecture preset say "any target whose path
+ends in `.ts` or contains `/typescript/typing/` is a `typescript-consumer`
+*for projects that load this page*", instead of hardcoding that
+mapping in the task report. A project that does not load the matching
+preset never sees the classification.
+
+```json
+"metadata": {
+  "classifications": ["typescript-consumer"],
+  "triggers": {
+    "extensions": [".ts", ".tsx"],
+    "pathContains": ["/typescript/typing/"],
+    "pathSuffix": [".generated.cs"]
+  }
+}
+```
+
+All three trigger fields are optional and combine with OR semantics. A
+page with `classifications` but no `triggers` only contributes when the
+generic file-shape classifier (under `project-graph-task-report.ts`)
+already produced a matching classification.
 
 ## Layer 3 — Custom user pages (per project)
 

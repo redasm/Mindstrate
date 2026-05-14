@@ -81,9 +81,16 @@ describe('handleProjectGraphTaskQuery', () => {
 
     const response = await handleProjectGraphTaskQuery(api, { task: 'before-edit', query: 'TypeScript/Typing/UObject.d.ts' });
 
+    // The path lives under a generated root, so the classifier still
+    // tags it `generated-output` and the safety pass flags the edit.
+    // The previous Unreal-flavored fallbacks ("Run UnrealSharp/type
+    // generation") are no longer hardcoded into the report — they only
+    // surface when a project's system-page rule actually contributes
+    // them via metadata.
     expect(response.content[0].text).toContain('Generated outputs are not source of truth');
     expect(response.content[0].text).toContain('TypeScript/Typing');
-    expect(response.content[0].text).toContain('Run UnrealSharp/type generation');
+    expect(response.content[0].text).toContain('generated-output-targeted');
+    expect(response.content[0].text).not.toContain('Run UnrealSharp/type generation');
   });
 
   it('emits a generic node listing for non-report tasks', async () => {
@@ -330,9 +337,11 @@ describe('handleProjectGraphTaskQuery system-page metadata integration', () => {
     const response = await handleProjectGraphTaskQuery(api, { task: 'before-edit', query: 'random.ts' });
 
     const text = response.content[0].text;
-    // The classification picked up 'typescript-consumer' from the .ts
-    // suffix, which the supplied system-page does not cover, so its
-    // project-specific constraint must NOT appear.
+    // `random.ts` no longer auto-triggers any stack classification
+    // (the previous hardcoded `.ts -> typescript-consumer` mapping was
+    // removed, see project-graph-task-report.ts), and the supplied
+    // system-page covers `build-module` / `plugin-manifest` instead.
+    // It therefore must NOT contribute its project-specific constraint.
     expect(text).not.toContain('Project-specific plugin rule.');
   });
 
@@ -358,13 +367,34 @@ describe('handleProjectGraphTaskQuery system-page metadata integration', () => {
     expect(response.content[0].text).toContain('Select validation commands from the affected chain.');
   });
 
-  it('reports a project-specific Source Of Truth from system-page metadata when available', async () => {
-    // Reproduces Gap B from the post-rollout review: a query for
-    // "TypeScript/Typing" used to receive only the generic fallback
-    // ("Exact source file and its direct callers/importers.") even
-    // when the cpp-typescript-bridge system page rule was loaded,
-    // because `analyzeProjectGraphTask` did not thread system-page
-    // `sourceOfTruth` through the merge step.
+  it('keeps a plain Node TypeScript project free of UnrealSharp-flavored guidance', async () => {
+    // Path 3 invariant: without a stack preset that opts in via
+    // `metadata.triggers`, a `.ts` file no longer auto-promotes to
+    // `typescript-consumer`. Mindstrate itself relies on this — its
+    // before-edit reports must not list UnrealSharp / TypeScript/Typing
+    // chains.
+    const api = createFakeMcpApi({
+      contextNodes: [],
+      contextEdges: [],
+      overlays: [],
+      systemPageRules: [],
+    });
+
+    const response = await handleProjectGraphTaskQuery(api, {
+      task: 'before-edit',
+      query: 'packages/server/src/runtime/mindstrate-runtime.ts',
+    });
+    const text = response.content[0].text;
+    expect(text).not.toContain('UnrealSharp');
+    expect(text).not.toContain('TypeScript/Typing');
+    expect(text).not.toContain('typescript-consumer');
+  });
+
+  it('lights up typescript-consumer ONLY when a system-page rule contributes a matching trigger', async () => {
+    // Same path as above, but this time the project ships an Unreal
+    // architecture preset whose 02-cpp-typescript-bridge page declares
+    // a trigger for `.ts`. The classification must now appear, and the
+    // page's project-specific guidance must surface.
     const api = createFakeMcpApi({
       contextNodes: [],
       contextEdges: [],
@@ -372,6 +402,38 @@ describe('handleProjectGraphTaskQuery system-page metadata integration', () => {
       systemPageRules: [systemPageRule({
         pageKey: '02-cpp-typescript-bridge',
         classifications: ['native-script-binding', 'generated-output', 'typescript-consumer'],
+        triggers: { extensions: ['.ts', '.tsx'], pathContains: ['/typescript/typing/'] },
+        knownConstraints: ['Generated TypeScript declarations must be driven by C++ reflection metadata.'],
+        sourceOfTruth: ['C++ reflection source or UnrealSharp generator/configuration.'],
+      })],
+    });
+
+    const response = await handleProjectGraphTaskQuery(api, {
+      task: 'before-edit',
+      query: 'TypeScript/Typing/UObject.d.ts',
+    });
+    const text = response.content[0].text;
+    expect(text).toContain('typescript-consumer');
+    expect(text).toContain('Generated TypeScript declarations must be driven by C++ reflection metadata.');
+  });
+
+  it('reports a project-specific Source Of Truth from system-page metadata when available', async () => {
+    // Reproduces Gap B from the post-rollout review: a query for
+    // "TypeScript/Typing" used to receive only the generic fallback
+    // ("Exact source file and its direct callers/importers.") even
+    // when the cpp-typescript-bridge system page rule was loaded,
+    // because `analyzeProjectGraphTask` did not thread system-page
+    // `sourceOfTruth` through the merge step. Triggers wire the rule
+    // to the actual path so it activates without a hardcoded
+    // typescript-consumer mapping in the task report.
+    const api = createFakeMcpApi({
+      contextNodes: [],
+      contextEdges: [],
+      overlays: [],
+      systemPageRules: [systemPageRule({
+        pageKey: '02-cpp-typescript-bridge',
+        classifications: ['native-script-binding', 'generated-output', 'typescript-consumer'],
+        triggers: { extensions: ['.ts', '.tsx'], pathContains: ['/typescript/typing/'] },
         knownConstraints: ['Generated TypeScript declarations must be driven by C++ reflection metadata.'],
         doNotEditTargets: ['TypeScript/Typing'],
         sourceOfTruth: ['C++ reflection source or UnrealSharp generator/configuration.'],
@@ -393,11 +455,11 @@ describe('handleProjectGraphTaskQuery system-page metadata integration', () => {
   it('returns "Do Not Edit Directly: TypeScript/Typing" for a bare TypeScript/Typing query (Gap A regression)', async () => {
     // Pinned regression: a query of just "TypeScript/Typing" with no
     // selected nodes and no evidence still has to surface the
-    // project-specific do-not-edit target. The classifier maps the
-    // query string itself to `generated-output` + `typescript-consumer`,
-    // so when a system-page rule for `02-cpp-typescript-bridge` is
-    // loaded, its `doNotEditTargets: ['TypeScript/Typing']` must be
-    // listed BEFORE the generic generated-roots fallback.
+    // project-specific do-not-edit target. The page declares a trigger
+    // (`pathContains: ['/typescript/typing/']` and `extensions: ['.ts']`)
+    // that lights up `typescript-consumer` for the matching path. A
+    // project that does not load the cpp-typescript-bridge page never
+    // sees this entry — that is the Path 3 invariant.
     const api = createFakeMcpApi({
       contextNodes: [],
       contextEdges: [],
@@ -405,6 +467,7 @@ describe('handleProjectGraphTaskQuery system-page metadata integration', () => {
       systemPageRules: [systemPageRule({
         pageKey: '02-cpp-typescript-bridge',
         classifications: ['native-script-binding', 'generated-output', 'typescript-consumer'],
+        triggers: { extensions: ['.ts', '.tsx'], pathContains: ['/typescript/typing/'] },
         doNotEditTargets: ['TypeScript/Typing'],
       })],
     });

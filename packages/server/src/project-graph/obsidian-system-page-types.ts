@@ -45,6 +45,15 @@ export type SystemPageClassification =
 export interface SystemPageMetadata {
   /** Which classification(s) this page is an authoritative source for. */
   classifications?: SystemPageClassification[];
+  /**
+   * Optional file-shape triggers that promote `classifications` for any
+   * target whose path matches. Lets a stack architecture preset say
+   * "any `.ts` file in this project is a `typescript-consumer`"
+   * without baking that mapping into the task report. The MCP
+   * before-edit / impact handler is what consumes this — see
+   * `collectTriggeredClassifications` in `project-graph-task-report.ts`.
+   */
+  triggers?: SystemPageMetadataTriggers;
   /** Sentences pasted into "Known Constraints" of the before-edit report. */
   knownConstraints?: string[];
   /** Targets pasted into "Do Not Edit Directly". */
@@ -62,6 +71,15 @@ export interface SystemPageMetadata {
   recommendedVerification?: string[];
   /** Free-form tags appended to the internalized RULE node. */
   tags?: string[];
+}
+
+export interface SystemPageMetadataTriggers {
+  /** File extensions (with leading dot, lowercase) that promote this page's classifications. */
+  extensions?: string[];
+  /** Substrings searched in the lower-case forward-slash path. */
+  pathContains?: string[];
+  /** Suffixes searched in the lower-case forward-slash path (after extensions / contains). */
+  pathSuffix?: string[];
 }
 
 export interface SystemPageDefinition {
