@@ -134,6 +134,7 @@ export {
   // Atomic write primitive used by tests and tooling that materialise
   // project graph artifacts outside the sub-domain API (rare).
   writeProjectGraphTextFileAtomically,
+  KNOWN_SYSTEM_PAGE_CLASSIFICATIONS,
 } from './project-graph/index.js';
 export type {
   CreateProjectGraphEdgeIdInput,

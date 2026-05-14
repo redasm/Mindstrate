@@ -30,32 +30,19 @@ import * as path from 'node:path';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject, RuleSystemPagePreset, SystemPagePresetLocale } from '../project/index.js';
 import { genericSystemPageDefinitions } from './obsidian-system-pages-generic.js';
-import type { SystemPageClassification, SystemPageDefinition } from './obsidian-system-page-types.js';
+import type { SystemPageDefinition } from './obsidian-system-page-types.js';
 import { loadCustomSystemPages, mergeSystemPages } from './custom-system-pages.js';
 import { writeProjectGraphTextFileAtomically } from './project-graph-file-io.js';
 import { importProjectGraphOverlayBlock } from './project-graph-overlay-import.js';
 import { preserveProjectGraphBlock } from './project-graph-report-shared.js';
 import { resolveProjectGraphLocale } from './project-graph-locale.js';
 import { renderProjectOperationManualSections } from './operation-manual.js';
+import { normalizeSystemPageMetadata } from './system-page-metadata.js';
 
 export interface WrittenSystemPage {
   key: string;
   path: string;
 }
-
-const KNOWN_CLASSIFICATIONS = new Set<SystemPageClassification>([
-  'generated-output',
-  'project-manifest',
-  'plugin-manifest',
-  'build-module',
-  'editor-boundary',
-  'asset-reference-sensitive',
-  'config-sensitive',
-  'native-script-binding',
-  'typescript-consumer',
-  'cpp-source',
-  'general-source',
-]);
 
 export const systemPageDefinitionsForProject = (project: DetectedProject): SystemPageDefinition[] => {
   const skeleton = genericSystemPageDefinitions(project);
@@ -125,20 +112,6 @@ const stackPresetForProject = (project: DetectedProject): SystemPageDefinition[]
 };
 
 const toSystemPageDefinition = (preset: RuleSystemPagePreset): SystemPageDefinition => {
-  const classifications = (preset.metadata?.classifications ?? [])
-    .filter((entry): entry is SystemPageClassification => KNOWN_CLASSIFICATIONS.has(entry as SystemPageClassification));
-  const metadata = preset.metadata
-    ? {
-      ...(classifications.length > 0 ? { classifications } : {}),
-      ...(preset.metadata.triggers ? { triggers: preset.metadata.triggers } : {}),
-      ...(preset.metadata.knownConstraints ? { knownConstraints: preset.metadata.knownConstraints } : {}),
-      ...(preset.metadata.doNotEditTargets ? { doNotEditTargets: preset.metadata.doNotEditTargets } : {}),
-      ...(preset.metadata.affectedChain ? { affectedChain: preset.metadata.affectedChain } : {}),
-      ...(preset.metadata.sourceOfTruth ? { sourceOfTruth: preset.metadata.sourceOfTruth } : {}),
-      ...(preset.metadata.recommendedVerification ? { recommendedVerification: preset.metadata.recommendedVerification } : {}),
-      ...(preset.metadata.tags ? { tags: preset.metadata.tags } : {}),
-    }
-    : undefined;
   return {
     key: preset.key,
     name: preset.name,
@@ -148,7 +121,7 @@ const toSystemPageDefinition = (preset: RuleSystemPagePreset): SystemPageDefinit
     userNotesPlaceholder: preset.userNotesPlaceholder,
     userNotesTitle: preset.userNotesTitle,
     overlayTitle: preset.overlayTitle,
-    metadata: metadata && Object.keys(metadata).length > 0 ? metadata : undefined,
+    metadata: normalizeSystemPageMetadata(preset.metadata),
   };
 };
 

@@ -191,7 +191,7 @@ describe('end-to-end: custom pages flow through to internalized RULE nodes', () 
     // field rather than failing or polluting the page metadata.
     writeCustomPage('50-help', {
       _help: {
-        schema: 'mindstrate.system-page.v1',
+        schema: 'mindstrate.system-page',
         classificationsHint: 'pick from: generated-output, build-module, ...',
       },
       key: '50-help',

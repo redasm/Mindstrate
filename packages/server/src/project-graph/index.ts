@@ -92,6 +92,7 @@ export {
   type ProjectGraphObsidianProjectionOptions,
 } from './project-graph-obsidian-projection.js';
 export type { SystemPageDefinition } from './obsidian-system-page-types.js';
+export { KNOWN_SYSTEM_PAGE_CLASSIFICATIONS } from './system-page-metadata.js';
 export {
   detectProjectGraphChangeSet,
   detectProjectGraphChanges,

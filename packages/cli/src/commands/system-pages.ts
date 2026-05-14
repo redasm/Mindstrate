@@ -26,31 +26,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Command } from 'commander';
-import { detectProject, errorMessage, type SuggestedSystemPage } from '@mindstrate/server';
+import {
+  detectProject,
+  errorMessage,
+  KNOWN_SYSTEM_PAGE_CLASSIFICATIONS,
+  type SuggestedSystemPage,
+} from '@mindstrate/server';
 
 const CUSTOM_DIR = path.join('.mindstrate', 'system-pages');
-
-/**
- * Classification labels the task-report's `classifyTargets` understands.
- * Custom system pages may declare any of these in `metadata.classifications`
- * to be matched when a `before-edit` query hits the same classification.
- * Adding a label here that is NOT in the server-side
- * `SystemPageClassification` union will be silently dropped by the loader,
- * so keep this list aligned with `obsidian-system-page-types.ts`.
- */
-const KNOWN_CLASSIFICATIONS = [
-  'generated-output',
-  'project-manifest',
-  'plugin-manifest',
-  'build-module',
-  'editor-boundary',
-  'asset-reference-sensitive',
-  'config-sensitive',
-  'native-script-binding',
-  'typescript-consumer',
-  'cpp-source',
-  'general-source',
-];
 
 const BUILTIN_PAGE_KEYS = [
   '00-overview',
@@ -148,7 +131,7 @@ systemPagesCommand.command('init <key>')
       }
       console.log('');
       console.log('Available metadata.classifications (pick the ones that fit; unknown labels are dropped):');
-      for (const value of KNOWN_CLASSIFICATIONS) console.log(`  - ${value}`);
+      for (const value of KNOWN_SYSTEM_PAGE_CLASSIFICATIONS) console.log(`  - ${value}`);
       console.log('');
       console.log('Next steps:');
       console.log('  1. Replace every "TODO" line with project-specific text and pick real classifications.');
@@ -170,9 +153,9 @@ const renderTemplate = (
   const title = titleOverride ?? suggestion?.title ?? key;
   const template = {
     _help: {
-      schema: 'mindstrate.system-page.v1',
+      schema: 'mindstrate.system-page',
       fillIn: 'Replace every "TODO" line below. Empty arrays are fine — keep the field but leave it [].',
-      classificationsHint: `Pick from: ${KNOWN_CLASSIFICATIONS.join(', ')}. Unknown labels are silently dropped.`,
+      classificationsHint: `Pick from: ${KNOWN_SYSTEM_PAGE_CLASSIFICATIONS.join(', ')}. Unknown labels are silently dropped.`,
       readMore: 'mindstrate system-pages list — show built-in + custom + suggested pages',
       seededFromSuggestion: suggestion ? `${suggestion.key} (project rule)` : null,
     },
