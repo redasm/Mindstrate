@@ -6,7 +6,7 @@ This guide describes the supported Mindstrate deployment modes and operational c
 
 | Item | Requirement |
 | --- | --- |
-| Node.js | 18 or newer |
+| Node.js | 20.19 or newer (Node 18 reached EOL in 2025-04 and is no longer tested) |
 | npm | 10 or newer |
 | OS | Windows, macOS, or Linux |
 | Git | Optional, for Git collection workflows |
