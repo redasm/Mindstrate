@@ -23,7 +23,10 @@ export class MindstrateContextAssemblyApi {
     private readonly services: MindstrateRuntime,
     private readonly ensureInit: () => Promise<void>,
     private readonly loadSessionContext: (project?: string) => string,
-    private readonly queryGraphKnowledge: (query: string, options?: { project?: string; limit?: number }) => GraphKnowledgeSearchResult[],
+    private readonly queryGraphKnowledge: (
+      query: string,
+      options?: { project?: string; limit?: number; includeProjectGraphNodes?: boolean },
+    ) => GraphKnowledgeSearchResult[],
     private readonly listConflictRecords: (project?: string, limit?: number) => ConflictRecord[],
   ) {}
 
@@ -39,13 +42,21 @@ export class MindstrateContextAssemblyApi {
       perLayerLimit: 5,
     });
     const conflicts = this.listConflictRecords(project, 5);
-    const knowledge = this.queryGraphKnowledge(taskDescription, { project, limit: 5 });
-    const workflows = this.queryGraphKnowledge(taskDescription, { project, limit: 10 })
+    // The assembled context already surfaces project graph nodes via
+    // `loadProjectGraphFacts` (a separate, file/edge-aware traversal),
+    // so the Curated Context layer should focus on `RULE / PATTERN /
+    // SUMMARY / SKILL` knowledge instead of double-listing dependency
+    // / file nodes here. This is the one place that opts out of the
+    // default-on `includeProjectGraphNodes` change made in
+    // `ProjectedKnowledgeSearch.search`.
+    const knowledge = this.queryGraphKnowledge(taskDescription, { project, limit: 5, includeProjectGraphNodes: false });
+    const workflows = this.queryGraphKnowledge(taskDescription, { project, limit: 10, includeProjectGraphNodes: false })
       .filter((result) => result.view.domainType === ContextDomainType.WORKFLOW)
       .slice(0, 3);
     const warnings = this.queryGraphKnowledge(`common mistakes pitfalls when ${taskDescription}`, {
       project,
       limit: 3,
+      includeProjectGraphNodes: false,
     });
     const sections = this.formatCurationSections(
       taskDescription,

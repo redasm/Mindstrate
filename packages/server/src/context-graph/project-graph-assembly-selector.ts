@@ -101,20 +101,63 @@ const collectCurrentFileSeeds = (
   seedIds: Set<string>,
 ): void => {
   if (!currentFile) return;
-  const normalized = currentFile.replace(/\\/g, '/').toLowerCase();
+  const candidates = currentFileMatchCandidates(currentFile);
+  if (candidates.length === 0) return;
   for (const node of nodes) {
-    const idLower = node.id.toLowerCase();
-    if (idLower.endsWith(`:file:${normalized}`)) seedIds.add(node.id);
-  }
-  if (seedIds.size > 0) return;
-  for (const node of nodes) {
-    const paths = nodeEvidencePaths(node);
-    if (paths.some((path) => normalized.endsWith(path.toLowerCase())
-      || path.toLowerCase().endsWith(normalized))) {
-      seedIds.add(node.id);
-    }
+    if (matchesAnyPath(node, candidates)) seedIds.add(node.id);
   }
 };
+
+/**
+ * Build the set of normalized paths a project graph node could match
+ * against `currentFile`. The caller passes either an editor-relative
+ * path (`packages/server/src/...`), a workspace-relative path, or an
+ * absolute path on disk; we accept all three by reducing to lowercase
+ * forward-slash form and adding both the full normalized path and the
+ * leaf filename. The leaf is added only when the full path failed to
+ * exist as a node title / evidence entry, so we do not silently match
+ * every `index.ts` in the repo when the precise path was given.
+ *
+ * Why not match by node id: project graph file node ids are
+ * `pg:<project>:file:<sha>` where `<sha>` is the hash of the absolute
+ * path on the indexer machine, so endsWith on the user-facing relative
+ * path never matches anything.
+ */
+const currentFileMatchCandidates = (currentFile: string): string[] => {
+  const normalized = normalizePath(currentFile);
+  const result = new Set<string>();
+  if (normalized.length > 0) result.add(normalized);
+  // Strip a leading project root if the user passed an absolute path.
+  // We cannot know the indexer root from here, so we drop everything
+  // up to and including the first `packages/` (the most common
+  // workspace prefix in this repo) when present.
+  const packagesIndex = normalized.lastIndexOf('packages/');
+  if (packagesIndex > 0) result.add(normalized.slice(packagesIndex));
+  // Last resort fallback: bare filename.
+  const slash = normalized.lastIndexOf('/');
+  if (slash >= 0 && slash < normalized.length - 1) result.add(normalized.slice(slash + 1));
+  return Array.from(result);
+};
+
+/**
+ * Project graph file nodes carry their relative path in `title` and
+ * also in every `evidence[].path`. Match against both: a precise
+ * user-supplied path will hit the title exactly; the evidence fallback
+ * still works for nodes whose title was overridden by an overlay.
+ */
+const matchesAnyPath = (node: ContextNode, candidates: string[]): boolean => {
+  const titleNormalized = normalizePath(node.title);
+  const sourceRefNormalized = node.sourceRef ? normalizePath(node.sourceRef) : '';
+  const evidencePaths = nodeEvidencePaths(node).map(normalizePath);
+  for (const candidate of candidates) {
+    if (titleNormalized === candidate) return true;
+    if (sourceRefNormalized === candidate) return true;
+    if (evidencePaths.some((path) => path === candidate)) return true;
+  }
+  return false;
+};
+
+const normalizePath = (value: string): string => value.replace(/\\/g, '/').toLowerCase();
 
 const collectTokenMatchSeeds = (
   nodes: ContextNode[],

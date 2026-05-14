@@ -170,4 +170,40 @@ describe('ProjectedKnowledgeSearch', () => {
 
     expect(results.map((result) => result.view.title)).toContain('Runtime Editor Boundary');
   });
+
+  it('surfaces project graph nodes by default so graph_knowledge_search reaches file/dependency facts', () => {
+    // Regression: the projector defaults to filtering project graph
+    // nodes (so the assembly DAG's "knowledge" slice does not double-list
+    // file nodes that already appear under "Project Graph Relationships").
+    // The user-facing search tools (`graph_knowledge_search`,
+    // `memory_search`) used to inherit that default and silently
+    // returned "no relevant graph knowledge" for the most natural
+    // queries. The search layer now defaults `includeProjectGraphNodes`
+    // back to `true`; callers who want the old behavior pass `false`.
+    graphStore.createNode({
+      id: 'pg:demo:file:packages/server/src/feature.ts',
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'packages/server/src/feature.ts',
+      content: 'file: packages/server/src/feature.ts',
+      tags: ['project-graph', 'file'],
+      project: 'demo',
+      status: ContextNodeStatus.ACTIVE,
+      metadata: {
+        projectGraph: true,
+        kind: 'file',
+      },
+    });
+
+    const defaultSearch = search.search('feature.ts', { project: 'demo', topK: 5 });
+    expect(defaultSearch.length).toBeGreaterThan(0);
+    expect(defaultSearch[0].view.title).toBe('packages/server/src/feature.ts');
+
+    const optedOut = search.search('feature.ts', {
+      project: 'demo',
+      topK: 5,
+      includeProjectGraphNodes: false,
+    });
+    expect(optedOut).toHaveLength(0);
+  });
 });

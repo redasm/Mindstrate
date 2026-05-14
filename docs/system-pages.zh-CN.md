@@ -97,6 +97,7 @@ Token 替换同样适用于 `title` 以及任何非占位的 `body` 行：
 | 字段                      | 用于 `before-edit` / `impact` 中填充       |
 | ------------------------- | ------------------------------------------ |
 | `classifications`         | 决定本页面对哪些目标分类生效。              |
+| `triggers`                | 文件形状规则，匹配路径时为本页 classifications 加分。见下。|
 | `knownConstraints`        | "### Known Constraints" 段落的条目。       |
 | `doNotEditTargets`        | "### Do Not Edit Directly" 段落的条目。    |
 | `affectedChain`           | "### Affected Chains" 段落的内容。         |
@@ -107,6 +108,29 @@ Token 替换同样适用于 `title` 以及任何非占位的 `body` 行：
 **没有 `classifications`** 的页面会作为全局 overlay：它的
 `recommendedVerification` 会附加到每一份 `before-edit` 报告。其他
 metadata 字段在全局页上会被忽略，避免淹没针对性指引。
+
+### 触发规则（`metadata.triggers`）
+
+触发规则让 stack 架构 preset 能声明"对于**加载了这个 preset 的项目**，
+路径以 `.ts` 结尾或含 `/typescript/typing/` 的目标算作
+`typescript-consumer`"，而不是把这个映射硬编码在 task report 里。
+没加载对应 preset 的项目永远看不到这个分类。
+
+```json
+"metadata": {
+  "classifications": ["typescript-consumer"],
+  "triggers": {
+    "extensions": [".ts", ".tsx"],
+    "pathContains": ["/typescript/typing/"],
+    "pathSuffix": [".generated.cs"]
+  }
+}
+```
+
+三个 trigger 字段都是可选的，按 OR 语义组合。带 `classifications` 但
+没有 `triggers` 的页面只在通用文件形状分类器（见
+`project-graph-task-report.ts`）已经给出匹配 classification 时才贡献
+内容。
 
 ## 第三层 — 项目自定义页
 

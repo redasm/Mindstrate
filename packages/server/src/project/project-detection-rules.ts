@@ -242,12 +242,27 @@ const parseRuleSystemPageMetadata = (raw: unknown): RuleSystemPagePreset['metada
     : [];
   const result: NonNullable<RuleSystemPagePreset['metadata']> = {};
   if (stringArray('classifications').length > 0) result.classifications = stringArray('classifications');
+  const triggers = parseRuleTriggers(value['triggers']);
+  if (triggers) result.triggers = triggers;
   if (stringArray('knownConstraints').length > 0) result.knownConstraints = stringArray('knownConstraints');
   if (stringArray('doNotEditTargets').length > 0) result.doNotEditTargets = stringArray('doNotEditTargets');
   if (typeof value['affectedChain'] === 'string') result.affectedChain = value['affectedChain'];
   if (stringArray('sourceOfTruth').length > 0) result.sourceOfTruth = stringArray('sourceOfTruth');
   if (stringArray('recommendedVerification').length > 0) result.recommendedVerification = stringArray('recommendedVerification');
   if (stringArray('tags').length > 0) result.tags = stringArray('tags');
+  return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const parseRuleTriggers = (raw: unknown): NonNullable<RuleSystemPagePreset['metadata']>['triggers'] => {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const value = raw as Record<string, unknown>;
+  const stringArray = (key: string): string[] => Array.isArray(value[key])
+    ? (value[key] as unknown[]).filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  const result: NonNullable<NonNullable<RuleSystemPagePreset['metadata']>['triggers']> = {};
+  if (stringArray('extensions').length > 0) result.extensions = stringArray('extensions');
+  if (stringArray('pathContains').length > 0) result.pathContains = stringArray('pathContains');
+  if (stringArray('pathSuffix').length > 0) result.pathSuffix = stringArray('pathSuffix');
   return Object.keys(result).length > 0 ? result : undefined;
 };
 
