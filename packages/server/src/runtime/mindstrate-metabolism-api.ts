@@ -19,17 +19,20 @@ import type {
   PruneResult,
   RunMetabolismOptions,
 } from '../metabolism/index.js';
-import { MetabolismScheduler } from '../metabolism/index.js';
+import { EvolutionEngine, MetabolismScheduler } from '../metabolism/index.js';
 import type { MetabolismRun } from '@mindstrate/protocol/models';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateMetabolismApi {
   private metabolismScheduler: MetabolismScheduler | null = null;
+  private readonly evolutionEngine: EvolutionEngine;
 
   constructor(
     private readonly services: MindstrateRuntime,
     private readonly ensureInit: () => Promise<void>,
-  ) {}
+  ) {
+    this.evolutionEngine = new EvolutionEngine(this.services.contextGraphStore, this.services.pruner);
+  }
 
   async runEvolution(options?: {
     autoApply?: boolean;
@@ -37,22 +40,12 @@ export class MindstrateMetabolismApi {
     mode?: 'standard' | 'background';
   }): Promise<EvolutionRunResult> {
     await this.ensureInit();
-    const run = await this.runMetabolism({ trigger: 'manual' });
-    const scanned = Object.values(run.stageStats)
-      .reduce((sum, stats) => sum + (stats?.scanned ?? 0), 0);
-    return {
-      mode: options?.mode ?? 'standard',
-      scanned,
-      suggestions: [],
-      summary: { merge: 0, improve: 0, validate: 0, archive: 0, split: 0 },
-      llmEnhanced: 0,
-      autoApplied: 0,
-      pendingReview: 0,
-    };
+    await this.runMetabolism({ trigger: options?.mode === 'background' ? 'scheduled' : 'manual' });
+    return this.evolutionEngine.run(options);
   }
 
   applyEvolutionSuggestion(suggestion: EvolutionSuggestion): boolean {
-    return this.services.contextGraphStore.getNodeById(suggestion.nodeId) !== null;
+    return this.evolutionEngine.applySuggestion(suggestion);
   }
 
   async runSummaryCompression(options?: SummaryCompressionOptions): Promise<SummaryCompressionResult> {
@@ -161,4 +154,3 @@ export class MindstrateMetabolismApi {
     return this.services.contextGraphStore.listMetabolismRuns({ project, limit });
   }
 }
-
