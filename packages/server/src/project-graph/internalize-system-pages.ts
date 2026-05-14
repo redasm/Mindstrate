@@ -31,7 +31,8 @@ import {
   type ContextNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
-import type { SystemPageDefinition, SystemPageMetadataTriggers } from './obsidian-system-page-types.js';
+import type { SystemPageDefinition } from './obsidian-system-page-types.js';
+import { hasSystemPageTriggerEntries, uniqueSystemPageStrings } from './system-page-metadata.js';
 
 export const SYSTEM_PAGE_RULE_TAG = 'system-page';
 export const SYSTEM_PAGE_RULE_ID_PREFIX = 'architecture:system-page:';
@@ -135,7 +136,7 @@ interface DesiredSystemPageRule {
 
 const renderSystemPageRule = (projectName: string, page: SystemPageDefinition): DesiredSystemPageRule => {
   const pageMetadata = page.metadata ?? {};
-  const tags = uniqueStrings([
+  const tags = uniqueSystemPageStrings([
     'architecture',
     SYSTEM_PAGE_RULE_TAG,
     `system-page:${page.key}`,
@@ -151,7 +152,7 @@ const renderSystemPageRule = (projectName: string, page: SystemPageDefinition): 
     pageName: page.name,
   };
   if (pageMetadata.classifications?.length) metadata['classifications'] = pageMetadata.classifications;
-  if (hasTriggerEntries(pageMetadata.triggers)) metadata['triggers'] = pageMetadata.triggers;
+  if (hasSystemPageTriggerEntries(pageMetadata.triggers)) metadata['triggers'] = pageMetadata.triggers;
   if (pageMetadata.knownConstraints?.length) metadata['knownConstraints'] = pageMetadata.knownConstraints;
   if (pageMetadata.doNotEditTargets?.length) metadata['doNotEditTargets'] = pageMetadata.doNotEditTargets;
   if (pageMetadata.affectedChain) metadata['affectedChain'] = pageMetadata.affectedChain;
@@ -164,13 +165,6 @@ const renderSystemPageRule = (projectName: string, page: SystemPageDefinition): 
     tags,
     metadata,
   };
-};
-
-const hasTriggerEntries = (triggers: SystemPageMetadataTriggers | undefined): boolean => {
-  if (!triggers) return false;
-  return ((triggers.extensions?.length ?? 0)
-    + (triggers.pathContains?.length ?? 0)
-    + (triggers.pathSuffix?.length ?? 0)) > 0;
 };
 
 const systemPageRuleMatches = (existing: ContextNode, desired: DesiredSystemPageRule): boolean =>
@@ -188,9 +182,6 @@ const stripGraphVersion = (metadata: Record<string, unknown>): Record<string, un
   const { graphVersion: _ignored, ...rest } = metadata;
   return rest;
 };
-
-const uniqueStrings = (values: string[]): string[] =>
-  Array.from(new Set(values.filter(Boolean)));
 
 const setEquals = (a: Set<string>, b: Set<string>): boolean => {
   if (a.size !== b.size) return false;

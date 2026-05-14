@@ -47,29 +47,14 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { safeJson } from '../project/detection-support.js';
 import type { DetectedProject } from '../project/index.js';
-import type {
-  SystemPageClassification,
-  SystemPageDefinition,
-  SystemPageMetadata,
-  SystemPageMetadataTriggers,
-} from './obsidian-system-page-types.js';
+import type { SystemPageDefinition } from './obsidian-system-page-types.js';
+import {
+  normalizeSystemPageMetadata,
+  systemPageString,
+  systemPageStringArray,
+} from './system-page-metadata.js';
 
 export const CUSTOM_SYSTEM_PAGES_DIR = path.join('.mindstrate', 'system-pages');
-
-const KNOWN_CLASSIFICATIONS: SystemPageClassification[] = [
-  'generated-output',
-  'project-manifest',
-  'plugin-manifest',
-  'build-module',
-  'editor-boundary',
-  'asset-reference-sensitive',
-  'config-sensitive',
-  'native-script-binding',
-  'typescript-consumer',
-  'cpp-source',
-  'general-source',
-];
-const CLASSIFICATION_SET = new Set<string>(KNOWN_CLASSIFICATIONS);
 
 const DEFAULT_USER_NOTES_PLACEHOLDER = '- Add project-specific confirmations, corrections, or open questions here.';
 const DEFAULT_USER_NOTES_TITLE = 'User Notes';
@@ -114,17 +99,17 @@ export const mergeSystemPages = (
 const parseCustomSystemPage = (raw: unknown, fileName: string): SystemPageDefinition | null => {
   if (!raw || typeof raw !== 'object') return null;
   const value = raw as Record<string, unknown>;
-  const key = stringOrUndefined(value['key']);
+  const key = systemPageString(value['key']);
   if (!key) return null;
 
-  const title = stringOrUndefined(value['title']) ?? key;
-  const name = stringOrUndefined(value['name']) ?? `${key}.md`;
-  const body = stringArray(value['body']);
-  const overlays = stringArray(value['overlays']);
-  const userNotesPlaceholder = stringOrUndefined(value['userNotesPlaceholder']) ?? DEFAULT_USER_NOTES_PLACEHOLDER;
-  const userNotesTitle = stringOrUndefined(value['userNotesTitle']) ?? DEFAULT_USER_NOTES_TITLE;
-  const overlayTitle = stringOrUndefined(value['overlayTitle']) ?? DEFAULT_OVERLAY_TITLE;
-  const metadata = parseCustomMetadata(value['metadata']);
+  const title = systemPageString(value['title']) ?? key;
+  const name = systemPageString(value['name']) ?? `${key}.md`;
+  const body = systemPageStringArray(value['body']);
+  const overlays = systemPageStringArray(value['overlays']);
+  const userNotesPlaceholder = systemPageString(value['userNotesPlaceholder']) ?? DEFAULT_USER_NOTES_PLACEHOLDER;
+  const userNotesTitle = systemPageString(value['userNotesTitle']) ?? DEFAULT_USER_NOTES_TITLE;
+  const overlayTitle = systemPageString(value['overlayTitle']) ?? DEFAULT_OVERLAY_TITLE;
+  const metadata = normalizeSystemPageMetadata(value['metadata']);
 
   return {
     key,
@@ -139,47 +124,3 @@ const parseCustomSystemPage = (raw: unknown, fileName: string): SystemPageDefini
     sourceFile: fileName,
   };
 };
-
-const parseCustomMetadata = (raw: unknown): SystemPageMetadata | undefined => {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const value = raw as Record<string, unknown>;
-  const classifications = stringArray(value['classifications'])
-    .filter((entry): entry is SystemPageClassification => CLASSIFICATION_SET.has(entry));
-  const metadata: SystemPageMetadata = {};
-  if (classifications.length > 0) metadata.classifications = classifications;
-  const triggers = parseTriggers(value['triggers']);
-  if (triggers) metadata.triggers = triggers;
-  const knownConstraints = stringArray(value['knownConstraints']);
-  if (knownConstraints.length > 0) metadata.knownConstraints = knownConstraints;
-  const doNotEditTargets = stringArray(value['doNotEditTargets']);
-  if (doNotEditTargets.length > 0) metadata.doNotEditTargets = doNotEditTargets;
-  const affectedChain = stringOrUndefined(value['affectedChain']);
-  if (affectedChain) metadata.affectedChain = affectedChain;
-  const sourceOfTruth = stringArray(value['sourceOfTruth']);
-  if (sourceOfTruth.length > 0) metadata.sourceOfTruth = sourceOfTruth;
-  const recommendedVerification = stringArray(value['recommendedVerification']);
-  if (recommendedVerification.length > 0) metadata.recommendedVerification = recommendedVerification;
-  const tags = stringArray(value['tags']);
-  if (tags.length > 0) metadata.tags = tags;
-  return Object.keys(metadata).length > 0 ? metadata : undefined;
-};
-
-const parseTriggers = (raw: unknown): SystemPageMetadataTriggers | undefined => {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const value = raw as Record<string, unknown>;
-  const result: SystemPageMetadataTriggers = {};
-  const extensions = stringArray(value['extensions']);
-  if (extensions.length > 0) result.extensions = extensions;
-  const pathContains = stringArray(value['pathContains']);
-  if (pathContains.length > 0) result.pathContains = pathContains;
-  const pathSuffix = stringArray(value['pathSuffix']);
-  if (pathSuffix.length > 0) result.pathSuffix = pathSuffix;
-  return Object.keys(result).length > 0 ? result : undefined;
-};
-
-const stringOrUndefined = (value: unknown): string | undefined =>
-  typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-
-const stringArray = (value: unknown): string[] => Array.isArray(value)
-  ? value.filter((entry): entry is string => typeof entry === 'string')
-  : [];
