@@ -20,5 +20,8 @@ export const initializeSessionSchema = (db: Database.Database): void => {
     CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project);
     CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
     CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
+    -- Case-insensitive project filter (see context-graph-database for
+    -- the rationale).
+    CREATE INDEX IF NOT EXISTS idx_sessions_project_lower ON sessions(LOWER(project));
   `);
 };

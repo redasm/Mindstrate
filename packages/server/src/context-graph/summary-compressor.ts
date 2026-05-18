@@ -46,6 +46,15 @@ export class SummaryCompressor {
       content: buildSummaryContent,
       metadata: (cluster) => ({ sourceSnapshotIds: cluster.map((item) => item.id) }),
       evidence: (snapshot) => ({ sourceSnapshotId: snapshot.id }),
+      // Promote a quality-verified single snapshot into a SUMMARY when
+      // no peer cluster exists yet. Without this, a solo user with one
+      // active project would never see memory "mature" out of the
+      // SNAPSHOT layer no matter how much they used the system —
+      // clustering requires at least two similar snapshots which the
+      // happy-path workflow rarely produces in a single session. The
+      // qualityScore >= 70 guard keeps low-quality scratch snapshots
+      // out of the SUMMARY layer.
+      promoteSingleton: (node) => node.qualityScore >= 70,
     }, options);
 
     return {

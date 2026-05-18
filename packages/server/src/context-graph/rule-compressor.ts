@@ -33,7 +33,12 @@ export class RuleCompressor {
   async compressProjectPatterns(
     options: RuleCompressionOptions = {},
   ): Promise<RuleCompressionResult> {
-    const minPositiveFeedback = options.minPositiveFeedback ?? 4;
+    // Default of 2 positive feedback (was 4): a PATTERN with at least
+    // two `adopted` signals is a credible RULE candidate. Four was
+    // calibrated for team-server multi-user mode where many agents
+    // collectively reinforce the same pattern; for single-user local
+    // use it made the lineage stall at PATTERN forever.
+    const minPositiveFeedback = options.minPositiveFeedback ?? 2;
     const run = await runSubstrateCompression(this.graphStore, this.embedder, {
       sourceType: SubstrateType.PATTERN,
       sourceDomain: ContextDomainType.PATTERN,

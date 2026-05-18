@@ -99,6 +99,15 @@ export class HighOrderCompressor {
         sourceSubstrateType: spec.sourceType,
         targetSubstrateType: spec.targetType,
       }),
+      // Promote a high-feedback singleton when no peer cluster forms.
+      // High-order substrates (skill / heuristic / axiom) require
+      // stronger feedback evidence than mid-tier substrates because a
+      // promotion mistake here is harder to reverse — a stray AXIOM
+      // shapes future context assemblies indefinitely. Three positive
+      // signals with no negatives is the minimum bar.
+      promoteSingleton: (node) => (
+        node.positiveFeedback >= 3 && node.negativeFeedback === 0
+      ),
     }, options);
 
     return {

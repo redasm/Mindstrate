@@ -75,7 +75,7 @@ export class ConflictRecordRepository {
     const params: unknown[] = [];
 
     if (options.project) {
-      conditions.push('project = ?');
+      conditions.push('LOWER(project) = LOWER(?)');
       params.push(options.project);
     }
 

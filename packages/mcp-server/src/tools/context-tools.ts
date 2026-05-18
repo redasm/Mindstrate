@@ -14,6 +14,7 @@ import {
   handleProjectGraphGetNode,
   handleProjectGraphPath,
   handleProjectGraphQuery,
+  handleProjectGraphReindex,
   handleProjectGraphTaskQuery,
 } from './handlers.js';
 import {
@@ -31,6 +32,7 @@ import {
   ProjectGraphOverlaySchema,
   ProjectGraphPathSchema,
   ProjectGraphQuerySchema,
+  ProjectGraphReindexSchema,
   ProjectGraphTaskQuerySchema,
 } from './tool-schemas.js';
 import { defineTool } from './tool-types.js';
@@ -131,5 +133,11 @@ export const contextTools = [
     description: 'Attach an editable user/team note, correction, confirmation, rejection, risk, or convention to a project graph node or edge without mutating extracted graph facts.',
     schema: ProjectGraphOverlaySchema,
     handler: (api, input) => handleProjectGraphAddOverlay(api, input),
+  }),
+  defineTool({
+    name: 'reindex_project_graph',
+    description: 'Rescan the project filesystem and rebuild the project graph. Run this when `before-edit` / `impact` / `context_assemble` start returning stale facts — typical triggers are: the original `mindstrate setup` predates large source root additions, you renamed/moved files outside the editor, or you switched branches. Local mode only; team-server projects are reindexed by the team server itself.',
+    schema: ProjectGraphReindexSchema,
+    handler: (api, input) => handleProjectGraphReindex(api, input),
   }),
 ];

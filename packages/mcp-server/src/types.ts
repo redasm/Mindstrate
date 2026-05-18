@@ -135,6 +135,21 @@ export interface LocalContextSubApi {
   createProjectGraphOverlay(input: ProjectGraphOverlayInput): ProjectGraphOverlay;
   listProjectGraphOverlays(options?: ProjectGraphOverlayQueryOptions): ProjectGraphOverlay[];
   recordFeedback(retrievalId: string, signal: FeedbackEvent['signal'], context?: string): boolean;
+  /**
+   * Run the project graph scanner against `project.root` and reconcile
+   * the result with the existing ECS graph. Used by the
+   * `reindex_project_graph` MCP tool to recover from a stale db without
+   * forcing the user out of the agent loop.
+   */
+  indexProjectGraph(project: import('@mindstrate/server').DetectedProject): {
+    project: string;
+    filesScanned: number;
+    nodesCreated: number;
+    nodesUpdated: number;
+    edgesCreated: number;
+    edgesUpdated: number;
+    edgesSkipped: number;
+  };
 }
 
 export interface LocalEventsSubApi {
@@ -235,6 +250,22 @@ export interface ContextGraphApi {
   listProjectGraphOverlays(options?: ProjectGraphOverlayQueryOptions): Promise<ProjectGraphOverlay[]>;
   acceptConflictCandidate(input: { conflictId: string; candidateNodeId: string; resolution: string }): Promise<{ resolved: ConflictRecord | null }>;
   rejectConflictCandidate(input: { conflictId: string; candidateNodeId: string; reason: string }): Promise<{ rejected: boolean } | { rejectedNode: unknown }>;
+  /**
+   * Rebuild the project graph from the filesystem rooted at `cwd`. Used
+   * to recover from a stale db (e.g. the original `mindstrate setup` ran
+   * before the project gained new source roots) without forcing the user
+   * to leave the MCP loop. Returns a coarse stats object the handler
+   * surfaces to the AI so the user can see what changed.
+   */
+  reindexProjectGraph(input: { cwd?: string }): Promise<{
+    project: string;
+    filesScanned: number;
+    nodesCreated: number;
+    nodesUpdated: number;
+    edgesCreated: number;
+    edgesUpdated: number;
+    edgesSkipped: number;
+  }>;
 }
 
 export interface MetabolismApi {

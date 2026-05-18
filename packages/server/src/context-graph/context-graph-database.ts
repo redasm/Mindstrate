@@ -125,5 +125,14 @@ export function initializeContextGraphSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_projection_records_target ON projection_records(target);
     CREATE INDEX IF NOT EXISTS idx_metabolism_runs_project ON metabolism_runs(project);
     CREATE INDEX IF NOT EXISTS idx_metabolism_runs_started_at ON metabolism_runs(started_at);
+
+    -- Lowercase indexes: the project filter on every list/query
+    -- query uses LOWER(project) so callers can pass "Mindstrate" or
+    -- "mindstrate" interchangeably. Without these expression indexes
+    -- the fold would force a table scan on every read.
+    CREATE INDEX IF NOT EXISTS idx_context_nodes_project_lower ON context_nodes(LOWER(project));
+    CREATE INDEX IF NOT EXISTS idx_context_events_project_lower ON context_events(LOWER(project));
+    CREATE INDEX IF NOT EXISTS idx_conflict_records_project_lower ON conflict_records(LOWER(project));
+    CREATE INDEX IF NOT EXISTS idx_metabolism_runs_project_lower ON metabolism_runs(LOWER(project));
   `);
 }

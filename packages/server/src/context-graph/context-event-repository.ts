@@ -57,7 +57,7 @@ export class ContextEventRepository {
     const params: unknown[] = [];
 
     if (options.project) {
-      conditions.push('project = ?');
+      conditions.push('LOWER(project) = LOWER(?)');
       params.push(options.project);
     }
     if (options.type) {

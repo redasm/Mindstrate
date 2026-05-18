@@ -7,6 +7,7 @@ import type { LocalMemory, McpApi } from './types.js';
 import { createBundleProjectionApi } from './mcp-bundle-projection-api.js';
 import { runLocalMetabolismStage } from './local-metabolism-stage.js';
 import { startVaultSync, type VaultSync } from './obsidian-vault-sync.js';
+import { resolveLocalDataDir } from './local-data-dir.js';
 
 interface RuntimeApiOptions {
   teamServerUrl: string;
@@ -39,7 +40,16 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
           );
           throw err;
         }
-        const localMemory = new MindstrateClass();
+        // Resolve dataDir up-front so MCP server and project-local CLI
+        // commands (mindstrate setup, mindstrate init, mindstrate graph
+        // sync) share the same SQLite file. Without this MCP defaulted
+        // to `~/.mindstrate` even when the project had already been set
+        // up in `<project>/.mindstrate`, producing two databases that
+        // drifted silently.
+        const dataDir = resolveLocalDataDir({ logger: options.logger });
+        const localMemory = dataDir
+          ? new MindstrateClass({ dataDir })
+          : new MindstrateClass();
         memory = localMemory as unknown as LocalMemory;
         await localMemory.init();
 
@@ -215,6 +225,31 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
     async queryGraphKnowledge(query: string, opts?: { project?: string; topK?: number; limit?: number }) {
       if (teamClient) return teamClient.context.queryKnowledge(query, opts);
       return memory!.context.queryGraphKnowledge(query, opts);
+    },
+
+    async reindexProjectGraph(input: { cwd?: string }) {
+      if (teamClient) {
+        // Team mode: the team server owns the canonical graph, so a
+        // local reindex would have no effect. Tell the caller directly
+        // instead of pretending success.
+        throw new Error('reindex_project_graph is only available in local mode; the team server owns its own scan cadence.');
+      }
+      const { detectProject } = await import('@mindstrate/server');
+      const cwd = input.cwd ?? process.cwd();
+      const project = detectProject(cwd);
+      if (!project) {
+        throw new Error(`Could not detect a project rooted at ${cwd}. Pass an explicit \`cwd\` pointing at a folder with package.json / Cargo.toml / pyproject.toml.`);
+      }
+      const result = memory!.context.indexProjectGraph(project);
+      return {
+        project: project.name,
+        filesScanned: result.filesScanned,
+        nodesCreated: result.nodesCreated,
+        nodesUpdated: result.nodesUpdated,
+        edgesCreated: result.edgesCreated,
+        edgesUpdated: result.edgesUpdated,
+        edgesSkipped: result.edgesSkipped,
+      };
     },
 
     close() {

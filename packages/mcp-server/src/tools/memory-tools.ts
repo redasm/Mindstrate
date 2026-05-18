@@ -27,7 +27,7 @@ export const memoryTools = [
   }),
   defineTool({
     name: 'memory_add',
-    description: 'Add a new knowledge entry to the team knowledge base.',
+    description: 'Add a new knowledge entry to the team knowledge base. Pass `project` so `graph_knowledge_search({ project })` can find this entry later — entries without a project scope are reachable via `memory_search` (no project filter) but invisible to the project-aware search path.',
     schema: MemoryAddSchema,
     handler: (api, input) => handleMemoryAdd(api, input),
   }),

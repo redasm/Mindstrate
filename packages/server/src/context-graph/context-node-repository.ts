@@ -103,7 +103,15 @@ export class ContextNodeRepository {
     const params: unknown[] = [];
 
     if (options.project) {
-      conditions.push('project = ?');
+      // Case-insensitive match so callers that pass `Mindstrate` or
+      // `MINDSTRATE` still find rows persisted as `mindstrate`. Project
+      // slugs are deliberately lower-snake-case in the detection
+      // pipeline, but real-world usage routinely sees the human-cased
+      // form leak in from MCP arguments / overlay imports / team-server
+      // requests. Storing-time normalization was rejected because it
+      // would silently rewrite existing dbs; this query-time fold
+      // keeps both shapes addressable from day one.
+      conditions.push('LOWER(project) = LOWER(?)');
       params.push(options.project);
     }
     if (options.substrateType) {
