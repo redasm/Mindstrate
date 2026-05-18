@@ -60,8 +60,6 @@ export class MindstrateContextAssemblyApi {
     });
     const sections = this.formatCurationSections(
       taskDescription,
-      graphSelection,
-      conflicts,
       knowledge,
       workflows,
       warnings,
@@ -151,35 +149,22 @@ export class MindstrateContextAssemblyApi {
     return this.assembleContext(taskDescription, options);
   }
 
+  /**
+   * Render the curation-only slice of an assembled context: the
+   * task-keyed search hits ("relevant graph knowledge" / "potential
+   * pitfalls"). The DAG owns the surrounding `Operational Rules`,
+   * `Repeated Patterns`, `Active Conflicts`, and `Project Graph
+   * Relationships` sections — duplicating them in `curated.summary`
+   * used to render the same titles two or three times in the same
+   * MCP response.
+   */
   private formatCurationSections(
     taskDescription: string,
-    graphSelection: {
-      rules: ContextNode[];
-      patterns: ContextNode[];
-      summaries: ContextNode[];
-    },
-    conflicts: ConflictRecord[],
     knowledge: GraphKnowledgeSearchResult[],
     workflows: GraphKnowledgeSearchResult[],
     warnings: GraphKnowledgeSearchResult[],
   ): string[] {
-    const sections: string[] = [`## Context for: ${taskDescription}`];
-    this.appendTitles(sections, 'Operational Rules', graphSelection.rules);
-    this.appendTitles(sections, 'Repeated Patterns', graphSelection.patterns);
-    this.appendTitles(sections, 'Recent Summary Clusters', graphSelection.summaries);
-    if (conflicts.length > 0) {
-      sections.push('\n### Active Conflicts');
-      sections.push(...conflicts.map((record) => `- ${record.reason}`));
-    }
-    sections.push('\n### Task Curation');
-    sections.push(generateGraphCurationSummary(taskDescription, knowledge, workflows, warnings));
-    return sections;
-  }
-
-  private appendTitles(sections: string[], title: string, nodes: ContextNode[]): void {
-    if (nodes.length === 0) return;
-    sections.push(`\n### ${title}`);
-    sections.push(...nodes.map((node) => `- ${node.title}`));
+    return [generateGraphCurationSummary(taskDescription, knowledge, workflows, warnings)];
   }
 
   private findProjectSnapshot(project: string): ContextNode | null {
@@ -247,7 +232,18 @@ export class MindstrateContextAssemblyApi {
           taskDescription,
           sessionId,
         );
-        result.push({ retrievalId, nodeId: entry.nodeId, origin: entry.origin });
+        // Snapshot the node's cumulative feedback so the MCP layer can
+        // render it inline with the retrieval ticket. Doing it server-
+        // side avoids forcing every consumer to issue a round-trip per
+        // ticket just to see "did anyone find this useful before?".
+        const node = this.services.contextGraphStore.getNodeById(entry.nodeId);
+        const feedback = node
+          ? {
+            positive: node.positiveFeedback ?? 0,
+            negative: node.negativeFeedback ?? 0,
+          }
+          : undefined;
+        result.push({ retrievalId, nodeId: entry.nodeId, origin: entry.origin, feedback });
       } catch {
         // A missing-node insert from a foreign-key violation just means
         // the surfaced node was already removed mid-assembly. Skip

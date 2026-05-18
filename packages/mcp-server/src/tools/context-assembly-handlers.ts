@@ -104,9 +104,12 @@ const appendRetrievals = (
 ): string => {
   const header = '### Retrieval Tickets — please report which were used';
   if (retrievals && retrievals.length > 0) {
-    const lines = retrievals.map(
-      (entry) => `- ${entry.origin}: ${entry.nodeId}\n  - retrievalId: ${entry.retrievalId}`,
-    );
+    const lines = retrievals.map((entry) => {
+      const feedback = entry.feedback && (entry.feedback.positive > 0 || entry.feedback.negative > 0)
+        ? `  _(feedback so far: +${entry.feedback.positive} / -${entry.feedback.negative})_`
+        : '';
+      return `- ${entry.origin}: ${entry.nodeId}${feedback}\n  - retrievalId: ${entry.retrievalId}`;
+    });
     return `${text}\n\n${header}\nAfter you finish answering, call \`memory_feedback_auto\` once per ticket below with one of \`adopted\` / \`partial\` / \`ignored\` / \`rejected\` so the graph can learn which nodes actually informed your answer.\n${lines.join('\n')}\n`;
   }
   const note = diagnostics.project

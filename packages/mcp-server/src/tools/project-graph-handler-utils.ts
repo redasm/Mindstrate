@@ -85,6 +85,117 @@ export const loadSystemPageRules = async (api: McpApi, project?: string): Promis
 };
 
 // ============================================================
+// Path-aware seed selection
+// ============================================================
+
+/**
+ * Detect whether a free-form task query looks like a file path the
+ * caller wants seeded against. Treat it as a path when it contains
+ * either a slash separator or one of the workspace-prefix markers we
+ * know are paths (no spaces, no Chinese, no punctuation outside path
+ * characters). Anything else is treated as natural language and falls
+ * back to the token-includes matcher used by `selectTaskNodes`.
+ */
+export const looksLikeFilePath = (query: string | undefined): boolean => {
+  if (typeof query !== 'string' || query.length === 0) return false;
+  if (/\s/.test(query)) return false;
+  return query.includes('/') || query.includes('\\');
+};
+
+/**
+ * Normalize any incoming path representation (Windows backslashes,
+ * absolute, workspace-relative, leaf-only) into a comparable lowercase
+ * forward-slash form. Mirrors `normalizePath` in
+ * `selectProjectGraphAssemblyFacts` so the two seed selectors agree on
+ * what "the same path" means.
+ */
+const normalizeQueryPath = (value: string): string =>
+  value.replace(/\\/g, '/').toLowerCase();
+
+/**
+ * Build the set of path forms a node could match against. Accepts the
+ * full normalized path, the longest workspace-relative tail starting at
+ * `packages/`, and the bare filename as a last-resort. The same shape
+ * that `selectProjectGraphAssemblyFacts.currentFileMatchCandidates`
+ * produces, kept in sync intentionally — the two selectors are reached
+ * by different MCP tools but must surface the same set of seeds for a
+ * given file path.
+ */
+const pathMatchCandidates = (query: string): string[] => {
+  const normalized = normalizeQueryPath(query);
+  const result = new Set<string>();
+  if (normalized.length > 0) result.add(normalized);
+  const packagesIndex = normalized.lastIndexOf('packages/');
+  if (packagesIndex > 0) result.add(normalized.slice(packagesIndex));
+  const slash = normalized.lastIndexOf('/');
+  if (slash >= 0 && slash < normalized.length - 1) result.add(normalized.slice(slash + 1));
+  return Array.from(result);
+};
+
+const nodePathHaystack = (node: ContextNode): string[] => {
+  const paths = new Set<string>();
+  paths.add(normalizeQueryPath(node.title));
+  if (node.sourceRef) paths.add(normalizeQueryPath(node.sourceRef));
+  const evidence = node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.evidence];
+  if (Array.isArray(evidence)) {
+    for (const entry of evidence) {
+      if (entry && typeof entry === 'object' && 'path' in entry) {
+        paths.add(normalizeQueryPath(String((entry as Record<string, unknown>).path)));
+      }
+    }
+  }
+  return Array.from(paths);
+};
+
+/**
+ * Path-aware seed selection for `before-edit` / `impact` / `flow` /
+ * `binding` / `asset-references` task queries.
+ *
+ * The previous `nodes.filter(includes(query))` fallback produced
+ * pathological results for deep paths like
+ * `packages/server/src/metabolism/scheduler.ts`: no node title contains
+ * the full string, so `matching` came back empty and `selectTaskNodes`
+ * fell back to "first N global-hot nodes" (README.md, tsconfig.base.json,
+ * web-ui/i18n). This selector instead:
+ *
+ *   1. If `query` looks like a path, find nodes whose title /
+ *      sourceRef / evidence path equals one of the path candidates.
+ *      Returns those as seeds. Never returns README.md for a deep path.
+ *   2. Otherwise, fall back to the token-includes matcher (treating
+ *      the query as natural language).
+ *
+ * Returning an empty array when the path is real but unindexed is
+ * deliberate: the report builder downstream will then say "no graph
+ * nodes match" rather than fabricate a wrong impact set.
+ */
+export const collectTaskQuerySeeds = (
+  nodes: ContextNode[],
+  query: string | undefined,
+): ContextNode[] => {
+  if (typeof query !== 'string' || query.length === 0) return [];
+  if (looksLikeFilePath(query)) {
+    const candidates = pathMatchCandidates(query);
+    const matched = nodes.filter((node) => {
+      const haystack = nodePathHaystack(node);
+      return candidates.some((candidate) => haystack.includes(candidate));
+    });
+    if (matched.length > 0) return matched;
+    // The query was clearly a path but nothing matched. Do not fall
+    // back to substring search — README.md would match the bare leaf
+    // `scheduler.ts` of any other scheduler.ts in the repo and the
+    // downstream report would be wrong. Empty seeds means "we honestly
+    // do not have this file in the graph", which the report builder
+    // surfaces explicitly.
+    return [];
+  }
+  const lowered = query.toLowerCase();
+  return nodes.filter((node) =>
+    node.title.toLowerCase().includes(lowered)
+      || node.id.toLowerCase().includes(lowered),
+  );
+};
+
+// ============================================================
 // Neighborhood traversal
 // ============================================================
 

@@ -307,6 +307,17 @@ export interface AssembledRetrieval {
   nodeId: string;
   /** Where in the assembled context this node appeared. */
   origin: 'graph-rule' | 'graph-pattern' | 'graph-summary' | 'project-graph' | 'curated-knowledge';
+  /**
+   * Cumulative feedback counters on the source node at the moment this
+   * ticket was minted. Surfaced to the AI so the effect of past
+   * `memory_feedback_auto` calls is visible (a flat 0 / 0 here used to
+   * make the entire feedback loop look like a no-op even though the
+   * counters were actually being recorded).
+   */
+  feedback?: {
+    positive: number;
+    negative: number;
+  };
 }
 
 // ============================================================

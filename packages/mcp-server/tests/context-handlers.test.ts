@@ -170,6 +170,27 @@ describe('handleContextAssemble (BUG #4: explicit diagnostics)', () => {
     expect(response.content[0].text).toContain('memory_feedback_auto');
   });
 
+  it('surfaces feedback counters inline with each retrieval ticket when the node has non-zero history', async () => {
+    // Previously, the agent had no way to tell whether its earlier
+    // memory_feedback_auto calls had taken effect — counters lived
+    // exclusively in the SQLite row and were never surfaced. Now the
+    // ticket line carries `+N / -M` so the loop is observable.
+    const api = createFakeMcpApi({});
+    api.assembleContext = async () => baseAssembled({
+      retrievals: [
+        { nodeId: 'rule-1', retrievalId: 'r-rule', origin: 'graph-rule', feedback: { positive: 3, negative: 1 } },
+        { nodeId: 'rule-2', retrievalId: 'r-fresh', origin: 'graph-rule', feedback: { positive: 0, negative: 0 } },
+      ],
+    });
+
+    const response = await handleContextAssemble(api, { task: 'review code', project: 'demo' });
+
+    expect(response.content[0].text).toContain('rule-1');
+    expect(response.content[0].text).toContain('feedback so far: +3 / -1');
+    // Brand-new node with 0/0 should NOT have the hint (no signal yet).
+    expect(response.content[0].text).not.toMatch(/rule-2.*feedback so far/s);
+  });
+
   // Smoke test for the unused-fixture import keeping the regression suite
   // documenting the dependency on system-page rules even though this
   // file does not exercise the project graph branch directly.

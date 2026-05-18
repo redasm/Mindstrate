@@ -13,6 +13,7 @@ import {
 } from './project-graph-render.js';
 import {
   collectBlastRadius,
+  collectTaskQuerySeeds,
   findProjectGraphNode,
   findProjectGraphNodeInList,
   loadSystemPageRules,
@@ -54,8 +55,14 @@ export async function handleProjectGraphTaskQuery(
     limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   }));
   const edges = projectGraphEdges(await api.listContextEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }));
-  const query = typeof input.query === 'string' ? input.query.toLowerCase() : undefined;
-  const matching = nodes.filter((node) => !query || node.title.toLowerCase().includes(query) || node.id.toLowerCase().includes(query));
+  // Path-aware seed selection. When the caller passed a file path (as
+  // AGENTS.md tells them to for the `before-edit` workflow), match
+  // against node title / sourceRef / evidence paths instead of doing a
+  // free-form `title.includes(query)` — the latter used to return
+  // global-hot but unrelated nodes (README.md / tsconfig.base.json /
+  // web-ui/i18n) for deep paths like
+  // `packages/server/src/metabolism/scheduler.ts`.
+  const matching = collectTaskQuerySeeds(nodes, input.query);
   const selected = selectTaskNodes(input.task, nodes, edges, matching).slice(0, input.limit ?? 10);
   const evidence = Array.from(new Set(selected.flatMap(evidencePaths))).slice(0, input.limit ?? 10);
   if (input.task === 'before-edit' || input.task === 'impact') {

@@ -39,13 +39,13 @@ export const memoryTools = [
   }),
   defineTool({
     name: 'memory_feedback',
-    description: 'Record an ECS feedback signal for a context node or retrieval result.',
+    description: 'Record an ECS feedback signal against a `retrievalId` that was previously minted via context_assemble. Use this when you want to score a single ticket explicitly. The `_auto` variant is preferred for the close-the-loop pattern (report every ticket after a context_assemble call); use `memory_feedback` when you need the same write from a different entry point. Rejects unknown retrieval ids loudly so the feedback counters stay trustworthy.',
     schema: MemoryFeedbackSchema,
     handler: (api, input) => handleMemoryFeedback(api, input),
   }),
   defineTool({
     name: 'memory_feedback_auto',
-    description: 'Record automatic feedback on a previously retrieved knowledge entry.',
+    description: 'Close the feedback loop for one retrieval ticket from a context_assemble response. After answering, you MUST call this once per ticket in the Retrieval Tickets block, passing the `retrievalId` from that block plus `adopted` / `partial` / `ignored` / `rejected` so the priority selector learns which surfaced nodes actually informed the answer. "_auto" refers to the automatic closed-loop pattern (ACE-style generator self-reporting), NOT to any fallback behavior — the tool rejects unknown retrieval ids.',
     schema: MemoryFeedbackAutoSchema,
     handler: (api, input) => handleMemoryFeedbackAuto(api, input),
   }),

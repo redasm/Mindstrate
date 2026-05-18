@@ -45,25 +45,32 @@ export class FeedbackLoop {
   }
 
   /**
-   * 记录反馈信号
+   * Record a feedback signal against a previously minted retrieval id.
    *
-   * - adopted:  知识被采纳使用
-   * - rejected: 知识被明确拒绝
-   * - ignored:  知识被忽略（未使用也未拒绝）
-   * - partial:  知识被部分采纳
+   * Returns `true` when the retrieval id existed and the feedback was
+   * applied to the source node; returns `false` when the retrieval id
+   * was not found in the feedback events table. The caller is expected
+   * to surface this distinction to MCP clients — silently returning
+   * success for unknown ids used to look indistinguishable from a real
+   * write and let typo'd / fabricated ids appear to mutate the graph.
+   *
+   * - adopted:  knowledge was used in the answer
+   * - rejected: knowledge was explicitly rejected
+   * - ignored:  knowledge was seen but not used
+   * - partial:  knowledge was partially adopted
    */
   recordFeedback(
     retrievalId: string,
     signal: FeedbackEvent['signal'],
     context?: string,
-  ): void {
+  ): boolean {
     const now = new Date().toISOString();
 
     const row = this.db.prepare(
       'SELECT node_id FROM feedback_events WHERE id = ?'
     ).get(retrievalId) as { node_id: string } | undefined;
 
-    if (!row) return;
+    if (!row) return false;
 
     this.db.prepare(`
       UPDATE feedback_events
@@ -72,6 +79,7 @@ export class FeedbackLoop {
     `).run(signal, now, context ?? null, retrievalId);
 
     this.applyFeedbackToNode(row.node_id, signal);
+    return true;
   }
 
   /**
