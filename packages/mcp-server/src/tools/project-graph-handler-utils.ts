@@ -36,17 +36,35 @@ export const projectGraphEdges = (edges: ContextEdge[]): ContextEdge[] =>
 export const findProjectGraphNodeInList = (nodes: ContextNode[], id: string): ContextNode | undefined =>
   nodes.find((node) => node.id === id || node.title === id || node.sourceRef === id);
 
+/**
+ * Resolve a node by id / title / sourceRef. Looks at the standard
+ * project graph nodes first (file / module / dependency / asset facts
+ * produced by the extractor); falls back to architecture system-page
+ * RULE nodes so callers can `get_project_graph_node id="architecture:
+ * system-page:<project>:<page-key>"` (and `explain_project_graph_node`)
+ * directly without being told the node does not exist.
+ *
+ * Both classes of nodes share `domainType: ARCHITECTURE`, so a single
+ * `queryContextGraph` call returns both — we just need to widen the
+ * post-filter beyond `isProjectGraphNode`.
+ */
 export const findProjectGraphNode = async (
   api: McpApi,
   id: string,
   project?: string,
 ): Promise<ContextNode | null> => {
-  const nodes = projectGraphNodes(await api.queryContextGraph({
+  const nodes = await api.queryContextGraph({
     project,
     domainType: ContextDomainType.ARCHITECTURE,
     limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-  }));
-  return findProjectGraphNodeInList(nodes, id) ?? null;
+  });
+  const direct = findProjectGraphNodeInList(projectGraphNodes(nodes), id);
+  if (direct) return direct;
+  const systemPage = nodes.find((node) =>
+    node.metadata?.['systemPage'] === true
+      && (node.id === id || node.title === id || node.sourceRef === id),
+  );
+  return systemPage ?? null;
 };
 
 /**

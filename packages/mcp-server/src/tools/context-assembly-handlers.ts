@@ -25,10 +25,16 @@ export async function handleContextAssemble(
     text += `\n\n### Project Snapshot ID\n- ${assembled.projectSnapshot.id}\n`;
   }
   text = appendGraphContextSections(text, assembled);
-  text = appendProjectGraphContext(text, assembled.projectGraphContext);
-  text = appendRetrievals(text, assembled.retrievals);
+  text = appendProjectGraphContext(text, assembled.projectGraphContext, { project, currentFile });
+  text = appendRetrievals(text, assembled.retrievals, { task, project });
 
   return { content: [{ type: 'text', text }] };
+}
+
+interface ContextAssembleDiagnostics {
+  project?: string;
+  currentFile?: string;
+  task?: string;
 }
 
 /**
@@ -36,17 +42,41 @@ export async function handleContextAssemble(
  * with explicit node ids so the AI can copy them into follow-up tool
  * calls (`get_project_graph_node`, `get_project_graph_neighbors`,
  * `memory_feedback_auto`) without re-resolving them.
+ *
+ * When no facts surfaced, the section is still emitted with a
+ * diagnostic line. Silently dropping it used to make the assembled
+ * output look like the feature was never wired up, while the actual
+ * cause was always either a missing `project` argument, a project name
+ * mismatch (`Mindstrate` vs `mindstrate`), or an architecture book that
+ * has not been internalized yet (run `mindstrate graph sync --vault
+ * <path>` / `mindstrate init` to fix).
  */
 const appendProjectGraphContext = (
   text: string,
   facts: ProjectGraphContextFact[] | undefined,
+  diagnostics: Pick<ContextAssembleDiagnostics, 'project' | 'currentFile'>,
 ): string => {
-  if (!facts || facts.length === 0) return text;
-  const lines = facts.map((fact) => {
-    const evidence = fact.evidence.length > 0 ? ` — evidence: ${fact.evidence.join(', ')}` : '';
-    return `- [${fact.source}] ${fact.label} (${fact.kind})${evidence}\n  - id: ${fact.nodeId}`;
-  });
-  return `${text}\n\n### Project Graph Relationships\n${lines.join('\n')}\n`;
+  if (facts && facts.length > 0) {
+    const lines = facts.map((fact) => {
+      const evidence = fact.evidence.length > 0 ? ` — evidence: ${fact.evidence.join(', ')}` : '';
+      return `- [${fact.source}] ${fact.label} (${fact.kind})${evidence}\n  - id: ${fact.nodeId}`;
+    });
+    return `${text}\n\n### Project Graph Relationships\n${lines.join('\n')}\n`;
+  }
+  const reasons: string[] = [];
+  if (!diagnostics.project) {
+    reasons.push('no `project` argument was supplied (project graph facts are project-scoped)');
+  }
+  if (!diagnostics.currentFile) {
+    reasons.push('no `currentFile` seed was supplied to anchor the 1-hop expansion');
+  }
+  if (diagnostics.project && diagnostics.currentFile) {
+    reasons.push('no architecture nodes matched — verify the project graph has been indexed (`mindstrate graph sync --vault <path>`) and that `project` matches the slug used during setup');
+  }
+  const reasonLine = reasons.length > 0
+    ? reasons.map((reason) => `- ${reason}`).join('\n')
+    : '- (no project graph context selected for this task)';
+  return `${text}\n\n### Project Graph Relationships\n_No project graph facts were surfaced. Likely cause(s):_\n${reasonLine}\n`;
 };
 
 /**
@@ -62,16 +92,27 @@ const appendProjectGraphContext = (
  * turn drives `ContextPrioritySelector.scoreNode` for future
  * assemblies. Without this loop the priority scores stay flat
  * regardless of whether the AI actually used the surfaced knowledge.
+ *
+ * Always emits the section so the AI can see whether any tickets were
+ * minted; a silently omitted block used to look indistinguishable from
+ * a broken assembly pipeline.
  */
 const appendRetrievals = (
   text: string,
   retrievals: AssembledRetrieval[] | undefined,
+  diagnostics: Pick<ContextAssembleDiagnostics, 'task' | 'project'>,
 ): string => {
-  if (!retrievals || retrievals.length === 0) return text;
-  const lines = retrievals.map(
-    (entry) => `- ${entry.origin}: ${entry.nodeId}\n  - retrievalId: ${entry.retrievalId}`,
-  );
-  return `${text}\n\n### Retrieval Tickets — please report which were used\nAfter you finish answering, call \`memory_feedback_auto\` once per ticket below with one of \`adopted\` / \`partial\` / \`ignored\` / \`rejected\` so the graph can learn which nodes actually informed your answer.\n${lines.join('\n')}\n`;
+  const header = '### Retrieval Tickets — please report which were used';
+  if (retrievals && retrievals.length > 0) {
+    const lines = retrievals.map(
+      (entry) => `- ${entry.origin}: ${entry.nodeId}\n  - retrievalId: ${entry.retrievalId}`,
+    );
+    return `${text}\n\n${header}\nAfter you finish answering, call \`memory_feedback_auto\` once per ticket below with one of \`adopted\` / \`partial\` / \`ignored\` / \`rejected\` so the graph can learn which nodes actually informed your answer.\n${lines.join('\n')}\n`;
+  }
+  const note = diagnostics.project
+    ? `_No retrieval tickets minted. The task \`${diagnostics.task}\` did not select any nodes from project \`${diagnostics.project}\`; either the relevant knowledge has not been ingested yet or the priority selector ranked everything below threshold._`
+    : '_No retrieval tickets minted. Supply a `project` argument so the priority selector can pull project-scoped knowledge._';
+  return `${text}\n\n${header}\n${note}\n`;
 };
 
 export async function handleContextInternalize(
