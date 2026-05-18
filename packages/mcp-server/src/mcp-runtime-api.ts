@@ -217,6 +217,31 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       return memory!.context.queryGraphKnowledge(query, opts);
     },
 
+    async reindexProjectGraph(input: { cwd?: string }) {
+      if (teamClient) {
+        // Team mode: the team server owns the canonical graph, so a
+        // local reindex would have no effect. Tell the caller directly
+        // instead of pretending success.
+        throw new Error('reindex_project_graph is only available in local mode; the team server owns its own scan cadence.');
+      }
+      const { detectProject } = await import('@mindstrate/server');
+      const cwd = input.cwd ?? process.cwd();
+      const project = detectProject(cwd);
+      if (!project) {
+        throw new Error(`Could not detect a project rooted at ${cwd}. Pass an explicit \`cwd\` pointing at a folder with package.json / Cargo.toml / pyproject.toml.`);
+      }
+      const result = memory!.context.indexProjectGraph(project);
+      return {
+        project: project.name,
+        filesScanned: result.filesScanned,
+        nodesCreated: result.nodesCreated,
+        nodesUpdated: result.nodesUpdated,
+        edgesCreated: result.edgesCreated,
+        edgesUpdated: result.edgesUpdated,
+        edgesSkipped: result.edgesSkipped,
+      };
+    },
+
     close() {
       if (vaultSync) {
         void vaultSync.stop();

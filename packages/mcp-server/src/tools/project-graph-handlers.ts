@@ -245,3 +245,31 @@ export async function handleProjectGraphAddOverlay(
     }],
   };
 }
+
+export async function handleProjectGraphReindex(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  try {
+    const result = await api.reindexProjectGraph({ cwd: input.cwd });
+    const text = [
+      `Project graph reindexed for "${result.project}".`,
+      '',
+      `Files scanned:   ${result.filesScanned}`,
+      `Nodes created:   ${result.nodesCreated}`,
+      `Nodes updated:   ${result.nodesUpdated}`,
+      `Edges created:   ${result.edgesCreated}`,
+      `Edges updated:   ${result.edgesUpdated}`,
+      `Edges skipped:   ${result.edgesSkipped} (already up-to-date)`,
+    ].join('\n');
+    return { content: [{ type: 'text', text }] };
+  } catch (err) {
+    return {
+      content: [{
+        type: 'text',
+        text: err instanceof Error ? err.message : String(err),
+      }],
+      isError: true,
+    };
+  }
+}

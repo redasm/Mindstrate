@@ -94,6 +94,10 @@ export const ProjectGraphOverlaySchema = z.object({
   message: 'target, targetNodeId, or targetEdgeId is required',
 });
 
+export const ProjectGraphReindexSchema = z.object({
+  cwd: z.string().min(1).optional(),
+});
+
 export const ContextConflictsSchema = z.object({
   project: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),

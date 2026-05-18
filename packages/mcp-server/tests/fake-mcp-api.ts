@@ -129,6 +129,7 @@ export const createFakeMcpApi = (options: FakeMcpApiOptions = {}): FakeMcpApi =>
     },
     acceptConflictCandidate: notImplemented('acceptConflictCandidate'),
     rejectConflictCandidate: notImplemented('rejectConflictCandidate'),
+    reindexProjectGraph: notImplemented('reindexProjectGraph'),
     // ---------- MetabolismApi ----------
     runMetabolism: notImplemented('runMetabolism'),
     runMetabolismStage: notImplemented('runMetabolismStage'),

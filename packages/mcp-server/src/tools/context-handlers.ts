@@ -18,6 +18,7 @@ export {
   handleProjectGraphGetNode,
   handleProjectGraphPath,
   handleProjectGraphQuery,
+  handleProjectGraphReindex,
 } from './project-graph-handlers.js';
 
 type ToolInput = any;

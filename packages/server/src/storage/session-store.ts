@@ -45,10 +45,10 @@ export class SessionStore {
     return this.rowToSession(row);
   }
 
-  /** 获取当前活跃会话（某项目） */
+  /** 获取当前活跃会话（某项目）—— 匹配大小写不敏感 */
   getActiveSession(project: string = ''): Session | null {
     const row = this.db.prepare(
-      "SELECT * FROM sessions WHERE project = ? AND status = 'active' ORDER BY started_at DESC LIMIT 1"
+      "SELECT * FROM sessions WHERE LOWER(project) = LOWER(?) AND status = 'active' ORDER BY started_at DESC LIMIT 1"
     ).get(project) as any;
     if (!row) return null;
     return this.rowToSession(row);
@@ -101,11 +101,11 @@ export class SessionStore {
     ).run(status, new Date().toISOString(), id);
   }
 
-  /** 获取项目的最近 N 个已完成会话 */
+  /** 获取项目的最近 N 个已完成会话 —— 匹配大小写不敏感 */
   getRecentSessions(project: string = '', limit: number = 5): Session[] {
     const rows = this.db.prepare(`
       SELECT * FROM sessions
-      WHERE project = ? AND status != 'active'
+      WHERE LOWER(project) = LOWER(?) AND status != 'active'
       ORDER BY ended_at DESC
       LIMIT ?
     `).all(project, limit) as any[];

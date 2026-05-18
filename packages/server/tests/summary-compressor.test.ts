@@ -107,4 +107,52 @@ describe('SummaryCompressor', () => {
     expect(result.scannedSnapshots).toBe(0);
     expect(result.summaryNodesCreated).toBe(0);
   });
+
+  it('promotes a single quality-verified snapshot into a SUMMARY when no peer cluster exists', async () => {
+    // Real-world single-user single-project scenario: there is exactly
+    // one session_summary snapshot in the project. Previously this
+    // produced zero compression no matter how active the session was,
+    // because clusterContextNodes required `minClusterSize >= 2`. The
+    // promoteSingleton hook now lifts a singleton SNAPSHOT with
+    // `qualityScore >= 70` into a SUMMARY so the lineage starts
+    // moving from day one.
+    graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Lone session snapshot',
+      content: 'Summary: discovered before-edit path-matching regression and fixed it.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 75,
+      confidence: 0.85,
+    });
+
+    const result = await compressor.compressProjectSnapshots({ project: 'mindstrate' });
+
+    expect(result.summaryNodesCreated).toBe(1);
+    const summaries = graphStore.listNodes({
+      project: 'mindstrate',
+      substrateType: SubstrateType.SUMMARY,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      limit: 10,
+    });
+    expect(summaries).toHaveLength(1);
+  });
+
+  it('does NOT promote a low-quality singleton', async () => {
+    graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Scratch snapshot',
+      content: 'Summary: half-finished thought, not worth promoting.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 40,
+      confidence: 0.5,
+    });
+
+    const result = await compressor.compressProjectSnapshots({ project: 'mindstrate' });
+
+    expect(result.summaryNodesCreated).toBe(0);
+  });
 });

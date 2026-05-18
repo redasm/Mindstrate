@@ -36,7 +36,14 @@ export class PatternCompressor {
   async compressProjectSummaries(
     options: PatternCompressionOptions = {},
   ): Promise<PatternCompressionResult> {
-    const minPositiveFeedback = options.minPositiveFeedback ?? 3;
+    // Default of 1 positive feedback (was 3) accepts the single-user
+    // single-project flow: a SUMMARY that the agent reported as
+    // `adopted` even once is already a credible PATTERN candidate.
+    // Three was the right number for team-server multi-user mode but
+    // made local users see no compression at all no matter how often
+    // they closed the feedback loop. The `positive > negative` guard
+    // still rejects nodes the agent actually rejected.
+    const minPositiveFeedback = options.minPositiveFeedback ?? 1;
     const minDistinctProjects = options.minDistinctProjects ?? 1;
     const run = await runSubstrateCompression(this.graphStore, this.embedder, {
       sourceType: SubstrateType.SUMMARY,
