@@ -71,7 +71,13 @@ export async function handleMemoryFeedback(
   input: ToolInput,
 ): Promise<McpToolResponse> {
   const { id, signal, context } = input;
-  await api.recordFeedback(id, signal, context);
+  const applied = await api.recordFeedback(id, signal, context);
+  if (!applied) {
+    return {
+      content: [{ type: 'text', text: `Unknown retrieval id: ${id}. memory_feedback expects a retrievalId minted by context_assemble; if you want to score a graph node directly, fetch a retrievalId first via assemble or use memory_evolve instead.` }],
+      isError: true,
+    };
+  }
 
   return {
     content: [{ type: 'text', text: `ECS feedback signal recorded: ${signal} for ${id}` }],
@@ -83,7 +89,16 @@ export async function handleMemoryFeedbackAuto(
   input: ToolInput,
 ): Promise<McpToolResponse> {
   const { retrievalId, signal, context: feedbackContext } = input;
-  await api.recordFeedback(retrievalId, signal, feedbackContext);
+  const applied = await api.recordFeedback(retrievalId, signal, feedbackContext);
+  if (!applied) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Unknown retrievalId: ${retrievalId}. memory_feedback_auto must be called with a retrievalId from the Retrieval Tickets block of a context_assemble response. Typo'd or stale ids are rejected so the feedback counters stay trustworthy.`,
+      }],
+      isError: true,
+    };
+  }
 
   return {
     content: [{ type: 'text', text: `Feedback recorded: ${signal} for retrieval ${retrievalId}` }],

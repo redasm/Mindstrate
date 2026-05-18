@@ -174,9 +174,19 @@ describe('Mindstrate', () => {
   });
 
   describe('feedback', () => {
-    it('should record graph feedback signals', async () => {
+    it('should record graph feedback signals and reject unknown retrieval ids', async () => {
       const r = await memory.knowledge.add(makeKnowledgeInput());
-      memory.context.recordFeedback(r.view!.id, 'adopted', 'test');
+      // Mint a retrieval ticket the same way assembleContext does:
+      // call into the feedback loop directly so we get a real
+      // retrievalId tied to this node. (We avoid going through a full
+      // `assembleContext` call here because that path filters by
+      // substrate priority and the input node may not survive the
+      // selection cut on a synthetic small test graph.)
+      const retrievalId = memory.context.trackRetrieval(r.view!.id, 'apply secret rotation guidance');
+      expect(retrievalId).toBeDefined();
+
+      const applied = memory.context.recordFeedback(retrievalId, 'adopted', 'test');
+      expect(applied).toBe(true);
 
       const signals = memory.context.listContextNodes({
         substrateType: SubstrateType.EPISODE,
@@ -185,8 +195,22 @@ describe('Mindstrate', () => {
       expect(signals.some((signal) =>
         signal.tags.includes('feedback-signal') &&
         signal.tags.includes('adopted') &&
-        signal.metadata?.['retrievalId'] === r.view!.id
+        signal.metadata?.['retrievalId'] === retrievalId
       )).toBe(true);
+
+      // Fabricated retrieval ids must NOT mutate state — neither the
+      // graph node counters nor the feedback-signal event log. This is
+      // the regression that the MCP-level "memory_feedback_auto used
+      // to fake-success" report turned up.
+      const fabricatedApplied = memory.context.recordFeedback('fabricated-id-xxx', 'adopted', 'should-be-rejected');
+      expect(fabricatedApplied).toBe(false);
+      const signalsAfter = memory.context.listContextNodes({
+        substrateType: SubstrateType.EPISODE,
+        domainType: ContextDomainType.CONTEXT_EVENT,
+      });
+      expect(signalsAfter.some((signal) =>
+        signal.metadata?.['retrievalId'] === 'fabricated-id-xxx'
+      )).toBe(false);
     });
   });
 
@@ -477,9 +501,18 @@ describe('Mindstrate', () => {
         currentFramework: 'react',
       });
 
+      // `graphRules` is the structured field consumers read; the
+      // `summary` string is the curation slice only (the "relevant
+      // graph knowledge" / "potential pitfalls" lines). The
+      // surrounding "Operational Rules" / "Task Curation" headings
+      // belong to the assembly DAG renderer, not to curateContext
+      // itself — duplicating them here used to render the same
+      // headings three times inside one MCP response.
       expect(curated.graphRules).toEqual(['Hydration Safety Rule']);
-      expect(curated.summary).toContain('Operational Rules');
-      expect(curated.summary).toContain('Task Curation');
+      expect(curated.summary).toContain('Curated graph context for: fix hydration mismatch');
+      expect(curated.summary).toContain('Hydration Safety Rule');
+      expect(curated.summary).not.toContain('### Operational Rules');
+      expect(curated.summary).not.toContain('### Task Curation');
     });
   });
 

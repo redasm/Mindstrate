@@ -119,9 +119,19 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       retrievalId: string,
       signal: 'adopted' | 'rejected' | 'ignored' | 'partial',
       context?: string,
-    ) {
-      if (teamClient) return teamClient.feedback.record(retrievalId, signal, context);
-      memory!.context.recordFeedback(retrievalId, signal, context);
+    ): Promise<boolean> {
+      if (teamClient) {
+        // The team server rejects unknown retrieval ids with 404;
+        // `feedback.record` throws on non-2xx so we map that to a
+        // typed `false` here. Local mode returns the bool directly.
+        try {
+          await teamClient.feedback.record(retrievalId, signal, context);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+      return memory!.context.recordFeedback(retrievalId, signal, context);
     },
 
     async curateContext(task: string, context?: RetrievalContext): Promise<CuratedContext> {

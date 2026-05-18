@@ -134,7 +134,7 @@ export interface LocalContextSubApi {
   listConflictRecords(project?: string, limit?: number): ConflictRecord[];
   createProjectGraphOverlay(input: ProjectGraphOverlayInput): ProjectGraphOverlay;
   listProjectGraphOverlays(options?: ProjectGraphOverlayQueryOptions): ProjectGraphOverlay[];
-  recordFeedback(retrievalId: string, signal: FeedbackEvent['signal'], context?: string): void;
+  recordFeedback(retrievalId: string, signal: FeedbackEvent['signal'], context?: string): boolean;
 }
 
 export interface LocalEventsSubApi {
@@ -209,7 +209,7 @@ export interface KnowledgeApi {
   add(input: CreateKnowledgeInput): Promise<AddKnowledgeResult>;
   get(id: string): Promise<GraphKnowledgeView | null>;
   getStats(): Promise<unknown>;
-  recordFeedback(retrievalId: string, signal: 'adopted' | 'rejected' | 'ignored' | 'partial', context?: string): Promise<void>;
+  recordFeedback(retrievalId: string, signal: 'adopted' | 'rejected' | 'ignored' | 'partial', context?: string): Promise<boolean>;
   curateContext(task: string, context?: RetrievalContext): Promise<CuratedContext>;
   assembleContext(task: string, options?: { project?: string; context?: RetrievalContext; sessionId?: string }): Promise<AssembledContext>;
   runEvolution(options?: { autoApply?: boolean; maxItems?: number; mode?: 'standard' | 'background' }): Promise<EvolutionRunResult>;

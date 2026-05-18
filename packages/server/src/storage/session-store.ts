@@ -148,14 +148,22 @@ export class SessionStore {
         endedAt: s.endedAt ?? s.startedAt,
       }));
 
-    // 从所有近期会话中聚合未完成的任务
+    // Cross-session open tasks: aggregate everything from recent
+    // sessions, deduplicate, then drop anything already surfaced under
+    // `lastSession.openTasks`. Without this subtraction the same task
+    // got rendered twice in `formatContextForInjection` — once under
+    // "Open Tasks (unfinished from last session)" and once under
+    // "Project Context" — which made the restored context look broken
+    // even though both blocks were technically correct in isolation.
+    const lastSessionOpenTasks = new Set(context.lastSession?.openTasks ?? []);
     const allOpenTasks = recent
       .flatMap(s => s.openTasks ?? [])
-      .filter((task, idx, arr) => arr.indexOf(task) === idx) // 去重
+      .filter((task, idx, arr) => arr.indexOf(task) === idx) // dedupe
+      .filter((task) => !lastSessionOpenTasks.has(task))
       .slice(0, 10);
 
     if (allOpenTasks.length > 0) {
-      context.projectContext = `Pending tasks from recent sessions:\n${allOpenTasks.map(t => `- ${t}`).join('\n')}`;
+      context.projectContext = `Older pending tasks (older than last session):\n${allOpenTasks.map(t => `- ${t}`).join('\n')}`;
     }
 
     return context;

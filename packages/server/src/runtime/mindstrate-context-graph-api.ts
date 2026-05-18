@@ -110,13 +110,26 @@ export class MindstrateContextGraphApi {
     retrievalId: string,
     signal: FeedbackEvent['signal'],
     context?: string,
-  ): void {
-    this.services.feedbackLoop.recordFeedback(retrievalId, signal, context);
+  ): boolean {
+    const applied = this.services.feedbackLoop.recordFeedback(retrievalId, signal, context);
+    if (!applied) return false;
     this.tryIngestDerivedEvent(() => ingestUserFeedback(this.services.contextGraphStore, {
       retrievalId,
       signal,
       context,
     }));
+    return true;
+  }
+
+  /**
+   * Mint a retrieval ticket for a node. Mirrors what `assembleContext`
+   * does automatically — exposed publicly so callers that surface
+   * nodes via a non-assembly path (custom tools, evaluation harnesses,
+   * tests) can still close the feedback loop properly instead of
+   * passing a bare node id to `recordFeedback`.
+   */
+  trackRetrieval(nodeId: string, query: string, sessionId?: string): string {
+    return this.services.feedbackLoop.trackRetrieval(nodeId, query, sessionId);
   }
 
   getFeedbackStats(nodeId: string) {

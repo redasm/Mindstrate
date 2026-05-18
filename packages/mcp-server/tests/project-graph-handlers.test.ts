@@ -123,6 +123,29 @@ describe('handleProjectGraphGetNode', () => {
     expect(response.isError).toBe(true);
     expect(response.content[0].text).toBe('Project graph node not found.');
   });
+
+  // BUG #2 regression: the canonical `architecture:system-page:<project>:
+  // <key>` RULE node produced by `internalize-system-pages.ts` used to be
+  // unreachable via `get_project_graph_node` because the lookup pre-filtered
+  // through `projectGraphNodes` (which drops anything without
+  // `metadata.projectGraph === true`). The handler now falls back to the
+  // system-page RULE branch so callers can resolve those node ids directly.
+  it('resolves an architecture system-page RULE node by its canonical id', async () => {
+    const rule = systemPageRule({
+      pageKey: '00-overview',
+      title: 'mindstrate architecture',
+      project: 'mindstrate',
+    });
+    const api = createFakeMcpApi({ systemPageRules: [rule] });
+
+    const response = await handleProjectGraphGetNode(api, {
+      id: 'architecture:system-page:mindstrate:00-overview',
+      project: 'mindstrate',
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(response.content[0].text).toContain('mindstrate architecture');
+  });
 });
 
 describe('handleProjectGraphGetNeighbors', () => {
@@ -181,6 +204,28 @@ describe('handleProjectGraphExplainNode', () => {
     const response = await handleProjectGraphExplainNode(api, { id: 'missing' });
 
     expect(response.isError).toBe(true);
+  });
+
+  // BUG #2 regression: explain_project_graph_node must accept the
+  // canonical system-page RULE id the same way get_project_graph_node
+  // now does. The MCP transcript that surfaced this had the AI ask for
+  // `architecture:system-page:mindstrate:02-validation-playbook` and get
+  // `Project graph node not found` even though the node existed.
+  it('resolves an architecture system-page RULE node by its canonical id', async () => {
+    const rule = systemPageRule({
+      pageKey: '02-validation-playbook',
+      title: 'validation playbook',
+      project: 'mindstrate',
+    });
+    const api = createFakeMcpApi({ systemPageRules: [rule] });
+
+    const response = await handleProjectGraphExplainNode(api, {
+      id: 'architecture:system-page:mindstrate:02-validation-playbook',
+      project: 'mindstrate',
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(response.content[0].text).toContain('validation playbook');
   });
 });
 

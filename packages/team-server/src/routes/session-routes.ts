@@ -79,7 +79,15 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
-    memory.context.recordFeedback(retrievalId, signal, context);
+    const applied = memory.context.recordFeedback(retrievalId, signal, context);
+    if (!applied) {
+      // Reject unknown retrieval ids loudly. Silent-success used to let
+      // typo'd / fabricated ids look like real writes (the MCP layer
+      // would then echo "Feedback recorded" even though no graph node
+      // was touched).
+      res.status(404).json({ error: `Unknown retrievalId: ${retrievalId}` });
+      return;
+    }
     res.json({ success: true });
   }));
 

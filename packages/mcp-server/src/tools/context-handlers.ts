@@ -1,9 +1,11 @@
 import {
   ContextDomainType,
-  type ContextEventType,
-  type ContextNodeStatus,
+  ContextEventType,
+  ContextNodeStatus,
+  SubstrateType,
 } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
+import { coerceContextEnum } from './enum-coercion.js';
 export {
   handleContextAssemble,
   handleContextInternalize,
@@ -26,8 +28,9 @@ export async function handleContextIngestEvent(
 ): Promise<McpToolResponse> {
   const result = await api.ingestContextEvent({
     ...input,
-    type: input.type as ContextEventType,
-    domainType: input.domainType as ContextDomainType | undefined,
+    type: coerceContextEnum(ContextEventType, input.type) as ContextEventType,
+    domainType: coerceContextEnum(ContextDomainType, input.domainType),
+    substrateType: coerceContextEnum(SubstrateType, input.substrateType),
   });
   return {
     content: [{
@@ -44,9 +47,9 @@ export async function handleContextQueryGraph(
   const nodes = await api.queryContextGraph({
     query: input.query,
     project: input.project,
-    substrateType: input.substrateType,
-    domainType: input.domainType as ContextDomainType | undefined,
-    status: input.status as ContextNodeStatus | undefined,
+    substrateType: coerceContextEnum(SubstrateType, input.substrateType),
+    domainType: coerceContextEnum(ContextDomainType, input.domainType),
+    status: coerceContextEnum(ContextNodeStatus, input.status),
     limit: input.limit ?? 10,
   });
 

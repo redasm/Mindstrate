@@ -219,7 +219,15 @@ export async function runContextAssemblyDag(
         if (graphRules.length > 0) {
           prioritizedSections.push({
             priority: 90,
-            content: formatSummarySection('Operational Rules', graphRules.slice(0, 5).map((node) => node.title)),
+            // Inline the first 200 chars of each rule's content under
+            // the title. Title-only used to force callers to issue a
+            // second `get_project_graph_node` per rule just to read
+            // the rule body — every RULE node already lives in the
+            // graph and we already paid the cost of loading it.
+            content: formatSummarySection(
+              'Operational Rules',
+              graphRules.slice(0, 5).map((node) => formatRuleWithSnippet(node)),
+            ),
           });
         }
         if (projectGraphFacts.length > 0) {
@@ -330,4 +338,50 @@ export async function runContextAssemblyDag(
 const formatProjectGraphFactLine = (fact: ProjectGraphContextFact): string => {
   const evidence = fact.evidence.length > 0 ? ` — evidence: ${fact.evidence.join(', ')}` : '';
   return `${fact.label} (${fact.kind})${evidence}`;
+};
+
+/**
+ * Render an Operational Rule as `<title> — <snippet>` so the agent can
+ * read the rule body inline. Without the snippet, surfacing only the
+ * title forced every consumer to issue a second `get_project_graph_node`
+ * round-trip per rule just to read what the rule actually says.
+ *
+ * The snippet is capped at 200 chars and stripped of Markdown bullet /
+ * heading markup so it stays one line inside the bulleted list. When
+ * the node has `metadata.knownConstraints` (set by
+ * `internalize-system-pages.ts` from the page front-matter), prefer
+ * those concrete constraint strings over the page body so the agent
+ * sees the actionable bits first instead of the prose introduction.
+ *
+ * Surfaces feedback counts at the tail so the human / AI can see
+ * whether the rule has been adopted before — the feedback loop's
+ * effect on ranking used to be completely invisible to consumers.
+ */
+const formatRuleWithSnippet = (node: ContextNode): string => {
+  const constraints = node.metadata?.['knownConstraints'];
+  const fromConstraints = Array.isArray(constraints) && constraints.length > 0
+    ? constraints.slice(0, 2).filter((entry): entry is string => typeof entry === 'string').join('; ')
+    : '';
+  const snippetSource = fromConstraints || node.content || '';
+  const snippet = compactRuleSnippet(snippetSource, 200);
+  const feedback = formatFeedbackHint(node);
+  const body = snippet.length > 0 ? ` — ${snippet}` : '';
+  return `**${node.title}**${body}${feedback}`;
+};
+
+const compactRuleSnippet = (text: string, maxChars: number): string => {
+  const collapsed = text
+    .replace(/^#+\s*/gm, '')
+    .replace(/^[-*]\s+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (collapsed.length <= maxChars) return collapsed;
+  return `${collapsed.slice(0, maxChars - 1).trimEnd()}…`;
+};
+
+const formatFeedbackHint = (node: ContextNode): string => {
+  const positive = node.positiveFeedback ?? 0;
+  const negative = node.negativeFeedback ?? 0;
+  if (positive === 0 && negative === 0) return '';
+  return `  _(feedback: +${positive} / -${negative})_`;
 };
