@@ -122,12 +122,33 @@ export const buildBeforeEditReport = (input: ProjectGraphTaskReportInput): strin
     formatProjectGraphOverlays(report.overlays),
     '',
     '### Matching Nodes',
-    formatProjectGraphNodes(input.selected),
+    formatMatchingNodes(input.selected, input.query),
     '',
     '### Compact JSON',
     '```json',
     JSON.stringify(compactJson, null, 2),
     '```',
+  ].join('\n');
+};
+
+/**
+ * Render the "Matching Nodes" block. When the seed selector returned
+ * nothing we explicitly say so, with a diagnostic that points the user
+ * at the most common cause (the path is not in the graph yet). The
+ * earlier behavior re-used `formatProjectGraphNodes([])` which still
+ * emitted suggested-next-queries lines and looked deceptively like a
+ * successful empty search.
+ */
+const formatMatchingNodes = (selected: ContextNode[], query: unknown): string => {
+  if (selected.length > 0) return formatProjectGraphNodes(selected);
+  const queryStr = typeof query === 'string' ? query : '(no query)';
+  return [
+    'Found 0 project graph node(s).',
+    '',
+    `_No graph node matched **${queryStr}**. Likely causes:_`,
+    '- The file exists on disk but is not yet in the project graph. Run `reindex_project_graph` to rebuild.',
+    '- The query is a free-form sentence rather than a file path. Re-run with the file path you intend to edit.',
+    '- The project graph was indexed under a different project slug. Verify the `project` argument matches the slug used during `mindstrate setup`.',
   ].join('\n');
 };
 

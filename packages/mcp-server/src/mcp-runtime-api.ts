@@ -7,6 +7,7 @@ import type { LocalMemory, McpApi } from './types.js';
 import { createBundleProjectionApi } from './mcp-bundle-projection-api.js';
 import { runLocalMetabolismStage } from './local-metabolism-stage.js';
 import { startVaultSync, type VaultSync } from './obsidian-vault-sync.js';
+import { resolveLocalDataDir } from './local-data-dir.js';
 
 interface RuntimeApiOptions {
   teamServerUrl: string;
@@ -39,7 +40,16 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
           );
           throw err;
         }
-        const localMemory = new MindstrateClass();
+        // Resolve dataDir up-front so MCP server and project-local CLI
+        // commands (mindstrate setup, mindstrate init, mindstrate graph
+        // sync) share the same SQLite file. Without this MCP defaulted
+        // to `~/.mindstrate` even when the project had already been set
+        // up in `<project>/.mindstrate`, producing two databases that
+        // drifted silently.
+        const dataDir = resolveLocalDataDir({ logger: options.logger });
+        const localMemory = dataDir
+          ? new MindstrateClass({ dataDir })
+          : new MindstrateClass();
         memory = localMemory as unknown as LocalMemory;
         await localMemory.init();
 

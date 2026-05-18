@@ -49,6 +49,10 @@ export async function handleMemoryAdd(
     solution: input.solution,
     tags: input.tags ?? [],
     context: {
+      // Persist project scope so `graph_knowledge_search({ project })`
+      // can find this knowledge later. Without project on the node,
+      // the search filter drops the row even though it is in the db.
+      project: input.project,
       language: input.language,
       framework: input.framework,
     },

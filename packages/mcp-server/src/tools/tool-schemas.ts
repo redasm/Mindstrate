@@ -198,6 +198,12 @@ export const MemoryAddSchema = z.object({
   tags: z.array(z.string()).optional(),
   language: z.string().optional(),
   framework: z.string().optional(),
+  // Project scope. Without this, knowledge entries are written with a
+  // null `project` field and `graph_knowledge_search({ project: ... })`
+  // filters them out — `memory_search` (no project filter) finds them
+  // but the project-aware path does not. Pass the same slug your
+  // `mindstrate setup` produced (typically lowercase).
+  project: z.string().optional(),
   actionable: z.object({
     preconditions: z.array(z.string()).optional(),
     steps: z.array(z.string()).optional(),
