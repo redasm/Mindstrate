@@ -120,17 +120,22 @@ export class VectorStore implements IVectorStore {
       });
     }
 
-    // 计算余弦相似度
-    const scored: VectorSearchResult[] = candidates.map(doc => {
+    // 计算余弦相似度。对维度不匹配的文档静默跳过——这通常意味着 db
+    // 里残留的是上一代 embedding 模型的旧向量（例如本地 256 维切换到
+    // OpenAI 1024 维）。抛错会让整个 add / search 流程崩溃；跳过则允许
+    // 新维度逐步替代旧数据，且新写入仍能命中维度一致的近邻。
+    const scored: VectorSearchResult[] = [];
+    for (const doc of candidates) {
+      if (doc.embedding.length !== embedding.length) continue;
       const similarity = cosineSimilarity(embedding, doc.embedding);
-      return {
+      scored.push({
         id: doc.id,
         distance: 1 - similarity,
         score: similarity,
         text: doc.text,
         metadata: doc.metadata,
-      };
-    });
+      });
+    }
 
     // 按相似度降序排序，取 Top-K
     scored.sort((a, b) => b.score - a.score);
@@ -158,21 +163,38 @@ export class VectorStore implements IVectorStore {
 
   /**
    * Validate that embedding dimensions are consistent across the store.
-   * Prevents silent data corruption when switching between local/OpenAI modes.
+   *
+   * Strategy: lock in to the first dimension seen. When a write arrives
+   * with a different dimension (typical when the user switches between
+   * local-256d and OpenAI-1024/1536d modes), do not throw — that would
+   * crash every `knowledge.add` and every `findDuplicates` call. Instead
+   * accept the new dimension as the canonical one, drop the now-stale
+   * incompatible documents in the in-memory index, and emit a console
+   * warning so the developer can clear / migrate the on-disk store on
+   * their own schedule. Stale docs cannot be used for similarity anyway
+   * (cosine across dimensions is undefined), so silently retaining them
+   * would just keep poisoning future searches.
    */
   private validateDimension(embedding: number[]): void {
     if (this.expectedDimension === null) {
       this.expectedDimension = embedding.length;
       return;
     }
-    if (embedding.length !== this.expectedDimension) {
-      throw new StorageError(
-        `Embedding dimension mismatch: expected ${this.expectedDimension} but got ${embedding.length}. ` +
-        `This usually happens when switching between local (256d) and OpenAI (1536d) embedding modes. ` +
-        `To fix, either set OPENAI_API_KEY consistently or clear the vector store.`,
-        { expected: this.expectedDimension, actual: embedding.length },
-      );
-    }
+    if (embedding.length === this.expectedDimension) return;
+
+    const droppedCount = this.index.documents.filter(
+      (doc) => doc.embedding.length !== embedding.length,
+    ).length;
+    console.warn(
+      `[vector-store] Embedding dimension changed from ${this.expectedDimension} to ${embedding.length}. ` +
+      `Dropping ${droppedCount} legacy document(s) from the in-memory index. ` +
+      `Run \`mindstrate maintenance --rebuild-vectors\` or delete the vector store file to clean up on-disk state. ` +
+      `(This usually means OPENAI_API_KEY was set/unset since the last write.)`,
+    );
+    this.index.documents = this.index.documents.filter(
+      (doc) => doc.embedding.length === embedding.length,
+    );
+    this.expectedDimension = embedding.length;
   }
 
   private loadIndex(): VectorIndex {
