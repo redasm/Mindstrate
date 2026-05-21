@@ -209,19 +209,37 @@ export const collectRelatedNodes = (
   depth: number,
 ): ContextNode[] => {
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const selected = new Set(seeds.map((node) => node.id));
+  const distanceById = new Map<string, number>();
+  for (const seed of seeds) distanceById.set(seed.id, 0);
   const queue = seeds.map((node) => ({ id: node.id, depth: 0 }));
   while (queue.length > 0) {
     const current = queue.shift()!;
     if (current.depth >= depth) continue;
     for (const edge of adjacentProjectGraphEdges(edges, current.id)) {
       const nextId = edge.sourceId === current.id ? edge.targetId : edge.sourceId;
-      if (selected.has(nextId) || !byId.has(nextId)) continue;
-      selected.add(nextId);
+      if (distanceById.has(nextId) || !byId.has(nextId)) continue;
+      distanceById.set(nextId, current.depth + 1);
       queue.push({ id: nextId, depth: current.depth + 1 });
     }
   }
-  return nodes.filter((node) => selected.has(node.id));
+  // Return BFS order (seeds first, then 1-hop, then 2-hop) instead of
+  // the source `nodes` order (which is `updated_at DESC` from
+  // SQLite). On a real project graph, a deep file like
+  // `metabolism/scheduler.ts` reaches ~700 nodes within 2 hops via
+  // imports / project-containment edges; sorting that bag by
+  // `updated_at` floats README.md / tsconfig.base.json to the top and
+  // drowns out the actual semantic neighbours (`metabolism/
+  // compressor.ts`, etc.). Distance-first preserves the user's
+  // intent: 'what is closest to the file I'm about to edit?'.
+  return Array.from(distanceById.entries())
+    .map(([id, distance]) => ({ node: byId.get(id)!, distance }))
+    .sort((a, b) => {
+      if (a.distance !== b.distance) return a.distance - b.distance;
+      // Same distance: prefer higher-quality nodes (more confident
+      // extraction) over noise.
+      return (b.node.qualityScore ?? 0) - (a.node.qualityScore ?? 0);
+    })
+    .map((entry) => entry.node);
 };
 
 export const relatedByEdgeKinds = (
