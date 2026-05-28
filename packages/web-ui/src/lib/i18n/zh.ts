@@ -182,6 +182,7 @@ const zh: Translations = {
     statusDisabled: '已禁用',
     demote: '降为成员',
     demoteConfirm: '将 "{NAME}" 降为成员？该用户将失去管理员权限。管理员仅能通过 dev（TEAM_API_KEY）重新创建。',
+    lastAdminLocked: '最后一名管理员 · 不可移除',
     regenConfirm: '为 "{NAME}" 重新生成密钥？旧密钥将立即失效。',
     deleteConfirm: '删除用户 "{NAME}"？此操作无法撤销。',
     reveal: '显示',

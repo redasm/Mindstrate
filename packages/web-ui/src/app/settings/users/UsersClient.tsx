@@ -206,6 +206,10 @@ export function UsersClient({ initialUsers, knownProjects }: Props) {
               const isAdmin = u.role === 'admin';
               const revealed = revealedId === u.id;
               const disabled = !!u.revokedAt;
+              const activeAdminCount = users.filter(
+                (entry) => entry.role === 'admin' && !entry.revokedAt,
+              ).length;
+              const isLastAdmin = isAdmin && !disabled && activeAdminCount <= 1;
               return (
                 <tr key={u.id} className="border-t border-surface-100 align-top">
                   <td className="px-4 py-3">
@@ -269,7 +273,7 @@ export function UsersClient({ initialUsers, knownProjects }: Props) {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
-                    {isAdmin && (
+                    {isAdmin && !isLastAdmin && (
                       <button
                         type="button"
                         onClick={() => demoteToMember(u)}
@@ -279,14 +283,16 @@ export function UsersClient({ initialUsers, knownProjects }: Props) {
                         {t.users.demote}
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => toggleEnabled(u)}
-                      disabled={busyId === u.id}
-                      className="text-xs text-brand-600 font-semibold hover:underline disabled:opacity-40"
-                    >
-                      {disabled ? t.users.enable : t.users.disable}
-                    </button>
+                    {!isLastAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => toggleEnabled(u)}
+                        disabled={busyId === u.id}
+                        className="text-xs text-brand-600 font-semibold hover:underline disabled:opacity-40"
+                      >
+                        {disabled ? t.users.enable : t.users.disable}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => regenerate(u)}
@@ -295,14 +301,21 @@ export function UsersClient({ initialUsers, knownProjects }: Props) {
                     >
                       {t.users.regenerate}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteUser(u)}
-                      disabled={busyId === u.id}
-                      className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-40"
-                    >
-                      {t.users.delete}
-                    </button>
+                    {!isLastAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => deleteUser(u)}
+                        disabled={busyId === u.id}
+                        className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-40"
+                      >
+                        {t.users.delete}
+                      </button>
+                    )}
+                    {isLastAdmin && (
+                      <span className="text-[11px] text-surface-400 italic">
+                        {t.users.lastAdminLocked}
+                      </span>
+                    )}
                   </td>
                 </tr>
               );
