@@ -180,6 +180,7 @@ const en = {
     statusDisabled: 'disabled',
     demote: 'Demote',
     demoteConfirm: 'Demote "{NAME}" to member? They will lose admin access. Admins can only be re-created via dev (TEAM_API_KEY).',
+    lastAdminLocked: 'last admin · locked',
     regenConfirm: 'Regenerate key for "{NAME}"? The old key will stop working.',
     deleteConfirm: 'Delete user "{NAME}"? This cannot be undone.',
     reveal: 'Reveal',

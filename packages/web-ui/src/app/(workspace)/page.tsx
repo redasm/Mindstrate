@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { readSession, resolveVisibleProjects } from '@/lib/session';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -9,7 +10,6 @@ export const dynamic = 'force-dynamic';
 export default async function WorkspaceLanding() {
   const session = await readSession();
   if (!session) redirect('/login');
-  if (session.role === 'admin') redirect('/settings');
 
   const projects = await resolveVisibleProjects(session);
   const first = projects[0];
@@ -18,6 +18,7 @@ export default async function WorkspaceLanding() {
   }
 
   const t = getTranslations(await detectLocale());
+  const isAdmin = session.role === 'admin';
 
   return (
     <div className="p-12">
@@ -26,7 +27,14 @@ export default async function WorkspaceLanding() {
         title={t.sidebar.emptyAdmin === 'No projects yet.' || t.sidebar.emptyAdmin === '还没有项目。'
           ? t.sidebar.emptyAdmin.replace(/[.。]$/, '')
           : t.sidebar.emptyAdmin}
-        description={t.empty.noProjectsMember}
+        description={isAdmin ? t.empty.noProjectsAdmin : t.empty.noProjectsMember}
+        cta={
+          isAdmin ? (
+            <Link href="/settings/scanner-sources?new=git" className="btn-primary">
+              {t.sidebar.addProject}
+            </Link>
+          ) : undefined
+        }
       />
     </div>
   );
