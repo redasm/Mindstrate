@@ -80,6 +80,8 @@ hook 会调用 `mindstrate-scan ingest git --last-commit`。hook 逻辑属于 `r
 
 ## 增量 Git Source
 
+> **团队模式提示**：管理员也可以在 Web UI `Settings → Scanner Sources` 中按项目添加/编辑/启停 Git 与 P4 source，daemon 会读取相同的 SQLite 表。CLI 仍然可用，主要面向个人本地模式或脚本化场景。
+
 注册 source：
 
 ```bash
@@ -90,9 +92,7 @@ mindstrate-scan source add-git \
   --branch main \
   --interval-sec 300 \
   --init-mode from_now
-```
-
-回填最近提交：
+```回填最近提交：
 
 ```bash
 mindstrate-scan source add-git \
@@ -230,7 +230,7 @@ Suggested queries:
 
 ## 安全建议
 
-- 不要把 API Key 写入 scanner source 配置。
-- `TEAM_SERVER_URL` 和 `TEAM_API_KEY` 优先使用环境变量。
+- Git auth token、P4 password 等扫描源凭据通过 Web UI `Settings → Scanner Sources`（或 CLI `mindstrate-scan source add-*`）保存在共享 SQLite，与项目 LLM API Key 同等处理；不要把它们写回环境变量或仓库文件。
+- `TEAM_SERVER_URL` 和 `TEAM_API_KEY` 优先使用环境变量，且 `TEAM_API_KEY` 仅作为管理员引导密钥；成员密钥由 Web UI 签发，并按项目限定可访问范围。
 - 自定义 collector 是受信任代码；不可信仓库只使用声明式 project rules。
 - scanner cursor DB 和 Mindstrate 知识 DB 保持分离。

@@ -47,6 +47,18 @@ Main packages:
 
 See [Architecture](docs/architecture.en.md) for package boundaries.
 
+## Web Console
+
+Once Team Server is deployed, the Web UI is the single entry point for both admin configuration and member browsing. **LLM providers, scanner sources, and member API keys** are all governed per-project through the Web UI — no env vars required.
+
+| | |
+| --- | --- |
+| ![Login](docs/images/login.jpg) | ![Settings overview](docs/images/setting_overview.jpg) |
+| ![Users and API keys](docs/images/setting_user.jpg) | ![Knowledge browser](docs/images/knowledge.jpg) |
+| ![Project graph](docs/images/project_graph.jpg) | ![Global search](docs/images/golbal_search.jpg) |
+
+The admin signs in with the `TEAM_API_KEY` chosen at deployment time, then uses Settings to configure per-project LLM/embedding providers, Git/P4 scanner sources, and to mint API keys for team members scoped by project and role. See the [Installation Guide](docs/installation.en.md#web-console) for the full flow.
+
 ## Quick Start
 
 ### 1. Build From Source

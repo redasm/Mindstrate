@@ -11,7 +11,7 @@ This guide describes the supported Mindstrate deployment modes and operational c
 | OS | Windows, macOS, or Linux |
 | Git | Optional, for Git collection workflows |
 | Perforce CLI | Optional, for P4 collection workflows |
-| LLM provider key | Optional, for semantic search and LLM-assisted enrichment |
+| LLM provider key | Optional; no longer passed via env vars — configured per project in the Web UI |
 
 ## Build From Source
 
@@ -74,10 +74,11 @@ Typical Team Server environment:
 
 ```bash
 TEAM_PORT=3388
-TEAM_API_KEY=your-team-secret
+TEAM_API_KEY=your-team-secret     # admin bootstrap key; member keys are minted in the Web UI
 MINDSTRATE_DATA_DIR=/data/mindstrate
-OPENAI_API_KEY=sk-... # optional
 ```
+
+> LLM providers, scanner sources, and member API keys are governed per-project from the Web UI — they are no longer driven by env vars. The legacy `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `MINDSTRATE_LLM_MODEL` / `MINDSTRATE_EMBEDDING_MODEL` variables have been removed.
 
 Start the server after building:
 
@@ -119,26 +120,29 @@ Also append Mindstrate MCP usage rules to the project-root `AGENTS.md` so the AI
 | --- | --- |
 | `MINDSTRATE_DATA_DIR` | Data directory for local or Team Server storage |
 | `MINDSTRATE_DB_PATH` | Explicit SQLite database path |
-| `OPENAI_API_KEY` | OpenAI-compatible provider key |
-| `OPENAI_BASE_URL` | Optional custom provider base URL |
-| `MINDSTRATE_EMBEDDING_MODEL` | Embedding model name |
+| `MINDSTRATE_VECTOR_BACKEND` | `local` (default) or `qdrant` |
+| `MINDSTRATE_QDRANT_URL` | Qdrant URL when the vector backend is `qdrant` |
 | `MINDSTRATE_LOCALE` | Preferred output locale, for example `en` or `zh-CN` |
 | `TEAM_PORT` | Team Server port |
-| `TEAM_API_KEY` | Team Server API key |
+| `TEAM_API_KEY` | Team Server admin bootstrap key (member keys are minted in the Web UI) |
 | `TEAM_SERVER_URL` | Team Server URL used by clients/MCP |
+| `LOG_LEVEL` | Log level |
 
 Use `.env.example` and `deploy/.env.deploy.example` as templates.
+
+> **Removed env vars**: `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_EMBEDDING_BASE_URL`, `MINDSTRATE_LLM_MODEL`, `MINDSTRATE_EMBEDDING_MODEL`, and `MINDSTRATE_SCANNER_*`. These settings are now managed per project under Web UI `Settings → LLM Configs` and `Settings → Scanner Sources`.
 
 ## Operations
 
 Recommended production controls:
 
 - Run Team Server behind internal network controls or a reverse proxy.
-- Set `TEAM_API_KEY` in production.
-- Back up `MINDSTRATE_DATA_DIR` regularly.
-- Keep provider secrets outside repository files.
+- Set `TEAM_API_KEY` in production (admin bootstrap only — never distribute it to members).
+- Mint per-member, project-scoped API keys via Web UI `Settings → Users`.
+- Back up `MINDSTRATE_DATA_DIR` regularly (it carries SQLite, vector collections, and all Web UI configuration).
+- Rotate LLM provider keys directly in `Settings → LLM Configs`; the provider cache invalidates automatically.
 - Run `mindstrate doctor` and graph evaluation commands during maintenance windows.
 
 ## Troubleshooting
 
-If MCP cannot connect, rebuild the MCP package, verify the configured command path, and restart the AI tool. If Team Server calls fail, check `/health`, firewall rules, server logs, and API key consistency. If search quality is weak, verify whether an embedding provider is configured or whether the system is running in offline fallback mode.
+If MCP cannot connect, rebuild the MCP package, verify the configured command path, and restart the AI tool. If Team Server calls fail, check `/health`, firewall rules, server logs, and API key consistency. If search quality is weak, confirm whether the project has a config under Web UI `Settings → LLM Configs`, or whether it is currently on the offline fallback (256-dim local hash embedder with LLM extraction skipped).

@@ -47,6 +47,18 @@ AI 工具 -> 本地 MCP Server -> Team Server HTTP API -> 共享 Mindstrate runt
 
 架构边界见 [架构](docs/architecture.zh-CN.md)。
 
+## Web 控制台
+
+团队模式部署后，Web UI 是管理员配置和成员浏览的统一入口。**LLM provider、扫描源、成员 API Key** 都通过 Web UI 按项目治理，不再依赖环境变量。
+
+| | |
+| --- | --- |
+| ![登录](docs/images/login.jpg) | ![设置总览](docs/images/setting_overview.jpg) |
+| ![用户与 API Key](docs/images/setting_user.jpg) | ![知识浏览](docs/images/knowledge.jpg) |
+| ![项目图谱](docs/images/project_graph.jpg) | ![全局搜索](docs/images/golbal_search.jpg) |
+
+管理员使用部署时生成的 `TEAM_API_KEY` 登录，进入 Settings 中按项目维度配置 LLM/Embedding provider、Git/P4 扫描源，以及为团队成员签发限定项目和角色的 API Key。完整流程见 [安装指南](docs/installation.zh-CN.md#web-控制台)。
+
 ## 快速开始
 
 ### 1. 从源码构建

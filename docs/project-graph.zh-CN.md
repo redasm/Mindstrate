@@ -54,6 +54,10 @@ Mindstrate 可以写出：
 
 重要操作包括图谱搜索、节点读取、邻居展开、最短路径、blast radius、任务导向查询、报告生成和变更影响分析。MCP 工具应返回聚焦上下文，而不是直接倾倒整个图。
 
+团队模式下，Web UI 在浏览器中渲染同一份图谱：节点、依赖、风险信息、编辑前报告和成员添加的 structured overlay 都可以直接浏览和编辑。
+
+![Web UI 项目图谱视图](images/project_graph.jpg)
+
 ## 隐私边界
 
 Parser facts 在本地抽取。LLM enrichment 是可选能力，默认应接收受限 evidence snippet，而不是无限制源码。LLM 生成内容必须标记为 inferred 或 ambiguous。

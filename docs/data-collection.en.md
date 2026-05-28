@@ -80,6 +80,8 @@ The hook calls `mindstrate-scan ingest git --last-commit`. Hook logic belongs in
 
 ## Incremental Git Source
 
+> **Team-mode tip**: admins can also add/edit/toggle Git and P4 sources from the Web UI under `Settings → Scanner Sources`. The daemon reads the same SQLite table either way. The CLI is still supported and is most useful for local personal mode or scripted setups.
+
 Register a source:
 
 ```bash
@@ -230,7 +232,7 @@ Run change analysis before agents edit large projects, Unreal projects, generate
 
 ## Security Notes
 
-- Do not write API keys into scanner source config.
-- Prefer environment variables for `TEAM_SERVER_URL` and `TEAM_API_KEY`.
+- Scanner credentials (Git auth tokens, P4 passwords) are saved in the shared SQLite via Web UI `Settings → Scanner Sources` or the CLI `mindstrate-scan source add-*` commands, with the same handling as per-project LLM API keys. Do not move them back to env vars or commit them.
+- Prefer environment variables for `TEAM_SERVER_URL` and `TEAM_API_KEY`; `TEAM_API_KEY` is the admin bootstrap key only — member keys are minted in the Web UI with project-scoped access.
 - Custom collectors are trusted code; use declarative project rules for untrusted repositories.
 - Keep scanner cursor DB separate from the Mindstrate knowledge DB.

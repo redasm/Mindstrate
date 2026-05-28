@@ -11,7 +11,7 @@
 | 操作系统 | Windows、macOS 或 Linux |
 | Git | 可选，用于 Git 采集工作流 |
 | Perforce CLI | 可选，用于 P4 采集工作流 |
-| LLM provider key | 可选，用于语义搜索和 LLM 辅助 enrichment |
+| LLM provider key | 可选；不再通过环境变量传入，由 Web UI 按项目配置 |
 
 ## 从源码构建
 
@@ -74,10 +74,11 @@ mindstrate init
 
 ```bash
 TEAM_PORT=3388
-TEAM_API_KEY=your-team-secret
+TEAM_API_KEY=your-team-secret     # 管理员引导密钥；成员密钥由 Web UI 签发
 MINDSTRATE_DATA_DIR=/data/mindstrate
-OPENAI_API_KEY=sk-... # 可选
 ```
+
+> LLM provider、扫描源、成员 API Key 都在 Web UI 中按项目治理，不再通过环境变量传入。`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `MINDSTRATE_LLM_MODEL` / `MINDSTRATE_EMBEDDING_MODEL` 等历史变量已经被移除。
 
 构建后启动服务：
 
@@ -119,26 +120,29 @@ mindstrate setup \
 | --- | --- |
 | `MINDSTRATE_DATA_DIR` | 本地或 Team Server 数据目录 |
 | `MINDSTRATE_DB_PATH` | 显式 SQLite 数据库路径 |
-| `OPENAI_API_KEY` | OpenAI-compatible provider key |
-| `OPENAI_BASE_URL` | 可选自定义 provider base URL |
-| `MINDSTRATE_EMBEDDING_MODEL` | Embedding 模型名 |
+| `MINDSTRATE_VECTOR_BACKEND` | `local`（默认）或 `qdrant` |
+| `MINDSTRATE_QDRANT_URL` | 使用 `qdrant` 后端时的 Qdrant 服务地址 |
 | `MINDSTRATE_LOCALE` | 输出语言偏好，例如 `en` 或 `zh-CN` |
 | `TEAM_PORT` | Team Server 端口 |
-| `TEAM_API_KEY` | Team Server API key |
+| `TEAM_API_KEY` | Team Server 管理员引导密钥（成员密钥在 Web UI 中签发） |
 | `TEAM_SERVER_URL` | 客户端/MCP 使用的 Team Server URL |
+| `LOG_LEVEL` | 日志级别 |
 
 可从 `.env.example` 和 `deploy/.env.deploy.example` 复制模板。
+
+> **已移除的环境变量**：`OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_EMBEDDING_BASE_URL`、`MINDSTRATE_LLM_MODEL`、`MINDSTRATE_EMBEDDING_MODEL`、`MINDSTRATE_SCANNER_*`。这些设置现在在 Web UI `Settings → LLM Configs` 和 `Settings → Scanner Sources` 中按项目维护。
 
 ## 运维建议
 
 生产环境建议：
 
 - 将 Team Server 放在内网控制或反向代理之后。
-- 生产环境设置 `TEAM_API_KEY`。
-- 定期备份 `MINDSTRATE_DATA_DIR`。
-- Provider 密钥不要写入仓库文件。
+- 生产环境设置 `TEAM_API_KEY`（仅作为管理员引导，不要分发给成员）。
+- 通过 Web UI `Settings → Users` 为每位成员单独签发受限项目的 API Key。
+- 定期备份 `MINDSTRATE_DATA_DIR`（其中包含 SQLite、向量集合和所有 Web UI 配置）。
+- LLM provider 密钥在 Web UI 中按项目治理；轮换时直接在 `Settings → LLM Configs` 修改即可，缓存会自动失效。
 - 在维护窗口运行 `mindstrate doctor` 和图谱评估命令。
 
 ## 故障排查
 
-如果 MCP 无法连接，先重新构建 MCP package，确认配置里的 command 路径正确，并重启 AI 工具。如果 Team Server 调用失败，检查 `/health`、防火墙、服务日志和 API key 是否一致。如果搜索质量较弱，确认是否已配置 embedding provider，或当前是否处于离线 fallback 模式。
+如果 MCP 无法连接，先重新构建 MCP package，确认配置里的 command 路径正确，并重启 AI 工具。如果 Team Server 调用失败，检查 `/health`、防火墙、服务日志和 API key 是否一致。如果搜索质量较弱，确认是否已经在 Web UI `Settings → LLM Configs` 中为该项目配置 provider，或当前是否处于离线 fallback 模式（256 维本地哈希向量、跳过 LLM 抽取）。
