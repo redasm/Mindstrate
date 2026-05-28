@@ -6,7 +6,9 @@
  * 2. 本地 hash-based embedding（离线模式，无需 API key）
  *
  * 离线模式使用简易的词频向量，精度较低但完全免费、零延迟。
- * 设置 OPENAI_API_KEY 后自动切换到 OpenAI 模式。
+ * 是否使用 OpenAI 由项目级 LLM Config 决定（Web UI Settings → LLM Configs），
+ * 不再依赖进程级 OPENAI_API_KEY 环境变量；ProviderFactory 会按项目装配
+ * 对应的 Embedder 实例。
  */
 
 import type { CreateKnowledgeInput } from '@mindstrate/protocol';
