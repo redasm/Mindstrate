@@ -1,6 +1,20 @@
 import { execSync } from 'node:child_process';
 import type { CommitInfo } from '@mindstrate/server';
 
+export interface P4Env {
+  p4Port?: string;
+  p4User?: string;
+  p4Passwd?: string;
+}
+
+function buildEnv(env?: P4Env): NodeJS.ProcessEnv {
+  const merged: NodeJS.ProcessEnv = { ...process.env };
+  if (env?.p4Port) merged.P4PORT = env.p4Port;
+  if (env?.p4User) merged.P4USER = env.p4User;
+  if (env?.p4Passwd) merged.P4PASSWD = env.p4Passwd;
+  return merged;
+}
+
 export function isP4Available(): boolean {
   try {
     execSync('p4 -V', { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' });
@@ -10,9 +24,13 @@ export function isP4Available(): boolean {
   }
 }
 
-export function isP4Connected(): boolean {
+export function isP4Connected(env?: P4Env): boolean {
   try {
-    return execSync('p4 info', { stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf-8' }).includes('Server address');
+    return execSync('p4 info', {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      encoding: 'utf-8',
+      env: buildEnv(env),
+    }).includes('Server address');
   } catch {
     return false;
   }
@@ -26,12 +44,14 @@ function sanitizeChangelist(cl: string): string {
   return num;
 }
 
-export function getChangelistInfo(changelist: string): CommitInfo | null {
+export function getChangelistInfo(changelist: string, env?: P4Env): CommitInfo | null {
   try {
     const cl = sanitizeChangelist(changelist);
+    const processEnv = buildEnv(env);
     const describe = execSync(`p4 describe -s ${cl}`, {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: processEnv,
     });
 
     const parsed = parseP4Describe(describe);
@@ -43,6 +63,7 @@ export function getChangelistInfo(changelist: string): CommitInfo | null {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
         maxBuffer: 10 * 1024 * 1024,
+        env: processEnv,
       }));
     } catch {
       diff = '';
@@ -60,7 +81,7 @@ export function getChangelistInfo(changelist: string): CommitInfo | null {
   }
 }
 
-export function getRecentChangelists(n: number = 10, depotPath?: string): string[] {
+export function getRecentChangelists(n: number = 10, depotPath?: string, env?: P4Env): string[] {
   const count = Math.max(1, Math.min(Math.floor(n) || 10, 1000));
   try {
     if (depotPath && !/^\/\/[a-zA-Z0-9_.\-\/]+$/.test(depotPath)) {
@@ -70,12 +91,42 @@ export function getRecentChangelists(n: number = 10, depotPath?: string): string
     const output = execSync(`p4 changes -s submitted -m ${count}${pathArg}`, {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildEnv(env),
     });
 
     return output
       .split('\n')
       .map((line) => line.match(/^Change\s+(\d+)\s+on/)?.[1])
       .filter((value): value is string => Boolean(value));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Return changelist numbers strictly greater than `cursor`, oldest → newest.
+ * Uses `p4 changes ...@<cursor+1>,#head` which is exclusive of the cursor CL.
+ */
+export function listChangelistsSince(cursor: string, depotPath?: string, env?: P4Env): string[] {
+  const cl = sanitizeChangelist(cursor);
+  if (depotPath && !/^\/\/[a-zA-Z0-9_.\-\/]+$/.test(depotPath)) {
+    throw new Error(`Invalid depot path format: ${depotPath}`);
+  }
+  const next = String(BigInt(cl) + 1n);
+  const path = depotPath ?? '//...';
+  try {
+    const output = execSync(`p4 changes -s submitted ${path}@${next},#head`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildEnv(env),
+    });
+
+    const newestFirst = output
+      .split('\n')
+      .map((line) => line.match(/^Change\s+(\d+)\s+on/)?.[1])
+      .filter((value): value is string => Boolean(value));
+
+    return newestFirst.reverse();
   } catch {
     return [];
   }

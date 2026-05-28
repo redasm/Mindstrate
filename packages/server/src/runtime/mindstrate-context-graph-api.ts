@@ -69,7 +69,6 @@ import {
 import type { ProjectGraphOverlay } from '@mindstrate/protocol/models';
 import type { DetectedProject } from '../project/index.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
-import { getOpenAIClient } from '../openai-client.js';
 
 export class MindstrateContextGraphApi {
   constructor(private readonly services: MindstrateRuntime) {}
@@ -147,8 +146,16 @@ export class MindstrateContextGraphApi {
     return this.services.contextGraphStore.listNodes(options);
   }
 
+  listKnownProjects(): string[] {
+    return this.services.contextGraphStore.listKnownProjects();
+  }
+
   listConflictRecords(project?: string, limit?: number): ConflictRecord[] {
     return this.services.contextGraphStore.listConflictRecords({ project, limit });
+  }
+
+  getConflictRecord(id: string): ConflictRecord | null {
+    return this.services.contextGraphStore.getConflictRecordById(id);
   }
 
   listContextEdges(options?: {
@@ -235,10 +242,11 @@ export class MindstrateContextGraphApi {
     project: DetectedProject,
     options?: Pick<ProjectGraphEnrichmentInput, 'summarize'>,
   ): Promise<ProjectGraphEnrichmentResult> {
+    const providers = this.services.providerFactory.forProject(project.name);
     const summarize = options?.summarize ?? await this.createProjectGraphSummarizer(project);
     return enrichProjectGraph(this.services.contextGraphStore, {
       project: project.name,
-      llmConfigured: this.services.config.openaiApiKey.length > 0,
+      llmConfigured: providers.hasConfig,
       extractedNodes: this.services.contextGraphStore.listNodes({
         project: project.name,
         domainType: ContextDomainType.ARCHITECTURE,
@@ -249,12 +257,13 @@ export class MindstrateContextGraphApi {
   }
 
   async planProjectGraphSystemPages(project: DetectedProject): Promise<SystemPageDefinition[] | null> {
-    if (!this.services.config.openaiApiKey) return null;
-    const client = await getOpenAIClient(this.services.config.openaiApiKey, this.services.config.openaiBaseUrl);
+    const providers = this.services.providerFactory.forProject(project.name);
+    if (!providers.hasConfig) return null;
+    const client = await providers.llmClientPromise;
     if (!client) return null;
     return planProjectGraphSystemPagesWithLlm({
       client,
-      model: this.services.config.llmModel,
+      model: providers.llmModel,
       project,
       extractedNodes: this.services.contextGraphStore.listNodes({
         project: project.name,
@@ -277,7 +286,7 @@ export class MindstrateContextGraphApi {
         ?.filter((layer) => layer.parserAdapters.includes('unreal-asset-metadata'))
         .flatMap((layer) => layer.roots),
       manifests: project.graphHints?.manifests,
-      llmProviderConfigured: this.services.config.openaiApiKey.length > 0,
+      llmProviderConfigured: this.services.providerFactory.forProject(project.name).hasConfig,
       onProgress: options?.onScanProgress,
     });
   }
@@ -402,12 +411,13 @@ export class MindstrateContextGraphApi {
   private async createProjectGraphSummarizer(
     project: DetectedProject,
   ): Promise<ProjectGraphEnrichmentInput['summarize'] | undefined> {
-    if (!this.services.config.openaiApiKey) return undefined;
-    const client = await getOpenAIClient(this.services.config.openaiApiKey, this.services.config.openaiBaseUrl);
+    const providers = this.services.providerFactory.forProject(project.name);
+    if (!providers.hasConfig) return undefined;
+    const client = await providers.llmClientPromise;
     if (!client) return undefined;
     return () => summarizeProjectGraphWithLlm({
       client,
-      model: this.services.config.llmModel,
+      model: providers.llmModel,
       project: project.name,
       extractedNodes: this.services.contextGraphStore.listNodes({
         project: project.name,

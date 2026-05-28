@@ -1,4 +1,4 @@
-import type { Embedder } from '../processing/embedder.js';
+import type { ProviderFactory } from '../processing/provider-factory.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
 import {
@@ -36,7 +36,7 @@ interface UpgradeSpec {
 export class HighOrderCompressor {
   constructor(
     private readonly graphStore: ContextGraphStore,
-    private readonly embedder: Embedder,
+    private readonly providerFactory: ProviderFactory,
   ) {}
 
   compressRulesToSkills(options: HighOrderCompressionOptions = {}): Promise<HighOrderCompressionResult> {
@@ -79,7 +79,8 @@ export class HighOrderCompressor {
     options: HighOrderCompressionOptions,
     spec: UpgradeSpec,
   ): Promise<HighOrderCompressionResult> {
-    const run = await runSubstrateCompression(this.graphStore, this.embedder, {
+    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
+    const run = await runSubstrateCompression(this.graphStore, embedder, {
       sourceType: spec.sourceType,
       targetType: spec.targetType,
       targetDomain: spec.targetDomain,

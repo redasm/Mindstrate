@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { RepoScannerService } from './scanner-service.js';
 import { RepoScannerDaemon } from './scheduler.js';
-import { CaptureSource, errorMessage } from '@mindstrate/server';
+import { CaptureSource, Mindstrate, consoleLogger, errorMessage } from '@mindstrate/server';
 import { getCommitInfo, getGitRoot, getLastCommit, getRecentCommits } from './git-source.js';
 import { installGitHook, uninstallGitHook } from './hook-installer.js';
-import { getChangelistInfo, getRecentChangelists, isP4Available, isP4Connected } from './p4-source.js';
+import { getChangelistInfo, getRecentChangelists, isP4Available } from './p4-source.js';
 import * as path from 'node:path';
 
 function value(flag: string, args: string[], fallback?: string): string | undefined {
@@ -13,9 +13,19 @@ function value(flag: string, args: string[], fallback?: string): string | undefi
   return args[index + 1];
 }
 
+function optionalNumber(flag: string, args: string[]): number | undefined {
+  const raw = value(flag, args);
+  if (raw === undefined) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) throw new Error(`Invalid number for ${flag}: ${raw}`);
+  return parsed;
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const service = new RepoScannerService();
+  const memory = new Mindstrate({ logger: consoleLogger });
+  await memory.init();
+  const service = new RepoScannerService({ memory });
   await service.init();
 
   try {
@@ -25,19 +35,79 @@ async function main(): Promise<void> {
       const name = value('--name', args);
       const project = value('--project', args);
       const repoPath = value('--repo-path', args);
-      if (!name || !project || !repoPath) {
-        throw new Error('Usage: mindstrate-scan source add-git --name <name> --project <project> --repo-path <path>');
+      const remoteUrl = value('--remote-url', args);
+      if (!name || !project || (!repoPath && !remoteUrl)) {
+        throw new Error('Usage: mindstrate-scan source add-git --name <name> --project <project> (--repo-path <path> | --remote-url <url>) [--git-token <token>] [--branch main]');
       }
       const source = service.addGitLocalSource({
         name,
         project,
-        repoPath,
+        repoPath: repoPath ?? `/repos/${name}`,
         branch: value('--branch', args),
+        remoteUrl,
+        authToken: value('--git-token', args),
         intervalSec: Number(value('--interval-sec', args, '300')),
         initMode: (value('--init-mode', args, 'from_now') as 'from_now' | 'backfill_recent'),
         backfillCount: Number(value('--backfill-count', args, '10')),
       });
       console.log(`Added source ${source.id} (${source.name})`);
+      return;
+    }
+
+    if (command === 'source' && subcommand === 'add-p4') {
+      const name = value('--name', args);
+      const project = value('--project', args);
+      if (!name || !project) {
+        throw new Error('Usage: mindstrate-scan source add-p4 --name <name> --project <project> [--depot //depot/main/...] [--p4-port <host>] [--p4-user <user>] [--p4-password <pwd>]');
+      }
+      if (!isP4Available()) {
+        throw new Error('p4 command not found — install Perforce CLI (or rebuild scanner image with INSTALL_P4=1) before registering a P4 source');
+      }
+      const source = service.addP4Source({
+        name,
+        project,
+        depotPath: value('--depot', args),
+        p4Port: value('--p4-port', args),
+        p4User: value('--p4-user', args),
+        p4Passwd: value('--p4-password', args),
+        intervalSec: Number(value('--interval-sec', args, '300')),
+        initMode: (value('--init-mode', args, 'from_now') as 'from_now' | 'backfill_recent'),
+        backfillCount: Number(value('--backfill-count', args, '10')),
+      });
+      console.log(`Added source ${source.id} (${source.name})`);
+      return;
+    }
+
+    if (command === 'source' && subcommand === 'update') {
+      const sourceId = args[2];
+      if (!sourceId) throw new Error('Usage: mindstrate-scan source update <source-id> [flags]');
+      const updated = service.scanner.updateSource(sourceId, {
+        name: value('--name', args),
+        project: value('--project', args),
+        repoPath: value('--repo-path', args),
+        depotPath: value('--depot', args),
+        branch: value('--branch', args),
+        remoteUrl: value('--remote-url', args),
+        authToken: value('--git-token', args),
+        p4Port: value('--p4-port', args),
+        p4User: value('--p4-user', args),
+        p4Passwd: value('--p4-password', args),
+        intervalSec: optionalNumber('--interval-sec', args),
+        initMode: value('--init-mode', args) as 'from_now' | 'backfill_recent' | undefined,
+        backfillCount: optionalNumber('--backfill-count', args),
+      });
+      if (!updated) throw new Error(`Unknown source: ${sourceId}`);
+      console.log(`Updated source ${updated.id}`);
+      return;
+    }
+
+    if (command === 'source' && subcommand === 'delete') {
+      const sourceId = args[2];
+      if (!sourceId) throw new Error('Usage: mindstrate-scan source delete <source-id>');
+      if (!service.deleteSource(sourceId)) {
+        throw new Error(`Unknown source: ${sourceId}`);
+      }
+      console.log(`Deleted source ${sourceId}`);
       return;
     }
 
@@ -91,9 +161,6 @@ async function main(): Promise<void> {
     if (command === 'ingest' && subcommand === 'p4') {
       if (!isP4Available()) {
         throw new Error('p4 command not found');
-      }
-      if (!isP4Connected()) {
-        throw new Error('Cannot connect to Perforce server');
       }
 
       const project = value('--project', args, path.basename(process.cwd()))!;
@@ -184,6 +251,7 @@ async function main(): Promise<void> {
       const shutdown = async () => {
         await daemon.stop();
         await service.close();
+        memory.close();
         process.exit(0);
       };
       process.on('SIGINT', () => { void shutdown(); });
@@ -197,7 +265,10 @@ async function main(): Promise<void> {
       '  mindstrate-scan ingest p4 [--project <project>] [--changelist <cl> | --recent <n>] [--depot <path>] [--dry-run]',
       '  mindstrate-scan hook install [--repo-path <path>]',
       '  mindstrate-scan hook uninstall [--repo-path <path>]',
-      '  mindstrate-scan source add-git --name <name> --project <project> --repo-path <path> [--branch main]',
+      '  mindstrate-scan source add-git --name <name> --project <project> (--repo-path <path> | --remote-url <url>) [--git-token <token>] [--branch main]',
+      '  mindstrate-scan source add-p4 --name <name> --project <project> [--depot //depot/main/...] [--p4-port <host>] [--p4-user <user>] [--p4-password <pwd>]',
+      '  mindstrate-scan source update <source-id> [--name ...] [--project ...] [--remote-url ...] [--git-token ...] [--p4-port ...] [--p4-user ...] [--p4-password ...] [--interval-sec ...] [--init-mode from_now|backfill_recent] [--backfill-count ...]',
+      '  mindstrate-scan source delete <source-id>',
       '  mindstrate-scan source list',
       '  mindstrate-scan source enable <source-id>',
       '  mindstrate-scan source disable <source-id>',
@@ -211,6 +282,7 @@ async function main(): Promise<void> {
   } finally {
     if (commandExits(process.argv.slice(2))) {
       await service.close();
+      memory.close();
     }
   }
 }

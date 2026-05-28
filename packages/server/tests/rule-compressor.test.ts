@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { RuleCompressor } from '../src/context-graph/rule-compressor.js';
-import { Embedder } from '../src/processing/embedder.js';
+import { ProviderFactory } from '../src/processing/provider-factory.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 import {
   ContextDomainType,
@@ -19,7 +19,7 @@ describe('RuleCompressor', () => {
   beforeEach(() => {
     tempDir = createTempDir();
     graphStore = new ContextGraphStore(path.join(tempDir, 'context-graph.db'));
-    compressor = new RuleCompressor(graphStore, new Embedder(''));
+    compressor = new RuleCompressor(graphStore, ProviderFactory.offline());
   });
 
   afterEach(() => {

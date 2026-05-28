@@ -30,7 +30,7 @@ export class RepoScannerDaemon {
     if (this.running) return [];
     this.running = true;
     try {
-      const due = this.service.store.listDueSources();
+      const due = this.service.scanner.listDueSources();
       const results: ScanExecutionResult[] = [];
       for (const source of due) {
         results.push(await this.service.runSource(source.id));

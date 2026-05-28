@@ -8,17 +8,15 @@
 import pino from 'pino';
 import { Mindstrate, consoleLogger } from '@mindstrate/server';
 import { createApp } from './app.js';
-import type { TeamApiKey } from './http/auth-middleware.js';
 
 const logger = pino({
   level: process.env['LOG_LEVEL'] ?? 'info',
 });
 
 const port = parseInt(process.env['TEAM_PORT'] ?? '3388', 10);
-const apiKey = process.env['TEAM_API_KEY'] ?? '';
+const adminKey = process.env['TEAM_API_KEY'] ?? '';
 const memory = new Mindstrate({ logger: consoleLogger });
-const authKeys = readTeamApiKeys();
-const app = createApp({ apiKey, authKeys, memory });
+const app = createApp({ adminKey, memory });
 
 export interface SchedulerEnvConfig {
   enabled: boolean;
@@ -32,39 +30,15 @@ export const readSchedulerEnvConfig = (env: NodeJS.ProcessEnv = process.env): Sc
   project: env['MINDSTRATE_METABOLISM_PROJECT'] || undefined,
 });
 
-export function readTeamApiKeys(env: NodeJS.ProcessEnv = process.env): TeamApiKey[] {
-  const rawKeys = env['TEAM_API_KEYS'];
-  if (rawKeys) {
-    const parsed = JSON.parse(rawKeys) as TeamApiKey[];
-    if (!Array.isArray(parsed) || parsed.some((entry) => !entry.key)) {
-      throw new Error('TEAM_API_KEYS must be a JSON array of objects with a key field.');
-    }
-    return parsed;
-  }
-
-  const singleKey = env['TEAM_API_KEY'];
-  if (!singleKey) {
-    throw new Error('TEAM_API_KEY or TEAM_API_KEYS is required for Team Server.');
-  }
-
-  return [{
-    key: singleKey,
-    scopes: ['read', 'write', 'admin'],
-    projects: ['*'],
-  }];
-}
-
 const warnIfAuthDisabled = (): void => {
-  if (authKeys.length > 0) {
-    logger.info('Authentication: API Key required');
+  if (adminKey) {
+    logger.info('Authentication: TEAM_API_KEY admin bootstrap configured; member keys resolved from DB.');
     return;
   }
 
   logger.warn(
-    'SECURITY WARNING: No TEAM_API_KEY configured. Server is running WITHOUT authentication. ' +
-    'Anyone with network access can read/write/delete knowledge. ' +
-    'Set TEAM_API_KEY environment variable to enable API key authentication. ' +
-    'This is acceptable only for local development or trusted private networks.'
+    'SECURITY WARNING: No TEAM_API_KEY configured. Server will reject every request. ' +
+    'Set TEAM_API_KEY in the environment to enable admin login + member key management via the Web UI.'
   );
 };
 

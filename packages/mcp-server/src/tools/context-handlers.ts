@@ -5,6 +5,7 @@ import {
   SubstrateType,
 } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
+import { assertProjectAllowed } from '../allowed-projects.js';
 import { coerceContextEnum } from './enum-coercion.js';
 export {
   handleContextAssemble,
@@ -27,6 +28,7 @@ export async function handleContextIngestEvent(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
+  assertProjectAllowed(input.project);
   const result = await api.ingestContextEvent({
     ...input,
     type: coerceContextEnum(ContextEventType, input.type) as ContextEventType,

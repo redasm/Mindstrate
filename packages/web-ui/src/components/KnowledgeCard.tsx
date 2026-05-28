@@ -1,83 +1,109 @@
 'use client';
 
 import Link from 'next/link';
+import { Icon } from './ui/Icon';
+import { KnowledgeTypePill } from './ui/Pill';
 
-interface GraphKnowledgeView {
+export interface KnowledgeCardData {
   id: string;
   title: string;
   summary: string;
   substrateType: string;
-  domainType: string;
+  domainType?: string;
   project?: string;
-  priorityScore: number;
-  status: string;
-  sourceRef?: string;
-  tags: string[];
+  priorityScore?: number;
+  status?: string;
+  tags?: string[];
+  context?: { project?: string; language?: string };
+  updatedAt?: string;
+  refCount?: number;
+}
+
+function timeAgo(iso?: string): string {
+  if (!iso) return '';
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return '';
+  const diff = Date.now() - then;
+  const min = Math.round(diff / 60_000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const d = Math.round(hr / 24);
+  if (d < 7) return `${d}d ago`;
+  const w = Math.round(d / 7);
+  return `${w}w ago`;
 }
 
 export function KnowledgeCard({
   knowledge: k,
-  relevance,
-  showActions = false,
+  href,
   onDelete,
 }: {
-  knowledge: GraphKnowledgeView;
-  relevance?: number;
-  showActions?: boolean;
+  knowledge: KnowledgeCardData;
+  href?: string;
   onDelete?: (id: string) => void;
 }) {
-  return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow">
-      <div className="flex items-start justify-between gap-3 mb-2">
-        <Link href={`/knowledge/${k.id}`} className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 hover:text-brand-600 transition-colors truncate">
-            {k.title}
-          </h3>
-        </Link>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700">
-            {k.substrateType}
-          </span>
-          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-            {k.status}
-          </span>
-        </div>
-      </div>
-
-      <p className="text-sm text-gray-700 mb-3 line-clamp-3">{k.summary}</p>
-
-      {k.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {k.tags.map(tag => (
-            <span key={tag} className="px-1.5 py-0.5 bg-gray-100 rounded text-xs text-gray-600">
-              {tag}
+  const language = k.context?.language;
+  const inner = (
+    <>
+      <div className="flex items-start justify-between mb-3">
+        <KnowledgeTypePill type={k.substrateType} />
+        {(onDelete || href) && (
+          <div className="card-actions flex items-center gap-1">
+            <span className="action-btn" title="View details">
+              <Icon icon="lucide:expand" className="text-sm" />
             </span>
-          ))}
-        </div>
-      )}
-
-      <div className="flex items-center justify-between text-xs text-gray-500">
-        <div className="flex items-center gap-3">
-          {relevance !== undefined && (
-            <span className="text-brand-600 font-medium">{(relevance * 100).toFixed(1)}% match</span>
-          )}
-          <span>priority {k.priorityScore.toFixed(2)}</span>
-          <span>{k.domainType}</span>
-          {k.project ? <span>{k.project}</span> : null}
-        </div>
-
-        {showActions && (
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => onDelete?.(k.id)}
-              className="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors text-xs"
-              title="Delete"
-            >
-              Delete
-            </button>
+            {onDelete && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDelete(k.id);
+                }}
+                className="action-btn danger"
+                title="Delete"
+              >
+                <Icon icon="lucide:trash-2" className="text-sm" />
+              </button>
+            )}
           </div>
         )}
       </div>
-    </div>
+      <h3 className="text-sm font-bold text-surface-800 tracking-tight mb-1.5 leading-snug">
+        {k.title}
+      </h3>
+      <p className="text-xs text-surface-500 leading-relaxed mb-3 line-clamp-2">{k.summary}</p>
+      <div className="flex items-center gap-3 text-[11px] text-surface-400 font-medium">
+        {language && (
+          <span className="flex items-center gap-1">
+            <Icon icon="lucide:code-2" className="text-xs" />
+            {language}
+          </span>
+        )}
+        {k.updatedAt && (
+          <span className="flex items-center gap-1">
+            <Icon icon="lucide:clock" className="text-xs" />
+            {timeAgo(k.updatedAt)}
+          </span>
+        )}
+        {typeof k.refCount === 'number' && (
+          <span className="flex items-center gap-1">
+            <Icon icon="lucide:eye" className="text-xs" />
+            {k.refCount} refs
+          </span>
+        )}
+      </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link href={href} className="card-entry bg-white rounded-xl p-5 block cursor-pointer">
+        {inner}
+      </Link>
+    );
+  }
+  return <div className="card-entry bg-white rounded-xl p-5">{inner}</div>;
 }

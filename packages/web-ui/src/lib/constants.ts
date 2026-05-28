@@ -22,7 +22,6 @@ export const STATUS_COLORS: Record<string, string> = {
   outdated:   'bg-yellow-100 text-yellow-700',
 };
 
-/** Get localized type label + color */
 export function getTypeInfo(type: string, locale: Locale): { label: string; color: string } {
   const t = getTranslations(locale);
   return {
@@ -31,7 +30,6 @@ export function getTypeInfo(type: string, locale: Locale): { label: string; colo
   };
 }
 
-/** Get localized status label + color */
 export function getStatusInfo(status: string, locale: Locale): { label: string; color: string } {
   const t = getTranslations(locale);
   return {
@@ -40,16 +38,6 @@ export function getStatusInfo(status: string, locale: Locale): { label: string; 
   };
 }
 
-/** Get the type filter options list (localized) */
-export function getTypeFilterOptions(locale: Locale): Array<{ value: string; label: string }> {
-  const t = getTranslations(locale);
-  return [
-    { value: '', label: t.typeFilter.all },
-    ...Object.entries(t.types).map(([value, label]) => ({ value, label })),
-  ];
-}
-
-/** Format a date string according to locale */
 export function formatDate(iso: string, locale: Locale = 'en'): string {
   const dateLocale = locale === 'zh' ? 'zh-CN' : 'en-US';
   return new Date(iso).toLocaleDateString(dateLocale, {

@@ -54,6 +54,10 @@ The graph is an index and guide, not a substitute for source review.
 
 Important operations include graph search, node lookup, neighbor expansion, shortest path, blast radius, task-oriented queries, report generation, and change impact analysis. MCP tools should return focused context instead of dumping the full graph.
 
+In team mode, the Web UI renders the same graph in the browser — nodes, dependencies, risk metadata, before-edit reports, and member-authored structured overlays can all be browsed and edited directly.
+
+![Web UI project graph view](images/project_graph.jpg)
+
 ## Privacy Boundary
 
 Parser facts are extracted locally. LLM enrichment is optional and should receive bounded evidence snippets rather than unrestricted source by default. LLM-created content must be labeled as inferred or ambiguous.

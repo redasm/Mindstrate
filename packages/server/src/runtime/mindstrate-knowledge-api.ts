@@ -39,8 +39,11 @@ export class MindstrateKnowledgeApi {
       completenessScore: gateResult.completenessScore,
     });
     const text = `${digested.nodeInput.title}\n${digested.nodeInput.content}`;
-    const embedding = await this.services.embedder.embed(text);
-    const duplicates = await this.services.vectorStore.findDuplicates(
+    const project = input.context?.project ?? '';
+    const providers = this.services.providerFactory.forProject(project);
+    const vectorStore = await this.services.vectorStoreFactory.forProject(project);
+    const embedding = await providers.embedder.embed(text);
+    const duplicates = await vectorStore.findDuplicates(
       embedding,
       this.services.config.deduplicationThreshold,
     );
@@ -65,7 +68,7 @@ export class MindstrateKnowledgeApi {
         substrateType: node.substrateType,
       },
     });
-    await this.services.vectorStore.add({
+    await vectorStore.add({
       id: node.id,
       embedding,
       text,

@@ -90,9 +90,12 @@ export class MindstrateSnapshotApi {
   private async indexSnapshotNode(node: ContextNode, id: string): Promise<void> {
     try {
       const text = `${node.title}\n${node.content}`;
-      const embedding = await this.services.embedder.embed(text);
-      await this.services.vectorStore.delete(id);
-      await this.services.vectorStore.add({
+      const project = node.project ?? '';
+      const embedder = this.services.providerFactory.forProject(project).embedder;
+      const vectorStore = await this.services.vectorStoreFactory.forProject(project);
+      const embedding = await embedder.embed(text);
+      await vectorStore.delete(id);
+      await vectorStore.add({
         id,
         embedding,
         text,

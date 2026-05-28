@@ -8,7 +8,7 @@ import {
 } from '@mindstrate/protocol/models';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { HighOrderCompressor } from '../src/context-graph/high-order-compressor.js';
-import { Embedder } from '../src/processing/embedder.js';
+import { ProviderFactory } from '../src/processing/provider-factory.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('HighOrderCompressor', () => {
@@ -19,7 +19,7 @@ describe('HighOrderCompressor', () => {
   beforeEach(() => {
     tempDir = createTempDir();
     graphStore = new ContextGraphStore(path.join(tempDir, 'context-graph.db'));
-    compressor = new HighOrderCompressor(graphStore, new Embedder(''));
+    compressor = new HighOrderCompressor(graphStore, ProviderFactory.offline());
   });
 
   afterEach(() => {

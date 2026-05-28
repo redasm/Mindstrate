@@ -25,10 +25,8 @@ import {
   dependencyFingerprint,
   metaPath,
   type DetectedProject,
-  type MindstrateConfig,
 } from '@mindstrate/server';
 import { SyncManager, VaultLayout } from '@mindstrate/obsidian-sync';
-import { upsertProjectEnv } from '../cli-config.js';
 import { buildProjectGraphAnalysisLines } from './init.js';
 import {
   printIndexProgress,
@@ -40,7 +38,6 @@ import { normalizeOptionalPath } from './setup-prompts.js';
 
 export interface InitializeLocalProjectOptions {
   vaultPath?: string;
-  llmEnv?: Record<string, string>;
   onProgress?: SetupProgress;
 }
 
@@ -51,7 +48,7 @@ export async function initializeLocalProject(
 ): Promise<void> {
   const vaultPath = normalizeOptionalPath(options.vaultPath);
   options.onProgress?.('Opening local memory database');
-  const memory = new Mindstrate(setupMindstrateConfig(dataDir, options.llmEnv));
+  const memory = new Mindstrate({ dataDir, logger: consoleLogger });
   try {
     await runSetupStage('opening local memory database', () => memory.init());
     options.onProgress?.('Writing project snapshot');
@@ -116,47 +113,6 @@ export async function initializeLocalProject(
   } finally {
     memory.close();
   }
-}
-
-export function setupMindstrateConfig(
-  dataDir: string,
-  llmEnv: Record<string, string> | undefined,
-): Partial<MindstrateConfig> {
-  return {
-    dataDir,
-    openaiApiKey: llmEnv?.['OPENAI_API_KEY'],
-    openaiBaseUrl: llmEnv?.['OPENAI_BASE_URL'],
-    llmModel: llmEnv?.['MINDSTRATE_LLM_MODEL'],
-    embeddingModel: llmEnv?.['MINDSTRATE_EMBEDDING_MODEL'],
-    logger: consoleLogger,
-  };
-}
-
-/**
- * Persist LLM credentials to the project's `.env` file. Returns the
- * resolved env path, or `null` when no values were provided. Side effect
- * is bounded to the filesystem; callers must invoke
- * `injectLlmEnvIntoProcess` separately when they also want
- * `process.env` updated.
- */
-export function writeProjectLlmEnv(
-  projectRoot: string,
-  llmEnv: Record<string, string>,
-): string | null {
-  if (Object.keys(llmEnv).length === 0) return null;
-  return upsertProjectEnv(projectRoot, llmEnv);
-}
-
-/**
- * Mutate the current process's environment with the just-collected LLM
- * credentials so the subsequent in-process `Mindstrate` instance picks
- * them up via `loadConfig`. Kept separate from `writeProjectLlmEnv` so
- * tests, multi-tenant tooling, and any future "write env without
- * mutating the parent process" caller can opt out of the global side
- * effect.
- */
-export function injectLlmEnvIntoProcess(llmEnv: Record<string, string>): void {
-  for (const [key, value] of Object.entries(llmEnv)) process.env[key] = value;
 }
 
 export async function exportVaultDuringSetup(

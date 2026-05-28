@@ -1,4 +1,5 @@
 import type { McpApi, McpToolResponse } from '../types.js';
+import { assertProjectAllowed } from '../allowed-projects.js';
 
 type ToolInput = any;
 
@@ -6,6 +7,7 @@ export async function handleMetabolismRun(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
+  assertProjectAllowed(input.project);
   if (input.stage) {
     const result = await api.runMetabolismStage(input.stage, { project: input.project });
     return {

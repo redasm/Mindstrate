@@ -1,5 +1,6 @@
 import { CaptureSource } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
+import { assertProjectAllowed } from '../allowed-projects.js';
 import { formatGraphKnowledgeResults } from './graph-knowledge-format.js';
 
 type ToolInput = any;
@@ -42,6 +43,7 @@ export async function handleMemoryAdd(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
+  assertProjectAllowed(input.project);
   const result = await api.add({
     type: input.type,
     title: input.title,

@@ -22,14 +22,12 @@ function commitFile(repoPath: string, file: string, content: string, message: st
 describe('RepoScannerService', () => {
   let repoDir: string;
   let memoryDir: string;
-  let scannerDir: string;
   let memory: Mindstrate;
   let service: RepoScannerService;
 
   beforeEach(async () => {
     repoDir = createTempDir('repo-scanner-repo-');
     memoryDir = createTempDir('repo-scanner-memory-');
-    scannerDir = createTempDir('repo-scanner-db-');
     initRepo(repoDir);
     commitFile(repoDir, 'app.ts', [
       'export function fixUser() {',
@@ -39,12 +37,9 @@ describe('RepoScannerService', () => {
       '}',
     ].join('\n'), 'fix: handle missing user');
 
-    memory = new Mindstrate({ dataDir: memoryDir, openaiApiKey: '' });
+    memory = new Mindstrate({ dataDir: memoryDir });
     await memory.init();
-    service = new RepoScannerService({
-      scannerDbPath: path.join(scannerDir, 'scanner.db'),
-      memory,
-    });
+    service = new RepoScannerService({ memory });
     await service.init();
   });
 
@@ -53,7 +48,6 @@ describe('RepoScannerService', () => {
     memory.close();
     removeTempDir(repoDir);
     removeTempDir(memoryDir);
-    removeTempDir(scannerDir);
   });
 
   it('initializes from current head when initMode=from_now', async () => {
@@ -67,7 +61,7 @@ describe('RepoScannerService', () => {
     const result = await service.runSource(source.id);
     expect(result.mode).toBe('initialized');
     expect(result.itemsImported).toBe(0);
-    expect(service.store.getSource(source.id)?.lastCursor).toBeTruthy();
+    expect(service.scanner.getSource(source.id)?.lastCursor).toBeTruthy();
   });
 
   it('backfills recent commits and writes extracted knowledge', async () => {
@@ -119,12 +113,12 @@ describe('RepoScannerService', () => {
 
     const result = await service.runSource(source.id);
     expect(result.itemsFailed).toBe(1);
-    expect(service.store.listFailedItems(source.id)).toHaveLength(1);
+    expect(service.scanner.listFailedItems(source.id)).toHaveLength(1);
 
     shouldFail = false;
     const retried = await service.retryFailedItems(source.id);
     expect(retried.itemsImported).toBe(1);
-    expect(service.store.listFailedItems(source.id)).toHaveLength(0);
+    expect(service.scanner.listFailedItems(source.id)).toHaveLength(0);
   });
 
   it('returns source status summary including runs and failed items', async () => {

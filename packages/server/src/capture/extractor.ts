@@ -16,7 +16,7 @@ import {
   buildExtractionUserPrompt,
 } from '../prompts.js';
 import { LLMError } from '@mindstrate/protocol';
-import { getOpenAIClient } from '../openai-client.js';
+import type { ProviderFactory } from '../processing/provider-factory.js';
 import { errorMessage, truncateText } from '@mindstrate/protocol/text';
 
 export interface CommitInfo {
@@ -34,26 +34,20 @@ export interface ExtractionResult {
 }
 
 export class KnowledgeExtractor {
-  private apiKey: string;
-  private baseURL?: string;
-  private model: string;
-
-  constructor(apiKey: string = '', model: string = 'gpt-4o-mini', baseURL?: string) {
-    this.apiKey = apiKey;
-    this.baseURL = baseURL;
-    this.model = model;
-  }
+  constructor(private readonly providerFactory: ProviderFactory) {}
 
   /** 从一次 commit 中提取知识 */
-  async extractFromCommit(commit: CommitInfo): Promise<ExtractionResult> {
+  async extractFromCommit(commit: CommitInfo, project: string = ''): Promise<ExtractionResult> {
     // 先用规则判断是否值得提取
     if (!this.isWorthExtracting(commit)) {
       return { extracted: false, reason: 'Commit does not appear to contain extractable knowledge' };
     }
 
-    // 如果有 API key，使用 LLM 提取
-    if (this.apiKey) {
-      return this.llmExtract(commit);
+    const providers = this.providerFactory.forProject(project);
+
+    // 如果有配置，使用 LLM 提取
+    if (providers.hasConfig) {
+      return this.llmExtract(commit, providers);
     }
 
     // 否则使用基于规则的提取
@@ -93,9 +87,12 @@ export class KnowledgeExtractor {
   }
 
   /** 使用 LLM 提取知识 */
-  private async llmExtract(commit: CommitInfo): Promise<ExtractionResult> {
+  private async llmExtract(
+    commit: CommitInfo,
+    providers: { llmClientPromise: Promise<unknown>; llmModel: string },
+  ): Promise<ExtractionResult> {
     try {
-      const client = await getOpenAIClient(this.apiKey, this.baseURL);
+      const client = (await providers.llmClientPromise) as Awaited<ReturnType<typeof import('../openai-client.js').getOpenAIClient>>;
       if (!client) {
         return { extracted: false, reason: 'OpenAI client unavailable (apiKey missing or openai package not installed)' };
       }
@@ -104,7 +101,7 @@ export class KnowledgeExtractor {
       const truncatedDiff = truncateText(commit.diff, 4016, '\n... (truncated)');
 
       const response = await client.chat.completions.create({
-        model: this.model,
+        model: providers.llmModel,
         temperature: 0.1,
         response_format: { type: 'json_object' },
         messages: [
@@ -161,7 +158,6 @@ export class KnowledgeExtractor {
       // Log as LLMError but fall through to rule-based extraction
       const llmErr = new LLMError(`LLM extraction failed: ${errMsg}`, {
         commitHash: commit.hash,
-        model: this.model,
       });
       return { extracted: false, reason: llmErr.message };
     }

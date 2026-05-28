@@ -1,5 +1,5 @@
 import { cosineSimilarity } from '../processing/vector-distance.js';
-import type { Embedder } from '../processing/embedder.js';
+import type { ProviderFactory } from '../processing/provider-factory.js';
 import { lexicalOverlap } from './context-clustering.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
@@ -30,12 +30,13 @@ export interface PatternCompressionResult {
 export class PatternCompressor {
   constructor(
     private readonly graphStore: ContextGraphStore,
-    private readonly embedder: Embedder,
+    private readonly providerFactory: ProviderFactory,
   ) {}
 
   async compressProjectSummaries(
     options: PatternCompressionOptions = {},
   ): Promise<PatternCompressionResult> {
+    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
     // Default of 1 positive feedback (was 3) accepts the single-user
     // single-project flow: a SUMMARY that the agent reported as
     // `adopted` even once is already a credible PATTERN candidate.
@@ -45,7 +46,7 @@ export class PatternCompressor {
     // still rejects nodes the agent actually rejected.
     const minPositiveFeedback = options.minPositiveFeedback ?? 1;
     const minDistinctProjects = options.minDistinctProjects ?? 1;
-    const run = await runSubstrateCompression(this.graphStore, this.embedder, {
+    const run = await runSubstrateCompression(this.graphStore, embedder, {
       sourceType: SubstrateType.SUMMARY,
       sourceDomain: ContextDomainType.SESSION_SUMMARY,
       targetType: SubstrateType.PATTERN,

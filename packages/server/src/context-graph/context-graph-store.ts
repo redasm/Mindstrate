@@ -113,6 +113,10 @@ export class ContextGraphStore {
     return this.nodes.list(options);
   }
 
+  listKnownProjects(): string[] {
+    return this.nodes.listDistinctProjects();
+  }
+
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
     return this.nodes.update(id, input);
   }

@@ -17,7 +17,7 @@
 | Git | 源码安装和 Git 采集需要 |
 | Docker | 仅 Team Server Docker 部署需要 |
 | p4 CLI | 可选，仅 Perforce 采集需要 |
-| OpenAI 兼容 API | 可选；不配置时仍可用离线 hash embedding 和确定性提取 |
+| OpenAI 兼容 API | 可选；不配置时仍可用离线 hash embedding 和确定性提取。团队模式下按项目在 Web UI 中配置 |
 
 ## 从源码构建
 
@@ -130,6 +130,28 @@ curl http://127.0.0.1:3388/health
 # Web UI: http://<server>:3377
 ```
 
+### 3. Web 控制台
+
+部署完成后，所有团队运维都在 Web UI 完成。打开 `http://<server>:3377/login`，使用 `.env.deploy` 中的 `TEAM_API_KEY` 登录（这是 **唯一** 的管理员引导密钥，不要随成员分发；成员密钥在登录后于 Settings → Users 中签发）。
+
+![Web UI 登录](images/login.jpg)
+
+登录后会进入 Settings 总览：
+
+![Settings 总览](images/setting_overview.jpg)
+
+按顺序完成以下首次配置：
+
+1. **Settings → Users**：为每位成员创建一条 API Key，可指定 `admin/member` 角色以及该 Key 允许访问的项目集合（`*` 表示所有项目）。把生成的 Key 通过安全渠道发给成员，作为 `TEAM_API_KEY` 注入到该成员的 MCP 配置中。
+
+   ![Users 与 API Key](images/setting_user.jpg)
+
+2. **Settings → Scanner Sources**：按项目添加 Git/P4 扫描源（仓库路径、远端 URL、Auth token、轮询间隔、初始模式等）。Daemon 会读取这里的配置自动采集，不再依赖以前的 `MINDSTRATE_SCANNER_*` 环境变量。
+
+3. **Settings → LLM Configs**：按项目配置 OpenAI 兼容 provider（API Key、Base URL、LLM 模型、Embedding 模型、Embedding 维度）。未配置的项目会回退到 256 维离线哈希向量并跳过 LLM 抽取。详见 [LLM 服务商配置](#llm-服务商配置)。
+
+成员视角的浏览能力（知识、项目图谱、全局搜索）见 [Web 控制台 — 成员视角](#web-控制台--成员视角)。
+
 ### 部署文件
 
 ```text
@@ -171,7 +193,7 @@ docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy
 0 3 * * * cd /opt/Mindstrate && EXPORT_DIR=/srv/mindstrate-data-exports bash deploy/export-data-volume.sh >> /var/log/mindstrate-data-export.log 2>&1
 ```
 
-### 端口、访问范围和 OpenAI
+### 端口和访问范围
 
 如果 `preflight.sh` 报端口占用，修改 `deploy/.env.deploy`：
 
@@ -187,7 +209,7 @@ TEAM_BIND=127.0.0.1
 WEB_UI_BIND=127.0.0.1
 ```
 
-不设置 `OPENAI_API_KEY` 时，服务使用离线 hash embedding 和确定性提取；设置后会启用 OpenAI 兼容 embedding 和 LLM 抽取能力。
+> LLM provider、扫描源和成员 API Key 不再通过环境变量配置，全部在 Web UI 中按项目治理。仓库根目录的 `.env.deploy` 只保留端口、绑定地址、`TEAM_API_KEY`（管理员引导密钥）、日志级别和 Locale。
 
 ### 部署故障排查
 
@@ -200,6 +222,8 @@ WEB_UI_BIND=127.0.0.1
 | 升级后 Web UI 报 502 | 等待 Next.js 启动，或查看 `docker compose ... logs web-ui` |
 
 ## 团队成员接入
+
+> 接入前，管理员需要先在 Web UI `Settings → Users` 中为该成员签发一条 API Key（建议使用 `member` 角色，并把 projects 限定到他需要访问的项目集合）。下文中的 `<key>` 指这条 **成员密钥**，而不是 `.env.deploy` 中的管理员引导密钥 `TEAM_API_KEY`。
 
 每个成员在自己的项目中运行：
 
@@ -219,7 +243,7 @@ TEAM_SERVER_URL=http://<server>:3388
 TEAM_API_KEY=<key>
 ```
 
-设置 `TEAM_SERVER_URL` 后，MCP server 进入团队模式，不再使用本地 SQLite 作为事实源，而是把读写转发到 Team Server。
+设置 `TEAM_SERVER_URL` 后，MCP server 进入团队模式，不再使用本地 SQLite 作为事实源，而是把读写转发到 Team Server。成员只能访问其密钥被授权的项目，跨项目读写会被服务器以 403 拒绝。
 
 ## 团队成员安装包
 
@@ -372,35 +396,50 @@ MCP 配置只让工具可用，不一定会让 AI 主动使用它。建议在每
 
 ## LLM 服务商配置
 
-Mindstrate 不强制依赖 LLM。不设置 `OPENAI_API_KEY` 时，会使用确定性提取和本地 hash embedding。
+Mindstrate 不强制依赖 LLM。**未配置 LLM provider 的项目** 会使用确定性提取和 256 维本地 hash embedding，仍可用但语义检索质量较弱、知识进化也会跳过 LLM 抽取。
 
-如果需要更好的语义检索、提交提取、图谱 enrichment 和知识进化，可以配置 OpenAI 兼容服务：
+团队模式下，LLM/Embedding provider 在 Web UI 中按项目配置，不再使用进程级环境变量。打开 `Settings → LLM Configs → + 新增配置`，按字段填写：
 
-```bash
-mindstrate setup \
-  --openai-api-key sk-... \
-  --openai-base-url https://api.openai.com/v1 \
-  --llm-model gpt-4o-mini \
-  --embedding-model text-embedding-3-small
+| 字段 | 说明 |
+| --- | --- |
+| Project | 该配置作用的项目名（同一项目只能存在一条配置）。 |
+| OpenAI API Key | 以明文存入共享 SQLite，与扫描源凭据同等级别。 |
+| LLM Base URL | 可选；留空使用 OpenAI 官方端点。 |
+| Embedding Base URL | 可选；留空与 LLM Base URL 共用同一端点。 |
+| LLM Model | `gpt-4o-mini`、`qwen-max`、`deepseek-chat` 等。 |
+| Embedding Model | `text-embedding-3-small`、`text-embedding-v3`、`bge-m3` 等。常见模型会自动填充维度。 |
+| Embedding Dim | 必须与模型实际输出一致；不同项目可以使用不同维度，向量会写入各自的独立集合。 |
+
+常见 OpenAI 兼容 Base URL：
+
+```text
+OpenAI 官方:        https://api.openai.com/v1
+阿里云 DashScope:   https://dashscope.aliyuncs.com/compatible-mode/v1
+DeepSeek:           https://api.deepseek.com/v1
+Moonshot:           https://api.moonshot.cn/v1
+本地 Ollama:        http://127.0.0.1:11434/v1
 ```
 
-常见兼容服务：
+修改配置后 provider 缓存会失效，下一次写入或搜索会立即使用新模型；删除配置后该项目自动回退到离线模式。
 
-```bash
-# 阿里云 DashScope compatible mode
-OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-MINDSTRATE_LLM_MODEL=qwen-max
-MINDSTRATE_EMBEDDING_MODEL=text-embedding-v3
+> 个人本地模式（未连接 Team Server）仍支持把 `OPENAI_API_KEY` 通过 MCP 配置注入到本地 MCP 进程；但 Team Server 上的 LLM 配置只通过 Web UI 管理。
 
-# Moonshot
-OPENAI_BASE_URL=https://api.moonshot.cn/v1
-MINDSTRATE_LLM_MODEL=moonshot-v1-32k
+## Web 控制台 — 成员视角
 
-# 本地 Ollama 兼容端点
-OPENAI_API_KEY=ollama
-OPENAI_BASE_URL=http://127.0.0.1:11434/v1
-MINDSTRATE_LLM_MODEL=qwen2.5
-```
+成员使用自己的 API Key 登录 Web UI 后，可以在浏览器中：
+
+- 浏览该项目的知识条目、了解 ECS 代谢谱系（episode → snapshot → pattern → rule）：
+
+  ![知识浏览](images/knowledge.jpg)
+
+- 浏览项目图谱节点、依赖关系、影响面和编辑前安全提示，并把人工备注作为 overlay 写回图谱：
+
+  ![项目图谱](images/project_graph.jpg)
+
+- 触发跨项目的全局搜索，定位知识、项目快照或图谱节点：
+
+  ![全局搜索](images/golbal_search.jpg)
+
 
 ## Git 提交建议
 

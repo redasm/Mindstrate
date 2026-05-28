@@ -1,5 +1,6 @@
 import type { AssembledContext, AssembledRetrieval, ProjectGraphContextFact } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
+import { assertProjectAllowed } from '../allowed-projects.js';
 import { appendGraphContextSections } from './memory-handlers.js';
 
 type ToolInput = any;
@@ -122,6 +123,7 @@ export async function handleContextInternalize(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
+  assertProjectAllowed(input.project);
   const accepted = input.accept
     ? await api.acceptInternalizationSuggestions(input)
     : undefined;

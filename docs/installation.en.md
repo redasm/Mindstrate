@@ -11,7 +11,7 @@ This guide covers local personal setup, team member setup, Team Server deploymen
 | Git | Required for source installation and Git collection |
 | Docker | Required only for Docker Team Server deployment |
 | p4 CLI | Optional, only for Perforce collection |
-| OpenAI-compatible API | Optional; deterministic extraction and local hash embeddings work without it |
+| OpenAI-compatible API | Optional; deterministic extraction and local hash embeddings work without it. In team mode this is configured per-project from the Web UI |
 
 ## Build From Source
 
@@ -124,6 +124,28 @@ curl http://127.0.0.1:3388/health
 # Web UI: http://<server>:3377
 ```
 
+### 3. Web Console
+
+Once Team Server is running, all team operations happen in the Web UI. Open `http://<server>:3377/login` and sign in with the `TEAM_API_KEY` from `.env.deploy`. That value is the **admin bootstrap key only** — do not hand it to members; member keys are minted from the Web UI under Settings → Users.
+
+![Web UI login](images/login.jpg)
+
+After signing in you land on Settings:
+
+![Settings overview](images/setting_overview.jpg)
+
+Complete the first-time setup in this order:
+
+1. **Settings → Users**: mint an API key per member, choose `admin` or `member`, and restrict the key to the projects that member should reach (`*` means all projects). Distribute the key over a secure channel so the member can use it as `TEAM_API_KEY` in their MCP configuration.
+
+   ![Users and API keys](images/setting_user.jpg)
+
+2. **Settings → Scanner Sources**: register Git or P4 scanner sources per project (repo path, remote URL, auth token, poll interval, init mode). The scanner daemon reads this table directly — the old `MINDSTRATE_SCANNER_*` env vars are no longer used.
+
+3. **Settings → LLM Configs**: configure OpenAI-compatible providers per project (API key, base URL, LLM model, embedding model, embedding dim). Projects without a config fall back to the 256-dim offline hash embedder and skip LLM extraction. See [LLM Provider Configuration](#llm-provider-configuration) for details.
+
+For the member-facing browsing surface (knowledge, project graph, global search), see [Web Console — Member View](#web-console--member-view).
+
 ### Deployment Files
 
 ```text
@@ -165,7 +187,7 @@ Example cron backup:
 0 3 * * * cd /opt/Mindstrate && EXPORT_DIR=/srv/mindstrate-data-exports bash deploy/export-data-volume.sh >> /var/log/mindstrate-data-export.log 2>&1
 ```
 
-### Ports, Bind Address, And OpenAI
+### Ports And Bind Address
 
 If `preflight.sh` reports a port conflict, edit `deploy/.env.deploy`:
 
@@ -181,7 +203,7 @@ TEAM_BIND=127.0.0.1
 WEB_UI_BIND=127.0.0.1
 ```
 
-Without `OPENAI_API_KEY`, the service uses offline hash embeddings and deterministic extraction. When an OpenAI-compatible key is configured, embedding and LLM extraction are enabled.
+> LLM providers, scanner sources, and member API keys are no longer driven by env vars — they live in the Web UI as per-project records. The `.env.deploy` file only carries ports, bind addresses, the admin bootstrap `TEAM_API_KEY`, log level, and locale.
 
 ### Deployment Troubleshooting
 
@@ -194,6 +216,8 @@ Without `OPENAI_API_KEY`, the service uses offline hash embeddings and determini
 | Web UI returns 502 after upgrade | Wait for Next.js startup or inspect `docker compose ... logs web-ui` |
 
 ## Team Member Setup
+
+> Before a member can connect, the admin must mint an API key for them in the Web UI under `Settings → Users` (use the `member` role and restrict the key to the projects that member should reach). The `<key>` in the commands below refers to that **per-member key**, not the admin bootstrap `TEAM_API_KEY` from `.env.deploy`.
 
 Each member runs this inside their project:
 
@@ -213,7 +237,7 @@ TEAM_SERVER_URL=http://<server>:3388
 TEAM_API_KEY=<key>
 ```
 
-When `TEAM_SERVER_URL` is present, the MCP server runs in team mode and forwards reads/writes to Team Server instead of using local SQLite as the source of truth.
+When `TEAM_SERVER_URL` is present, the MCP server runs in team mode and forwards reads/writes to Team Server instead of using local SQLite as the source of truth. Members can only access the projects their key is scoped to; cross-project access returns 403.
 
 ## Team Member Installer Package
 
@@ -366,35 +390,50 @@ If the project already has `AGENTS.md`, append these rules to the existing file.
 
 ## LLM Provider Configuration
 
-Mindstrate does not require an LLM. Without `OPENAI_API_KEY`, it uses deterministic extraction and local hash embeddings.
+Mindstrate does not require an LLM. **Projects without an LLM config** fall back to deterministic extraction and a 256-dim local hash embedder — still usable, but semantic search quality is weaker and the LLM-driven extraction passes are skipped.
 
-Configure an OpenAI-compatible provider for stronger semantic search, commit extraction, graph enrichment, and knowledge evolution:
+In team mode, LLM and embedding providers are configured per-project from the Web UI; the process-level env vars are gone. Open `Settings → LLM Configs → + Add config` and fill in:
 
-```bash
-mindstrate setup \
-  --openai-api-key sk-... \
-  --openai-base-url https://api.openai.com/v1 \
-  --llm-model gpt-4o-mini \
-  --embedding-model text-embedding-3-small
+| Field | Notes |
+| --- | --- |
+| Project | The project this config applies to. Only one config per project. |
+| OpenAI API Key | Stored as plaintext in the shared SQLite, same handling as scanner credentials. |
+| LLM Base URL | Optional; leave blank for OpenAI official. |
+| Embedding Base URL | Optional; defaults to the LLM Base URL. |
+| LLM Model | `gpt-4o-mini`, `qwen-max`, `deepseek-chat`, ... |
+| Embedding Model | `text-embedding-3-small`, `text-embedding-v3`, `bge-m3`, ... The dimension auto-fills for common models. |
+| Embedding Dim | Must match the actual model output. Different projects can use different dimensions; vectors live in separate per-project collections. |
+
+Common OpenAI-compatible base URLs:
+
+```text
+OpenAI official:    https://api.openai.com/v1
+Aliyun DashScope:   https://dashscope.aliyuncs.com/compatible-mode/v1
+DeepSeek:           https://api.deepseek.com/v1
+Moonshot:           https://api.moonshot.cn/v1
+Local Ollama:       http://127.0.0.1:11434/v1
 ```
 
-Common compatible providers:
+When a config is updated, the provider cache invalidates and the next embed/search uses the new model. Deleting a config drops the project back to offline mode automatically.
 
-```bash
-# DashScope compatible mode
-OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-MINDSTRATE_LLM_MODEL=qwen-max
-MINDSTRATE_EMBEDDING_MODEL=text-embedding-v3
+> Local personal mode (no Team Server) still accepts `OPENAI_API_KEY` injected into the local MCP process. Team Server LLM configuration is only managed through the Web UI.
 
-# Moonshot
-OPENAI_BASE_URL=https://api.moonshot.cn/v1
-MINDSTRATE_LLM_MODEL=moonshot-v1-32k
+## Web Console — Member View
 
-# Local Ollama-compatible endpoint
-OPENAI_API_KEY=ollama
-OPENAI_BASE_URL=http://127.0.0.1:11434/v1
-MINDSTRATE_LLM_MODEL=qwen2.5
-```
+After signing in with their own API key, members can use the Web UI to:
+
+- Browse the project's knowledge entries and follow the ECS lineage (episode → snapshot → pattern → rule):
+
+  ![Knowledge browser](images/knowledge.jpg)
+
+- Browse project graph nodes, dependencies, blast radius, and edit-safety hints, and write structured overlays back into the graph:
+
+  ![Project graph](images/project_graph.jpg)
+
+- Run cross-project global search to locate knowledge entries, snapshots, or graph nodes:
+
+  ![Global search](images/golbal_search.jpg)
+
 
 ## What To Commit
 

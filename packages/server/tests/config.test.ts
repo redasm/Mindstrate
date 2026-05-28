@@ -1,22 +1,13 @@
-/**
- * Tests for config loading — focused on the OpenAI-compatible provider
- * configuration that lets users point Mindstrate at Aliyun, DeepSeek,
- * Moonshot, local Ollama, etc.
- */
-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { loadConfig } from '../src/config.js';
 
-describe('loadConfig — OpenAI-compatible provider settings', () => {
+describe('loadConfig', () => {
   const ENV_KEYS = [
-    'OPENAI_API_KEY',
-    'OPENAI_BASE_URL',
-    'OPENAI_EMBEDDING_BASE_URL',
-    'MINDSTRATE_EMBEDDING_MODEL',
-    'MINDSTRATE_LLM_MODEL',
     'MINDSTRATE_PROJECT_GRAPH_LLM_FACT_BATCH_SIZE',
     'MINDSTRATE_PROJECT_GRAPH_LLM_DELAY_MS',
     'MINDSTRATE_PROJECT_GRAPH_LLM_TIMEOUT_MS',
+    'MINDSTRATE_VECTOR_BACKEND',
+    'MINDSTRATE_QDRANT_URL',
   ];
   const saved: Record<string, string | undefined> = {};
 
@@ -34,47 +25,29 @@ describe('loadConfig — OpenAI-compatible provider settings', () => {
     }
   });
 
-  it('defaults: no baseURL, OpenAI official endpoint', () => {
+  it('defaults to local vector backend with sensible projectGraphLlm values', () => {
     const cfg = loadConfig();
-    expect(cfg.openaiBaseUrl).toBeUndefined();
-    expect(cfg.openaiEmbeddingBaseUrl).toBeUndefined();
-    expect(cfg.embeddingModel).toBe('text-embedding-3-small');
-    expect(cfg.llmModel).toBe('gpt-4o-mini');
+    expect(cfg.vectorBackend).toBe('local');
+    expect(cfg.collectionName).toBe('mindstrate');
+    expect(cfg.projectGraphLlm).toEqual({
+      factBatchSize: 20,
+      requestDelayMs: 1500,
+      requestTimeoutMs: 60000,
+    });
   });
 
-  it('reads OPENAI_BASE_URL from environment (Aliyun example)', () => {
-    process.env['OPENAI_BASE_URL'] = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-    process.env['OPENAI_API_KEY'] = 'sk-aliyun-test';
-    process.env['MINDSTRATE_LLM_MODEL'] = 'qwen-max';
-    process.env['MINDSTRATE_EMBEDDING_MODEL'] = 'text-embedding-v3';
-
+  it('reads MINDSTRATE_VECTOR_BACKEND=qdrant with its URL', () => {
+    process.env['MINDSTRATE_VECTOR_BACKEND'] = 'qdrant';
+    process.env['MINDSTRATE_QDRANT_URL'] = 'http://qdrant:6333';
     const cfg = loadConfig();
-    expect(cfg.openaiApiKey).toBe('sk-aliyun-test');
-    expect(cfg.openaiBaseUrl).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1');
-    expect(cfg.llmModel).toBe('qwen-max');
-    expect(cfg.embeddingModel).toBe('text-embedding-v3');
-  });
-
-  it('OPENAI_EMBEDDING_BASE_URL is independent (mixed-provider scenario)', () => {
-    // Use Aliyun for chat (cheap), but OpenAI for embeddings (high quality).
-    process.env['OPENAI_BASE_URL'] = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-    process.env['OPENAI_EMBEDDING_BASE_URL'] = 'https://api.openai.com/v1';
-
-    const cfg = loadConfig();
-    expect(cfg.openaiBaseUrl).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1');
-    expect(cfg.openaiEmbeddingBaseUrl).toBe('https://api.openai.com/v1');
+    expect(cfg.vectorBackend).toBe('qdrant');
+    expect(cfg.qdrantUrl).toBe('http://qdrant:6333');
   });
 
   it('explicit overrides win over environment', () => {
-    process.env['OPENAI_BASE_URL'] = 'https://from-env';
-    const cfg = loadConfig({ openaiBaseUrl: 'https://from-override' });
-    expect(cfg.openaiBaseUrl).toBe('https://from-override');
-  });
-
-  it('unset env => undefined fields (so OpenAI SDK falls back to its default)', () => {
-    const cfg = loadConfig();
-    expect('openaiBaseUrl' in cfg).toBe(true);
-    expect(cfg.openaiBaseUrl).toBeUndefined();
+    process.env['MINDSTRATE_VECTOR_BACKEND'] = 'qdrant';
+    const cfg = loadConfig({ vectorBackend: 'local' });
+    expect(cfg.vectorBackend).toBe('local');
   });
 
   it('reads project graph LLM throttling and timeout settings', () => {

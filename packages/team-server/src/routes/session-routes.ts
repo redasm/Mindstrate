@@ -1,9 +1,20 @@
 import type { Express } from 'express';
-import { asyncRoute, readParam, type TeamRouteDeps } from '../http/route-support.js';
+import {
+  asyncRoute,
+  authorizeProject,
+  authorizeProjectForResource,
+  readParam,
+  withInitializedMemory,
+  type TeamRouteDeps,
+} from '../http/route-support.js';
 
 export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): void => {
-  app.post('/api/session/start', asyncRoute(async (req, res) => {
-    const project = req.body.project || '';
+  app.post('/api/session/start', withInitializedMemory(memory, async (req, res) => {
+    const requestedProject = req.body.project || '';
+    const authorized = authorizeProject(req, res, requestedProject || undefined, 'write');
+    if (authorized === null) return;
+
+    const project = authorized ?? requestedProject;
     const session = await memory.sessions.startSession({
       project,
       techContext: req.body.techContext,
@@ -13,23 +24,39 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json({ session, context: context || null });
   }));
 
-  app.post('/api/session/save', asyncRoute((req, res) => {
+  app.post('/api/session/save', withInitializedMemory(memory, async (req, res) => {
     const { sessionId, type, content, metadata } = req.body;
     if (!sessionId || !type || !content) {
       res.status(400).json({ error: 'sessionId, type, and content are required' });
       return;
     }
 
+    const authorized = authorizeProjectForResource(
+      req,
+      res,
+      () => memory.sessions.getSession(sessionId)?.project,
+      'write',
+    );
+    if (authorized === null) return;
+
     memory.sessions.saveObservation({ sessionId, type, content, metadata });
     res.json({ success: true });
   }));
 
-  app.post('/api/session/end', asyncRoute(async (req, res) => {
+  app.post('/api/session/end', withInitializedMemory(memory, async (req, res) => {
     const { sessionId, summary, openTasks } = req.body;
     if (!sessionId) {
       res.status(400).json({ error: 'sessionId is required' });
       return;
     }
+
+    const authorized = authorizeProjectForResource(
+      req,
+      res,
+      () => memory.sessions.getSession(sessionId)?.project,
+      'write',
+    );
+    if (authorized === null) return;
 
     if (summary) {
       memory.sessions.compressSession({ sessionId, summary, openTasks });
@@ -81,10 +108,6 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
 
     const applied = memory.context.recordFeedback(retrievalId, signal, context);
     if (!applied) {
-      // Reject unknown retrieval ids loudly. Silent-success used to let
-      // typo'd / fabricated ids look like real writes (the MCP layer
-      // would then echo "Feedback recorded" even though no graph node
-      // was touched).
       res.status(404).json({ error: `Unknown retrievalId: ${retrievalId}` });
       return;
     }

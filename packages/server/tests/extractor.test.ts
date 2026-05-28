@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { KnowledgeExtractor, type CommitInfo } from '../src/capture/extractor.js';
+import { ProviderFactory } from '../src/processing/provider-factory.js';
 import { KnowledgeType, CaptureSource } from '@mindstrate/protocol';
 
 function makeCommit(overrides: Partial<CommitInfo> = {}): CommitInfo {
@@ -28,7 +29,7 @@ function makeCommit(overrides: Partial<CommitInfo> = {}): CommitInfo {
 }
 
 describe('KnowledgeExtractor', () => {
-  const extractor = new KnowledgeExtractor(''); // no API key = rule mode
+  const extractor = new KnowledgeExtractor(ProviderFactory.offline()); // offline mode = rule-based extraction
 
   describe('extractFromCommit', () => {
     it('should extract from a fix commit', async () => {

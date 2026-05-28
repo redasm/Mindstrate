@@ -5,7 +5,7 @@ import {
   toGraphKnowledgeView,
   type CreateKnowledgeInput,
 } from '@mindstrate/server';
-import { asyncRoute, authorizeProject, parseLimit, readParam, readStringArray, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
+import { asyncRoute, authorizeProject, authorizeProjectForResource, parseLimit, readParam, readStringArray, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
 import { filterGraphKnowledgeViews, includesAll } from './knowledge-filters.js';
 
 const createKnowledgeInput = (body: any): CreateKnowledgeInput => ({
@@ -94,6 +94,14 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       return;
     }
 
+    const project = authorizeProjectForResource(
+      req,
+      res,
+      () => memory.context.getContextNode(id)?.project,
+      'write',
+    );
+    if (project === null) return;
+
     const deleted = memory.context.deleteContextNode(id);
     if (!deleted) {
       res.status(404).json({ error: 'Not found' });
@@ -143,6 +151,10 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
 
     for (const entry of entries) {
       try {
+        const entryProject = entry.context?.project ?? entry.project;
+        const project = authorizeProject(req, res, entryProject, 'write');
+        if (project === null) return;
+
         const result = await memory.knowledge.add({
           type: entry.type,
           title: entry.title,
@@ -150,7 +162,7 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
           solution: entry.solution,
           codeSnippets: entry.codeSnippets,
           tags: entry.tags,
-          context: entry.context,
+          context: { ...(entry.context ?? {}), project },
           author: entry.metadata?.author ?? entry.author,
           source: entry.metadata?.source ?? entry.source,
           commitHash: entry.metadata?.commitHash ?? entry.commitHash,

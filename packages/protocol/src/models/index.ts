@@ -5,3 +5,6 @@ export * from './context-event.js';
 export * from './metabolism.js';
 export * from './projection.js';
 export * from './project-graph.js';
+export * from './api-key.js';
+export * from './scan-source.js';
+export * from './llm-config.js';

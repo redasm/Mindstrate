@@ -27,7 +27,6 @@ import {
   normalizeOptionalPath,
   printBanner,
   readExperience,
-  readLlmEnvironment,
   readOptionalVaultPath,
   readTool,
   readValue,
@@ -36,8 +35,6 @@ import {
 import {
   exportVaultDuringSetup,
   initializeLocalProject,
-  injectLlmEnvIntoProcess,
-  writeProjectLlmEnv,
 } from './setup-local.js';
 import { runTeamDeployWizard } from './setup-team-deploy.js';
 import { printStepProgress } from './setup-progress.js';
@@ -49,10 +46,6 @@ export const setupCommand = new Command('setup')
   .option('--vault <path>', 'Obsidian vault path for local personal setup')
   .option('--team-server-url <url>', 'Team Server URL for team mode')
   .option('--team-api-key <key>', 'Team API key for team mode')
-  .option('--openai-api-key <key>', 'LLM API key to inject into generated MCP config')
-  .option('--openai-base-url <url>', 'OpenAI-compatible base URL')
-  .option('--llm-model <model>', 'Chat/completion model')
-  .option('--embedding-model <model>', 'Embedding model')
   .option('-y, --yes', 'Use defaults for omitted interactive answers', false)
   .action(async (options: SetupOptions) => {
     const cwd = process.cwd();
@@ -79,7 +72,6 @@ export const setupCommand = new Command('setup')
       const resolvedVaultPath = vaultPath ? path.resolve(vaultPath) : undefined;
       const teamServerUrl = mode === 'team' ? await readValue(rl, options.teamServerUrl, 'Team Server URL') : undefined;
       const teamApiKey = mode === 'team' ? await readValue(rl, options.teamApiKey, 'Team API key') : undefined;
-      const llmEnv = await readLlmEnvironment(rl, options);
 
       const plan = buildSetupPlan({
         mode,
@@ -103,8 +95,6 @@ export const setupCommand = new Command('setup')
         return;
       }
 
-      const envPath = writeProjectLlmEnv(project.root, llmEnv);
-      injectLlmEnvIntoProcess(llmEnv);
       const configPath = writeProjectCliConfig(project.root, {
         mode,
         tool,
@@ -116,7 +106,6 @@ export const setupCommand = new Command('setup')
         console.log('\nApplying local setup:');
         await initializeLocalProject(project, plan.dataDir, {
           vaultPath: resolvedVaultPath,
-          llmEnv,
           onProgress: printStepProgress(7),
         });
       }
@@ -124,10 +113,7 @@ export const setupCommand = new Command('setup')
       const mcp = writeMcpConfig({
         tool,
         cwd: project.root,
-        extraEnv: {
-          ...plan.environment,
-          ...llmEnv,
-        },
+        extraEnv: plan.environment,
       });
 
       if (resolvedVaultPath && mode === 'local') {
@@ -136,9 +122,12 @@ export const setupCommand = new Command('setup')
 
       console.log('\nMindstrate ready:');
       console.log(`  Config:  ${configPath}`);
-      if (envPath) console.log(`  Env:     ${envPath}`);
       console.log(`  MCP:     ${mcp.generated.join(', ')}`);
       console.log(`  Server:  ${mcp.serverPath}`);
+      if (mode === 'local') {
+        console.log('\nNext: configure LLM/embedding providers per-project in the web UI');
+        console.log('  at /settings/llm-configs (admin only).');
+      }
       if (mode === 'team' && (!teamServerUrl || !teamApiKey)) {
         console.log('\nTeam server next step:');
         console.log('  Deploy Team Server first, then re-run:');

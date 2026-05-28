@@ -88,12 +88,14 @@ export class MindstrateContextAssemblyApi {
     },
   ): Promise<AssembledContext> {
     await this.ensureInit();
-    const queryEmbedding = await this.services.embedder.embed(taskDescription);
+    const project = options?.project ?? options?.context?.project ?? '';
+    const providers = this.services.providerFactory.forProject(project);
+    const queryEmbedding = await providers.embedder.embed(taskDescription);
     const graphSelection = this.services.contextPrioritySelector.select({
-      project: options?.project ?? options?.context?.project,
+      project,
       context: options?.context,
       queryEmbedding,
-      embeddingModel: this.services.config.embeddingModel,
+      embeddingModel: providers.embeddingModel,
       perLayerLimit: 5,
     });
     const result = await runContextAssemblyDag(

@@ -3,48 +3,54 @@
  *
  * Lightweight internationalization without external dependencies.
  * Supports zh (Chinese) and en (English).
- * Default locale is detected from the system/browser environment.
  */
+
+import { cookies, headers } from 'next/headers';
 
 export type Locale = 'zh' | 'en';
 
 export const SUPPORTED_LOCALES: Locale[] = ['zh', 'en'];
 
+export const LOCALE_COOKIE = 'mindstrate-locale';
+
 /**
- * Detect the user's preferred locale.
+ * Server-side locale detection (async — uses next/headers).
  *
  * Priority:
- * 1. MINDSTRATE_LOCALE environment variable (server-side)
- * 2. Accept-Language header (server-side, via headers())
- * 3. navigator.language (client-side)
+ * 1. `mindstrate-locale` cookie (set by the in-app switcher)
+ * 2. `MINDSTRATE_LOCALE` env variable
+ * 3. `Accept-Language` request header
  * 4. Default: 'en'
  */
-export function detectLocale(): Locale {
-  // Server-side: env variable
-  const envLocale = typeof process !== 'undefined'
-    ? process.env['MINDSTRATE_LOCALE']
-    : undefined;
-  if (envLocale) {
-    const env = envLocale.toLowerCase();
-    if (env.startsWith('zh')) return 'zh';
-    return 'en';
+export async function detectLocale(): Promise<Locale> {
+  try {
+    const cookieStore = await cookies();
+    const cookieLocale = cookieStore.get(LOCALE_COOKIE)?.value;
+    if (cookieLocale === 'zh' || cookieLocale === 'en') return cookieLocale;
+  } catch {
+    // cookies() not available in this rendering context — fall through
   }
 
-  // Client-side: navigator
-  if (typeof navigator !== 'undefined' && navigator.language) {
-    if (navigator.language.startsWith('zh')) return 'zh';
-    return 'en';
+  const envLocale = typeof process !== 'undefined' ? process.env['MINDSTRATE_LOCALE'] : undefined;
+  if (envLocale) {
+    return envLocale.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  }
+
+  try {
+    const hdrs = await headers();
+    const accept = hdrs.get('accept-language') ?? '';
+    if (accept.toLowerCase().includes('zh')) return 'zh';
+  } catch {
+    // headers() not available — fall through
   }
 
   return 'en';
 }
 
-/** Get the HTML lang attribute value for a locale */
 export function getHtmlLang(locale: Locale): string {
   return locale === 'zh' ? 'zh-CN' : 'en';
 }
 
-/** Get the date formatting locale string */
 export function getDateLocale(locale: Locale): string {
   return locale === 'zh' ? 'zh-CN' : 'en-US';
 }
