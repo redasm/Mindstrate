@@ -21,16 +21,18 @@ describe('runtime logger injection', () => {
   it('routes session-compressor LLM failures through the injected logger instead of console', async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mindstrate-logger-'));
     const { logger, entries } = createCapturingLogger();
-    const memory = new Mindstrate({
-      dataDir,
-      // Force an LLM call so we can observe the failure path; compress will
-      // fall back to rule-based after the warn is emitted.
-      openaiApiKey: 'sk-invalid',
-      openaiBaseUrl: 'http://127.0.0.1:1', // unreachable
-      logger,
-    });
+    const memory = new Mindstrate({ dataDir, logger });
     await memory.init();
     try {
+      memory.llmConfigs.create({
+        project: 'logger-demo',
+        openaiApiKey: 'sk-invalid',
+        llmBaseUrl: 'http://127.0.0.1:1',
+        llmModel: 'gpt-4o-mini',
+        embeddingModel: 'text-embedding-3-small',
+        embeddingDim: 1536,
+      });
+
       const session = await memory.sessions.startSession({ project: 'logger-demo' });
       memory.sessions.saveObservation({
         sessionId: session.id,

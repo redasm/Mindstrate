@@ -12,36 +12,38 @@ import {
   SESSION_COMPRESSION_SYSTEM_PROMPT,
   buildSessionCompressionUserPrompt,
 } from '../prompts.js';
-import { getOpenAIClient } from '../openai-client.js';
 import { noopLogger, type Logger } from '../runtime/logger.js';
+import type { ProviderFactory } from './provider-factory.js';
 
 export class SessionCompressor {
-  private apiKey: string;
-  private baseURL?: string;
-  private model: string;
   private logger: Logger;
 
-  constructor(apiKey: string = '', model: string = 'gpt-4o-mini', baseURL?: string, logger: Logger = noopLogger) {
-    this.apiKey = apiKey;
-    this.baseURL = baseURL;
-    this.model = model;
+  constructor(
+    private readonly providerFactory: ProviderFactory,
+    logger: Logger = noopLogger,
+  ) {
     this.logger = logger;
   }
 
   /** 压缩会话为结构化摘要 */
   async compress(session: Session): Promise<CompressSessionInput> {
     const observations = session.observations ?? [];
+    const providers = this.providerFactory.forProject(session.project);
 
-    if (this.apiKey && observations.length > 0) {
-      return this.llmCompress(session, observations);
+    if (providers.hasConfig && observations.length > 0) {
+      return this.llmCompress(session, observations, providers);
     }
     return this.ruleCompress(session, observations);
   }
 
   /** LLM 压缩 */
-  private async llmCompress(session: Session, observations: SessionObservation[]): Promise<CompressSessionInput> {
+  private async llmCompress(
+    session: Session,
+    observations: SessionObservation[],
+    providers: { llmClientPromise: Promise<unknown>; llmModel: string },
+  ): Promise<CompressSessionInput> {
     try {
-      const client = await getOpenAIClient(this.apiKey, this.baseURL);
+      const client = (await providers.llmClientPromise) as Awaited<ReturnType<typeof import('../openai-client.js').getOpenAIClient>>;
       if (!client) return this.ruleCompress(session, observations);
 
       const obsText = observations
@@ -49,7 +51,7 @@ export class SessionCompressor {
         .join('\n');
 
       const response = await client.chat.completions.create({
-        model: this.model,
+        model: providers.llmModel,
         temperature: 0.1,
         response_format: { type: 'json_object' },
         messages: [

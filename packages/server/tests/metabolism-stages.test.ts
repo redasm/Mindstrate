@@ -15,7 +15,7 @@ import { PatternCompressor } from '../src/context-graph/pattern-compressor.js';
 import { RuleCompressor } from '../src/context-graph/rule-compressor.js';
 import { SummaryCompressor } from '../src/context-graph/summary-compressor.js';
 import { Assimilator, DigestEngine, MetabolicCompressor, Reflector } from '../src/metabolism/index.js';
-import { Embedder } from '../src/processing/embedder.js';
+import { ProviderFactory } from '../src/processing/provider-factory.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('metabolism stage modules', () => {
@@ -209,7 +209,7 @@ describe('metabolism stage modules', () => {
   });
 
   it('runs compression and reflection as independent stage classes', async () => {
-    const embedder = new Embedder('');
+    const providerFactory = ProviderFactory.offline();
     graphStore.createNode({
       substrateType: SubstrateType.SNAPSHOT,
       domainType: ContextDomainType.SESSION_SUMMARY,
@@ -228,12 +228,12 @@ describe('metabolism stage modules', () => {
     });
 
     const compression = await new MetabolicCompressor({
-      summaryCompressor: new SummaryCompressor(graphStore, embedder),
-      patternCompressor: new PatternCompressor(graphStore, embedder),
-      ruleCompressor: new RuleCompressor(graphStore, embedder),
+      summaryCompressor: new SummaryCompressor(graphStore, providerFactory),
+      patternCompressor: new PatternCompressor(graphStore, providerFactory),
+      ruleCompressor: new RuleCompressor(graphStore, providerFactory),
     }).run({ project: 'mindstrate' });
     const reflection = await new Reflector({
-      conflictDetector: new ConflictDetector(graphStore, embedder),
+      conflictDetector: new ConflictDetector(graphStore, providerFactory),
       conflictReflector: new ConflictReflector(graphStore),
     }).run({ project: 'mindstrate' });
 

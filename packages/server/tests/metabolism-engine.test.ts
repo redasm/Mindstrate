@@ -10,7 +10,7 @@ import { GraphKnowledgeProjector } from '../src/context-graph/knowledge-projecto
 import { KnowledgeProjectionMaterializer } from '../src/projections/knowledge-projection.js';
 import { MetabolismEngine } from '../src/metabolism/metabolism-engine.js';
 import { Pruner } from '../src/metabolism/pruner.js';
-import { Embedder } from '../src/processing/embedder.js';
+import { ProviderFactory } from '../src/processing/provider-factory.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 import {
   ContextDomainType,
@@ -29,14 +29,14 @@ describe('MetabolismEngine', () => {
   beforeEach(() => {
     tempDir = createTempDir();
     graphStore = new ContextGraphStore(path.join(tempDir, 'context-graph.db'));
-    const embedder = new Embedder('');
+    const providerFactory = ProviderFactory.offline();
     const projector = new GraphKnowledgeProjector(graphStore);
     engine = new MetabolismEngine({
       graphStore,
-      summaryCompressor: new SummaryCompressor(graphStore, embedder),
-      patternCompressor: new PatternCompressor(graphStore, embedder),
-      ruleCompressor: new RuleCompressor(graphStore, embedder),
-      conflictDetector: new ConflictDetector(graphStore, embedder),
+      summaryCompressor: new SummaryCompressor(graphStore, providerFactory),
+      patternCompressor: new PatternCompressor(graphStore, providerFactory),
+      ruleCompressor: new RuleCompressor(graphStore, providerFactory),
+      conflictDetector: new ConflictDetector(graphStore, providerFactory),
       conflictReflector: new ConflictReflector(graphStore),
       projectionMaterializer: new KnowledgeProjectionMaterializer(graphStore, projector),
       pruner: new Pruner(graphStore),

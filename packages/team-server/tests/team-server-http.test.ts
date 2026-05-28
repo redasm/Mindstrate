@@ -33,7 +33,7 @@ const startTeamServer = async (options?: {
   projects?: string[];
 }): Promise<RunningTeamServer> => {
   const tempDir = createTempDir('mindstrate-team-server-test-');
-  const memory = new Mindstrate({ dataDir: tempDir, openaiApiKey: '' });
+  const memory = new Mindstrate({ dataDir: tempDir });
   await memory.init();
 
   const apiKey = options?.apiKey ?? TEST_API_KEY;

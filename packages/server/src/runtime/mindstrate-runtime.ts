@@ -2,13 +2,12 @@ import * as fs from 'node:fs';
 import { loadConfig, type MindstrateConfig } from '../config.js';
 import { noopLogger, type Logger } from './logger.js';
 import { DatabaseStore } from '../storage/database-store.js';
-import { VectorStore } from '../storage/vector-store.js';
-import { QdrantVectorStore } from '../storage/qdrant-vector-store.js';
 import type { IVectorStore } from '../storage/vector-store-interface.js';
 import { SessionStore } from '../storage/session-store.js';
 import { ApiKeyRepository } from '../storage/api-key-repository.js';
 import { ScanSourceRepository } from '../storage/scan-source-repository.js';
-import { Embedder } from '../processing/embedder.js';
+import { LlmConfigRepository } from '../storage/llm-config-repository.js';
+import { ProviderFactory } from '../processing/provider-factory.js';
 import { KnowledgeQualityGate } from '../processing/knowledge-quality-gate.js';
 import { SessionCompressor } from '../processing/session-compressor.js';
 import { FeedbackLoop } from '../quality/feedback-loop.js';
@@ -33,6 +32,7 @@ import {
   SessionProjectionMaterializer,
 } from '../projections/index.js';
 import { PortableContextBundleManager } from '../bundles/index.js';
+import { VectorStoreFactory } from './vector-store-factory.js';
 
 export interface MindstrateRuntime {
   config: MindstrateConfig;
@@ -56,11 +56,12 @@ export interface MindstrateRuntime {
   summaryCompressor: SummaryCompressor;
   highOrderCompressor: HighOrderCompressor;
   feedbackCooccurrenceCompressor: FeedbackCooccurrenceCompressor;
-  vectorStore: IVectorStore;
+  vectorStoreFactory: VectorStoreFactory;
   sessionStore: SessionStore;
   apiKeyRepository: ApiKeyRepository;
   scanSourceRepository: ScanSourceRepository;
-  embedder: Embedder;
+  llmConfigRepository: LlmConfigRepository;
+  providerFactory: ProviderFactory;
   qualityGate: KnowledgeQualityGate;
   sessionCompressor: SessionCompressor;
   bundleManager: PortableContextBundleManager;
@@ -83,8 +84,6 @@ export function createMindstrateRuntime(
     fs.mkdirSync(config.dataDir, { recursive: true });
   }
 
-  const llmBaseUrl = config.openaiBaseUrl;
-  const embeddingBaseUrl = config.openaiEmbeddingBaseUrl ?? llmBaseUrl;
   const databaseStore = new DatabaseStore(config.dbPath);
   const contextGraphStore = new ContextGraphStore(databaseStore.getDb());
   const contextInternalizer = new ContextInternalizer(contextGraphStore);
@@ -95,13 +94,14 @@ export function createMindstrateRuntime(
   const sessionProjectionMaterializer = new SessionProjectionMaterializer(contextGraphStore);
   const projectSnapshotProjectionMaterializer = new ProjectSnapshotProjectionMaterializer(contextGraphStore);
   const obsidianProjectionMaterializer = new ObsidianProjectionMaterializer(contextGraphStore);
-  const embedder = new Embedder(config.openaiApiKey, config.embeddingModel, embeddingBaseUrl);
-  const conflictDetector = new ConflictDetector(contextGraphStore, embedder);
+  const llmConfigRepository = new LlmConfigRepository(databaseStore.getDb());
+  const providerFactory = new ProviderFactory(llmConfigRepository);
+  const conflictDetector = new ConflictDetector(contextGraphStore, providerFactory);
   const conflictReflector = new ConflictReflector(contextGraphStore);
-  const patternCompressor = new PatternCompressor(contextGraphStore, embedder);
-  const ruleCompressor = new RuleCompressor(contextGraphStore, embedder);
-  const summaryCompressor = new SummaryCompressor(contextGraphStore, embedder);
-  const highOrderCompressor = new HighOrderCompressor(contextGraphStore, embedder);
+  const patternCompressor = new PatternCompressor(contextGraphStore, providerFactory);
+  const ruleCompressor = new RuleCompressor(contextGraphStore, providerFactory);
+  const summaryCompressor = new SummaryCompressor(contextGraphStore, providerFactory);
+  const highOrderCompressor = new HighOrderCompressor(contextGraphStore, providerFactory);
   const pruner = new Pruner(contextGraphStore);
   const metabolismEngine = new MetabolismEngine({
     graphStore: contextGraphStore,
@@ -117,12 +117,12 @@ export function createMindstrateRuntime(
     obsidianProjectionMaterializer,
     pruner,
   });
-  const vectorStore = configOverrides?.vectorStore ?? createVectorStore(config, embedder);
+  const vectorStoreFactory = new VectorStoreFactory(config, providerFactory);
   const sessionStore = new SessionStore(databaseStore.getDb());
   const apiKeyRepository = new ApiKeyRepository(databaseStore.getDb());
   const scanSourceRepository = new ScanSourceRepository(databaseStore.getDb());
   const bundleManager = new PortableContextBundleManager(contextGraphStore);
-  const sessionCompressor = new SessionCompressor(config.openaiApiKey, config.llmModel, llmBaseUrl, logger);
+  const sessionCompressor = new SessionCompressor(providerFactory, logger);
   const feedbackLoop = new FeedbackLoop(databaseStore.getDb());
   const feedbackCooccurrenceCompressor = new FeedbackCooccurrenceCompressor(
     contextGraphStore,
@@ -153,28 +153,16 @@ export function createMindstrateRuntime(
     summaryCompressor,
     highOrderCompressor,
     feedbackCooccurrenceCompressor,
-    vectorStore,
+    vectorStoreFactory,
     sessionStore,
     apiKeyRepository,
     scanSourceRepository,
-    embedder,
+    llmConfigRepository,
+    providerFactory,
     qualityGate,
     sessionCompressor,
     bundleManager,
     feedbackLoop,
     evaluator,
   };
-}
-
-function createVectorStore(config: MindstrateConfig, embedder: Embedder): IVectorStore {
-  if (config.vectorBackend === 'qdrant') {
-    return new QdrantVectorStore({
-      url: config.qdrantUrl ?? '',
-      apiKey: config.qdrantApiKey,
-      collectionName: config.collectionName,
-      dimension: embedder.getEmbeddingDimension(),
-    });
-  }
-
-  return new VectorStore(config.vectorStorePath, config.collectionName);
 }

@@ -119,9 +119,16 @@ describe('project graph LLM enrichment boundary', () => {
   });
 
   it('exposes provider-aware enrichment through the context API', async () => {
-    const memory = new Mindstrate({ dataDir: tempDir, openaiApiKey: 'test-key' });
+    const memory = new Mindstrate({ dataDir: tempDir });
     await memory.init();
     try {
+      memory.llmConfigs.create({
+        project: 'demo',
+        openaiApiKey: 'test-key',
+        llmModel: 'gpt-4o-mini',
+        embeddingModel: 'text-embedding-3-small',
+        embeddingDim: 1536,
+      });
       memory.context.createContextNode({
         id: 'pg:demo:file:src/App.tsx',
         substrateType: SubstrateType.SNAPSHOT,
@@ -165,7 +172,7 @@ describe('project graph LLM enrichment boundary', () => {
   });
 
   it('skips context API enrichment when no provider is configured', async () => {
-    const memory = new Mindstrate({ dataDir: tempDir, openaiApiKey: '' });
+    const memory = new Mindstrate({ dataDir: tempDir });
     await memory.init();
     try {
       const result = await memory.context.enrichProjectGraph({

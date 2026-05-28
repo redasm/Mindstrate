@@ -6,6 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { SessionCompressor } from '../src/processing/session-compressor.js';
+import { ProviderFactory } from '../src/processing/provider-factory.js';
 import { SessionStatus } from '@mindstrate/protocol';
 import type { Session, SessionObservation } from '@mindstrate/protocol';
 
@@ -20,7 +21,7 @@ function makeSession(observations: SessionObservation[] = []): Session {
 }
 
 describe('SessionCompressor', () => {
-  const compressor = new SessionCompressor(''); // offline mode
+  const compressor = new SessionCompressor(ProviderFactory.offline()); // offline mode
 
   describe('compress (rule-based)', () => {
     it('should produce summary for session with task starts', async () => {

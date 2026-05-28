@@ -18,10 +18,6 @@ export interface SetupOptions {
   vault?: string;
   teamServerUrl?: string;
   teamApiKey?: string;
-  openaiApiKey?: string;
-  openaiBaseUrl?: string;
-  llmModel?: string;
-  embeddingModel?: string;
   yes?: boolean;
 }
 
@@ -106,31 +102,4 @@ export const readValue = async (
   if (current) return current;
   const answer = await rl.question(`${label}? Leave empty to fill later: `);
   return answer.trim() || undefined;
-};
-
-export const readLlmEnvironment = async (
-  rl: readline.Interface,
-  options: SetupOptions,
-): Promise<Record<string, string>> => {
-  const env: Record<string, string> = {};
-  if (options.openaiApiKey) env.OPENAI_API_KEY = options.openaiApiKey;
-  if (options.openaiBaseUrl) env.OPENAI_BASE_URL = options.openaiBaseUrl;
-  if (options.llmModel) env.MINDSTRATE_LLM_MODEL = options.llmModel;
-  if (options.embeddingModel) env.MINDSTRATE_EMBEDDING_MODEL = options.embeddingModel;
-  if (options.yes || Object.keys(env).length > 0) return env;
-
-  const provider = await chooseOption(rl, 'Configure LLM now?', [
-    { label: 'Skip', value: 'skip', description: 'Use local hash embeddings and rule-based extraction' },
-    { label: 'OpenAI-compatible API', value: 'openai', description: 'OpenAI, DashScope, Moonshot, local Ollama/vLLM' },
-  ], 0);
-  if (provider === 'skip') return env;
-  const apiKey = await rl.question('OPENAI_API_KEY: ');
-  const baseUrl = await rl.question('OPENAI_BASE_URL [https://api.openai.com/v1]: ');
-  const llmModel = await rl.question('MINDSTRATE_LLM_MODEL [gpt-4o-mini]: ');
-  const embeddingModel = await rl.question('MINDSTRATE_EMBEDDING_MODEL [text-embedding-3-small]: ');
-  if (apiKey.trim()) env.OPENAI_API_KEY = apiKey.trim();
-  env.OPENAI_BASE_URL = baseUrl.trim() || 'https://api.openai.com/v1';
-  env.MINDSTRATE_LLM_MODEL = llmModel.trim() || 'gpt-4o-mini';
-  env.MINDSTRATE_EMBEDDING_MODEL = embeddingModel.trim() || 'text-embedding-3-small';
-  return env;
 };

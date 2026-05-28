@@ -1,56 +1,45 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
+import { JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { detectLocale, getHtmlLang } from '@/lib/i18n/index';
-import { getTranslations } from '@/lib/i18n/translations';
 import { LocaleProvider } from '@/lib/i18n/provider';
-import { NavLinks } from '@/components/NavLinks';
 
 export const metadata: Metadata = {
   title: 'Mindstrate',
   description: 'AI memory and context substrate for agents and teams',
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const locale = detectLocale();
-  const t = getTranslations(locale);
+const jetbrains = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-jetbrains',
+  display: 'swap',
+});
 
-  const NAV_ITEMS = [
-    { href: '/',               label: t.nav.dashboard },
-    { href: '/knowledge',      label: t.nav.knowledge },
-    { href: '/bundles',        label: 'Bundles' },
-    { href: '/ecs',            label: 'ECS' },
-    { href: '/project-graph',  label: 'Project Graph' },
-    { href: '/lineage',        label: 'Lineage' },
-    { href: '/graph-knowledge', label: 'Graph' },
-    { href: '/search',         label: t.nav.search },
-    { href: '/knowledge/new',  label: t.nav.add },
-    { href: '/admin/api-keys', label: 'API Keys' },
-    { href: '/admin/scanner-sources', label: 'Scanner' },
-  ];
-
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await detectLocale();
   return (
-    <html lang={getHtmlLang(locale)}>
-      <body className="bg-gray-50 min-h-screen">
-        {/* Top Nav */}
-        <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex h-14 items-center justify-between">
-              <Link href="/" className="flex items-center gap-2 font-bold text-lg text-gray-900">
-                <span className="text-brand-600">MS</span>
-                <span className="hidden sm:inline">Mindstrate</span>
-              </Link>
-              <NavLinks items={NAV_ITEMS} />
-            </div>
-          </div>
-        </nav>
-
-        {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <LocaleProvider locale={locale}>
-            {children}
-          </LocaleProvider>
-        </main>
+    <html
+      lang={getHtmlLang(locale)}
+      className={jetbrains.variable}
+      style={
+        {
+          // Cabinet Grotesk + Satoshi are loaded from Fontshare CDN below.
+          // Aliasing the CSS variables to the family names lets Tailwind's
+          // var(--font-cabinet) / var(--font-satoshi) resolve cleanly.
+          ['--font-cabinet' as string]: "'Cabinet Grotesk'",
+          ['--font-satoshi' as string]: "'Satoshi'",
+        } as React.CSSProperties
+      }
+    >
+      <head>
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,600,700,800&f[]=satoshi@400,500,600&display=swap"
+        />
+      </head>
+      <body className="bg-white min-h-screen text-surface-900">
+        <LocaleProvider locale={locale}>{children}</LocaleProvider>
       </body>
     </html>
   );

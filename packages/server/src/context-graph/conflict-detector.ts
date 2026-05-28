@@ -1,5 +1,5 @@
 import { cosineSimilarity } from '../processing/vector-distance.js';
-import { Embedder } from '../processing/embedder.js';
+import type { ProviderFactory } from '../processing/provider-factory.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import {
   ContextNodeStatus,
@@ -43,16 +43,17 @@ export interface ConflictDetectionResult {
 
 export class ConflictDetector {
   private readonly graphStore: ContextGraphStore;
-  private readonly embedder: Embedder;
+  private readonly providerFactory: ProviderFactory;
 
-  constructor(graphStore: ContextGraphStore, embedder: Embedder) {
+  constructor(graphStore: ContextGraphStore, providerFactory: ProviderFactory) {
     this.graphStore = graphStore;
-    this.embedder = embedder;
+    this.providerFactory = providerFactory;
   }
 
   async detectConflicts(options: ConflictDetectionOptions = {}): Promise<ConflictDetectionResult> {
     const similarityThreshold = options.similarityThreshold ?? 0.84;
     const limit = options.limit ?? 200;
+    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
 
     const nodes = this.graphStore.listNodes({
       project: options.project,
@@ -62,7 +63,7 @@ export class ConflictDetector {
 
     const embeddings = new Map<string, number[]>();
     for (const node of nodes) {
-      embeddings.set(node.id, await this.embedder.embed(node.content));
+      embeddings.set(node.id, await embedder.embed(node.content));
     }
 
     const records: ConflictRecord[] = [];

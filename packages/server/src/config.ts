@@ -2,6 +2,10 @@
  * Mindstrate - Configuration
  *
  * Global configuration with environment variable overrides and sensible defaults.
+ *
+ * Note: LLM/embedding provider settings are no longer environment variables.
+ * They are configured per-project via the Settings UI (/settings/llm-configs)
+ * and stored in the `project_llm_configs` table.
  */
 
 import * as path from 'node:path';
@@ -27,37 +31,7 @@ export interface MindstrateConfig {
   /** Optional Qdrant API key */
   qdrantApiKey?: string;
 
-  /** OpenAI API Key (or any provider that speaks the OpenAI API) */
-  openaiApiKey: string;
-
-  /**
-   * Optional base URL for the LLM endpoint.
-   *
-   * Defaults to OpenAI's official API. Set this to use any
-   * OpenAI-compatible provider, e.g.:
-   *   - Aliyun:   https://dashscope.aliyuncs.com/compatible-mode/v1
-   *   - DeepSeek: https://api.deepseek.com/v1
-   *   - Moonshot: https://api.moonshot.cn/v1
-   *   - Local:    http://127.0.0.1:11434/v1   (Ollama)
-   */
-  openaiBaseUrl?: string;
-
-  /**
-   * Optional separate base URL for embeddings.
-   *
-   * Useful when you want, say, Aliyun for chat (cheap) but OpenAI's
-   * `text-embedding-3-small` for embeddings (high quality). When unset,
-   * embeddings reuse `openaiBaseUrl` (or default if neither is set).
-   */
-  openaiEmbeddingBaseUrl?: string;
-
-  /** Embedding 模型 */
-  embeddingModel: string;
-
-  /** Chat / completion 模型（用于 LLM 抽取、Session 压缩、知识进化） */
-  llmModel: string;
-
-  /** 向量 collection 名称 */
+  /** 向量 collection 名称前缀（实际 collection 为 `<collectionName>-<projectSlug>`） */
   collectionName: string;
 
   /** 检索默认返回数量 */
@@ -124,21 +98,6 @@ export function loadConfig(overrides?: Partial<MindstrateConfig>): MindstrateCon
     qdrantApiKey: overrides?.qdrantApiKey
       ?? process.env['MINDSTRATE_QDRANT_API_KEY']
       ?? undefined,
-    openaiApiKey: overrides?.openaiApiKey
-      ?? process.env['OPENAI_API_KEY']
-      ?? '',
-    openaiBaseUrl: overrides?.openaiBaseUrl
-      ?? process.env['OPENAI_BASE_URL']
-      ?? undefined,
-    openaiEmbeddingBaseUrl: overrides?.openaiEmbeddingBaseUrl
-      ?? process.env['OPENAI_EMBEDDING_BASE_URL']
-      ?? undefined,
-    embeddingModel: overrides?.embeddingModel
-      ?? process.env['MINDSTRATE_EMBEDDING_MODEL']
-      ?? 'text-embedding-3-small',
-    llmModel: overrides?.llmModel
-      ?? process.env['MINDSTRATE_LLM_MODEL']
-      ?? 'gpt-4o-mini',
     collectionName: overrides?.collectionName ?? 'mindstrate',
     defaultTopK: overrides?.defaultTopK ?? 5,
     deduplicationThreshold: overrides?.deduplicationThreshold ?? 0.92,

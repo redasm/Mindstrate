@@ -192,12 +192,6 @@ export const initCommand = new Command('init')
       // 9) Mode hints
       printModeHints(project, options);
 
-      // 10) OPENAI_API_KEY warning
-      if (!config.openaiApiKey) {
-        console.log('\n  Note: OPENAI_API_KEY not set — falling back to local hash-based embeddings.');
-        console.log('  Set it in your environment for higher-quality semantic search.');
-      }
-
       memory.close();
       console.log('\nDone.');
     } catch (error) {

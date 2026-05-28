@@ -7,7 +7,6 @@
 
 import type { GraphKnowledgeSearchResult } from '@mindstrate/protocol';
 import type { MindstrateConfig } from './config.js';
-import type { IVectorStore } from './storage/vector-store-interface.js';
 import { createMindstrateRuntime, type MindstrateRuntime } from './runtime/mindstrate-runtime.js';
 import { MindstrateApiKeysApi } from './runtime/mindstrate-api-keys-api.js';
 import { MindstrateBundleApi } from './runtime/mindstrate-bundle-api.js';
@@ -16,6 +15,7 @@ import { MindstrateContextGraphApi } from './runtime/mindstrate-context-graph-ap
 import { MindstrateEvaluationApi } from './runtime/mindstrate-evaluation-api.js';
 import { MindstrateEventApi } from './runtime/mindstrate-event-api.js';
 import { MindstrateKnowledgeApi } from './runtime/mindstrate-knowledge-api.js';
+import { MindstrateLlmConfigsApi } from './runtime/mindstrate-llm-configs-api.js';
 import { MindstrateMaintenanceApi } from './runtime/mindstrate-maintenance-api.js';
 import { MindstrateMetabolismApi } from './runtime/mindstrate-metabolism-api.js';
 import { MindstrateProjectionApi } from './runtime/mindstrate-projection-api.js';
@@ -32,6 +32,7 @@ export class Mindstrate {
   readonly evaluation: MindstrateEvaluationApi;
   readonly events: MindstrateEventApi;
   readonly knowledge: MindstrateKnowledgeApi;
+  readonly llmConfigs: MindstrateLlmConfigsApi;
   readonly maintenance: MindstrateMaintenanceApi;
   readonly metabolism: MindstrateMetabolismApi;
   readonly projections: MindstrateProjectionApi;
@@ -41,9 +42,7 @@ export class Mindstrate {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
 
-  constructor(configOverrides?: Partial<MindstrateConfig> & {
-    vectorStore?: IVectorStore;
-  }) {
+  constructor(configOverrides?: Partial<MindstrateConfig>) {
     this.services = createMindstrateRuntime(configOverrides, (query, options) =>
       this.queryGraphKnowledgeIds(query, options.topK),
     );
@@ -51,6 +50,7 @@ export class Mindstrate {
     this.bundles = new MindstrateBundleApi(this.services);
     this.context = new MindstrateContextGraphApi(this.services);
     this.knowledge = new MindstrateKnowledgeApi(this.services, () => this.ensureInit());
+    this.llmConfigs = new MindstrateLlmConfigsApi(this.services);
     this.sessions = new MindstrateSessionApi(this.services);
     this.assembly = new MindstrateContextAssemblyApi(
       this.services,
@@ -71,8 +71,9 @@ export class Mindstrate {
   async init(): Promise<void> {
     if (this.initialized) return;
     if (!this.initPromise) {
-      this.initPromise = this.services.vectorStore.initialize()
+      this.initPromise = Promise.resolve()
         .then(() => {
+          this.bootstrapAdminFromEnv();
           this.initialized = true;
         })
         .catch((err) => {
@@ -85,7 +86,7 @@ export class Mindstrate {
 
   close(): void {
     this.metabolism.stopMetabolismScheduler();
-    this.services.vectorStore.flush();
+    this.services.vectorStoreFactory.flushAll();
     this.services.databaseStore.close();
   }
 
@@ -93,9 +94,36 @@ export class Mindstrate {
     return this.services.config;
   }
 
+  /**
+   * Internal helper used by `repo-scanner` to construct a `KnowledgeExtractor`
+   * that resolves per-project providers at extract-time. Not part of the
+   * stable sub-domain API surface.
+   */
+  get providerFactory() {
+    return this.services.providerFactory;
+  }
+
   private queryGraphKnowledgeIds(query: string, topK: number): string[] {
     return this.context.queryGraphKnowledge(query, { topK, trackFeedback: false })
       .map((result: GraphKnowledgeSearchResult) => result.view.id);
+  }
+
+  private bootstrapAdminFromEnv(): void {
+    const teamApiKey = process.env['TEAM_API_KEY'];
+    if (!teamApiKey) return;
+    if (this.services.apiKeyRepository.countAdmins() > 0) return;
+    try {
+      this.services.apiKeyRepository.create({
+        name: 'admin',
+        key: teamApiKey,
+        scopes: ['admin'],
+        projects: ['*'],
+        role: 'admin',
+        createdBy: 'bootstrap',
+      });
+    } catch {
+      // Key already exists with a different role/name — leave it alone.
+    }
   }
 
   private async ensureInit(): Promise<void> {

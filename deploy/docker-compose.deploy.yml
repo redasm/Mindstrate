@@ -45,13 +45,8 @@ services:
       TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
       MINDSTRATE_DATA_DIR: "/data"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
-      # LLM provider — works with OpenAI or any OpenAI-compatible API
-      # (Aliyun, DeepSeek, Moonshot, local Ollama, ...)
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
-      OPENAI_EMBEDDING_BASE_URL: "${OPENAI_EMBEDDING_BASE_URL:-}"
-      MINDSTRATE_EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-3-small}"
-      MINDSTRATE_LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
+      # LLM provider config moved to the Web UI (Settings → LLM Configs).
+      # Per-project keys/models live in SQLite, not env vars.
     volumes:
       - mindstrate-data:/data
     healthcheck:
@@ -83,11 +78,6 @@ services:
       MINDSTRATE_LOCALE: "${WEB_UI_LOCALE:-zh}"
       # Web UI shares the same database as team-server; do NOT point it
       # at the team-server HTTP API. Direct DB access is intentional.
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
-      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
-      OPENAI_EMBEDDING_BASE_URL: "${OPENAI_EMBEDDING_BASE_URL:-}"
-      MINDSTRATE_EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-3-small}"
-      MINDSTRATE_LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
     volumes:
       - mindstrate-data:/data
     depends_on:

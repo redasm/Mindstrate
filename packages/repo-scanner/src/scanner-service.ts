@@ -3,7 +3,6 @@ import {
   errorMessage,
   Mindstrate,
   KnowledgeExtractor,
-  loadConfig,
   type CommitInfo,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
@@ -39,13 +38,8 @@ export class RepoScannerService {
   constructor(options: RepoScannerOptions) {
     this.memory = options.memory;
     this.scanner = options.memory.scanner;
-    const config = loadConfig(options.memory.getConfig());
     this.sink = createKnowledgeSink(options.memory);
-    this.extractor = new KnowledgeExtractor(
-      config.openaiApiKey,
-      config.llmModel,
-      config.openaiBaseUrl,
-    );
+    this.extractor = new KnowledgeExtractor(options.memory.providerFactory);
   }
 
   async init(): Promise<void> {
@@ -241,7 +235,7 @@ export class RepoScannerService {
       });
     }
 
-    const extraction = await this.extractor.extractFromCommit(commit);
+    const extraction = await this.extractor.extractFromCommit(commit, project);
     if (!extraction.extracted || !extraction.input) {
       return {
         status: 'skipped',

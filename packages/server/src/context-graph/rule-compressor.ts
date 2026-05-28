@@ -1,4 +1,4 @@
-import type { Embedder } from '../processing/embedder.js';
+import type { ProviderFactory } from '../processing/provider-factory.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
 import {
@@ -27,19 +27,20 @@ export interface RuleCompressionResult {
 export class RuleCompressor {
   constructor(
     private readonly graphStore: ContextGraphStore,
-    private readonly embedder: Embedder,
+    private readonly providerFactory: ProviderFactory,
   ) {}
 
   async compressProjectPatterns(
     options: RuleCompressionOptions = {},
   ): Promise<RuleCompressionResult> {
+    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
     // Default of 2 positive feedback (was 4): a PATTERN with at least
     // two `adopted` signals is a credible RULE candidate. Four was
     // calibrated for team-server multi-user mode where many agents
     // collectively reinforce the same pattern; for single-user local
     // use it made the lineage stall at PATTERN forever.
     const minPositiveFeedback = options.minPositiveFeedback ?? 2;
-    const run = await runSubstrateCompression(this.graphStore, this.embedder, {
+    const run = await runSubstrateCompression(this.graphStore, embedder, {
       sourceType: SubstrateType.PATTERN,
       sourceDomain: ContextDomainType.PATTERN,
       targetType: SubstrateType.RULE,

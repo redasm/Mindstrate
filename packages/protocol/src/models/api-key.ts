@@ -9,6 +9,8 @@
 
 export type ApiKeyScope = 'read' | 'write' | 'admin';
 
+export type ApiKeyRole = 'admin' | 'member';
+
 export interface ApiKey {
   id: string;
   name: string;
@@ -16,14 +18,19 @@ export interface ApiKey {
   scopes: ApiKeyScope[];
   /** Wildcard ('*') means all projects. */
   projects: string[];
+  role: ApiKeyRole;
   createdAt: string;
   createdBy?: string;
   revokedAt?: string;
+  lastUsedAt?: string;
 }
 
 export interface CreateApiKeyInput {
   name: string;
   scopes: ApiKeyScope[];
   projects: string[];
+  role?: ApiKeyRole;
   createdBy?: string;
+  /** Optional explicit key (used for bootstrap from TEAM_API_KEY). */
+  key?: string;
 }

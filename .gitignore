@@ -14,3 +14,4 @@ data/
 *.tsbuildinfo
 .tasks/
 .env.deploy
+install/mindstrate-installer-0.1.0.zip

@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import type { ScanInitMode, UpdateScanSourceInput } from '@mindstrate/protocol';
 import { getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
-import { ADMIN_COOKIE_NAME, isAdminSession } from '@/lib/admin-session';
+import { requireAdminFromRequest } from '@/lib/session';
 
-const requireAdmin = async (): Promise<NextResponse | null> => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
-  if (!isAdminSession(token)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+const guard = (req: NextRequest): Response | null => {
+  try {
+    requireAdminFromRequest(req);
+    return null;
+  } catch (resp) {
+    return resp as Response;
   }
-  return null;
 };
 
 const VALID_INIT_MODES: ScanInitMode[] = ['from_now', 'backfill_recent'];
@@ -60,8 +59,7 @@ function buildPatch(body: Record<string, unknown>): UpdateScanSourceInput {
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const denied = guard(request); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();
@@ -77,9 +75,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = guard(request); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();

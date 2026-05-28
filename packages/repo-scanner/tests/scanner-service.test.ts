@@ -37,7 +37,7 @@ describe('RepoScannerService', () => {
       '}',
     ].join('\n'), 'fix: handle missing user');
 
-    memory = new Mindstrate({ dataDir: memoryDir, openaiApiKey: '' });
+    memory = new Mindstrate({ dataDir: memoryDir });
     await memory.init();
     service = new RepoScannerService({ memory });
     await service.init();

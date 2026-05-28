@@ -30,7 +30,7 @@ const startTeamServer = async (options?: {
   scopes?: Array<'read' | 'write' | 'admin'>;
 }): Promise<RunningTeamServer> => {
   const tempDir = createTempDir('mindstrate-authz-test-');
-  const memory = new Mindstrate({ dataDir: tempDir, openaiApiKey: '' });
+  const memory = new Mindstrate({ dataDir: tempDir });
   await memory.init();
 
   const adminKey = options?.apiKey ?? 'test-admin-key';

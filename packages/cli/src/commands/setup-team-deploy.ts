@@ -22,8 +22,6 @@ export async function runTeamDeployWizard(
     ?? await askOptional(rl, 'TEAM_API_KEY for the server');
   const teamPort = await askOptional(rl, 'Team Server port [3388]') ?? '3388';
   const webPort = await askOptional(rl, 'Web UI port [3377]') ?? '3377';
-  const openaiApiKey = options.openaiApiKey ?? await askOptional(rl, 'OPENAI_API_KEY for the server, leave empty for offline mode');
-  const openaiBaseUrl = options.openaiBaseUrl ?? await askOptional(rl, 'OPENAI_BASE_URL, leave empty for OpenAI default');
 
   console.log('\nDeployment plan:');
   console.log('  Mode:    Team server deployment');
@@ -56,10 +54,6 @@ export async function runTeamDeployWizard(
     'WEB_UI_PORT=' + webPort,
     'TEAM_BIND=0.0.0.0',
     'WEB_UI_BIND=0.0.0.0',
-    'OPENAI_API_KEY=' + (openaiApiKey ?? ''),
-    ...(openaiBaseUrl ? ['OPENAI_BASE_URL=' + openaiBaseUrl] : []),
-    'EMBEDDING_MODEL=' + (options.embeddingModel ?? 'text-embedding-3-small'),
-    'LLM_MODEL=' + (options.llmModel ?? 'gpt-4o-mini'),
     'LOG_LEVEL=info',
     'WEB_UI_LOCALE=zh',
     '',
@@ -70,4 +64,6 @@ export async function runTeamDeployWizard(
   console.log(`  Env:     ${envPath}`);
   console.log('  Health:  http://<server>:' + teamPort + '/health');
   console.log('  Web UI:  http://<server>:' + webPort);
+  console.log('\n  After containers boot, configure per-project LLM/embedding providers');
+  console.log('  in the web UI at /settings/llm-configs (admin only).');
 }

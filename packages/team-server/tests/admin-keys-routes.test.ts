@@ -16,7 +16,7 @@ const runningServers: RunningServer[] = [];
 
 const startServer = async (adminKey = 'admin-bootstrap-key'): Promise<RunningServer> => {
   const tempDir = createTempDir('mindstrate-admin-keys-test-');
-  const memory = new Mindstrate({ dataDir: tempDir, openaiApiKey: '' });
+  const memory = new Mindstrate({ dataDir: tempDir });
   await memory.init();
 
   const app = createApp({ adminKey, memory });

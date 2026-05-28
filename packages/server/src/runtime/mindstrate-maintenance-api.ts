@@ -30,7 +30,12 @@ export class MindstrateMaintenanceApi {
   }> {
     const nodes = this.services.contextGraphStore.listNodes({ limit: 100000 });
     const dbStats = getGraphStats(nodes);
-    const vectorCount = await this.services.vectorStore.count();
+    const projects = new Set(nodes.map((n) => n.project ?? '').filter(Boolean));
+    let vectorCount = 0;
+    for (const project of projects) {
+      const store = await this.services.vectorStoreFactory.forProject(project);
+      vectorCount += await store.count();
+    }
     const feedbackStats = this.services.feedbackLoop.getGlobalStats();
 
     return {

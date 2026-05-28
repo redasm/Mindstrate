@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import type { ScanInitMode } from '@mindstrate/protocol';
 import { getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
-import { ADMIN_COOKIE_NAME, isAdminSession } from '@/lib/admin-session';
+import { requireAdminFromRequest } from '@/lib/session';
 
-const requireAdmin = async (): Promise<NextResponse | null> => {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(ADMIN_COOKIE_NAME)?.value;
-  if (!isAdminSession(token)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+const guard = (req: NextRequest): Response | null => {
+  try {
+    requireAdminFromRequest(req);
+    return null;
+  } catch (resp) {
+    return resp as Response;
   }
-  return null;
 };
 
 const VALID_INIT_MODES: ScanInitMode[] = ['from_now', 'backfill_recent'];
@@ -27,9 +26,8 @@ function optionalNumber(value: unknown): number | undefined {
   return value;
 }
 
-export async function GET() {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+export async function GET(req: NextRequest) {
+  const denied = guard(req); if (denied) return denied;
   try {
     const memory = await getMemoryReady();
     return NextResponse.json({ sources: memory.scanner.listSources() });
@@ -39,8 +37,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAdmin();
-  if (denied) return denied;
+  const denied = guard(request); if (denied) return denied;
   try {
     const body = await request.json().catch(() => ({}));
     const kind = body.kind;

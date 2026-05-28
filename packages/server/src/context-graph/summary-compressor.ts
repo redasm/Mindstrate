@@ -1,4 +1,4 @@
-import type { Embedder } from '../processing/embedder.js';
+import type { ProviderFactory } from '../processing/provider-factory.js';
 import type { ContextGraphStore } from './context-graph-store.js';
 import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
 import {
@@ -26,13 +26,14 @@ export interface SummaryCompressionResult {
 export class SummaryCompressor {
   constructor(
     private readonly graphStore: ContextGraphStore,
-    private readonly embedder: Embedder,
+    private readonly providerFactory: ProviderFactory,
   ) {}
 
   async compressProjectSnapshots(
     options: SummaryCompressionOptions = {},
   ): Promise<SummaryCompressionResult> {
-    const run = await runSubstrateCompression(this.graphStore, this.embedder, {
+    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
+    const run = await runSubstrateCompression(this.graphStore, embedder, {
       sourceType: SubstrateType.SNAPSHOT,
       sourceDomain: ContextDomainType.SESSION_SUMMARY,
       targetType: SubstrateType.SUMMARY,

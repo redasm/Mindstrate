@@ -19,7 +19,6 @@ describe('Mindstrate', () => {
     tempDir = createTempDir();
     memory = new Mindstrate({
       dataDir: tempDir,
-      openaiApiKey: '', // offline mode
     });
     await memory.init();
   });
