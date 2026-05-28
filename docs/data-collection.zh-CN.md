@@ -130,6 +130,52 @@ scanner 状态存放在独立数据库：
 ~/.mindstrate-scanner/scanner.db
 ```
 
+### Git 认证：使用 PAT / Deploy Token
+
+如果远端 Git 服务器需要鉴权（私有仓库），在 Scanner Source 的 `Auth token` 字段填入 **Personal Access Token** 或 **Deploy Token**，scanner 会以 `Authorization: bearer <token>` 形式注入到 `git clone` / `git fetch`。**不要** 用账号密码 —— 密码会泄漏到 `.git/config` 和容器 `ps` 输出里，且无法独立吊销。
+
+各家 Git 服务器 Token 入口：
+
+| 服务器 | 入口 | 推荐权限 |
+| --- | --- | --- |
+| GitHub | Settings → Developer settings → Personal access tokens（classic 或 fine-grained）| 只勾 `repo:read` |
+| GitLab | User Settings / Project / Group → Access Tokens | `read_repository` |
+| Gitea | User Settings → Applications → Generate New Token | `repository: read` |
+| Bitbucket Server | Personal access tokens | Project read |
+| Azure DevOps | User Settings → Personal access tokens | `Code: Read` |
+
+如果服务器只支持 SSH，可以在 scanner 容器/主机里部署一份 SSH key 并在 Git 服务器配置 deploy key，把 `Remote URL` 填成 `git@host:org/repo.git`，`Auth token` 留空。
+
+### 大仓库（>10 GB）部署模式
+
+scanner 默认会把远端 git 仓库以 `git clone --mirror` 形式拉到 `${REPO_SCANNER_REPOS_DIR}/<source-id>`（默认 `/repos/<uuid>`），整个 blob 历史都会保留。对几百 G 的代码仓库，这个成本通常不可接受。
+
+推荐做法：**自行在服务器维护一份 bare mirror，scanner 只读不克隆**。Scanner Source 表单里填 `Local repo path`、留空 `Remote URL`：
+
+```bash
+# 一次性建好 mirror（首次较慢）
+git clone --mirror https://github.com/big-org/giant-repo.git /srv/git-mirrors/giant-repo.git
+
+# 后续保持新鲜（cron 每 5 分钟）
+*/5 * * * * cd /srv/git-mirrors/giant-repo.git && git fetch --prune --quiet
+```
+
+UI 里 Source 配置：
+
+```text
+Kind:           git
+Local repo path: /srv/git-mirrors/giant-repo.git
+Remote URL:      （留空）
+```
+
+scanner 检测到 `repoPath` 已存在且 `remoteUrl` 为空，会直接基于该路径运行 `git log` / `git diff`，不会做任何 `git clone` / `git fetch`，不占额外磁盘。如果你还想用 partial / treeless 减少 mirror 自身体积：
+
+```bash
+git clone --mirror --filter=blob:none https://github.com/big-org/giant-repo.git /srv/git-mirrors/giant-repo.git
+```
+
+`--filter=blob:none` 让 mirror 只存 commit 和 tree metadata，blob 在需要 diff 内容时按需从远端拉。对代码仓库通常能省下 10–100x 空间，需要 Git 服务器支持 partial clone 协议（GitHub / GitLab / Gitea 都支持）。
+
 ## Perforce 采集
 
 一次性采集：
