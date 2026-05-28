@@ -3,10 +3,11 @@
 # Mindstrate repo-scanner — production image (daemon mode)
 # ----------------------------------------------------------------
 # Runs `mindstrate-scan daemon` as a long-lived container that polls
-# configured Git/P4 sources on a schedule. In team mode the scanner
-# pushes everything to a Team Server over HTTP, so this container
-# does NOT need to share the team-server data volume — only its own
-# scanner.db (cursors + failed-item retry queue).
+# configured Git/P4 sources on a schedule. The scanner reads source
+# config (per-source Git/P4 connection details) from the shared
+# mindstrate-data SQLite mounted at /data — same DB the team-server
+# and web-ui use — and pushes ingested commits to the Team Server
+# over HTTP as context events.
 #
 # Build (from repo root):
 #   docker build -f deploy/repo-scanner.Dockerfile -t mindstrate/repo-scanner:latest .
@@ -78,11 +79,11 @@ COPY --from=builder /app/packages/repo-scanner/dist         ./packages/repo-scan
 COPY --from=builder /app/packages/repo-scanner/package.json ./packages/repo-scanner/package.json
 COPY --from=builder /app/package.json                       ./package.json
 
-# Scanner state (cursors, failed items) lives in ~/.mindstrate-scanner/
-# Repos that the scanner needs to clone go under /repos (mountable volume).
-RUN mkdir -p /home/mindstrate/.mindstrate-scanner /repos \
- && chown -R mindstrate:mindstrate /app /home/mindstrate /repos
-VOLUME ["/home/mindstrate/.mindstrate-scanner", "/repos"]
+# Scanner reads source config from /data (shared mindstrate-data volume).
+# Auto-cloned repos go under /repos (separate volume so the data DB stays small).
+RUN mkdir -p /data /repos \
+ && chown -R mindstrate:mindstrate /app /home/mindstrate /data /repos
+VOLUME ["/data", "/repos"]
 
 USER mindstrate
 

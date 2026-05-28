@@ -25,7 +25,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     { href: '/graph-knowledge', label: 'Graph' },
     { href: '/search',         label: t.nav.search },
     { href: '/knowledge/new',  label: t.nav.add },
-    { href: '/admin/api-keys', label: 'Admin' },
+    { href: '/admin/api-keys', label: 'API Keys' },
+    { href: '/admin/scanner-sources', label: 'Scanner' },
   ];
 
   return (

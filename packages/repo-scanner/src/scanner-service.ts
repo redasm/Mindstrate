@@ -7,13 +7,14 @@ import {
   type CommitInfo,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
+import { ensureGitClone } from './git-clone.js';
 import {
   getChangelistInfo,
   getRecentChangelists,
   listChangelistsSince,
+  type P4Env,
 } from './p4-source.js';
-import { createKnowledgeSink, defaultScannerDbPath, type KnowledgeSink } from './knowledge-sink.js';
-import { SourceStore } from './source-store.js';
+import { createKnowledgeSink, type KnowledgeSink } from './knowledge-sink.js';
 import type {
   CommitIngestionOptions,
   CommitIngestionResult,
@@ -26,21 +27,19 @@ import type {
 } from './types.js';
 
 export interface RepoScannerOptions {
-  scannerDbPath?: string;
-  memory?: Mindstrate;
+  memory: Mindstrate;
 }
 
 export class RepoScannerService {
-  readonly store: SourceStore;
+  readonly scanner: Mindstrate['scanner'];
   private sink: KnowledgeSink;
   private extractor: KnowledgeExtractor;
-  private readonly adapterMemory?: Mindstrate;
+  private readonly memory: Mindstrate;
 
-  constructor(options: RepoScannerOptions = {}) {
-    const scannerDbPath = options.scannerDbPath ?? defaultScannerDbPath();
-    this.store = new SourceStore(scannerDbPath);
-    this.adapterMemory = options.memory;
-    const config = loadConfig(options.memory?.getConfig());
+  constructor(options: RepoScannerOptions) {
+    this.memory = options.memory;
+    this.scanner = options.memory.scanner;
+    const config = loadConfig(options.memory.getConfig());
     this.sink = createKnowledgeSink(options.memory);
     this.extractor = new KnowledgeExtractor(
       config.openaiApiKey,
@@ -54,79 +53,83 @@ export class RepoScannerService {
   }
 
   addGitLocalSource(input: GitLocalSourceInput): ScanSource {
-    return this.store.createGitLocalSource(input);
+    return this.scanner.createGitLocalSource(input);
   }
 
   addP4Source(input: P4SourceInput): ScanSource {
-    return this.store.createP4Source(input);
+    return this.scanner.createP4Source(input);
   }
 
   listSources(): ScanSource[] {
-    return this.store.listSources();
+    return this.scanner.listSources();
   }
 
   enableSource(sourceId: string): void {
-    this.store.setSourceEnabled(sourceId, true);
+    this.scanner.setSourceEnabled(sourceId, true);
   }
 
   disableSource(sourceId: string): void {
-    this.store.setSourceEnabled(sourceId, false);
+    this.scanner.setSourceEnabled(sourceId, false);
+  }
+
+  deleteSource(sourceId: string): boolean {
+    return this.scanner.deleteSource(sourceId);
   }
 
   listRuns(sourceId: string) {
-    return this.store.listRuns(sourceId);
+    return this.scanner.listRuns(sourceId);
   }
 
   listFailedItems(sourceId: string) {
-    return this.store.listFailedItems(sourceId);
+    return this.scanner.listFailedItems(sourceId);
   }
 
   getSourceStatus(sourceId: string) {
-    const source = this.store.getSource(sourceId);
+    const source = this.scanner.getSource(sourceId);
     if (!source) {
       throw new Error(`Unknown source: ${sourceId}`);
     }
 
     return {
       source,
-      recentRuns: this.store.listRuns(sourceId),
-      failedItems: this.store.listFailedItems(sourceId),
+      recentRuns: this.scanner.listRuns(sourceId),
+      failedItems: this.scanner.listFailedItems(sourceId),
     };
   }
 
   async runSource(sourceId: string): Promise<ScanExecutionResult> {
-    const source = this.store.getSource(sourceId);
+    const source = this.scanner.getSource(sourceId);
     if (!source) {
       throw new Error(`Unknown source: ${sourceId}`);
     }
     if (!source.enabled) {
       throw new Error(`Source is disabled: ${sourceId}`);
     }
-    if (this.store.hasRunningRun(sourceId)) {
+    if (this.scanner.hasRunningRun(sourceId)) {
       throw new Error(`Source is already running: ${sourceId}`);
     }
 
-    this.store.markRunStart(sourceId);
-    const run = this.store.createRun(sourceId);
+    this.scanner.markRunStart(sourceId);
+    const run = this.scanner.createRun(sourceId);
 
     try {
       const result = source.kind === 'p4'
         ? await this.executeP4Source(source)
         : await this.executeGitLocalSource(source);
-      this.store.finishRun(run.id, 'completed', {
+      this.scanner.finishRun(run.id, 'completed', {
         itemsSeen: result.itemsSeen,
         itemsImported: result.itemsImported,
         itemsSkipped: result.itemsSkipped,
         itemsFailed: result.itemsFailed,
       });
       if (result.cursor) {
-        this.store.updateCursor(sourceId, result.cursor);
+        this.scanner.updateCursor(sourceId, result.cursor);
       }
       return result;
     } catch (error) {
       const message = errorMessage(error);
-      this.store.markError(sourceId, message);
-      this.store.finishRun(run.id, 'failed', {
+      this.scanner.markError(sourceId, message);
+      this.scanner.finishRun(run.id, 'failed', {
         itemsSeen: 0,
         itemsImported: 0,
         itemsSkipped: 0,
@@ -138,10 +141,10 @@ export class RepoScannerService {
   }
 
   async retryFailedItems(sourceId: string): Promise<ScanExecutionResult> {
-    const source = this.store.getSource(sourceId);
+    const source = this.scanner.getSource(sourceId);
     if (!source) throw new Error(`Unknown source: ${sourceId}`);
 
-    const failedItems = this.store.listFailedItems(sourceId);
+    const failedItems = this.scanner.listFailedItems(sourceId);
     let itemsImported = 0;
     let itemsSkipped = 0;
     let itemsFailed = 0;
@@ -149,27 +152,27 @@ export class RepoScannerService {
     for (const failed of failedItems) {
       try {
         const commit = source.kind === 'p4'
-          ? getChangelistInfo(failed.externalId.replace(/^p4@/, ''))
+          ? getChangelistInfo(failed.externalId.replace(/^p4@/, ''), p4EnvOf(source))
           : readCommit(source.repoPath!, failed.externalId);
         if (!commit) {
           itemsFailed++;
-          this.store.recordFailedItem(source.id, failed.externalId, 'item no longer readable');
+          this.scanner.recordFailedItem(source.id, failed.externalId, 'item no longer readable');
           continue;
         }
         const imported = await this.processCommit(source, commit);
         if (imported === 'imported') {
           itemsImported++;
-          this.store.deleteFailedItem(failed.id);
+          this.scanner.deleteFailedItem(failed.id);
         } else if (imported === 'skipped') {
           itemsSkipped++;
-          this.store.deleteFailedItem(failed.id);
+          this.scanner.deleteFailedItem(failed.id);
         } else {
           itemsFailed++;
-          this.store.recordFailedItem(source.id, failed.externalId, 'retry failed');
+          this.scanner.recordFailedItem(source.id, failed.externalId, 'retry failed');
         }
       } catch (error) {
         itemsFailed++;
-        this.store.recordFailedItem(
+        this.scanner.recordFailedItem(
           source.id,
           failed.externalId,
           errorMessage(error),
@@ -219,7 +222,6 @@ export class RepoScannerService {
   }
 
   async close(): Promise<void> {
-    this.store.close();
     await this.sink.close();
   }
 
@@ -275,14 +277,14 @@ export class RepoScannerService {
 
   private async routeMindstrateInput(input: RepoScannerMindstrateInput): Promise<void> {
     if (input.type === 'event') {
-      this.sinkMemory().events.ingestEvent(input.event);
+      this.memory.events.ingestEvent(input.event);
       return;
     }
     if (input.type === 'bundle') {
-      this.sinkMemory().bundles.installBundle(input.bundle);
+      this.memory.bundles.installBundle(input.bundle);
       return;
     }
-    this.sinkMemory().context.ingestProjectGraphChangeSet({
+    this.memory.context.ingestProjectGraphChangeSet({
       name: input.project,
       root: process.cwd(),
       dependencies: [],
@@ -294,16 +296,9 @@ export class RepoScannerService {
     }, input.changeSet);
   }
 
-  private sinkMemory(): Mindstrate {
-    if (!this.adapterMemory) throw new Error('RepoScannerService requires a Mindstrate instance for source adapters.');
-    return this.adapterMemory;
-  }
-
   private async executeGitLocalSource(source: ScanSource): Promise<ScanExecutionResult> {
-    if (!source.repoPath) {
-      throw new Error(`Git source ${source.id} has no repoPath`);
-    }
-    const head = getHeadCommit(source.repoPath, source.branch);
+    const repoPath = ensureGitClone(source);
+    const head = getHeadCommit(repoPath, source.branch);
 
     if (!source.lastCursor) {
       if (source.initMode === 'from_now') {
@@ -318,8 +313,8 @@ export class RepoScannerService {
         };
       }
 
-      const initialCommits = listRecentCommits(source.repoPath, source.backfillCount, source.branch);
-      const processed = await this.processCommits(source, initialCommits);
+      const initialCommits = listRecentCommits(repoPath, source.backfillCount, source.branch);
+      const processed = await this.processCommits(source, repoPath, initialCommits);
       return {
         sourceId: source.id,
         mode: 'initialized',
@@ -328,8 +323,8 @@ export class RepoScannerService {
       };
     }
 
-    const commits = listCommitsSince(source.repoPath, source.lastCursor, source.branch);
-    const processed = await this.processCommits(source, commits);
+    const commits = listCommitsSince(repoPath, source.lastCursor, source.branch);
+    const processed = await this.processCommits(source, repoPath, commits);
     return {
       sourceId: source.id,
       mode: 'incremental',
@@ -340,10 +335,11 @@ export class RepoScannerService {
 
   private async executeP4Source(source: ScanSource): Promise<ScanExecutionResult> {
     const depot = source.depotPath;
+    const env = p4EnvOf(source);
 
     if (!source.lastCursor) {
       if (source.initMode === 'from_now') {
-        const latest = getRecentChangelists(1, depot);
+        const latest = getRecentChangelists(1, depot, env);
         return {
           sourceId: source.id,
           mode: 'initialized',
@@ -356,7 +352,7 @@ export class RepoScannerService {
       }
 
       // backfill_recent — getRecentChangelists returns newest-first; reverse to chronological.
-      const recent = getRecentChangelists(source.backfillCount, depot).slice().reverse();
+      const recent = getRecentChangelists(source.backfillCount, depot, env).slice().reverse();
       const processed = await this.processChangelists(source, recent);
       return {
         sourceId: source.id,
@@ -366,7 +362,7 @@ export class RepoScannerService {
       };
     }
 
-    const cls = listChangelistsSince(source.lastCursor, depot);
+    const cls = listChangelistsSince(source.lastCursor, depot, env);
     const processed = await this.processChangelists(source, cls);
     return {
       sourceId: source.id,
@@ -383,14 +379,15 @@ export class RepoScannerService {
     let itemsImported = 0;
     let itemsSkipped = 0;
     let itemsFailed = 0;
+    const env = p4EnvOf(source);
 
     for (const cl of changelists) {
       const externalId = `p4@${cl}`;
       try {
-        const commit = getChangelistInfo(cl);
+        const commit = getChangelistInfo(cl, env);
         if (!commit) {
           itemsFailed++;
-          this.store.recordFailedItem(source.id, externalId, 'changelist could not be read');
+          this.scanner.recordFailedItem(source.id, externalId, 'changelist could not be read');
           continue;
         }
 
@@ -401,11 +398,11 @@ export class RepoScannerService {
           itemsSkipped++;
         } else {
           itemsFailed++;
-          this.store.recordFailedItem(source.id, externalId, 'changelist processing failed');
+          this.scanner.recordFailedItem(source.id, externalId, 'changelist processing failed');
         }
       } catch (error) {
         itemsFailed++;
-        this.store.recordFailedItem(source.id, externalId, errorMessage(error));
+        this.scanner.recordFailedItem(source.id, externalId, errorMessage(error));
       }
     }
 
@@ -419,6 +416,7 @@ export class RepoScannerService {
 
   private async processCommits(
     source: ScanSource,
+    repoPath: string,
     commits: string[],
   ): Promise<Pick<ScanExecutionResult, 'itemsSeen' | 'itemsImported' | 'itemsSkipped' | 'itemsFailed'>> {
     let itemsImported = 0;
@@ -427,10 +425,10 @@ export class RepoScannerService {
 
     for (const hash of commits) {
       try {
-        const commit = readCommit(source.repoPath!, hash);
+        const commit = readCommit(repoPath, hash);
         if (!commit) {
           itemsFailed++;
-          this.store.recordFailedItem(source.id, hash, 'commit could not be read');
+          this.scanner.recordFailedItem(source.id, hash, 'commit could not be read');
           continue;
         }
 
@@ -441,11 +439,11 @@ export class RepoScannerService {
           itemsSkipped++;
         } else {
           itemsFailed++;
-          this.store.recordFailedItem(source.id, hash, 'commit processing failed');
+          this.scanner.recordFailedItem(source.id, hash, 'commit processing failed');
         }
       } catch (error) {
         itemsFailed++;
-        this.store.recordFailedItem(
+        this.scanner.recordFailedItem(
           source.id,
           hash,
           errorMessage(error),
@@ -470,4 +468,13 @@ export class RepoScannerService {
     });
     return result.status;
   }
+}
+
+function p4EnvOf(source: ScanSource): P4Env | undefined {
+  if (!source.p4Port && !source.p4User && !source.p4Passwd) return undefined;
+  return {
+    p4Port: source.p4Port,
+    p4User: source.p4User,
+    p4Passwd: source.p4Passwd,
+  };
 }

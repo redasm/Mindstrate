@@ -19,6 +19,7 @@ import { MindstrateKnowledgeApi } from './runtime/mindstrate-knowledge-api.js';
 import { MindstrateMaintenanceApi } from './runtime/mindstrate-maintenance-api.js';
 import { MindstrateMetabolismApi } from './runtime/mindstrate-metabolism-api.js';
 import { MindstrateProjectionApi } from './runtime/mindstrate-projection-api.js';
+import { MindstrateScannerApi } from './runtime/mindstrate-scanner-api.js';
 import { MindstrateSessionApi } from './runtime/mindstrate-session-api.js';
 import { MindstrateSnapshotApi } from './runtime/mindstrate-snapshot-api.js';
 
@@ -34,6 +35,7 @@ export class Mindstrate {
   readonly maintenance: MindstrateMaintenanceApi;
   readonly metabolism: MindstrateMetabolismApi;
   readonly projections: MindstrateProjectionApi;
+  readonly scanner: MindstrateScannerApi;
   readonly sessions: MindstrateSessionApi;
   readonly snapshots: MindstrateSnapshotApi;
   private initialized = false;
@@ -62,6 +64,7 @@ export class Mindstrate {
     this.maintenance = new MindstrateMaintenanceApi(this.services);
     this.metabolism = new MindstrateMetabolismApi(this.services, () => this.ensureInit());
     this.projections = new MindstrateProjectionApi(this.services);
+    this.scanner = new MindstrateScannerApi(this.services);
     this.snapshots = new MindstrateSnapshotApi(this.services, () => this.ensureInit());
   }
 

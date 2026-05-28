@@ -8,74 +8,17 @@ import type {
   PortableContextBundle,
 } from '@mindstrate/server';
 
-export type ScanSourceKind = 'git-local' | 'p4';
-export type ScanInitMode = 'from_now' | 'backfill_recent';
-
-export interface GitLocalSourceInput {
-  name: string;
-  project: string;
-  repoPath: string;
-  branch?: string;
-  intervalSec?: number;
-  initMode?: ScanInitMode;
-  backfillCount?: number;
-  enabled?: boolean;
-}
-
-export interface P4SourceInput {
-  name: string;
-  project: string;
-  depotPath?: string;
-  intervalSec?: number;
-  initMode?: ScanInitMode;
-  backfillCount?: number;
-  enabled?: boolean;
-}
-
-export interface ScanSource {
-  id: string;
-  kind: ScanSourceKind;
-  name: string;
-  project: string;
-  enabled: boolean;
-  repoPath?: string;
-  depotPath?: string;
-  branch?: string;
-  intervalSec: number;
-  initMode: ScanInitMode;
-  backfillCount: number;
-  lastCursor?: string;
-  lastRunAt?: string;
-  lastSuccessAt?: string;
-  lastError?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export type ScanRunStatus = 'running' | 'completed' | 'failed';
-
-export interface ScanRun {
-  id: string;
-  sourceId: string;
-  status: ScanRunStatus;
-  startedAt: string;
-  finishedAt?: string;
-  itemsSeen: number;
-  itemsImported: number;
-  itemsSkipped: number;
-  itemsFailed: number;
-  error?: string;
-}
-
-export interface FailedScanItem {
-  id: string;
-  sourceId: string;
-  externalId: string;
-  error: string;
-  firstSeenAt: string;
-  lastTriedAt: string;
-  retryCount: number;
-}
+export type {
+  FailedScanItem,
+  GitLocalSourceInput,
+  P4SourceInput,
+  ScanInitMode,
+  ScanRun,
+  ScanRunStatus,
+  ScanSource,
+  ScanSourceKind,
+  UpdateScanSourceInput,
+} from '@mindstrate/server';
 
 export interface ScanExecutionResult {
   sourceId: string;

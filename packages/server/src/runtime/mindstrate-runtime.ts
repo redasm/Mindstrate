@@ -7,6 +7,7 @@ import { QdrantVectorStore } from '../storage/qdrant-vector-store.js';
 import type { IVectorStore } from '../storage/vector-store-interface.js';
 import { SessionStore } from '../storage/session-store.js';
 import { ApiKeyRepository } from '../storage/api-key-repository.js';
+import { ScanSourceRepository } from '../storage/scan-source-repository.js';
 import { Embedder } from '../processing/embedder.js';
 import { KnowledgeQualityGate } from '../processing/knowledge-quality-gate.js';
 import { SessionCompressor } from '../processing/session-compressor.js';
@@ -58,6 +59,7 @@ export interface MindstrateRuntime {
   vectorStore: IVectorStore;
   sessionStore: SessionStore;
   apiKeyRepository: ApiKeyRepository;
+  scanSourceRepository: ScanSourceRepository;
   embedder: Embedder;
   qualityGate: KnowledgeQualityGate;
   sessionCompressor: SessionCompressor;
@@ -118,6 +120,7 @@ export function createMindstrateRuntime(
   const vectorStore = configOverrides?.vectorStore ?? createVectorStore(config, embedder);
   const sessionStore = new SessionStore(databaseStore.getDb());
   const apiKeyRepository = new ApiKeyRepository(databaseStore.getDb());
+  const scanSourceRepository = new ScanSourceRepository(databaseStore.getDb());
   const bundleManager = new PortableContextBundleManager(contextGraphStore);
   const sessionCompressor = new SessionCompressor(config.openaiApiKey, config.llmModel, llmBaseUrl, logger);
   const feedbackLoop = new FeedbackLoop(databaseStore.getDb());
@@ -153,6 +156,7 @@ export function createMindstrateRuntime(
     vectorStore,
     sessionStore,
     apiKeyRepository,
+    scanSourceRepository,
     embedder,
     qualityGate,
     sessionCompressor,

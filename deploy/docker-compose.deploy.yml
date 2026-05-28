@@ -115,14 +115,12 @@ services:
   #   docker compose -f deploy/docker-compose.deploy.yml \
   #     --env-file deploy/.env.deploy --profile scanner up -d --build
   #
-  # Configure sources by exec'ing into the container:
-  #   docker exec -it mindstrate-repo-scanner \
-  #     node packages/repo-scanner/dist/cli.js source add-git \
-  #       --name my-repo --project my-repo --repo-path /repos/my-repo
-  #
-  # The /repos volume is where the daemon expects local clones; mirror your
-  # repos in with `git clone` from the container or by pre-populating the
-  # volume on the host.
+  # Configure sources from the admin Web UI:
+  #   http://<host>:${WEB_UI_PORT:-3377}/admin/scanner-sources
+  # Each source carries its own connection details (Git remote URL + token,
+  # or P4 host/user/password), so one scanner container can serve many
+  # projects backed by different servers and accounts. The shared
+  # mindstrate-data volume below is what lets the scanner read those rows.
   repo-scanner:
     build:
       context: ..
@@ -138,13 +136,10 @@ services:
     environment:
       TEAM_SERVER_URL: "http://team-server:3388"
       TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
+      MINDSTRATE_DATA_DIR: "/data"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
-      # P4 connection (only used if INSTALL_P4=1 and sources include P4)
-      P4PORT: "${P4PORT:-}"
-      P4USER: "${P4USER:-}"
-      P4PASSWD: "${P4PASSWD:-}"
     volumes:
-      - mindstrate-scanner-state:/home/mindstrate/.mindstrate-scanner
+      - mindstrate-data:/data
       - mindstrate-scanner-repos:/repos
     depends_on:
       team-server:
@@ -157,8 +152,6 @@ services:
 volumes:
   mindstrate-data:
     name: mindstrate-data
-  mindstrate-scanner-state:
-    name: mindstrate-scanner-state
   mindstrate-scanner-repos:
     name: mindstrate-scanner-repos
 

@@ -1,5 +1,3 @@
-import * as os from 'node:os';
-import * as path from 'node:path';
 import { TeamClient } from '@mindstrate/client';
 import {
   ContextDomainType,
@@ -23,20 +21,16 @@ export interface KnowledgeSink {
 }
 
 export function createKnowledgeSink(memory?: Mindstrate): KnowledgeSink {
-  if (memory) {
-    return new LocalMemorySink(memory, false);
-  }
-
   const teamServerUrl = process.env['TEAM_SERVER_URL'] ?? '';
   if (teamServerUrl) {
     return new TeamServerSink(teamServerUrl);
   }
 
-  return new LocalMemorySink(new Mindstrate({ logger: consoleLogger }), true);
-}
+  if (memory) {
+    return new LocalMemorySink(memory, false);
+  }
 
-export function defaultScannerDbPath(): string {
-  return path.join(os.homedir(), '.mindstrate-scanner', 'scanner.db');
+  return new LocalMemorySink(new Mindstrate({ logger: consoleLogger }), true);
 }
 
 class LocalMemorySink implements KnowledgeSink {
