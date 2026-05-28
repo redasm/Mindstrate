@@ -13,3 +13,4 @@ data/
 .turbo/
 *.tsbuildinfo
 .tasks/
+.env.deploy

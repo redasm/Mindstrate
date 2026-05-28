@@ -9,6 +9,7 @@ import type { GraphKnowledgeSearchResult } from '@mindstrate/protocol';
 import type { MindstrateConfig } from './config.js';
 import type { IVectorStore } from './storage/vector-store-interface.js';
 import { createMindstrateRuntime, type MindstrateRuntime } from './runtime/mindstrate-runtime.js';
+import { MindstrateApiKeysApi } from './runtime/mindstrate-api-keys-api.js';
 import { MindstrateBundleApi } from './runtime/mindstrate-bundle-api.js';
 import { MindstrateContextAssemblyApi } from './runtime/mindstrate-context-assembly-api.js';
 import { MindstrateContextGraphApi } from './runtime/mindstrate-context-graph-api.js';
@@ -23,6 +24,7 @@ import { MindstrateSnapshotApi } from './runtime/mindstrate-snapshot-api.js';
 
 export class Mindstrate {
   private readonly services: MindstrateRuntime;
+  readonly apiKeys: MindstrateApiKeysApi;
   readonly assembly: MindstrateContextAssemblyApi;
   readonly bundles: MindstrateBundleApi;
   readonly context: MindstrateContextGraphApi;
@@ -43,6 +45,7 @@ export class Mindstrate {
     this.services = createMindstrateRuntime(configOverrides, (query, options) =>
       this.queryGraphKnowledgeIds(query, options.topK),
     );
+    this.apiKeys = new MindstrateApiKeysApi(this.services);
     this.bundles = new MindstrateBundleApi(this.services);
     this.context = new MindstrateContextGraphApi(this.services);
     this.knowledge = new MindstrateKnowledgeApi(this.services, () => this.ensureInit());

@@ -81,6 +81,34 @@ export function getRecentChangelists(n: number = 10, depotPath?: string): string
   }
 }
 
+/**
+ * Return changelist numbers strictly greater than `cursor`, oldest → newest.
+ * Uses `p4 changes ...@<cursor+1>,#head` which is exclusive of the cursor CL.
+ */
+export function listChangelistsSince(cursor: string, depotPath?: string): string[] {
+  const cl = sanitizeChangelist(cursor);
+  if (depotPath && !/^\/\/[a-zA-Z0-9_.\-\/]+$/.test(depotPath)) {
+    throw new Error(`Invalid depot path format: ${depotPath}`);
+  }
+  const next = String(BigInt(cl) + 1n);
+  const path = depotPath ?? '//...';
+  try {
+    const output = execSync(`p4 changes -s submitted ${path}@${next},#head`, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    const newestFirst = output
+      .split('\n')
+      .map((line) => line.match(/^Change\s+(\d+)\s+on/)?.[1])
+      .filter((value): value is string => Boolean(value));
+
+    return newestFirst.reverse();
+  } catch {
+    return [];
+  }
+}
+
 interface P4DescribeResult {
   user: string;
   description: string;

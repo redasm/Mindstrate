@@ -93,6 +93,19 @@ export interface AcceptInternalizationSuggestionsResult extends InternalizationS
   records: ProjectionRecord[];
 }
 
+/**
+ * Projects discoverable by the calling principal on a team server.
+ *
+ * - `wildcard: true` means the principal has admin/wildcard access; the
+ *   `projects` array is the full distinct list found in the team graph.
+ * - `wildcard: false` means the principal is scoped; `projects` is the
+ *   principal's whitelist.
+ */
+export interface ListProjectsResponse {
+  projects: string[];
+  wildcard: boolean;
+}
+
 export type EvolutionRunMode = 'standard' | 'background';
 
 export interface EvolutionSuggestionSummary {

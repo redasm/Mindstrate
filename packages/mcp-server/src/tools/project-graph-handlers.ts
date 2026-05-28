@@ -5,6 +5,7 @@ import {
   type ProjectGraphOverlayKind,
 } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
+import { assertProjectAllowed } from '../allowed-projects.js';
 import {
   evidencePaths,
   formatProjectGraphEdges,
@@ -218,6 +219,7 @@ export async function handleProjectGraphAddOverlay(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
+  assertProjectAllowed(input.project);
   const overlay = await api.createProjectGraphOverlay({
     project: input.project,
     target: input.target,

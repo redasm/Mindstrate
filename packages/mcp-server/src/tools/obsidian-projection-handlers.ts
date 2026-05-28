@@ -1,4 +1,5 @@
 import type { McpApi, McpToolResponse } from '../types.js';
+import { assertProjectAllowed } from '../allowed-projects.js';
 
 type ToolInput = any;
 
@@ -6,6 +7,7 @@ export async function handleObsidianProjectionWrite(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
+  assertProjectAllowed(input.project);
   const result = await api.writeObsidianProjectionFiles({
     rootDir: input.rootDir,
     project: input.project,

@@ -211,6 +211,15 @@ export class ContextNodeRepository {
     return result.changes > 0;
   }
 
+  listDistinctProjects(): string[] {
+    const rows = this.db.prepare(`
+      SELECT DISTINCT project FROM context_nodes
+      WHERE project IS NOT NULL AND project != ''
+      ORDER BY project ASC
+    `).all() as Array<{ project: string }>;
+    return rows.map((row) => row.project);
+  }
+
   recordAccess(id: string, accessedAt = new Date().toISOString()): void {
     this.db.prepare(`
       UPDATE context_nodes

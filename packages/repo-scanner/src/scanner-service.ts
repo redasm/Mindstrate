@@ -7,12 +7,18 @@ import {
   type CommitInfo,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
+import {
+  getChangelistInfo,
+  getRecentChangelists,
+  listChangelistsSince,
+} from './p4-source.js';
 import { createKnowledgeSink, defaultScannerDbPath, type KnowledgeSink } from './knowledge-sink.js';
 import { SourceStore } from './source-store.js';
 import type {
   CommitIngestionOptions,
   CommitIngestionResult,
   GitLocalSourceInput,
+  P4SourceInput,
   RepoScannerMindstrateInput,
   RepoScannerSourceAdapter,
   ScanExecutionResult,
@@ -49,6 +55,10 @@ export class RepoScannerService {
 
   addGitLocalSource(input: GitLocalSourceInput): ScanSource {
     return this.store.createGitLocalSource(input);
+  }
+
+  addP4Source(input: P4SourceInput): ScanSource {
+    return this.store.createP4Source(input);
   }
 
   listSources(): ScanSource[] {
@@ -100,7 +110,9 @@ export class RepoScannerService {
     const run = this.store.createRun(sourceId);
 
     try {
-      const result = await this.executeGitLocalSource(source);
+      const result = source.kind === 'p4'
+        ? await this.executeP4Source(source)
+        : await this.executeGitLocalSource(source);
       this.store.finishRun(run.id, 'completed', {
         itemsSeen: result.itemsSeen,
         itemsImported: result.itemsImported,
@@ -136,10 +148,12 @@ export class RepoScannerService {
 
     for (const failed of failedItems) {
       try {
-        const commit = readCommit(source.repoPath, failed.externalId);
+        const commit = source.kind === 'p4'
+          ? getChangelistInfo(failed.externalId.replace(/^p4@/, ''))
+          : readCommit(source.repoPath!, failed.externalId);
         if (!commit) {
           itemsFailed++;
-          this.store.recordFailedItem(source.id, failed.externalId, 'commit no longer readable');
+          this.store.recordFailedItem(source.id, failed.externalId, 'item no longer readable');
           continue;
         }
         const imported = await this.processCommit(source, commit);
@@ -286,6 +300,9 @@ export class RepoScannerService {
   }
 
   private async executeGitLocalSource(source: ScanSource): Promise<ScanExecutionResult> {
+    if (!source.repoPath) {
+      throw new Error(`Git source ${source.id} has no repoPath`);
+    }
     const head = getHeadCommit(source.repoPath, source.branch);
 
     if (!source.lastCursor) {
@@ -321,6 +338,85 @@ export class RepoScannerService {
     };
   }
 
+  private async executeP4Source(source: ScanSource): Promise<ScanExecutionResult> {
+    const depot = source.depotPath;
+
+    if (!source.lastCursor) {
+      if (source.initMode === 'from_now') {
+        const latest = getRecentChangelists(1, depot);
+        return {
+          sourceId: source.id,
+          mode: 'initialized',
+          itemsSeen: 0,
+          itemsImported: 0,
+          itemsSkipped: 0,
+          itemsFailed: 0,
+          cursor: latest[0],
+        };
+      }
+
+      // backfill_recent — getRecentChangelists returns newest-first; reverse to chronological.
+      const recent = getRecentChangelists(source.backfillCount, depot).slice().reverse();
+      const processed = await this.processChangelists(source, recent);
+      return {
+        sourceId: source.id,
+        mode: 'initialized',
+        ...processed,
+        cursor: recent.at(-1),
+      };
+    }
+
+    const cls = listChangelistsSince(source.lastCursor, depot);
+    const processed = await this.processChangelists(source, cls);
+    return {
+      sourceId: source.id,
+      mode: 'incremental',
+      ...processed,
+      cursor: cls.at(-1) ?? source.lastCursor,
+    };
+  }
+
+  private async processChangelists(
+    source: ScanSource,
+    changelists: string[],
+  ): Promise<Pick<ScanExecutionResult, 'itemsSeen' | 'itemsImported' | 'itemsSkipped' | 'itemsFailed'>> {
+    let itemsImported = 0;
+    let itemsSkipped = 0;
+    let itemsFailed = 0;
+
+    for (const cl of changelists) {
+      const externalId = `p4@${cl}`;
+      try {
+        const commit = getChangelistInfo(cl);
+        if (!commit) {
+          itemsFailed++;
+          this.store.recordFailedItem(source.id, externalId, 'changelist could not be read');
+          continue;
+        }
+
+        const outcome = await this.processCommit(source, commit);
+        if (outcome === 'imported') {
+          itemsImported++;
+        } else if (outcome === 'skipped') {
+          itemsSkipped++;
+        } else {
+          itemsFailed++;
+          this.store.recordFailedItem(source.id, externalId, 'changelist processing failed');
+        }
+      } catch (error) {
+        itemsFailed++;
+        this.store.recordFailedItem(source.id, externalId, errorMessage(error));
+      }
+    }
+
+    return {
+      itemsSeen: changelists.length,
+      itemsImported,
+      itemsSkipped,
+      itemsFailed,
+    };
+  }
+
   private async processCommits(
     source: ScanSource,
     commits: string[],
@@ -331,7 +427,7 @@ export class RepoScannerService {
 
     for (const hash of commits) {
       try {
-        const commit = readCommit(source.repoPath, hash);
+        const commit = readCommit(source.repoPath!, hash);
         if (!commit) {
           itemsFailed++;
           this.store.recordFailedItem(source.id, hash, 'commit could not be read');
@@ -369,7 +465,7 @@ export class RepoScannerService {
     const result = await this.ingestCommit({
       project: source.project,
       commit: commit as CommitInfo,
-      captureSource: CaptureSource.GIT_HOOK,
+      captureSource: source.kind === 'p4' ? CaptureSource.P4_TRIGGER : CaptureSource.GIT_HOOK,
       dryRun: false,
     });
     return result.status;

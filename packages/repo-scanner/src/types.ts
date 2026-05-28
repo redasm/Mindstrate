@@ -8,7 +8,7 @@ import type {
   PortableContextBundle,
 } from '@mindstrate/server';
 
-export type ScanSourceKind = 'git-local';
+export type ScanSourceKind = 'git-local' | 'p4';
 export type ScanInitMode = 'from_now' | 'backfill_recent';
 
 export interface GitLocalSourceInput {
@@ -22,13 +22,24 @@ export interface GitLocalSourceInput {
   enabled?: boolean;
 }
 
+export interface P4SourceInput {
+  name: string;
+  project: string;
+  depotPath?: string;
+  intervalSec?: number;
+  initMode?: ScanInitMode;
+  backfillCount?: number;
+  enabled?: boolean;
+}
+
 export interface ScanSource {
   id: string;
   kind: ScanSourceKind;
   name: string;
   project: string;
   enabled: boolean;
-  repoPath: string;
+  repoPath?: string;
+  depotPath?: string;
   branch?: string;
   intervalSec: number;
   initMode: ScanInitMode;

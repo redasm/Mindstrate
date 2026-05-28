@@ -1,14 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { RequestHandler } from 'express';
+import type { Mindstrate } from '@mindstrate/server';
 
 export type TeamScope = 'read' | 'write' | 'admin';
-
-export interface TeamApiKey {
-  key: string;
-  name?: string;
-  scopes?: TeamScope[];
-  projects?: string[];
-}
 
 export interface TeamPrincipal {
   name: string;
@@ -44,9 +38,13 @@ const readBearerToken = (authorization: string | undefined): string | undefined 
     : undefined
 );
 
-export const createAuthMiddleware = (apiKeys: TeamApiKey[]): RequestHandler => (req, res, next) => {
-  const configuredKeys = apiKeys.filter((entry) => entry.key);
-  if (configuredKeys.length === 0) {
+export interface AuthMiddlewareOptions {
+  adminKey: string;
+  memory: Mindstrate;
+}
+
+export const createAuthMiddleware = ({ adminKey, memory }: AuthMiddlewareOptions): RequestHandler => (req, res, next) => {
+  if (!adminKey) {
     res.status(500).json({ error: 'Team Server authentication is not configured.' });
     return;
   }
@@ -55,19 +53,27 @@ export const createAuthMiddleware = (apiKeys: TeamApiKey[]): RequestHandler => (
   const headerToken = typeof req.headers['x-api-key'] === 'string' ? req.headers['x-api-key'] : undefined;
   const token = bearerToken ?? headerToken;
 
-  const match = token
-    ? configuredKeys.find((entry) => safeCompare(token, entry.key))
-    : undefined;
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized. Provide valid API key via Authorization header or x-api-key.' });
+    return;
+  }
 
-  if (!match) {
+  if (safeCompare(token, adminKey)) {
+    req.teamPrincipal = { name: 'admin', scopes: ['read', 'write', 'admin'], projects: ['*'] };
+    next();
+    return;
+  }
+
+  const memberKey = memory.apiKeys.findActiveByKey(token);
+  if (!memberKey) {
     res.status(401).json({ error: 'Unauthorized. Provide valid API key via Authorization header or x-api-key.' });
     return;
   }
 
   req.teamPrincipal = {
-    name: match.name ?? 'api-key',
-    scopes: match.scopes?.length ? match.scopes : ['read', 'write', 'admin'],
-    projects: match.projects?.length ? match.projects : ['*'],
+    name: memberKey.name,
+    scopes: memberKey.scopes.length > 0 ? memberKey.scopes : ['read', 'write', 'admin'],
+    projects: memberKey.projects.length > 0 ? memberKey.projects : ['*'],
   };
   next();
 };

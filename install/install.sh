@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Mindstrate MCP Server — one-liner installer for Linux/macOS
 #
-# Quick install (with env vars):
+# Two distribution modes are supported:
+#
+# (1) Remote install via internal Nginx:
 #   curl -fsSL http://<nginx>/mindstrate/install.sh \
 #     | TEAM_SERVER_URL=http://10.103.231.74:3388 \
 #       TEAM_API_KEY=...your-key... \
 #       TOOL=opencode \
 #       bash
 #
-# Interactive install:
-#   curl -fsSL http://<nginx>/mindstrate/install.sh -o install.sh
-#   bash install.sh   # will prompt for missing values
+# (2) Offline / Feishu-zip install: unzip the bundle and run install.sh
+# from the same directory. The script auto-detects mindstrate-mcp.js
+# sitting next to it and skips the HTTP download.
+#   unzip mindstrate-installer.zip && cd mindstrate-installer
+#   bash install.sh   # interactive
 #
 # Re-running upgrades the bundle in place. Safe.
 
@@ -33,7 +37,15 @@ say()  { printf "${C_GREEN}==>${C_RESET} %s\n" "$*"; }
 warn() { printf "${C_YELLOW}!! ${C_RESET} %s\n" "$*"; }
 die()  { printf "${C_RED}xx ${C_RESET} %s\n" "$*" >&2; exit 1; }
 
-say "Source: $NGINX_BASE"
+# ----- 0. detect local-mode (bundle sits next to install.sh) -----
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+LOCAL_MODE=0
+if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/mindstrate-mcp.js" ]; then
+  LOCAL_MODE=1
+  say "Local install (bundle: $SCRIPT_DIR/mindstrate-mcp.js)"
+else
+  say "Source: $NGINX_BASE"
+fi
 
 # ----- 1. node check -----
 command -v node >/dev/null 2>&1 || die "Node.js is required. Install >= ${NODE_MIN_MAJOR} from https://nodejs.org/"
@@ -41,23 +53,37 @@ NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
 [ "$NODE_MAJOR" -ge "$NODE_MIN_MAJOR" ] || die "Node.js >= ${NODE_MIN_MAJOR} required, got $(node -v)"
 say "Node.js: $(node -v) ✓"
 
-# ----- 2. download manifest + bundle -----
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-curl -fsSL "$NGINX_BASE/manifest.json" -o "$TMP/manifest.json" \
-  || die "Cannot fetch $NGINX_BASE/manifest.json"
+# ----- 2. resolve manifest + bundle (remote download OR local copy) -----
+if [ "$LOCAL_MODE" = "1" ]; then
+  TMP="$SCRIPT_DIR"
+  # Don't trap-rm a directory the user owns.
+  BUNDLE="mindstrate-mcp.js"
+  if [ -f "$SCRIPT_DIR/manifest.json" ]; then
+    VERSION=$(node -e "console.log(require('$SCRIPT_DIR/manifest.json').version)")
+    EXPECTED_SHA=$(node -e "console.log(require('$SCRIPT_DIR/manifest.json').sha256)")
+  else
+    VERSION="(local)"
+    EXPECTED_SHA=""
+  fi
+  say "Installing version $VERSION"
+else
+  TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+  curl -fsSL "$NGINX_BASE/manifest.json" -o "$TMP/manifest.json" \
+    || die "Cannot fetch $NGINX_BASE/manifest.json"
 
-VERSION=$(node -e "console.log(require('$TMP/manifest.json').version)")
-BUNDLE=$(node -e "console.log(require('$TMP/manifest.json').bundle)")
-EXPECTED_SHA=$(node -e "console.log(require('$TMP/manifest.json').sha256)")
+  VERSION=$(node -e "console.log(require('$TMP/manifest.json').version)")
+  BUNDLE=$(node -e "console.log(require('$TMP/manifest.json').bundle)")
+  EXPECTED_SHA=$(node -e "console.log(require('$TMP/manifest.json').sha256)")
 
-say "Installing version $VERSION"
-curl -fsSL "$NGINX_BASE/$BUNDLE" -o "$TMP/$BUNDLE" \
-  || die "Cannot download $NGINX_BASE/$BUNDLE"
+  say "Installing version $VERSION"
+  curl -fsSL "$NGINX_BASE/$BUNDLE" -o "$TMP/$BUNDLE" \
+    || die "Cannot download $NGINX_BASE/$BUNDLE"
+fi
 
 # Integrity check.
 case "$EXPECTED_SHA" in
   '(sha256'*) warn "manifest.sha256 unavailable — skipping integrity check" ;;
-  '') warn "manifest has no sha256 — skipping" ;;
+  '') warn "no sha256 available — skipping integrity check" ;;
   *)
     if command -v sha256sum >/dev/null; then
       ACTUAL=$(sha256sum "$TMP/$BUNDLE" | awk '{print $1}')
@@ -102,6 +128,54 @@ prompt TOOL            "Wire up which AI tool? [opencode|cursor|claude-desktop|a
 [ -n "$TEAM_SERVER_URL" ] || die "TEAM_SERVER_URL is required"
 [ -n "$TEAM_API_KEY" ]    || die "TEAM_API_KEY is required"
 
+# ----- 4b. validate key + pick projects -----
+# Strip trailing slash so we don't end up with double // in the URL.
+TEAM_SERVER_URL="${TEAM_SERVER_URL%/}"
+
+PROJECTS_JSON=$(curl -fsS -H "Authorization: Bearer $TEAM_API_KEY" \
+  "$TEAM_SERVER_URL/api/projects" 2>/dev/null || true)
+if [ -z "$PROJECTS_JSON" ]; then
+  die "Team Server rejected the API key (or is unreachable). Ask your admin for a valid key."
+fi
+
+WILDCARD=$(node -e "try { console.log(JSON.parse(process.argv[1]).wildcard ? 'true' : 'false') } catch (_) { console.log('false') }" "$PROJECTS_JSON")
+SERVER_PROJECTS=$(node -e "try { const r = JSON.parse(process.argv[1]); console.log((r.projects||[]).join(',')) } catch (_) { console.log('') }" "$PROJECTS_JSON")
+
+if [ "$WILDCARD" = "true" ]; then
+  warn "API key has WILDCARD project access — recommended to ask admin for a project-scoped key."
+  if [ -z "$SERVER_PROJECTS" ]; then
+    prompt MINDSTRATE_PROJECTS "Which projects will you work on? (comma list, or '*' for all)" "*"
+  else
+    say  "Server knows projects: $SERVER_PROJECTS"
+    prompt MINDSTRATE_PROJECTS "Which projects will you work on? (comma list, or '*' for all)" "*"
+  fi
+else
+  if [ -z "$SERVER_PROJECTS" ]; then
+    die "API key is scoped but server returned no projects. Ask your admin to attach project(s) to your key."
+  fi
+  PROJECT_COUNT=$(printf "%s" "$SERVER_PROJECTS" | awk -F',' '{print NF}')
+  if [ "$PROJECT_COUNT" = "1" ]; then
+    MINDSTRATE_PROJECTS="$SERVER_PROJECTS"
+    say "Auto-selected sole authorized project: $MINDSTRATE_PROJECTS"
+  else
+    say "Your API key is authorized for: $SERVER_PROJECTS"
+    prompt MINDSTRATE_PROJECTS "Which of these will you work on? (comma list — must be a subset)" "$SERVER_PROJECTS"
+    # Validate subset.
+    IFS=',' read -ra _SEL <<< "$MINDSTRATE_PROJECTS"
+    IFS=',' read -ra _AUTH <<< "$SERVER_PROJECTS"
+    for p in "${_SEL[@]}"; do
+      pp=$(echo "$p" | xargs)
+      [ -z "$pp" ] && continue
+      found=0
+      for a in "${_AUTH[@]}"; do
+        aa=$(echo "$a" | xargs)
+        if [ "$pp" = "$aa" ]; then found=1; break; fi
+      done
+      [ "$found" = "1" ] || die "Project '$pp' is not in your authorized list ($SERVER_PROJECTS). Ask your admin to add it."
+    done
+  fi
+fi
+
 # ----- 5. write MCP config(s) -----
 NODE_BIN=$(command -v node)
 
@@ -128,7 +202,8 @@ case "$TOOL" in
   "command": ["$NODE_BIN", "$ENTRY"],
   "environment": {
     "TEAM_SERVER_URL": "$TEAM_SERVER_URL",
-    "TEAM_API_KEY":    "$TEAM_API_KEY"
+    "TEAM_API_KEY":    "$TEAM_API_KEY",
+    "MINDSTRATE_PROJECTS": "$MINDSTRATE_PROJECTS"
   }
 }
 EOF
@@ -153,7 +228,8 @@ case "$TOOL" in
   "args": ["$ENTRY"],
   "env": {
     "TEAM_SERVER_URL": "$TEAM_SERVER_URL",
-    "TEAM_API_KEY":    "$TEAM_API_KEY"
+    "TEAM_API_KEY":    "$TEAM_API_KEY",
+    "MINDSTRATE_PROJECTS": "$MINDSTRATE_PROJECTS"
   }
 }
 EOF
@@ -179,7 +255,8 @@ case "$TOOL" in
   "args": ["$ENTRY"],
   "env": {
     "TEAM_SERVER_URL": "$TEAM_SERVER_URL",
-    "TEAM_API_KEY":    "$TEAM_API_KEY"
+    "TEAM_API_KEY":    "$TEAM_API_KEY",
+    "MINDSTRATE_PROJECTS": "$MINDSTRATE_PROJECTS"
   }
 }
 EOF

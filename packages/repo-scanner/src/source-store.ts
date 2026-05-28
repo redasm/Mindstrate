@@ -2,7 +2,14 @@ import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { openSqliteDatabase } from '@mindstrate/server';
 import { initializeSourceStoreSchema } from './source-store-schema.js';
-import type { FailedScanItem, GitLocalSourceInput, ScanRun, ScanSource, ScanRunStatus } from './types.js';
+import type {
+  FailedScanItem,
+  GitLocalSourceInput,
+  P4SourceInput,
+  ScanRun,
+  ScanSource,
+  ScanRunStatus,
+} from './types.js';
 
 export class SourceStore {
   private db: Database.Database;
@@ -31,9 +38,9 @@ export class SourceStore {
 
     this.db.prepare(`
       INSERT INTO scan_sources (
-        id, kind, name, project, enabled, repo_path, branch, interval_sec,
+        id, kind, name, project, enabled, repo_path, depot_path, branch, interval_sec,
         init_mode, backfill_count, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       source.id,
       source.kind,
@@ -41,7 +48,49 @@ export class SourceStore {
       source.project,
       source.enabled ? 1 : 0,
       source.repoPath,
+      null,
       source.branch ?? null,
+      source.intervalSec,
+      source.initMode,
+      source.backfillCount,
+      source.createdAt,
+      source.updatedAt,
+    );
+
+    return source;
+  }
+
+  createP4Source(input: P4SourceInput): ScanSource {
+    const now = new Date().toISOString();
+    const source: ScanSource = {
+      id: randomUUID(),
+      kind: 'p4',
+      name: input.name,
+      project: input.project,
+      enabled: input.enabled ?? true,
+      repoPath: undefined,
+      depotPath: input.depotPath,
+      intervalSec: input.intervalSec ?? 300,
+      initMode: input.initMode ?? 'from_now',
+      backfillCount: input.backfillCount ?? 10,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    this.db.prepare(`
+      INSERT INTO scan_sources (
+        id, kind, name, project, enabled, repo_path, depot_path, branch, interval_sec,
+        init_mode, backfill_count, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      source.id,
+      source.kind,
+      source.name,
+      source.project,
+      source.enabled ? 1 : 0,
+      null,
+      source.depotPath ?? null,
+      null,
       source.intervalSec,
       source.initMode,
       source.backfillCount,
@@ -217,7 +266,8 @@ export class SourceStore {
       name: row.name,
       project: row.project,
       enabled: row.enabled === 1,
-      repoPath: row.repo_path,
+      repoPath: row.repo_path ?? undefined,
+      depotPath: row.depot_path ?? undefined,
       branch: row.branch ?? undefined,
       intervalSec: row.interval_sec,
       initMode: row.init_mode,

@@ -41,6 +41,30 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (command === 'source' && subcommand === 'add-p4') {
+      const name = value('--name', args);
+      const project = value('--project', args);
+      if (!name || !project) {
+        throw new Error('Usage: mindstrate-scan source add-p4 --name <name> --project <project> [--depot //depot/main/...]');
+      }
+      if (!isP4Available()) {
+        throw new Error('p4 command not found — install Perforce CLI (or rebuild scanner image with INSTALL_P4=1) before registering a P4 source');
+      }
+      if (!isP4Connected()) {
+        throw new Error('Cannot connect to Perforce server — check P4PORT/P4USER/P4PASSWD env vars');
+      }
+      const source = service.addP4Source({
+        name,
+        project,
+        depotPath: value('--depot', args),
+        intervalSec: Number(value('--interval-sec', args, '300')),
+        initMode: (value('--init-mode', args, 'from_now') as 'from_now' | 'backfill_recent'),
+        backfillCount: Number(value('--backfill-count', args, '10')),
+      });
+      console.log(`Added source ${source.id} (${source.name})`);
+      return;
+    }
+
     if (command === 'source' && subcommand === 'list') {
       for (const source of service.listSources()) {
         console.log(`${source.id}  ${source.name}  ${source.project}  cursor=${source.lastCursor ?? '(none)'}`);
@@ -198,6 +222,7 @@ async function main(): Promise<void> {
       '  mindstrate-scan hook install [--repo-path <path>]',
       '  mindstrate-scan hook uninstall [--repo-path <path>]',
       '  mindstrate-scan source add-git --name <name> --project <project> --repo-path <path> [--branch main]',
+      '  mindstrate-scan source add-p4 --name <name> --project <project> [--depot //depot/main/...] [--interval-sec 300] [--init-mode from_now|backfill_recent] [--backfill-count 10]',
       '  mindstrate-scan source list',
       '  mindstrate-scan source enable <source-id>',
       '  mindstrate-scan source disable <source-id>',

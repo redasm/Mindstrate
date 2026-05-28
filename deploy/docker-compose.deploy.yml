@@ -78,6 +78,7 @@ services:
     environment:
       PORT: "3377"
       HOSTNAME: "0.0.0.0"
+      TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
       MINDSTRATE_DATA_DIR: "/data"
       MINDSTRATE_LOCALE: "${WEB_UI_LOCALE:-zh}"
       # Web UI shares the same database as team-server; do NOT point it
@@ -103,9 +104,63 @@ services:
         limits:
           memory: 768M
 
+  # ----------------------------------------------------------------
+  # Optional: repo-scanner daemon
+  # ----------------------------------------------------------------
+  # Polls configured Git/P4 sources on a schedule and pushes commits
+  # into the Team Server as context events. Talks to team-server over
+  # the internal docker network (TEAM_SERVER_URL=http://team-server:3388).
+  #
+  # Enable with:
+  #   docker compose -f deploy/docker-compose.deploy.yml \
+  #     --env-file deploy/.env.deploy --profile scanner up -d --build
+  #
+  # Configure sources by exec'ing into the container:
+  #   docker exec -it mindstrate-repo-scanner \
+  #     node packages/repo-scanner/dist/cli.js source add-git \
+  #       --name my-repo --project my-repo --repo-path /repos/my-repo
+  #
+  # The /repos volume is where the daemon expects local clones; mirror your
+  # repos in with `git clone` from the container or by pre-populating the
+  # volume on the host.
+  repo-scanner:
+    build:
+      context: ..
+      dockerfile: deploy/repo-scanner.Dockerfile
+      args:
+        # Set to 1 to bake in the Perforce CLI. Adds ~50 MB.
+        INSTALL_P4: "${INSTALL_P4:-0}"
+    image: mindstrate/repo-scanner:latest
+    container_name: mindstrate-repo-scanner
+    restart: unless-stopped
+    profiles: [scanner]
+    networks: [mindstrate-net]
+    environment:
+      TEAM_SERVER_URL: "http://team-server:3388"
+      TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # P4 connection (only used if INSTALL_P4=1 and sources include P4)
+      P4PORT: "${P4PORT:-}"
+      P4USER: "${P4USER:-}"
+      P4PASSWD: "${P4PASSWD:-}"
+    volumes:
+      - mindstrate-scanner-state:/home/mindstrate/.mindstrate-scanner
+      - mindstrate-scanner-repos:/repos
+    depends_on:
+      team-server:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
 volumes:
   mindstrate-data:
     name: mindstrate-data
+  mindstrate-scanner-state:
+    name: mindstrate-scanner-state
+  mindstrate-scanner-repos:
+    name: mindstrate-scanner-repos
 
 networks:
   mindstrate-net:

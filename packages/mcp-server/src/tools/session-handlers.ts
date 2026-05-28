@@ -1,4 +1,5 @@
 import type { McpApi, McpToolResponse, SessionState } from '../types.js';
+import { assertProjectAllowed } from '../allowed-projects.js';
 
 type ToolInput = any;
 
@@ -8,6 +9,7 @@ export async function handleSessionStart(
   session: SessionState,
 ): Promise<McpToolResponse> {
   const project = (args?.project as string) ?? '';
+  assertProjectAllowed(project || undefined);
   const { session: sess, context } = await api.startSession(
     project,
     args?.techContext as string | undefined,

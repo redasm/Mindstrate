@@ -1,4 +1,4 @@
-import type { CreateKnowledgeInput, EvolutionRunResult } from '@mindstrate/protocol';
+import type { ApiKey, CreateApiKeyInput, CreateKnowledgeInput, EvolutionRunResult, ListProjectsResponse } from '@mindstrate/protocol';
 import { TeamDomainClient } from './team-domain-client.js';
 
 export interface TeamServerStats {
@@ -25,6 +25,10 @@ export class AdminClient extends TeamDomainClient {
     return this.fetch('/api/stats');
   }
 
+  async listProjects(): Promise<ListProjectsResponse> {
+    return this.fetch('/api/projects');
+  }
+
   async sync(entries: CreateKnowledgeInput[]): Promise<SyncResult> {
     return this.post('/api/sync', { entries });
   }
@@ -44,5 +48,22 @@ export class AdminClient extends TeamDomainClient {
     mode?: 'standard' | 'background';
   }): Promise<EvolutionRunResult> {
     return this.post('/api/evolve', options ?? {});
+  }
+
+  async listApiKeys(): Promise<ApiKey[]> {
+    const response = await this.fetch<{ keys: ApiKey[] }>('/api/admin/keys');
+    return response.keys;
+  }
+
+  async createApiKey(input: CreateApiKeyInput): Promise<ApiKey> {
+    return this.post<ApiKey>('/api/admin/keys', input);
+  }
+
+  async revokeApiKey(id: string): Promise<{ revoked: boolean }> {
+    const response = await this.request(`/api/admin/keys/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!response.ok) {
+      throw new Error(`Failed to revoke API key (${response.status})`);
+    }
+    return response.json() as Promise<{ revoked: boolean }>;
   }
 }

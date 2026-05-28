@@ -147,8 +147,16 @@ export class MindstrateContextGraphApi {
     return this.services.contextGraphStore.listNodes(options);
   }
 
+  listKnownProjects(): string[] {
+    return this.services.contextGraphStore.listKnownProjects();
+  }
+
   listConflictRecords(project?: string, limit?: number): ConflictRecord[] {
     return this.services.contextGraphStore.listConflictRecords({ project, limit });
+  }
+
+  getConflictRecord(id: string): ConflictRecord | null {
+    return this.services.contextGraphStore.getConflictRecordById(id);
   }
 
   listContextEdges(options?: {

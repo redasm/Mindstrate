@@ -37,15 +37,17 @@ const startTeamServer = async (options?: {
   await memory.init();
 
   const apiKey = options?.apiKey ?? TEST_API_KEY;
-  const app = createApp({
-    apiKey,
-    memory,
-    authKeys: [{
-      key: apiKey,
+  let clientKey = options?.clientApiKey ?? apiKey;
+  if (options?.projects) {
+    const memberKey = memory.apiKeys.create({
+      name: 'test-member',
       scopes: ['read', 'write', 'admin'],
-      projects: options?.projects,
-    }],
-  });
+      projects: options.projects,
+    });
+    clientKey = options.clientApiKey ?? memberKey.key;
+  }
+
+  const app = createApp({ adminKey: apiKey, memory });
   const server = await new Promise<Server>((resolve) => {
     const instance = createServer(app);
     instance.listen(0, '127.0.0.1', () => resolve(instance));
@@ -54,7 +56,7 @@ const startTeamServer = async (options?: {
   const address = server.address() as AddressInfo;
   const client = new TeamClient({
     serverUrl: `http://127.0.0.1:${address.port}`,
-    apiKey: options?.clientApiKey ?? apiKey,
+    apiKey: clientKey,
     timeout: 5000,
   });
 

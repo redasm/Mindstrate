@@ -1,4 +1,4 @@
-import type { Express } from 'express';
+import type { Express, Request, Response } from 'express';
 import {
   type ContextDomainType,
   type ContextEventType,
@@ -8,7 +8,33 @@ import {
   type PublishBundleOptions,
   type SubstrateType,
 } from '@mindstrate/server';
-import { parseLimit, withInitializedMemory, type TeamRouteDeps } from '../http/route-support.js';
+import {
+  authorizeProject,
+  authorizeProjectForResource,
+  parseLimit,
+  withInitializedMemory,
+  type TeamRouteDeps,
+} from '../http/route-support.js';
+
+const authorizeAllBundleProjects = (
+  req: Request,
+  res: Response,
+  bundle: PortableContextBundle,
+  scope: 'read' | 'write' | 'admin',
+): boolean => {
+  const projects = new Set<string>();
+  for (const node of bundle.nodes ?? []) {
+    if (node.project) projects.add(node.project);
+  }
+  if (projects.size === 0) {
+    if (authorizeProject(req, res, undefined, scope) === null) return false;
+    return true;
+  }
+  for (const project of projects) {
+    if (authorizeProject(req, res, project, scope) === null) return false;
+  }
+  return true;
+};
 
 export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): void => {
   app.get('/api/graph/knowledge', withInitializedMemory(memory, async (req, res) => {
@@ -43,10 +69,13 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    const authorizedProject = authorizeProject(req, res, project, 'write');
+    if (authorizedProject === null) return;
+
     const result = memory.events.ingestEvent({
       type: type as ContextEventType,
       content,
-      project,
+      project: authorizedProject,
       sessionId,
       actor,
       domainType: domainType as ContextDomainType | undefined,
@@ -98,6 +127,14 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    const authorized = authorizeProjectForResource(
+      req,
+      res,
+      () => memory.context.getConflictRecord(conflictId)?.project,
+      'write',
+    );
+    if (authorized === null) return;
+
     res.json(memory.metabolism.acceptConflictCandidate({ conflictId, candidateNodeId, resolution }));
   }));
 
@@ -107,6 +144,14 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       res.status(400).json({ error: 'conflictId, candidateNodeId, and reason are required' });
       return;
     }
+
+    const authorized = authorizeProjectForResource(
+      req,
+      res,
+      () => memory.context.getConflictRecord(conflictId)?.project,
+      'write',
+    );
+    if (authorized === null) return;
 
     res.json(memory.metabolism.rejectConflictCandidate({ conflictId, candidateNodeId, reason }));
   }));
@@ -159,16 +204,22 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
 
   app.post('/api/context/internalize', withInitializedMemory(memory, async (req, res) => {
     const { project, limit } = req.body;
+    const authorized = authorizeProject(req, res, project, 'write');
+    if (authorized === null) return;
+
     res.json(memory.projections.generateInternalizationSuggestions({
-      project,
+      project: authorized,
       limit,
     }));
   }));
 
   app.post('/api/context/internalize/accept', withInitializedMemory(memory, async (req, res) => {
     const { project, limit, targets } = req.body;
+    const authorized = authorizeProject(req, res, project, 'write');
+    if (authorized === null) return;
+
     res.json(memory.projections.acceptInternalizationSuggestions({
-      project,
+      project: authorized,
       limit,
       targets,
     }));
@@ -181,8 +232,11 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    const authorized = authorizeProject(req, res, project, 'write');
+    if (authorized === null) return;
+
     const files = memory.projections.writeObsidianProjectionFiles({
-      project,
+      project: authorized,
       limit,
       rootDir,
     });
@@ -196,6 +250,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    if (authorizeProject(req, res, undefined, 'admin') === null) return;
+
     res.json(memory.projections.importObsidianProjectionFile(filePath));
   }));
 
@@ -206,6 +262,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       res.status(400).json({ error: 'bundle and repoId are required' });
       return;
     }
+
+    if (!authorizeAllBundleProjects(req, res, bundle, 'write')) return;
 
     const result = memory.bundles.installBundle(bundle) as InstallBundleResult;
     const nodeId = bundle.nodeIds[0] ?? bundle.nodes?.[0]?.id;
@@ -221,6 +279,9 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       res.status(400).json({ error: 'project, kind, content, and source are required' });
       return;
     }
+
+    const authorized = authorizeProject(req, res, project, 'write');
+    if (authorized === null) return;
 
     res.status(201).json(memory.context.createProjectGraphOverlay({
       project,
@@ -247,32 +308,40 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.post('/api/evolve', withInitializedMemory(memory, async (req, res) => {
+    if (authorizeProject(req, res, undefined, 'admin') === null) return;
+
     const { autoApply, maxItems, mode } = req.body;
     res.json(await memory.metabolism.runEvolution({ autoApply, maxItems, mode }));
   }));
 
   app.post('/api/metabolism/run', withInitializedMemory(memory, async (req, res) => {
     const { project, trigger } = req.body;
-    res.json(await memory.metabolism.runMetabolism({ project, trigger }));
+    const authorized = authorizeProject(req, res, project, 'write');
+    if (authorized === null) return;
+
+    res.json(await memory.metabolism.runMetabolism({ project: authorized, trigger }));
   }));
 
   app.post('/api/metabolism/stage', withInitializedMemory(memory, async (req, res) => {
     const { project, stage } = req.body;
+    const authorized = authorizeProject(req, res, project, 'write');
+    if (authorized === null) return;
+
     switch (stage) {
       case 'digest':
-        res.json(memory.metabolism.runDigest({ project }));
+        res.json(memory.metabolism.runDigest({ project: authorized }));
         return;
       case 'assimilate':
-        res.json(memory.metabolism.runAssimilation({ project }));
+        res.json(memory.metabolism.runAssimilation({ project: authorized }));
         return;
       case 'compress':
-        res.json(await memory.metabolism.runCompression({ project }));
+        res.json(await memory.metabolism.runCompression({ project: authorized }));
         return;
       case 'prune':
-        res.json(memory.metabolism.runPruning({ project }));
+        res.json(memory.metabolism.runPruning({ project: authorized }));
         return;
       case 'reflect':
-        res.json(memory.metabolism.runReflection({ project }));
+        res.json(memory.metabolism.runReflection({ project: authorized }));
         return;
       default:
         res.status(400).json({ error: 'stage must be digest, assimilate, compress, prune, or reflect' });
@@ -286,11 +355,14 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    const authorized = authorizeProject(req, res, project, 'write');
+    if (authorized === null) return;
+
     res.status(201).json(memory.bundles.createBundle({
       name,
       version,
       description,
-      project,
+      project: authorized,
       nodeIds,
       includeRelatedEdges,
     }));
@@ -313,6 +385,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    if (!authorizeAllBundleProjects(req, res, bundle, 'write')) return;
+
     res.json(memory.bundles.installBundle(bundle));
   }));
 
@@ -323,6 +397,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    if (authorizeProject(req, res, undefined, 'admin') === null) return;
+
     res.json(await memory.bundles.installBundleFromRegistry({ registry, reference }));
   }));
 
@@ -332,6 +408,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       res.status(400).json({ error: 'bundle is required' });
       return;
     }
+
+    if (!authorizeAllBundleProjects(req, res, bundle, 'write')) return;
 
     res.json(memory.bundles.publishBundle(bundle, {
       registry: req.body.registry,
