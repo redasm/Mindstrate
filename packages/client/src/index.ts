@@ -30,6 +30,7 @@ export {
   type NodeFeedbackStats,
 } from './feedback-client.js';
 export { KnowledgeClient } from './knowledge-client.js';
+export { EvalClient } from './eval-client.js';
 export {
   MetabolismClient,
   type MetabolismStage,

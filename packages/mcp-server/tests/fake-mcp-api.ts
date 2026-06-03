@@ -155,6 +155,11 @@ export const createFakeMcpApi = (options: FakeMcpApiOptions = {}): FakeMcpApi =>
     renderBestSkillArtifact: notImplemented('renderBestSkillArtifact'),
     optimizeSkillTargets: notImplemented('optimizeSkillTargets'),
     transferVerifiedSkills: notImplemented('transferVerifiedSkills'),
+    // ---------- EvalApi ----------
+    listEvalCases: notImplemented('listEvalCases'),
+    addEvalCase: notImplemented('addEvalCase'),
+    deleteEvalCase: notImplemented('deleteEvalCase'),
+    runEvalDataset: notImplemented('runEvalDataset'),
   } satisfies FakeMcpApi;
 };
 

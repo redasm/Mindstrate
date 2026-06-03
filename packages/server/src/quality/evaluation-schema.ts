@@ -8,6 +8,7 @@ export const initializeEvaluationSchema = (db: Database.Database): void => {
       expected_ids TEXT NOT NULL,
       language TEXT,
       framework TEXT,
+      kind TEXT NOT NULL DEFAULT 'validation',
       created_at TEXT NOT NULL
     );
 
@@ -24,5 +25,15 @@ export const initializeEvaluationSchema = (db: Database.Database): void => {
 
     CREATE INDEX IF NOT EXISTS idx_eval_runs_timestamp
       ON eval_runs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_eval_cases_kind
+      ON eval_cases(kind);
   `);
+
+  // Backfill the kind column on databases created before dataset
+  // authoring landed. SQLite has no "ADD COLUMN IF NOT EXISTS", so probe
+  // the schema first.
+  const columns = db.prepare(`PRAGMA table_info(eval_cases)`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'kind')) {
+    db.exec(`ALTER TABLE eval_cases ADD COLUMN kind TEXT NOT NULL DEFAULT 'validation'`);
+  }
 };

@@ -322,3 +322,24 @@ export const SkillEvolutionTransferSchema = z.object({
   toProject: z.string().min(1, 'toProject is required'),
   limit: z.number().int().min(1).max(200).optional(),
 });
+
+export const EvalCaseListSchema = z.object({
+  kind: z.enum(['validation', 'holdout']).optional(),
+});
+
+export const EvalCaseAddSchema = z.object({
+  query: z.string().min(1, 'query is required'),
+  expectedIds: z.array(z.string()).min(1, 'expectedIds is required'),
+  language: z.string().optional(),
+  framework: z.string().optional(),
+  kind: z.enum(['validation', 'holdout']).optional(),
+});
+
+export const EvalCaseDeleteSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+});
+
+export const EvalRunSchema = z.object({
+  topK: z.number().int().min(1).max(50).optional(),
+  kind: z.enum(['validation', 'holdout']).optional(),
+});

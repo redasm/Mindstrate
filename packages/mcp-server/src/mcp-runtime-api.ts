@@ -256,6 +256,30 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       return memory!.metabolism.transferVerifiedSkills(input);
     },
 
+    async listEvalCases(options) {
+      if (teamClient) return teamClient.eval.listCases(options);
+      return memory!.evaluation.listEvalCases(options);
+    },
+
+    async addEvalCase(input) {
+      if (teamClient) return teamClient.eval.addCase(input);
+      return memory!.evaluation.addEvalCase(input.query, input.expectedIds, {
+        language: input.language,
+        framework: input.framework,
+        kind: input.kind,
+      });
+    },
+
+    async deleteEvalCase(id) {
+      if (teamClient) return teamClient.eval.deleteCase(id);
+      return { deleted: memory!.evaluation.deleteEvalCase(id) };
+    },
+
+    async runEvalDataset(options) {
+      if (teamClient) return teamClient.eval.run(options);
+      return memory!.evaluation.runEvaluation(options?.topK, options?.kind ? { kind: options.kind } : undefined);
+    },
+
     async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
       if (teamClient) return teamClient.context.readKnowledge(opts);
       return memory!.context.readGraphKnowledge(opts);

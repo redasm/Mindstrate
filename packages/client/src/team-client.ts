@@ -1,6 +1,7 @@
 import { AdminClient } from './admin-client.js';
 import { BundleClient } from './bundle-client.js';
 import { ContextClient } from './context-client.js';
+import { EvalClient } from './eval-client.js';
 import { FeedbackClient } from './feedback-client.js';
 import { KnowledgeClient } from './knowledge-client.js';
 import { MetabolismClient } from './metabolism-client.js';
@@ -18,6 +19,7 @@ export class TeamClient {
   readonly admin: AdminClient;
   readonly bundles: BundleClient;
   readonly context: ContextClient;
+  readonly eval: EvalClient;
   readonly feedback: FeedbackClient;
   readonly knowledge: KnowledgeClient;
   readonly metabolism: MetabolismClient;
@@ -29,6 +31,7 @@ export class TeamClient {
     this.admin = new AdminClient(transport);
     this.bundles = new BundleClient(transport);
     this.context = new ContextClient(transport);
+    this.eval = new EvalClient(transport);
     this.feedback = new FeedbackClient(transport);
     this.knowledge = new KnowledgeClient(transport);
     this.metabolism = new MetabolismClient(transport);

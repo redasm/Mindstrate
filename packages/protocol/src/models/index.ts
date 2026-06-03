@@ -9,3 +9,4 @@ export * from './api-key.js';
 export * from './scan-source.js';
 export * from './llm-config.js';
 export * from './skill-evolution.js';
+export * from './evaluation.js';

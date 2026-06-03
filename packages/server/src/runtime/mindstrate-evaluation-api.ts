@@ -8,7 +8,7 @@ import {
   type ProjectGraphEvaluationTask,
   type RenderProjectGraphEvaluationDatasetInput,
 } from '../project-graph/index.js';
-import type { EvalRunResult } from '../quality/eval.js';
+import type { EvalRunResult, EvalCaseKind } from '../quality/eval.js';
 import type {
   SkillEvolutionEvaluation,
   SkillEvolutionEvaluator,
@@ -22,16 +22,25 @@ export class MindstrateEvaluationApi {
     private readonly ensureInit: () => Promise<void>,
   ) {}
 
-  async runEvaluation(topK?: number): Promise<EvalRunResult> {
+  async runEvaluation(topK?: number, options?: { kind?: EvalCaseKind }): Promise<EvalRunResult> {
     await this.ensureInit();
-    return this.services.evaluator.runEvaluation(topK);
+    return this.services.evaluator.runEvaluation(topK, options);
   }
 
   addEvalCase(query: string, expectedIds: string[], options?: {
     language?: string;
     framework?: string;
+    kind?: EvalCaseKind;
   }) {
     return this.services.evaluator.addCase(query, expectedIds, options);
+  }
+
+  listEvalCases(options?: { kind?: EvalCaseKind }) {
+    return this.services.evaluator.listCases(options);
+  }
+
+  deleteEvalCase(id: string): boolean {
+    return this.services.evaluator.deleteCase(id);
   }
 
   getEvalTrend(limit?: number) {

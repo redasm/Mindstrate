@@ -507,6 +507,27 @@ describe('team-server HTTP integration', () => {
     const copied = memory.context.listContextNodes({ project: 'proj-to', limit: 10 });
     expect(copied.some((node) => node.metadata?.['transferredFromProject'] === 'proj-from')).toBe(true);
   });
+
+  it('authors and runs the eval dataset through the team HTTP API', async () => {
+    const { client } = await startTeamServer();
+
+    await client.eval.addCase({ query: 'fix hydration', expectedIds: ['k1'], kind: 'validation' });
+    await client.eval.addCase({ query: 'deploy team server', expectedIds: ['k2'], kind: 'holdout' });
+
+    const validation = await client.eval.listCases({ kind: 'validation' });
+    expect(validation).toHaveLength(1);
+    expect(validation[0].kind).toBe('validation');
+
+    const all = await client.eval.listCases();
+    expect(all).toHaveLength(2);
+
+    const run = await client.eval.run({ kind: 'validation' });
+    expect(run.totalCases).toBe(1);
+
+    const deleted = await client.eval.deleteCase(validation[0].id);
+    expect(deleted.deleted).toBe(true);
+    expect(await client.eval.listCases()).toHaveLength(1);
+  });
 });
 
 

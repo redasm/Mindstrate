@@ -19,6 +19,9 @@ import type {
   ContextEventType,
   ContextNode,
   ContextNodeStatus,
+  EvalCase,
+  EvalCaseKind,
+  EvalRunResult,
   FeedbackEvent,
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
@@ -250,7 +253,13 @@ export interface LocalMemory {
   readonly sessions: LocalSessionsSubApi;
   readonly assembly: LocalAssemblySubApi;
   readonly metabolism: LocalMetabolismSubApi & LocalSkillEvolutionSubApi;
-  readonly evaluation: { evaluateSkillPatchScoreGate(input: SkillEvolutionEvaluateInput): SkillEvolutionEvaluation };
+  readonly evaluation: {
+    evaluateSkillPatchScoreGate(input: SkillEvolutionEvaluateInput): SkillEvolutionEvaluation;
+    addEvalCase(query: string, expectedIds: string[], options?: { language?: string; framework?: string; kind?: EvalCaseKind }): EvalCase;
+    listEvalCases(options?: { kind?: EvalCaseKind }): EvalCase[];
+    deleteEvalCase(id: string): boolean;
+    runEvaluation(topK?: number, options?: { kind?: EvalCaseKind }): Promise<EvalRunResult>;
+  };
   readonly bundles: LocalBundlesSubApi;
   readonly projections: LocalProjectionsSubApi;
   readonly maintenance: LocalMaintenanceSubApi;
@@ -348,6 +357,13 @@ export interface SkillEvolutionApi {
   transferVerifiedSkills(input: { fromProject: string; toProject: string; limit?: number }): Promise<SkillTransferResult>;
 }
 
+export interface EvalApi {
+  listEvalCases(options?: { kind?: EvalCaseKind }): Promise<EvalCase[]>;
+  addEvalCase(input: { query: string; expectedIds: string[]; language?: string; framework?: string; kind?: EvalCaseKind }): Promise<EvalCase>;
+  deleteEvalCase(id: string): Promise<{ deleted: boolean }>;
+  runEvalDataset(options?: { topK?: number; kind?: EvalCaseKind }): Promise<EvalRunResult>;
+}
+
 export interface McpApi
   extends KnowledgeApi,
     SessionApi,
@@ -355,7 +371,8 @@ export interface McpApi
     MetabolismApi,
     BundleApi,
     InternalizationApi,
-    SkillEvolutionApi {
+    SkillEvolutionApi,
+    EvalApi {
   close(): void;
 }
 
