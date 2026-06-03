@@ -165,3 +165,32 @@ skillEvolutionCommand
       memory.close();
     }
   });
+
+skillEvolutionCommand
+  .command('optimize')
+  .description('Run the optimizer over low-adoption / negative-feedback skill nodes (requires an LLM config)')
+  .option('-p, --project <project>', 'Project scope')
+  .option('-l, --limit <number>', 'Maximum number of targets', '20')
+  .action(async (options: { project?: string; limit: string }) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const results = await memory.metabolism.optimizeSkillTargets({
+        project: options.project,
+        limit: parseInt(options.limit, 10),
+      });
+      if (results.length === 0) {
+        console.log('No skill optimization targets found.');
+        return;
+      }
+      console.log(`Skill optimization run over ${results.length} target(s):\n`);
+      for (const result of results) {
+        console.log(`- ${result.nodeId}: ${result.outcome}${result.patchId ? ` (patch ${result.patchId})` : ''}`);
+      }
+    } catch (error) {
+      console.error('Skill optimization failed:', errorMessage(error));
+      process.exit(1);
+    } finally {
+      memory.close();
+    }
+  });

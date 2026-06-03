@@ -246,6 +246,11 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       return { markdown: artifact.markdown, sourceNodeIds: artifact.sourceNodeIds };
     },
 
+    async optimizeSkillTargets(options) {
+      if (teamClient) return teamClient.skillEvolution.optimizeTargets(options);
+      return memory!.metabolism.optimizeSkillTargets(options);
+    },
+
     async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
       if (teamClient) return teamClient.context.readKnowledge(opts);
       return memory!.context.readGraphKnowledge(opts);

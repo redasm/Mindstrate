@@ -33,3 +33,7 @@ export {
   type SkillOptimizationReason,
   type SkillOptimizationTarget,
 } from './skill-evolution-input-source.js';
+export {
+  createLlmSkillPatchProposer,
+  type LlmSkillPatchProposerDeps,
+} from './llm-skill-patch-proposer.js';

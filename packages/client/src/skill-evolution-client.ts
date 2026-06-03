@@ -14,7 +14,22 @@ export interface BestSkillArtifactResponse {
   sourceNodeIds: string[];
 }
 
+export interface SkillOptimizationResult {
+  nodeId: string;
+  outcome: string;
+  patchId?: string;
+  evaluationId?: string;
+}
+
 export class SkillEvolutionClient extends TeamDomainClient {
+  async optimizeTargets(options?: { project?: string; limit?: number }): Promise<SkillOptimizationResult[]> {
+    const response = await this.post<{ results: SkillOptimizationResult[] }>(
+      '/api/skill-evolution/optimize',
+      { project: options?.project, limit: options?.limit },
+    );
+    return response.results;
+  }
+
   async renderBestSkillArtifact(options?: { project?: string; limit?: number }): Promise<BestSkillArtifactResponse> {
     const params = new URLSearchParams();
     if (options?.project) params.set('project', options.project);

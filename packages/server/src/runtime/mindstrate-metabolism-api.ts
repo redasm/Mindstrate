@@ -28,7 +28,14 @@ import type {
   SkillEvolutionPatchBudget,
 } from '@mindstrate/protocol/models';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
-import { validateSkillEvolutionPatchBudget } from '../skill-evolution/index.js';
+import {
+  collectSkillOptimizationTargets,
+  createLlmSkillPatchProposer,
+  SkillEvolutionOptimizer,
+  validateSkillEvolutionPatchBudget,
+  type ScoreCandidateInput,
+  type SkillEvolutionOptimizationResult,
+} from '../skill-evolution/index.js';
 
 export class MindstrateMetabolismApi {
   private metabolismScheduler: MetabolismScheduler | null = null;
@@ -207,5 +214,49 @@ export class MindstrateMetabolismApi {
 
   rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): SkillEvolutionPatch | null {
     return this.services.skillEvolutionStore.markPatchRejected(input.patchId, input.reason, input.metadata);
+  }
+
+  /**
+   * Run the SkillOpt-style optimizer over low-adoption / negative-feedback
+   * high-order nodes. Targets come from real failure signals; an LLM
+   * proposer suggests bounded patches that still pass the budget validator
+   * and the validation gate. Score the candidate via the retrieval
+   * evaluator: with no eval cases the gate returns `insufficient_data` and
+   * nothing is auto-applied. Offline (no LLM config) yields `no_proposal`.
+   */
+  async optimizeSkillTargets(options: {
+    project?: string;
+    limit?: number;
+  } = {}): Promise<SkillEvolutionOptimizationResult[]> {
+    await this.ensureInit();
+    const targets = collectSkillOptimizationTargets(
+      {
+        graphStore: this.services.contextGraphStore,
+        feedbackLoop: this.services.feedbackLoop,
+      },
+      { project: options.project, limit: options.limit },
+    );
+    if (targets.length === 0) return [];
+
+    const proposePatch = createLlmSkillPatchProposer({
+      providerFactory: this.services.providerFactory,
+    });
+    const optimizer = new SkillEvolutionOptimizer({
+      evolutionStore: this.services.skillEvolutionStore,
+      graphStore: this.services.contextGraphStore,
+      gate: this.services.skillEvolutionGate,
+      proposePatch,
+      scoreCandidate: (input: ScoreCandidateInput) => this.scoreSkillCandidate(input),
+    });
+    return optimizer.optimizeTargets(targets);
+  }
+
+  private async scoreSkillCandidate(_input: ScoreCandidateInput): Promise<{ baselineScore: number; candidateScore: number }> {
+    const run = await this.services.evaluator.runEvaluation();
+    // No held-out eval scoring for before/after content yet: use the
+    // current retrieval F1 as both scores so the hard gate cannot
+    // auto-accept on noise. Real before/after scoring (rebuild index per
+    // candidate) is a future enhancement.
+    return { baselineScore: run.f1, candidateScore: run.f1 };
   }
 }

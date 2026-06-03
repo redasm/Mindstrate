@@ -311,3 +311,8 @@ export const SkillEvolutionRenderBestSkillSchema = z.object({
   project: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),
 });
+
+export const SkillEvolutionOptimizeSchema = z.object({
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});

@@ -26,6 +26,16 @@ export const registerSkillEvolutionRoutes = (app: Express, { memory }: TeamRoute
     res.json(artifact);
   }));
 
+  app.post('/api/skill-evolution/optimize', withInitializedMemory(memory, async (req, res) => {
+    const project = typeof req.body.project === 'string' ? req.body.project : undefined;
+    const authorized = authorizeProject(req, res, project, 'write');
+    if (authorized === null) return;
+
+    const limit = typeof req.body.limit === 'number' ? req.body.limit : undefined;
+    const results = await memory.metabolism.optimizeSkillTargets({ project: authorized, limit });
+    res.json({ results, total: results.length });
+  }));
+
   app.get('/api/skill-evolution/patches', withInitializedMemory(memory, async (req, res) => {
     const project = readParam(req.query.project);
     const authorized = authorizeProject(req, res, project, 'read');

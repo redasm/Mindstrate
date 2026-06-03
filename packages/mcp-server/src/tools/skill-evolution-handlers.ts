@@ -115,3 +115,21 @@ export async function handleSkillEvolutionRenderBestSkill(
     content: [{ type: 'text', text: artifact.markdown }],
   };
 }
+
+export async function handleSkillEvolutionOptimize(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  assertProjectAllowed(input.project);
+  const results = await api.optimizeSkillTargets({ project: input.project, limit: input.limit });
+  if (results.length === 0) {
+    return { content: [{ type: 'text', text: 'No skill optimization targets found.' }] };
+  }
+  const lines = results.map((r) => `- ${r.nodeId}: ${r.outcome}${r.patchId ? ` (patch ${r.patchId})` : ''}`);
+  return {
+    content: [{
+      type: 'text',
+      text: `Skill optimization run over ${results.length} target(s):\n${lines.join('\n')}`,
+    }],
+  };
+}

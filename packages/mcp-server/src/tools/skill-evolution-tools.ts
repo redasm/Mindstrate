@@ -2,6 +2,7 @@ import {
   handleSkillEvolutionEvaluatePatch,
   handleSkillEvolutionGetPatch,
   handleSkillEvolutionListPatches,
+  handleSkillEvolutionOptimize,
   handleSkillEvolutionRejectPatch,
   handleSkillEvolutionRenderBestSkill,
 } from './handlers.js';
@@ -9,6 +10,7 @@ import {
   SkillEvolutionEvaluatePatchSchema,
   SkillEvolutionGetPatchSchema,
   SkillEvolutionListPatchesSchema,
+  SkillEvolutionOptimizeSchema,
   SkillEvolutionRejectPatchSchema,
   SkillEvolutionRenderBestSkillSchema,
 } from './tool-schemas.js';
@@ -44,5 +46,11 @@ export const skillEvolutionTools = [
     description: 'Render the deployable best_skill.md artifact from verified high-quality skill nodes. Read-only projection; does not mutate the graph.',
     schema: SkillEvolutionRenderBestSkillSchema,
     handler: (api, input) => handleSkillEvolutionRenderBestSkill(api, input),
+  }),
+  defineTool({
+    name: 'skill_evolution_optimize',
+    description: 'Run the SkillOpt-style optimizer over low-adoption / negative-feedback skill nodes. Proposes bounded patches through the budget and validation gate; never auto-applies without eval evidence.',
+    schema: SkillEvolutionOptimizeSchema,
+    handler: (api, input) => handleSkillEvolutionOptimize(api, input),
   }),
 ];

@@ -232,6 +232,7 @@ export interface LocalSkillEvolutionSubApi {
   getSkillPatch(id: string): SkillEvolutionPatch | null;
   evaluateSkillPatchScoreGate(input: SkillEvolutionEvaluateInput): SkillEvolutionEvaluation;
   rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): SkillEvolutionPatch | null;
+  optimizeSkillTargets(options?: { project?: string; limit?: number }): Promise<Array<{ nodeId: string; outcome: string; patchId?: string; evaluationId?: string }>>;
 }
 
 export interface BestSkillArtifact {
@@ -323,12 +324,20 @@ export interface InternalizationApi {
   importObsidianProjectionFile(filePath: string): Promise<{ sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean }>;
 }
 
+export interface SkillOptimizationResult {
+  nodeId: string;
+  outcome: string;
+  patchId?: string;
+  evaluationId?: string;
+}
+
 export interface SkillEvolutionApi {
   listSkillPatches(options?: SkillEvolutionListOptions): Promise<SkillEvolutionPatch[]>;
   getSkillPatch(id: string): Promise<SkillEvolutionPatch | null>;
   evaluateSkillPatch(input: SkillEvolutionEvaluateInput): Promise<SkillEvolutionEvaluation>;
   rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): Promise<SkillEvolutionPatch | null>;
   renderBestSkillArtifact(options?: { project?: string; limit?: number }): Promise<BestSkillArtifact>;
+  optimizeSkillTargets(options?: { project?: string; limit?: number }): Promise<SkillOptimizationResult[]>;
 }
 
 export interface McpApi

@@ -153,6 +153,7 @@ export const createFakeMcpApi = (options: FakeMcpApiOptions = {}): FakeMcpApi =>
     evaluateSkillPatch: notImplemented('evaluateSkillPatch'),
     rejectSkillPatch: notImplemented('rejectSkillPatch'),
     renderBestSkillArtifact: notImplemented('renderBestSkillArtifact'),
+    optimizeSkillTargets: notImplemented('optimizeSkillTargets'),
   } satisfies FakeMcpApi;
 };
 

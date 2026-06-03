@@ -642,6 +642,27 @@ describe('Mindstrate', () => {
       expect(memory.context.getContextNode(skill.id)?.content).toBe('- Use broad guidance');
     });
 
+    it('optimizes skill targets without an LLM config and reports no_proposal', async () => {
+      const skill = memory.context.createContextNode({
+        substrateType: SubstrateType.SKILL,
+        domainType: ContextDomainType.WORKFLOW,
+        title: 'Weak skill needing optimization',
+        content: '- Vague guidance',
+        project: 'proj-skill-optimize',
+        status: ContextNodeStatus.ACTIVE,
+      });
+      // Make it a negative-feedback optimization target.
+      memory.context.updateContextNode(skill.id, { negativeFeedback: 5 });
+
+      const results = await memory.metabolism.optimizeSkillTargets({ project: 'proj-skill-optimize' });
+
+      const target = results.find((r) => r.nodeId === skill.id);
+      expect(target).toBeDefined();
+      // Offline test memory has no LLM config, so the proposer fails closed.
+      expect(target?.outcome).toBe('no_proposal');
+      expect(memory.context.getContextNode(skill.id)?.content).toBe('- Vague guidance');
+    });
+
     it('should expose metabolism runs and projection records through the facade', async () => {
 
       memory.context.createContextNode({
