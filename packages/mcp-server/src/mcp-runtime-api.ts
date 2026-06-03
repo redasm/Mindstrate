@@ -251,6 +251,11 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       return memory!.metabolism.optimizeSkillTargets(options);
     },
 
+    async transferVerifiedSkills(input) {
+      if (teamClient) return teamClient.skillEvolution.transferVerifiedSkills(input);
+      return memory!.metabolism.transferVerifiedSkills(input);
+    },
+
     async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
       if (teamClient) return teamClient.context.readKnowledge(opts);
       return memory!.context.readGraphKnowledge(opts);

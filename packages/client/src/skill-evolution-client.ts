@@ -21,7 +21,17 @@ export interface SkillOptimizationResult {
   evaluationId?: string;
 }
 
+export interface SkillTransferResult {
+  transferred: number;
+  skipped: number;
+  targetNodeIds: string[];
+}
+
 export class SkillEvolutionClient extends TeamDomainClient {
+  async transferVerifiedSkills(input: { fromProject: string; toProject: string; limit?: number }): Promise<SkillTransferResult> {
+    return this.post<SkillTransferResult>('/api/skill-evolution/transfer', input);
+  }
+
   async optimizeTargets(options?: { project?: string; limit?: number }): Promise<SkillOptimizationResult[]> {
     const response = await this.post<{ results: SkillOptimizationResult[] }>(
       '/api/skill-evolution/optimize',

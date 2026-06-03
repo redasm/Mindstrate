@@ -133,3 +133,22 @@ export async function handleSkillEvolutionOptimize(
     }],
   };
 }
+
+export async function handleSkillEvolutionTransfer(
+  api: McpApi,
+  input: ToolInput,
+): Promise<McpToolResponse> {
+  assertProjectAllowed(input.fromProject);
+  assertProjectAllowed(input.toProject);
+  const result = await api.transferVerifiedSkills({
+    fromProject: input.fromProject,
+    toProject: input.toProject,
+    limit: input.limit,
+  });
+  return {
+    content: [{
+      type: 'text',
+      text: `Transferred ${result.transferred} verified skill(s) from ${input.fromProject} to ${input.toProject} as candidates (skipped ${result.skipped} already present).`,
+    }],
+  };
+}

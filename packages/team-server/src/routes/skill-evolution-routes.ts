@@ -36,6 +36,24 @@ export const registerSkillEvolutionRoutes = (app: Express, { memory }: TeamRoute
     res.json({ results, total: results.length });
   }));
 
+  app.post('/api/skill-evolution/transfer', withInitializedMemory(memory, async (req, res) => {
+    const { fromProject, toProject, limit } = req.body;
+    if (typeof fromProject !== 'string' || typeof toProject !== 'string') {
+      res.status(400).json({ error: 'fromProject and toProject are required' });
+      return;
+    }
+    // Transfer touches two projects; require write on both.
+    if (authorizeProject(req, res, fromProject, 'write') === null) return;
+    if (authorizeProject(req, res, toProject, 'write') === null) return;
+
+    const result = memory.metabolism.transferVerifiedSkills({
+      fromProject,
+      toProject,
+      limit: typeof limit === 'number' ? limit : undefined,
+    });
+    res.json(result);
+  }));
+
   app.get('/api/skill-evolution/patches', withInitializedMemory(memory, async (req, res) => {
     const project = readParam(req.query.project);
     const authorized = authorizeProject(req, res, project, 'read');

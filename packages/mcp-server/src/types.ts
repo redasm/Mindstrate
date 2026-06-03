@@ -233,6 +233,7 @@ export interface LocalSkillEvolutionSubApi {
   evaluateSkillPatchScoreGate(input: SkillEvolutionEvaluateInput): SkillEvolutionEvaluation;
   rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): SkillEvolutionPatch | null;
   optimizeSkillTargets(options?: { project?: string; limit?: number }): Promise<Array<{ nodeId: string; outcome: string; patchId?: string; evaluationId?: string }>>;
+  transferVerifiedSkills(input: { fromProject: string; toProject: string; limit?: number }): { transferred: number; skipped: number; targetNodeIds: string[] };
 }
 
 export interface BestSkillArtifact {
@@ -331,6 +332,12 @@ export interface SkillOptimizationResult {
   evaluationId?: string;
 }
 
+export interface SkillTransferResult {
+  transferred: number;
+  skipped: number;
+  targetNodeIds: string[];
+}
+
 export interface SkillEvolutionApi {
   listSkillPatches(options?: SkillEvolutionListOptions): Promise<SkillEvolutionPatch[]>;
   getSkillPatch(id: string): Promise<SkillEvolutionPatch | null>;
@@ -338,6 +345,7 @@ export interface SkillEvolutionApi {
   rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): Promise<SkillEvolutionPatch | null>;
   renderBestSkillArtifact(options?: { project?: string; limit?: number }): Promise<BestSkillArtifact>;
   optimizeSkillTargets(options?: { project?: string; limit?: number }): Promise<SkillOptimizationResult[]>;
+  transferVerifiedSkills(input: { fromProject: string; toProject: string; limit?: number }): Promise<SkillTransferResult>;
 }
 
 export interface McpApi

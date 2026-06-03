@@ -5,6 +5,7 @@ import {
   handleSkillEvolutionOptimize,
   handleSkillEvolutionRejectPatch,
   handleSkillEvolutionRenderBestSkill,
+  handleSkillEvolutionTransfer,
 } from './handlers.js';
 import {
   SkillEvolutionEvaluatePatchSchema,
@@ -13,6 +14,7 @@ import {
   SkillEvolutionOptimizeSchema,
   SkillEvolutionRejectPatchSchema,
   SkillEvolutionRenderBestSkillSchema,
+  SkillEvolutionTransferSchema,
 } from './tool-schemas.js';
 import { defineTool } from './tool-types.js';
 
@@ -52,5 +54,11 @@ export const skillEvolutionTools = [
     description: 'Run the SkillOpt-style optimizer over low-adoption / negative-feedback skill nodes. Proposes bounded patches through the budget and validation gate; never auto-applies without eval evidence.',
     schema: SkillEvolutionOptimizeSchema,
     handler: (api, input) => handleSkillEvolutionOptimize(api, input),
+  }),
+  defineTool({
+    name: 'skill_evolution_transfer',
+    description: 'Copy verified high-order skills from one project to another as candidates (cross-project transfer). The receiving project still gates promotion; lineage is preserved.',
+    schema: SkillEvolutionTransferSchema,
+    handler: (api, input) => handleSkillEvolutionTransfer(api, input),
   }),
 ];

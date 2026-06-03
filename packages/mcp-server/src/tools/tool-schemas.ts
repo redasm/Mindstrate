@@ -316,3 +316,9 @@ export const SkillEvolutionOptimizeSchema = z.object({
   project: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),
 });
+
+export const SkillEvolutionTransferSchema = z.object({
+  fromProject: z.string().min(1, 'fromProject is required'),
+  toProject: z.string().min(1, 'toProject is required'),
+  limit: z.number().int().min(1).max(200).optional(),
+});

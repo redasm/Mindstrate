@@ -194,3 +194,28 @@ skillEvolutionCommand
       memory.close();
     }
   });
+
+skillEvolutionCommand
+  .command('transfer <fromProject> <toProject>')
+  .description('Copy verified high-order skills from one project to another as candidates')
+  .option('-l, --limit <number>', 'Maximum number of skills', '50')
+  .action(async (fromProject: string, toProject: string, options: { limit: string }) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const result = memory.metabolism.transferVerifiedSkills({
+        fromProject,
+        toProject,
+        limit: parseInt(options.limit, 10),
+      });
+      console.log(`Transferred ${result.transferred} verified skill(s) from ${fromProject} to ${toProject} as candidates.`);
+      if (result.skipped > 0) {
+        console.log(`Skipped ${result.skipped} already-transferred skill(s).`);
+      }
+    } catch (error) {
+      console.error('Skill transfer failed:', errorMessage(error));
+      process.exit(1);
+    } finally {
+      memory.close();
+    }
+  });

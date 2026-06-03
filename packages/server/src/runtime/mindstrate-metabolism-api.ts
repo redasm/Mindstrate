@@ -33,10 +33,12 @@ import {
   createLlmSkillPatchProposer,
   SkillEvolutionOptimizer,
   synthesizeMetaSkill,
+  transferVerifiedSkills,
   validateSkillEvolutionPatchBudget,
   type MetaSkillSynthesisResult,
   type ScoreCandidateInput,
   type SkillEvolutionOptimizationResult,
+  type SkillTransferResult,
 } from '../skill-evolution/index.js';
 
 export class MindstrateMetabolismApi {
@@ -275,5 +277,14 @@ export class MindstrateMetabolismApi {
       },
       options,
     );
+  }
+
+  /**
+   * Copy a source project's verified high-order skills into a target
+   * project as candidates (cross-project transfer). The receiving
+   * project's gate / reviewers decide promotion; lineage is preserved.
+   */
+  transferVerifiedSkills(options: { fromProject: string; toProject: string; limit?: number }): SkillTransferResult {
+    return transferVerifiedSkills({ graphStore: this.services.contextGraphStore }, options);
   }
 }

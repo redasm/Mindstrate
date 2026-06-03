@@ -483,6 +483,30 @@ describe('team-server HTTP integration', () => {
     expect(artifact.markdown).toContain('Team gated skill');
     expect(artifact.sourceNodeIds.length).toBeGreaterThan(0);
   });
+
+  it('transfers verified skills across projects through the team HTTP API', async () => {
+    const { client, memory } = await startTeamServer();
+
+    memory.context.createContextNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Source verified skill',
+      content: 'Reusable diagnosis procedure.',
+      project: 'proj-from',
+      status: ContextNodeStatus.VERIFIED,
+      qualityScore: 90,
+      confidence: 0.9,
+    });
+
+    const result = await client.skillEvolution.transferVerifiedSkills({
+      fromProject: 'proj-from',
+      toProject: 'proj-to',
+    });
+
+    expect(result.transferred).toBe(1);
+    const copied = memory.context.listContextNodes({ project: 'proj-to', limit: 10 });
+    expect(copied.some((node) => node.metadata?.['transferredFromProject'] === 'proj-from')).toBe(true);
+  });
 });
 
 

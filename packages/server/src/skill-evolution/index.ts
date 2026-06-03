@@ -50,3 +50,9 @@ export {
   type MetaSkillSynthesisOptions,
   type MetaSkillSynthesisResult,
 } from './meta-skill-synthesizer.js';
+export {
+  transferVerifiedSkills,
+  type SkillTransferDeps,
+  type SkillTransferOptions,
+  type SkillTransferResult,
+} from './skill-transfer.js';
