@@ -158,4 +158,35 @@ describe('SkillEvolutionGate', () => {
     expect(evolutionStore.getPatchById(patch.id)?.status).toBe(SkillEvolutionPatchStatus.ACCEPTED);
     expect(graphStore.getNodeById(node.id)?.content).toBe('Use validated guidance with evidence ids.');
   });
+
+  it('applies a soft gate policy with a margin so tiny gains are rejected', () => {
+    const node = graphStore.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Skill',
+      content: 'Use broad guidance.',
+      status: ContextNodeStatus.CANDIDATE,
+    });
+    const patch = evolutionStore.createPatch({
+      sourceNodeId: node.id,
+      operation: SkillEvolutionPatchOperation.REPLACE,
+      beforeContent: node.content,
+      afterContent: 'Use slightly refined guidance.',
+      rationale: 'Tiny gain.',
+      budget: { maxChangedBullets: 2, maxChangedTokens: 8 },
+    });
+
+    const softGate = new SkillEvolutionGate(evolutionStore, graphStore, { mode: 'soft', softMargin: 0.1 });
+    const result = softGate.evaluateScoreGate({
+      patchId: patch.id,
+      evaluator: SkillEvolutionEvaluator.RETRIEVAL,
+      metric: SkillEvolutionMetric.SOFT_SCORE,
+      baselineScore: 0.5,
+      candidateScore: 0.52,
+    });
+
+    expect(result.accepted).toBe(false);
+    expect(evolutionStore.getPatchById(patch.id)?.status).toBe(SkillEvolutionPatchStatus.REJECTED);
+    expect(graphStore.getNodeById(node.id)?.content).toBe('Use broad guidance.');
+  });
 });

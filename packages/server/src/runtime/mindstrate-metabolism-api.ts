@@ -32,7 +32,9 @@ import {
   collectSkillOptimizationTargets,
   createLlmSkillPatchProposer,
   SkillEvolutionOptimizer,
+  synthesizeMetaSkill,
   validateSkillEvolutionPatchBudget,
+  type MetaSkillSynthesisResult,
   type ScoreCandidateInput,
   type SkillEvolutionOptimizationResult,
 } from '../skill-evolution/index.js';
@@ -258,5 +260,20 @@ export class MindstrateMetabolismApi {
     // auto-accept on noise. Real before/after scoring (rebuild index per
     // candidate) is a future enhancement.
     return { baselineScore: run.f1, candidateScore: run.f1 };
+  }
+
+  /**
+   * Synthesize a candidate meta-skill HEURISTIC summarizing how accepted
+   * skill patches improved skills for this project. Candidate-first: the
+   * gate or a human still decides promotion.
+   */
+  synthesizeMetaSkill(options: { project?: string; minAcceptedPatches?: number; limit?: number } = {}): MetaSkillSynthesisResult | null {
+    return synthesizeMetaSkill(
+      {
+        graphStore: this.services.contextGraphStore,
+        evolutionStore: this.services.skillEvolutionStore,
+      },
+      options,
+    );
   }
 }

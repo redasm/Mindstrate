@@ -16,6 +16,13 @@ export {
   type SkillEvolutionEvaluatorResult,
 } from './evaluation-gate.js';
 export {
+  decideGateOutcome,
+  type GateOutcome,
+  type GateScores,
+  type SkillEvolutionGateMode,
+  type SkillEvolutionGatePolicy,
+} from './gate-policy.js';
+export {
   SkillEvolutionOptimizer,
   type OptimizeNodeOptions,
   type ProposePatchInput,
@@ -37,3 +44,9 @@ export {
   createLlmSkillPatchProposer,
   type LlmSkillPatchProposerDeps,
 } from './llm-skill-patch-proposer.js';
+export {
+  synthesizeMetaSkill,
+  type MetaSkillSynthesisDeps,
+  type MetaSkillSynthesisOptions,
+  type MetaSkillSynthesisResult,
+} from './meta-skill-synthesizer.js';

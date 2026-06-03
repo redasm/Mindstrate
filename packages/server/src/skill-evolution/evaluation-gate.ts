@@ -8,6 +8,7 @@ import {
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import { validateSkillEvolutionPatchBudget } from './patch-budget.js';
+import { decideGateOutcome, type SkillEvolutionGatePolicy } from './gate-policy.js';
 import type { SkillEvolutionStore } from './skill-evolution-store.js';
 
 export interface EvaluateSkillEvolutionScoreGateInput {
@@ -33,10 +34,15 @@ export interface SkillEvolutionEvaluatorResult {
 }
 
 export class SkillEvolutionGate {
+  private readonly policy: SkillEvolutionGatePolicy;
+
   constructor(
     private readonly evolutionStore: SkillEvolutionStore,
     private readonly graphStore: ContextGraphStore,
-  ) {}
+    policy: SkillEvolutionGatePolicy = { mode: 'hard' },
+  ) {
+    this.policy = policy;
+  }
 
   /**
    * Hard gate on caller-supplied scores. Accepts only when the budget is
@@ -44,7 +50,7 @@ export class SkillEvolutionGate {
    */
   evaluateScoreGate(input: EvaluateSkillEvolutionScoreGateInput): SkillEvolutionEvaluation {
     const patch = this.requirePatch(input.patchId);
-    const status = this.decideStatus(patch, input.baselineScore, input.candidateScore, true);
+    const status = this.decideStatus(patch, input.baselineScore, input.candidateScore);
     return this.recordAndApply(patch, {
       evaluator: input.evaluator,
       metric: input.metric,
@@ -71,7 +77,7 @@ export class SkillEvolutionGate {
     const result = runEvaluator();
     const hasData = result.totalCases > 0;
     const status = hasData
-      ? this.decideStatus(patch, result.baselineScore, result.candidateScore, true)
+      ? this.decideStatus(patch, result.baselineScore, result.candidateScore)
       : SkillEvolutionGateStatus.INSUFFICIENT_DATA;
 
     return this.recordAndApply(patch, {
@@ -97,7 +103,6 @@ export class SkillEvolutionGate {
     patch: SkillEvolutionPatch,
     baselineScore: number,
     candidateScore: number,
-    requireImprovement: boolean,
   ): SkillEvolutionGateStatus {
     const sourceNode = this.graphStore.getNodeById(patch.sourceNodeId);
     const budget = validateSkillEvolutionPatchBudget({
@@ -108,8 +113,8 @@ export class SkillEvolutionGate {
       budget: patch.budget,
     });
     if (!budget.valid) return SkillEvolutionGateStatus.REJECTED;
-    if (requireImprovement && candidateScore <= baselineScore) return SkillEvolutionGateStatus.REJECTED;
-    return SkillEvolutionGateStatus.ACCEPTED;
+    const outcome = decideGateOutcome(this.policy, { baselineScore, candidateScore });
+    return outcome === 'accept' ? SkillEvolutionGateStatus.ACCEPTED : SkillEvolutionGateStatus.REJECTED;
   }
 
   private recordAndApply(
