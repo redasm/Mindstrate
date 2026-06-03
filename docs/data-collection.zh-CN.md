@@ -132,7 +132,18 @@ scanner 状态存放在独立数据库：
 
 ### Git 认证：使用 PAT / Deploy Token
 
-如果远端 Git 服务器需要鉴权（私有仓库），在 Scanner Source 的 `Auth token` 字段填入 **Personal Access Token** 或 **Deploy Token**，scanner 会以 `Authorization: bearer <token>` 形式注入到 `git clone` / `git fetch`。**不要** 用账号密码 —— 密码会泄漏到 `.git/config` 和容器 `ps` 输出里，且无法独立吊销。
+如果远端 Git 服务器需要鉴权（私有仓库），在 Scanner Source 的 `Auth token` 字段填入 **Personal Access Token** 或 **Deploy Token**。
+
+填写规则按是否含冒号自动分流：
+
+| 填写格式 | scanner 注入的 Authorization 头 | 适用服务器 |
+| --- | --- | --- |
+| `ghp_xxx` / `glpat-xxx` / `xoxp-xxx`（无冒号）| `Bearer <token>` | GitHub PAT、Bitbucket Server PAT |
+| `token-name:token-value`（含冒号）| `Basic base64(token-name:token-value)` | GitLab Deploy Token、Gitea PAT/Token、自建 Git |
+| `oauth2:<gitlab-pat>` | `Basic base64(oauth2:<gitlab-pat>)` | GitLab PAT 走 Git HTTPS |
+| `:<azure-devops-pat>`（冒号开头）| `Basic base64(:<pat>)` 空用户名 | Azure DevOps PAT |
+
+**不要** 用账号密码 —— 密码会泄漏到 `.git/config` 和容器 `ps` 输出里，且无法独立吊销。
 
 各家 Git 服务器 Token 入口：
 

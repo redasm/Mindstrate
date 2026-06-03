@@ -19,7 +19,7 @@ export function ensureGitClone(source: ScanSource): string {
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
 
   const headerArg = source.authToken
-    ? ` -c http.extraheader=${shellQuote(`AUTHORIZATION: bearer ${source.authToken}`)}`
+    ? ` -c http.extraheader=${shellQuote(`Authorization: Bearer ${source.authToken}`)}`
     : '';
 
   if (!fs.existsSync(path.join(targetPath, '.git')) && !fs.existsSync(path.join(targetPath, 'HEAD'))) {

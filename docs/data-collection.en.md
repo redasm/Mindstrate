@@ -134,7 +134,18 @@ Scanner state is stored separately:
 
 ### Git Auth: Use a PAT / Deploy Token
 
-If the remote Git server requires authentication (private repositories), fill the Scanner Source `Auth token` field with a **Personal Access Token** or **Deploy Token**. The scanner injects it as `Authorization: bearer <token>` for `git clone` / `git fetch`. **Do not** use a username + password — passwords leak into `.git/config` and the container `ps` output, and they cannot be rotated independently.
+If the remote Git server requires authentication (private repositories), fill the Scanner Source `Auth token` field with a **Personal Access Token** or **Deploy Token**.
+
+The format is auto-detected by whether the token contains a colon:
+
+| Token format | Authorization header injected | Servers that accept it |
+| --- | --- | --- |
+| `ghp_xxx` / `glpat-xxx` / `xoxp-xxx` (no colon) | `Bearer <token>` | GitHub PAT, Bitbucket Server PAT |
+| `token-name:token-value` (contains a colon) | `Basic base64(token-name:token-value)` | GitLab Deploy Token, Gitea PAT/Token, self-hosted Git |
+| `oauth2:<gitlab-pat>` | `Basic base64(oauth2:<gitlab-pat>)` | GitLab PAT over Git HTTPS |
+| `:<azure-devops-pat>` (leading colon) | `Basic base64(:<pat>)` with empty user | Azure DevOps PAT |
+
+**Do not** use a username + password — passwords leak into `.git/config` and the container `ps` output, and they cannot be rotated independently.
 
 Token entry points for common Git servers:
 
