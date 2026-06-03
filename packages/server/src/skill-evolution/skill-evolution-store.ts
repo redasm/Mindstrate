@@ -4,6 +4,7 @@ import {
   SkillEvolutionPatchStatus,
   type SkillEvolutionEvaluation,
   type SkillEvolutionEvaluator,
+  type SkillEvolutionGateStatus,
   type SkillEvolutionMetric,
   type SkillEvolutionPatch,
   type SkillEvolutionPatchBudget,
@@ -37,6 +38,7 @@ export interface CreateSkillEvolutionEvaluationInput {
   baselineScore: number;
   candidateScore: number;
   accepted: boolean;
+  status: SkillEvolutionGateStatus;
   details?: unknown;
 }
 
@@ -120,8 +122,8 @@ export class SkillEvolutionStore {
     this.db.prepare(`
       INSERT INTO skill_evolution_evaluations (
         id, patch_id, project, evaluator, metric, baseline_score,
-        candidate_score, delta, accepted, details, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        candidate_score, delta, accepted, status, details, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.patchId,
@@ -132,6 +134,7 @@ export class SkillEvolutionStore {
       input.candidateScore,
       delta,
       input.accepted ? 1 : 0,
+      input.status,
       JSON.stringify(input.details ?? null),
       createdAt,
     );
@@ -200,6 +203,7 @@ const initializeSkillEvolutionSchema = (db: Database.Database): void => {
       candidate_score REAL NOT NULL,
       delta REAL NOT NULL,
       accepted INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'rejected',
       details TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY(patch_id) REFERENCES skill_evolution_patches(id) ON DELETE CASCADE
@@ -244,6 +248,7 @@ const rowToEvaluation = (row: EvaluationRow): SkillEvolutionEvaluation => ({
   candidateScore: row.candidate_score,
   delta: row.delta,
   accepted: row.accepted === 1,
+  status: (row.status ?? (row.accepted === 1 ? 'accepted' : 'rejected')) as SkillEvolutionGateStatus,
   details: row.details ? JSON.parse(row.details) : undefined,
   createdAt: row.created_at,
 });
@@ -274,6 +279,7 @@ interface EvaluationRow {
   candidate_score: number;
   delta: number;
   accepted: number;
+  status: string | null;
   details: string | null;
   created_at: string;
 }

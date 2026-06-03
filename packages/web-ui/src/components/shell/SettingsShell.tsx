@@ -21,6 +21,7 @@ export function SettingsShell({
     { href: '/settings/scanner-sources', label: t.nav.settings.scannerSources, icon: 'lucide:radar' },
     { href: '/settings/llm-configs',     label: t.nav.settings.llmConfigs,     icon: 'lucide:brain-circuit' },
     { href: '/settings/ecs',             label: t.nav.settings.ecs,            icon: 'lucide:cpu' },
+    { href: '/settings/skill-evolution', label: t.nav.settings.skillEvolution, icon: 'lucide:sparkles' },
     { href: '/settings/lineage',         label: t.nav.settings.lineage,        icon: 'lucide:git-branch' },
   ];
   return (

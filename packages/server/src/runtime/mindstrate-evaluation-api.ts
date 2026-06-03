@@ -49,6 +49,43 @@ export class MindstrateEvaluationApi {
     return this.services.skillEvolutionGate.evaluateScoreGate(input);
   }
 
+  /**
+   * Validation-gated skill patch evaluation. Runs the retrieval
+   * evaluator over the held-out eval cases. When there are no eval cases
+   * the gate returns `insufficient_data` and the candidate is left
+   * untouched — it is never auto-accepted without evidence.
+   *
+   * `topK` and explicit `baselineScore` / `candidateScore` overrides are
+   * supported for callers that compute scores out-of-band; otherwise the
+   * current retrieval F1 is used as both scores and the gate falls back
+   * to the score comparison only when eval cases exist.
+   */
+  async evaluateSkillPatchWithEvaluator(input: {
+    patchId: string;
+    evaluator: SkillEvolutionEvaluator;
+    metric: SkillEvolutionMetric;
+    topK?: number;
+    baselineScore?: number;
+    candidateScore?: number;
+    details?: unknown;
+  }): Promise<SkillEvolutionEvaluation> {
+    await this.ensureInit();
+    const run = await this.services.evaluator.runEvaluation(input.topK);
+    return this.services.skillEvolutionGate.evaluateWithEvaluator(
+      {
+        patchId: input.patchId,
+        evaluator: input.evaluator,
+        metric: input.metric,
+        details: input.details,
+      },
+      () => ({
+        totalCases: run.totalCases,
+        baselineScore: input.baselineScore ?? run.f1,
+        candidateScore: input.candidateScore ?? run.f1,
+      }),
+    );
+  }
+
   /** List the canonical project graph evaluation fixtures bundled with the server. */
   listProjectGraphFixtures(): ProjectGraphEvaluationFixture[] {
     return listProjectGraphEvaluationFixtures();

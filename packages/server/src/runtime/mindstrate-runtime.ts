@@ -109,6 +109,8 @@ export function createMindstrateRuntime(
   const summaryCompressor = new SummaryCompressor(contextGraphStore, providerFactory);
   const highOrderCompressor = new HighOrderCompressor(contextGraphStore, providerFactory);
   const pruner = new Pruner(contextGraphStore);
+  const skillEvolutionStore = new SkillEvolutionStore(databaseStore.getDb());
+  const skillEvolutionGate = new SkillEvolutionGate(skillEvolutionStore, contextGraphStore);
   const metabolismEngine = new MetabolismEngine({
     graphStore: contextGraphStore,
     summaryCompressor,
@@ -122,6 +124,8 @@ export function createMindstrateRuntime(
     projectSnapshotProjectionMaterializer,
     obsidianProjectionMaterializer,
     pruner,
+    skillEvolutionStore,
+    skillEvolutionGate,
   });
   const vectorStoreFactory = new VectorStoreFactory(config, providerFactory);
   const sessionStore = new SessionStore(databaseStore.getDb());
@@ -136,8 +140,6 @@ export function createMindstrateRuntime(
   );
   const qualityGate = new KnowledgeQualityGate();
   const evaluator = new RetrievalEvaluator(databaseStore.getDb(), queryGraphKnowledgeIds);
-  const skillEvolutionStore = new SkillEvolutionStore(databaseStore.getDb());
-  const skillEvolutionGate = new SkillEvolutionGate(skillEvolutionStore, contextGraphStore);
 
   return {
     config,

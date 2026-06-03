@@ -4,12 +4,15 @@ import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { SummaryCompressor } from '../src/context-graph/summary-compressor.js';
 import { PatternCompressor } from '../src/context-graph/pattern-compressor.js';
 import { RuleCompressor } from '../src/context-graph/rule-compressor.js';
+import { HighOrderCompressor } from '../src/context-graph/high-order-compressor.js';
 import { ConflictDetector } from '../src/context-graph/conflict-detector.js';
 import { ConflictReflector } from '../src/context-graph/conflict-reflector.js';
 import { GraphKnowledgeProjector } from '../src/context-graph/knowledge-projector.js';
 import { KnowledgeProjectionMaterializer } from '../src/projections/knowledge-projection.js';
 import { MetabolismEngine } from '../src/metabolism/metabolism-engine.js';
 import { Pruner } from '../src/metabolism/pruner.js';
+import { SkillEvolutionGate } from '../src/skill-evolution/evaluation-gate.js';
+import { SkillEvolutionStore } from '../src/skill-evolution/skill-evolution-store.js';
 import { ProviderFactory } from '../src/processing/provider-factory.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 import {
@@ -79,5 +82,49 @@ describe('MetabolismEngine', () => {
     const runs = graphStore.listMetabolismRuns({ project: 'mindstrate' });
     expect(runs).toHaveLength(1);
     expect(graphStore.listProjectionRecords({ target: ProjectionTarget.GRAPH_KNOWLEDGE }).length).toBeGreaterThan(0);
+  });
+
+  it('gates candidate high-order skill nodes and reports patch counts in run notes', async () => {
+    const providerFactory = ProviderFactory.offline();
+    const sharedDbStore = new ContextGraphStore(path.join(tempDir, 'gated-graph.db'));
+    const gateStore = new SkillEvolutionStore((sharedDbStore as unknown as { db: import('better-sqlite3').Database }).db);
+    const gate = new SkillEvolutionGate(gateStore, sharedDbStore);
+    const projector = new GraphKnowledgeProjector(sharedDbStore);
+
+    // Two near-duplicate RULE nodes so the high-order compressor forms a
+    // SKILL cluster (created as a candidate, then gated).
+    for (let index = 0; index < 2; index++) {
+      sharedDbStore.createNode({
+        substrateType: SubstrateType.RULE,
+        domainType: ContextDomainType.CONVENTION,
+        title: `Gated rule ${index}`,
+        content: 'Always run focused ECS tests before changing runtime behavior.',
+        project: 'gated',
+        status: ContextNodeStatus.ACTIVE,
+      });
+    }
+
+    const gatedEngine = new MetabolismEngine({
+      graphStore: sharedDbStore,
+      summaryCompressor: new SummaryCompressor(sharedDbStore, providerFactory),
+      patternCompressor: new PatternCompressor(sharedDbStore, providerFactory),
+      ruleCompressor: new RuleCompressor(sharedDbStore, providerFactory),
+      highOrderCompressor: new HighOrderCompressor(sharedDbStore, providerFactory),
+      conflictDetector: new ConflictDetector(sharedDbStore, providerFactory),
+      conflictReflector: new ConflictReflector(sharedDbStore),
+      projectionMaterializer: new KnowledgeProjectionMaterializer(sharedDbStore, projector),
+      pruner: new Pruner(sharedDbStore),
+      skillEvolutionStore: gateStore,
+      skillEvolutionGate: gate,
+    });
+
+    const run = await gatedEngine.run({ project: 'gated', trigger: 'manual' });
+    expect(run.status).toBe(MetabolismRunStatus.COMPLETED);
+
+    const note = run.notes?.find((entry) => entry.startsWith('skillPatches'));
+    expect(note).toBeDefined();
+    expect(note).toMatch(/skillPatchesGated=\d+/);
+
+    sharedDbStore.close();
   });
 });

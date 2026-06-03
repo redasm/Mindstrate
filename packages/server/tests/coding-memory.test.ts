@@ -610,6 +610,38 @@ describe('Mindstrate', () => {
       expect(memory.context.getContextNode(skill.id)?.content).toContain('Preserve evaluation evidence ids');
     });
 
+    it('should not auto-accept a skill patch when there are no eval cases', async () => {
+      const skill = memory.context.createContextNode({
+        substrateType: SubstrateType.SKILL,
+        domainType: ContextDomainType.WORKFLOW,
+        title: 'Patchable skill no eval',
+        content: '- Use broad guidance',
+        project: 'proj-skill-no-eval',
+        status: ContextNodeStatus.CANDIDATE,
+      });
+
+      const patch = memory.metabolism.proposeSkillPatch({
+        project: 'proj-skill-no-eval',
+        sourceNodeId: skill.id,
+        operation: SkillEvolutionPatchOperation.ADD,
+        beforeContent: skill.content,
+        afterContent: '- Use broad guidance\n- Preserve evaluation evidence ids',
+        rationale: 'Bounded skill improvement without eval data.',
+        budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
+      });
+
+      const evaluation = await memory.evaluation.evaluateSkillPatchWithEvaluator({
+        patchId: patch.id,
+        evaluator: SkillEvolutionEvaluator.RETRIEVAL,
+        metric: SkillEvolutionMetric.F1,
+      });
+
+      expect(evaluation.accepted).toBe(false);
+      expect(evaluation.status).toBe('insufficient_data');
+      expect(memory.metabolism.getSkillPatch(patch.id)?.status).toBe(SkillEvolutionPatchStatus.CANDIDATE);
+      expect(memory.context.getContextNode(skill.id)?.content).toBe('- Use broad guidance');
+    });
+
     it('should expose metabolism runs and projection records through the facade', async () => {
 
       memory.context.createContextNode({

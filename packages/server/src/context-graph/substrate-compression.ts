@@ -25,6 +25,12 @@ export interface SubstrateCompressionSpec {
   compressionLevel: number;
   confidence: number;
   qualityScore: number;
+  /**
+   * Status assigned to the compressed target node. Defaults to `active`.
+   * High-order substrates (skill / heuristic / axiom) pass `candidate`
+   * so the SkillOpt-style gate, not the compressor, decides promotion.
+   */
+  targetStatus?: ContextNodeStatus;
   defaultSimilarityThreshold: number;
   title: (cluster: ContextNode[]) => string;
   content: (cluster: ContextNode[]) => string;
@@ -101,7 +107,7 @@ const createTargetNode = (
     compressionLevel: spec.compressionLevel,
     confidence: spec.confidence,
     qualityScore: spec.qualityScore,
-    status: ContextNodeStatus.ACTIVE,
+    status: spec.targetStatus ?? ContextNodeStatus.ACTIVE,
     metadata: {
       clusterSize: cluster.length,
       ...spec.metadata?.(cluster),

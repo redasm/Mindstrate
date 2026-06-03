@@ -12,4 +12,24 @@ export {
 export {
   SkillEvolutionGate,
   type EvaluateSkillEvolutionScoreGateInput,
+  type EvaluateSkillEvolutionWithEvaluatorInput,
+  type SkillEvolutionEvaluatorResult,
 } from './evaluation-gate.js';
+export {
+  SkillEvolutionOptimizer,
+  type OptimizeNodeOptions,
+  type ProposePatchInput,
+  type ScoreCandidateInput,
+  type SkillEvolutionOptimizationResult,
+  type SkillEvolutionOptimizerDeps,
+  type SkillEvolutionOptimizerOutcome,
+  type SkillPatchProposal,
+  type SkillPatchScore,
+} from './skill-evolution-optimizer.js';
+export {
+  collectSkillOptimizationTargets,
+  type CollectSkillOptimizationTargetsOptions,
+  type SkillOptimizationInputDeps,
+  type SkillOptimizationReason,
+  type SkillOptimizationTarget,
+} from './skill-evolution-input-source.js';

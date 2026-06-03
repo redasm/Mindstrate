@@ -281,3 +281,33 @@ export const MemoryEvolveSchema = z.object({
   maxItems: z.number().int().min(1).optional(),
   mode: z.enum(['standard', 'background']).optional(),
 });
+
+export const SkillEvolutionListPatchesSchema = z.object({
+  project: z.string().optional(),
+  sourceNodeId: z.string().optional(),
+  status: z.enum(['candidate', 'accepted', 'rejected']).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
+export const SkillEvolutionGetPatchSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+});
+
+export const SkillEvolutionEvaluatePatchSchema = z.object({
+  patchId: z.string().min(1, 'patchId is required'),
+  evaluator: z.enum(['retrieval', 'project_graph', 'task_harness']).optional(),
+  metric: z.enum(['f1', 'mrr', 'accuracy', 'soft_score', 'mixed']).optional(),
+  baselineScore: z.number(),
+  candidateScore: z.number(),
+  details: z.unknown().optional(),
+});
+
+export const SkillEvolutionRejectPatchSchema = z.object({
+  patchId: z.string().min(1, 'patchId is required'),
+  reason: z.string().min(1, 'reason is required'),
+});
+
+export const SkillEvolutionRenderBestSkillSchema = z.object({
+  project: z.string().optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});

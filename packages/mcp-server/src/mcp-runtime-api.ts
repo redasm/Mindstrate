@@ -217,6 +217,35 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
 
     ...createBundleProjectionApi(teamClient, () => memory!),
 
+    async listSkillPatches(options) {
+      if (teamClient) return teamClient.skillEvolution.listPatches(options);
+      return memory!.metabolism.listSkillPatches(options);
+    },
+
+    async getSkillPatch(id) {
+      if (teamClient) return teamClient.skillEvolution.getPatch(id);
+      return memory!.metabolism.getSkillPatch(id);
+    },
+
+    async evaluateSkillPatch(input) {
+      if (teamClient) return teamClient.skillEvolution.evaluatePatch(input);
+      return memory!.evaluation.evaluateSkillPatchScoreGate(input);
+    },
+
+    async rejectSkillPatch(input) {
+      if (teamClient) return teamClient.skillEvolution.rejectPatch(input);
+      return memory!.metabolism.rejectSkillPatch(input);
+    },
+
+    async renderBestSkillArtifact(options) {
+      if (teamClient) {
+        const artifact = await teamClient.skillEvolution.renderBestSkillArtifact(options);
+        return { markdown: artifact.markdown, sourceNodeIds: artifact.sourceNodeIds };
+      }
+      const artifact = memory!.projections.renderBestSkillArtifact(options);
+      return { markdown: artifact.markdown, sourceNodeIds: artifact.sourceNodeIds };
+    },
+
     async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
       if (teamClient) return teamClient.context.readKnowledge(opts);
       return memory!.context.readGraphKnowledge(opts);

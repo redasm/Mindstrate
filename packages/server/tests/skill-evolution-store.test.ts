@@ -4,6 +4,7 @@ import {
   SkillEvolutionPatchOperation,
   SkillEvolutionPatchStatus,
   SkillEvolutionEvaluator,
+  SkillEvolutionGateStatus,
   SkillEvolutionMetric,
 } from '@mindstrate/protocol/models';
 import { SkillEvolutionStore } from '../src/skill-evolution/skill-evolution-store.js';
@@ -91,10 +92,12 @@ describe('SkillEvolutionStore', () => {
       baselineScore: 0.4,
       candidateScore: 0.6,
       accepted: true,
+      status: SkillEvolutionGateStatus.ACCEPTED,
       details: { cases: 3 },
     });
 
     expect(evaluation.delta).toBeCloseTo(0.2);
+    expect(evaluation.status).toBe(SkillEvolutionGateStatus.ACCEPTED);
     expect(store.listEvaluations(patch.id)).toHaveLength(1);
     expect(store.listEvaluations(patch.id)[0].details).toEqual({ cases: 3 });
   });

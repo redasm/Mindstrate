@@ -24,6 +24,12 @@ export enum SkillEvolutionMetric {
   MIXED = 'mixed',
 }
 
+export enum SkillEvolutionGateStatus {
+  ACCEPTED = 'accepted',
+  REJECTED = 'rejected',
+  INSUFFICIENT_DATA = 'insufficient_data',
+}
+
 export interface SkillEvolutionPatchBudget {
   maxChangedBullets: number;
   maxChangedTokens: number;
@@ -55,6 +61,7 @@ export interface SkillEvolutionEvaluation {
   candidateScore: number;
   delta: number;
   accepted: boolean;
+  status: SkillEvolutionGateStatus;
   details?: unknown;
   createdAt: string;
 }

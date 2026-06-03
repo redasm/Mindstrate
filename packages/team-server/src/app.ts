@@ -7,6 +7,7 @@ import { registerContextRoutes } from './routes/context-routes.js';
 import { registerKnowledgeRoutes } from './routes/knowledge-routes.js';
 import { registerProjectsRoutes } from './routes/projects-routes.js';
 import { registerSessionRoutes } from './routes/session-routes.js';
+import { registerSkillEvolutionRoutes } from './routes/skill-evolution-routes.js';
 
 interface CreateAppOptions {
   adminKey: string;
@@ -28,6 +29,7 @@ export const createApp = ({ adminKey, memory }: CreateAppOptions): Express => {
   registerContextRoutes(app, { memory });
   registerProjectsRoutes(app, { memory });
   registerSessionRoutes(app, { memory });
+  registerSkillEvolutionRoutes(app, { memory });
   registerAdminKeysRoutes(app, { memory });
 
   return app;

@@ -39,6 +39,11 @@ import type {
   ProjectGraphOverlaySource,
   PublishBundleOptions,
   PublishBundleResult,
+  SkillEvolutionEvaluation,
+  SkillEvolutionEvaluator,
+  SkillEvolutionMetric,
+  SkillEvolutionPatch,
+  SkillEvolutionPatchStatus,
 } from '@mindstrate/protocol';
 
 export interface InstallBundleFromRegistryOptions {
@@ -199,10 +204,39 @@ export interface LocalProjectionsSubApi {
   acceptInternalizationSuggestions(options?: { project?: string; limit?: number; targets?: InternalizationTarget[] }): AcceptInternalizationSuggestionsResult;
   writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): string[];
   importObsidianProjectionFile(filePath: string): { sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean };
+  renderBestSkillArtifact(options?: { project?: string; limit?: number }): BestSkillArtifact;
 }
 
 export interface LocalMaintenanceSubApi {
   getStats(): Promise<unknown>;
+}
+
+export interface SkillEvolutionListOptions {
+  project?: string;
+  sourceNodeId?: string;
+  status?: SkillEvolutionPatchStatus;
+  limit?: number;
+}
+
+export interface SkillEvolutionEvaluateInput {
+  patchId: string;
+  evaluator: SkillEvolutionEvaluator;
+  metric: SkillEvolutionMetric;
+  baselineScore: number;
+  candidateScore: number;
+  details?: unknown;
+}
+
+export interface LocalSkillEvolutionSubApi {
+  listSkillPatches(options?: SkillEvolutionListOptions): SkillEvolutionPatch[];
+  getSkillPatch(id: string): SkillEvolutionPatch | null;
+  evaluateSkillPatchScoreGate(input: SkillEvolutionEvaluateInput): SkillEvolutionEvaluation;
+  rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): SkillEvolutionPatch | null;
+}
+
+export interface BestSkillArtifact {
+  markdown: string;
+  sourceNodeIds: string[];
 }
 
 export interface LocalMemory {
@@ -213,7 +247,8 @@ export interface LocalMemory {
   readonly events: LocalEventsSubApi;
   readonly sessions: LocalSessionsSubApi;
   readonly assembly: LocalAssemblySubApi;
-  readonly metabolism: LocalMetabolismSubApi;
+  readonly metabolism: LocalMetabolismSubApi & LocalSkillEvolutionSubApi;
+  readonly evaluation: { evaluateSkillPatchScoreGate(input: SkillEvolutionEvaluateInput): SkillEvolutionEvaluation };
   readonly bundles: LocalBundlesSubApi;
   readonly projections: LocalProjectionsSubApi;
   readonly maintenance: LocalMaintenanceSubApi;
@@ -288,13 +323,22 @@ export interface InternalizationApi {
   importObsidianProjectionFile(filePath: string): Promise<{ sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean }>;
 }
 
+export interface SkillEvolutionApi {
+  listSkillPatches(options?: SkillEvolutionListOptions): Promise<SkillEvolutionPatch[]>;
+  getSkillPatch(id: string): Promise<SkillEvolutionPatch | null>;
+  evaluateSkillPatch(input: SkillEvolutionEvaluateInput): Promise<SkillEvolutionEvaluation>;
+  rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): Promise<SkillEvolutionPatch | null>;
+  renderBestSkillArtifact(options?: { project?: string; limit?: number }): Promise<BestSkillArtifact>;
+}
+
 export interface McpApi
   extends KnowledgeApi,
     SessionApi,
     ContextGraphApi,
     MetabolismApi,
     BundleApi,
-    InternalizationApi {
+    InternalizationApi,
+    SkillEvolutionApi {
   close(): void;
 }
 

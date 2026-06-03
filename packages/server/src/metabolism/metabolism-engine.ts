@@ -21,6 +21,10 @@ import { DigestEngine } from './digest-engine.js';
 import { MetabolicCompressor } from './compressor.js';
 import { Pruner } from './pruner.js';
 import { Reflector } from './reflector.js';
+import { gateCandidateHighOrderNodes, type SkillGatingResult } from './metabolism-skill-gating.js';
+import type { SkillEvolutionGate, SkillEvolutionEvaluatorResult } from '../skill-evolution/evaluation-gate.js';
+import type { SkillEvolutionStore } from '../skill-evolution/skill-evolution-store.js';
+import type { ContextNode } from '@mindstrate/protocol/models';
 
 export interface RunMetabolismOptions {
   project?: string;
@@ -59,6 +63,9 @@ export class MetabolismEngine {
   private readonly assimilator: Assimilator;
   private readonly compressor: MetabolicCompressor;
   private readonly reflector: Reflector;
+  private readonly skillEvolutionStore?: SkillEvolutionStore;
+  private readonly skillEvolutionGate?: SkillEvolutionGate;
+  private readonly skillGatingEvaluator?: (node: ContextNode) => SkillEvolutionEvaluatorResult;
 
   constructor(deps: {
     graphStore: ContextGraphStore;
@@ -73,6 +80,9 @@ export class MetabolismEngine {
     projectSnapshotProjectionMaterializer?: ProjectSnapshotProjectionMaterializer;
     obsidianProjectionMaterializer?: ObsidianProjectionMaterializer;
     pruner: Pruner;
+    skillEvolutionStore?: SkillEvolutionStore;
+    skillEvolutionGate?: SkillEvolutionGate;
+    skillGatingEvaluator?: (node: ContextNode) => SkillEvolutionEvaluatorResult;
   }) {
     this.graphStore = deps.graphStore;
     this.summaryCompressor = deps.summaryCompressor;
@@ -86,6 +96,9 @@ export class MetabolismEngine {
     this.projectSnapshotProjectionMaterializer = deps.projectSnapshotProjectionMaterializer;
     this.obsidianProjectionMaterializer = deps.obsidianProjectionMaterializer;
     this.pruner = deps.pruner;
+    this.skillEvolutionStore = deps.skillEvolutionStore;
+    this.skillEvolutionGate = deps.skillEvolutionGate;
+    this.skillGatingEvaluator = deps.skillGatingEvaluator;
     this.digestEngine = new DigestEngine(this.graphStore);
     this.assimilator = new Assimilator(this.graphStore);
     this.compressor = new MetabolicCompressor({
@@ -126,6 +139,7 @@ export class MetabolismEngine {
     const { stage: _digestStage, ...digestStats } = digest;
     const { stage: _assimilateStage, ...assimilateStats } = assimilate;
     const { summary, pattern, rule, highOrder } = await this.runCompression(options);
+    const skillGating = this.gateCandidateHighOrderNodes(options.project);
     const reflection = await this.reflector.run(options);
     const prune = this.pruner.prune({
       project: options.project,
@@ -187,11 +201,30 @@ export class MetabolismEngine {
         `skillNodesCreated=${highOrder?.skill.nodesCreated ?? 0}`,
         `heuristicNodesCreated=${highOrder?.heuristic.nodesCreated ?? 0}`,
         `axiomNodesCreated=${highOrder?.axiom.nodesCreated ?? 0}`,
+        `skillPatchesGated=${skillGating.gated}`,
+        `skillPatchesAccepted=${skillGating.accepted}`,
+        `skillPatchesRejected=${skillGating.rejected}`,
+        `skillPatchesInsufficientData=${skillGating.insufficientData}`,
         `conflictsDetected=${reflection.conflictsDetected}`,
         `reflectionCandidates=${reflection.candidateNodesCreated}`,
         `archivedNodes=${prune.archivedNodes}`,
         `projectionRecords=${projections.length}`,
       ],
     })!;
+  }
+
+  private gateCandidateHighOrderNodes(project: string | undefined): SkillGatingResult {
+    if (!this.skillEvolutionStore || !this.skillEvolutionGate) {
+      return { gated: 0, accepted: 0, rejected: 0, insufficientData: 0 };
+    }
+    return gateCandidateHighOrderNodes(
+      {
+        graphStore: this.graphStore,
+        skillEvolutionStore: this.skillEvolutionStore,
+        skillEvolutionGate: this.skillEvolutionGate,
+        runEvaluator: this.skillGatingEvaluator,
+      },
+      project,
+    );
   }
 }

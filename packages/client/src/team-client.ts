@@ -5,6 +5,7 @@ import { FeedbackClient } from './feedback-client.js';
 import { KnowledgeClient } from './knowledge-client.js';
 import { MetabolismClient } from './metabolism-client.js';
 import { SessionClient } from './session-client.js';
+import { SkillEvolutionClient } from './skill-evolution-client.js';
 import { TeamHttpTransport } from './team-http-transport.js';
 
 export interface TeamClientConfig {
@@ -21,6 +22,7 @@ export class TeamClient {
   readonly knowledge: KnowledgeClient;
   readonly metabolism: MetabolismClient;
   readonly sessions: SessionClient;
+  readonly skillEvolution: SkillEvolutionClient;
 
   constructor(config: TeamClientConfig) {
     const transport = new TeamHttpTransport(config);
@@ -31,5 +33,6 @@ export class TeamClient {
     this.knowledge = new KnowledgeClient(transport);
     this.metabolism = new MetabolismClient(transport);
     this.sessions = new SessionClient(transport);
+    this.skillEvolution = new SkillEvolutionClient(transport);
   }
 }

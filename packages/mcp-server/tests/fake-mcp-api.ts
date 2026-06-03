@@ -147,6 +147,12 @@ export const createFakeMcpApi = (options: FakeMcpApiOptions = {}): FakeMcpApi =>
       record('importObsidianProjectionFile', filePath);
       return options.importObsidianProjectionFileResult ?? { changed: false };
     },
+    // ---------- SkillEvolutionApi ----------
+    listSkillPatches: notImplemented('listSkillPatches'),
+    getSkillPatch: notImplemented('getSkillPatch'),
+    evaluateSkillPatch: notImplemented('evaluateSkillPatch'),
+    rejectSkillPatch: notImplemented('rejectSkillPatch'),
+    renderBestSkillArtifact: notImplemented('renderBestSkillArtifact'),
   } satisfies FakeMcpApi;
 };
 
