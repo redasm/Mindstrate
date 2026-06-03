@@ -9,6 +9,11 @@ import {
   type RenderProjectGraphEvaluationDatasetInput,
 } from '../project-graph/index.js';
 import type { EvalRunResult } from '../quality/eval.js';
+import type {
+  SkillEvolutionEvaluation,
+  SkillEvolutionEvaluator,
+  SkillEvolutionMetric,
+} from '@mindstrate/protocol/models';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateEvaluationApi {
@@ -31,6 +36,17 @@ export class MindstrateEvaluationApi {
 
   getEvalTrend(limit?: number) {
     return this.services.evaluator.getTrend(limit);
+  }
+
+  evaluateSkillPatchScoreGate(input: {
+    patchId: string;
+    evaluator: SkillEvolutionEvaluator;
+    metric: SkillEvolutionMetric;
+    baselineScore: number;
+    candidateScore: number;
+    details?: unknown;
+  }): SkillEvolutionEvaluation {
+    return this.services.skillEvolutionGate.evaluateScoreGate(input);
   }
 
   /** List the canonical project graph evaluation fixtures bundled with the server. */

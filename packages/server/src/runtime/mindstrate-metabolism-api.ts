@@ -21,7 +21,14 @@ import type {
 } from '../metabolism/index.js';
 import { EvolutionEngine, MetabolismScheduler } from '../metabolism/index.js';
 import type { MetabolismRun } from '@mindstrate/protocol/models';
+import type {
+  SkillEvolutionPatch,
+  SkillEvolutionPatchOperation,
+  SkillEvolutionPatchStatus,
+  SkillEvolutionPatchBudget,
+} from '@mindstrate/protocol/models';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
+import { validateSkillEvolutionPatchBudget } from '../skill-evolution/index.js';
 
 export class MindstrateMetabolismApi {
   private metabolismScheduler: MetabolismScheduler | null = null;
@@ -152,5 +159,53 @@ export class MindstrateMetabolismApi {
 
   listMetabolismRuns(project?: string, limit?: number): MetabolismRun[] {
     return this.services.contextGraphStore.listMetabolismRuns({ project, limit });
+  }
+
+  proposeSkillPatch(input: {
+    project?: string;
+    sourceNodeId: string;
+    targetNodeId?: string;
+    operation: SkillEvolutionPatchOperation;
+    beforeContent: string;
+    afterContent: string;
+    rationale: string;
+    budget: SkillEvolutionPatchBudget;
+    metadata?: Record<string, unknown>;
+  }): SkillEvolutionPatch {
+    const sourceNode = this.services.contextGraphStore.getNodeById(input.sourceNodeId);
+    const budget = validateSkillEvolutionPatchBudget({
+      sourceNode,
+      operation: input.operation,
+      beforeContent: input.beforeContent,
+      afterContent: input.afterContent,
+      budget: input.budget,
+    });
+    if (!budget.valid) {
+      throw new Error(`Invalid skill evolution patch: ${budget.reason}`);
+    }
+    return this.services.skillEvolutionStore.createPatch({
+      ...input,
+      metadata: {
+        ...(input.metadata ?? {}),
+        budgetValidation: budget,
+      },
+    });
+  }
+
+  getSkillPatch(id: string): SkillEvolutionPatch | null {
+    return this.services.skillEvolutionStore.getPatchById(id);
+  }
+
+  listSkillPatches(options: {
+    project?: string;
+    sourceNodeId?: string;
+    status?: SkillEvolutionPatchStatus;
+    limit?: number;
+  } = {}): SkillEvolutionPatch[] {
+    return this.services.skillEvolutionStore.listPatches(options);
+  }
+
+  rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): SkillEvolutionPatch | null {
+    return this.services.skillEvolutionStore.markPatchRejected(input.patchId, input.reason, input.metadata);
   }
 }

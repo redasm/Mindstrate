@@ -30,6 +30,10 @@ export class MindstrateProjectionApi {
     return this.services.obsidianProjectionMaterializer.importFile(filePath);
   }
 
+  renderBestSkillArtifact(options?: { project?: string; limit?: number }) {
+    return this.services.bestSkillProjectionMaterializer.render(options);
+  }
+
   generateInternalizationSuggestions(options?: InternalizationSuggestionOptions): InternalizationSuggestions {
     return this.services.contextInternalizer.generateSuggestions(options);
   }
