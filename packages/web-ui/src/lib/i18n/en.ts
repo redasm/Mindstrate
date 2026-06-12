@@ -516,6 +516,11 @@ const en = {
     showing: 'Showing',
     of: 'of',
     deleteConfirm: 'Delete this entry?',
+    backToList: 'Back to knowledge',
+    detailNotFoundTitle: 'Entry not found',
+    detailNotFound: 'This knowledge entry does not exist or was deleted.',
+    createdLabel: 'Created',
+    updatedLabel: 'Updated',
   },
 
   projectGraph: {

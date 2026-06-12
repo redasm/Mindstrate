@@ -60,6 +60,11 @@ export class MindstrateScannerApi {
     return this.services.scanSourceRepository.hasRunningRun(sourceId);
   }
 
+  /** See ScanSourceRepository.recoverOrphanedRuns — daemon-startup only. */
+  recoverOrphanedRuns(): number {
+    return this.services.scanSourceRepository.recoverOrphanedRuns();
+  }
+
   createRun(sourceId: string): ScanRun {
     return this.services.scanSourceRepository.createRun(sourceId);
   }

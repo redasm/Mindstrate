@@ -21,6 +21,13 @@ export class RepoScannerDaemon {
 
   start(): void {
     if (this.timer) return;
+    // A previous process that died mid-scan leaves runs stuck in
+    // `running`, which blocks the source forever via hasRunningRun.
+    // Daemon startup is the one moment no scan can be in flight.
+    const recovered = this.service.scanner.recoverOrphanedRuns();
+    if (recovered > 0) {
+      console.log(`[repo-scanner] recovered ${recovered} orphaned running run(s) from a previous process`);
+    }
     void this.tick();
     this.timer = setInterval(() => {
       void this.tick();
@@ -60,7 +67,12 @@ export class RepoScannerDaemon {
     const results: ScanExecutionResult[] = [];
     for (const source of due) {
       try {
-        results.push(await this.service.runSource(source.id));
+        const result = await this.service.runSource(source.id);
+        results.push(result);
+        console.log(
+          `[repo-scanner] source ${source.id}: ${result.mode} `
+          + `seen=${result.itemsSeen} imported=${result.itemsImported} skipped=${result.itemsSkipped} failed=${result.itemsFailed}`,
+        );
       } catch (error) {
         this.onSourceError(source.id, errorMessage(error));
       }

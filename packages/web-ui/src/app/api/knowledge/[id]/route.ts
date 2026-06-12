@@ -1,19 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemory } from '@/lib/memory';
-import { toGraphKnowledgeView } from '@mindstrate/server';
+import { toGraphKnowledgeView, type ContextNode } from '@mindstrate/server';
 import { errorResponse } from '@/app/api/error-response';
+import { canAccessProject, requireSessionFromRequest, type SessionPayload } from '@/lib/session';
+
+const guard = async (req: NextRequest): Promise<{ session: SessionPayload } | { denied: Response }> => {
+  try {
+    return { session: await requireSessionFromRequest(req) };
+  } catch (resp) {
+    return { denied: resp as Response };
+  }
+};
+
+/** 404 for both missing nodes and nodes outside the member's projects, so ids don't leak. */
+const findAccessibleNode = (session: SessionPayload, id: string): ContextNode | null => {
+  const node = getMemory().context.getContextNode(id);
+  if (!node) return null;
+  if (node.project && !canAccessProject(session, node.project)) return null;
+  return node;
+};
 
 /** GET /api/knowledge/[id] */
-export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await guard(request);
+  if ('denied' in auth) return auth.denied;
   try {
     const { id } = await params;
-    const memory = getMemory();
-    const node = memory.context.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
-
+    const node = findAccessibleNode(auth.session, id);
     if (!node) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-
     return NextResponse.json(toGraphKnowledgeView(node));
   } catch (error) {
     return errorResponse(error);
@@ -22,12 +38,16 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
 /** PUT /api/knowledge/[id] - 更新 */
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await guard(request);
+  if ('denied' in auth) return auth.denied;
   try {
     const { id } = await params;
-    const memory = getMemory();
+    if (!findAccessibleNode(auth.session, id)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
     const body = await request.json();
 
-    const updated = memory.context.updateContextNode(id, {
+    const updated = getMemory().context.updateContextNode(id, {
       title: body.title,
       content: body.summary ?? body.content,
       tags: body.tags,
@@ -45,29 +65,21 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 }
 
 /** DELETE /api/knowledge/[id] */
-export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await guard(request);
+  if ('denied' in auth) return auth.denied;
   try {
     const { id } = await params;
-    const memory = getMemory();
-    const deleted = memory.context.deleteContextNode(id);
+    if (!findAccessibleNode(auth.session, id)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    const deleted = getMemory().context.deleteContextNode(id);
 
     if (!deleted) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    return errorResponse(error);
-  }
-}
-
-/** PATCH /api/knowledge/[id] - retained endpoint, returns the ECS node view */
-export async function PATCH(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-    const memory = getMemory();
-    const node = memory.context.queryContextGraph({ query: id, limit: 50 }).find((item) => item.id === id);
-    return NextResponse.json(node ? toGraphKnowledgeView(node) : null);
   } catch (error) {
     return errorResponse(error);
   }

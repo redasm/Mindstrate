@@ -7,6 +7,7 @@ import {
   detectProject,
   type CommitInfo,
   type DetectedProject,
+  type ProjectGraphScanProgress,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
 import { ensureGitClone } from './git-clone.js';
@@ -299,7 +300,7 @@ export class RepoScannerService {
     const head = getHeadCommit(repoPath, source.branch);
 
     if (!source.lastCursor) {
-      await this.initializeProjectFromPath(source, repoPath);
+      await this.initializeProjectFromPath(source, repoPath, runId);
       if (source.initMode === 'from_now') {
         return {
           sourceId: source.id,
@@ -332,15 +333,15 @@ export class RepoScannerService {
     };
   }
 
-  private async initializeP4Project(source: ScanSource, env: P4Env | undefined): Promise<void> {
+  private async initializeP4Project(source: ScanSource, env: P4Env | undefined, runId: string): Promise<void> {
     const projectRoot = source.repoPath ?? findP4WorkspaceRoot(source.depotPath, env);
     if (!projectRoot) {
       throw new Error(`P4 source ${source.id} needs a local workspace path for first-run project initialization`);
     }
-    await this.initializeProjectFromPath(source, projectRoot);
+    await this.initializeProjectFromPath(source, projectRoot, runId);
   }
 
-  private async initializeProjectFromPath(source: ScanSource, root: string): Promise<void> {
+  private async initializeProjectFromPath(source: ScanSource, root: string, runId: string): Promise<void> {
     const detected = detectProject(root);
     if (!detected) return;
     const project: DetectedProject = {
@@ -349,7 +350,31 @@ export class RepoScannerService {
       root,
     };
     await this.memory.snapshots.upsertProjectSnapshot(project, { author: 'repo-scanner' });
-    this.memory.context.indexProjectGraph(project);
+    this.memory.context.indexProjectGraph(project, {
+      onScanProgress: this.createInitProgressReporter(runId),
+    });
+  }
+
+  /**
+   * First-run graph indexing on a large checkout runs for minutes before a
+   * single commit is processed, leaving the run row frozen at zero. Write
+   * the scanned file count into the run as a throttled heartbeat so the UI
+   * "running" state shows movement; the final commit-based stats overwrite
+   * these numbers when the run finishes.
+   */
+  private createInitProgressReporter(runId: string): (event: ProjectGraphScanProgress) => void {
+    let lastWriteMs = 0;
+    return (event) => {
+      const now = Date.now();
+      if (now - lastWriteMs < 500) return;
+      lastWriteMs = now;
+      this.scanner.updateRunProgress(runId, {
+        itemsSeen: event.files,
+        itemsImported: 0,
+        itemsSkipped: 0,
+        itemsFailed: 0,
+      });
+    };
   }
 
   private async executeP4Source(source: ScanSource, runId: string): Promise<ScanExecutionResult> {
@@ -357,7 +382,7 @@ export class RepoScannerService {
     const env = p4EnvOf(source);
 
     if (!source.lastCursor) {
-      await this.initializeP4Project(source, env);
+      await this.initializeP4Project(source, env, runId);
       if (source.initMode === 'from_now') {
         const latest = getRecentChangelists(1, depot, env);
         return {

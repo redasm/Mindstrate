@@ -289,6 +289,21 @@ export class ScanSourceRepository {
     return row.count > 0;
   }
 
+  /**
+   * Finalize runs left in `running` by a process that died mid-scan.
+   * Without this, a crashed/restarted scanner leaves the run row running
+   * forever and `hasRunningRun` blocks every future scan of that source.
+   * Only safe to call when no scan can be in flight (daemon startup).
+   */
+  recoverOrphanedRuns(): number {
+    const result = this.db.prepare(`
+      UPDATE scan_runs
+      SET status = 'failed', finished_at = ?, error = 'orphaned: scanner stopped mid-run'
+      WHERE status = 'running'
+    `).run(new Date().toISOString());
+    return result.changes;
+  }
+
   createRun(sourceId: string): ScanRun {
     const run: ScanRun = {
       id: randomUUID(),

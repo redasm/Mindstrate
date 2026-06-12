@@ -518,6 +518,11 @@ const zh: Translations = {
     showing: '显示',
     of: '/',
     deleteConfirm: '删除该条目？',
+    backToList: '返回知识库',
+    detailNotFoundTitle: '条目不存在',
+    detailNotFound: '该知识条目不存在或已被删除。',
+    createdLabel: '创建于',
+    updatedLabel: '更新于',
   },
 
   projectGraph: {

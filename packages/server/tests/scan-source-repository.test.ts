@@ -156,4 +156,24 @@ describe('ScanSourceRepository', () => {
     expect(repo.listRuns(source.id)).toHaveLength(0);
     expect(repo.listFailedItems(source.id)).toHaveLength(0);
   });
+
+  it('recoverOrphanedRuns fails stuck running runs and unblocks the source', () => {
+    const source = repo.createGitLocalSource({ name: 'app', project: 'app', repoPath: '/repos/app' });
+    const orphan = repo.createRun(source.id);
+    const finished = repo.createRun(source.id);
+    repo.finishRun(finished.id, 'completed', { itemsSeen: 1, itemsImported: 1, itemsSkipped: 0, itemsFailed: 0 });
+    expect(repo.hasRunningRun(source.id)).toBe(true);
+
+    const recovered = repo.recoverOrphanedRuns();
+
+    expect(recovered).toBe(1);
+    expect(repo.hasRunningRun(source.id)).toBe(false);
+    const runs = repo.listRuns(source.id);
+    const orphanRow = runs.find((run) => run.id === orphan.id);
+    expect(orphanRow?.status).toBe('failed');
+    expect(orphanRow?.error).toContain('orphaned');
+    expect(orphanRow?.finishedAt).toBeTruthy();
+    // completed runs are untouched
+    expect(runs.find((run) => run.id === finished.id)?.status).toBe('completed');
+  });
 });

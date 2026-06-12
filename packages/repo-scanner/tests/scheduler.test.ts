@@ -7,6 +7,7 @@ describe('RepoScannerDaemon', () => {
     const service = {
       scanner: {
         listDueSources: () => [{ id: 'source-1' }],
+        recoverOrphanedRuns: () => 0,
       },
       runSource: async () => {
         runs++;
@@ -62,11 +63,39 @@ describe('RepoScannerDaemon', () => {
     expect(errors).toEqual([{ sourceId: 'bad', message: 'p4 connect refused' }]);
   });
 
+  it('recovers orphaned running runs on startup before the first tick', async () => {
+    const calls: string[] = [];
+    const service = {
+      scanner: {
+        listDueSources: () => {
+          calls.push('listDueSources');
+          return [];
+        },
+        recoverOrphanedRuns: () => {
+          calls.push('recoverOrphanedRuns');
+          return 2;
+        },
+      },
+      runSource: async () => {
+        throw new Error('unreachable');
+      },
+    };
+
+    const daemon = new RepoScannerDaemon(service as any, { tickMs: 60_000 });
+    daemon.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await daemon.stop();
+
+    expect(calls[0]).toBe('recoverOrphanedRuns');
+    expect(calls).toContain('listDueSources');
+  });
+
   it('stop() waits for the in-flight tick so the store can be closed safely afterwards', async () => {
     let finished = false;
     const service = {
       scanner: {
         listDueSources: () => [{ id: 'slow' }],
+        recoverOrphanedRuns: () => 0,
       },
       runSource: async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
