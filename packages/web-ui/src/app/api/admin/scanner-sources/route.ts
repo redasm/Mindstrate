@@ -63,8 +63,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'git-local requires repoPath or remoteUrl' }, { status: 400 });
       }
       const authToken = optionalString(body.authToken);
+      let warnings: string[];
       try {
-        validateGitSource({ repoPath, remoteUrl, authToken });
+        warnings = validateGitSource({ repoPath, remoteUrl, authToken });
       } catch (error) {
         return NextResponse.json({ error: errorMessage(error) }, { status: 400 });
       }
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
         initMode,
         backfillCount,
       });
-      return NextResponse.json(buildScannerSourceView(memory, created), { status: 201 });
+      return NextResponse.json({ ...buildScannerSourceView(memory, created), warnings }, { status: 201 });
     }
 
     if (kind === 'p4') {
@@ -91,8 +92,9 @@ export async function POST(request: NextRequest) {
       const p4Port = optionalString(body.p4Port);
       const p4User = optionalString(body.p4User);
       const p4Passwd = typeof body.p4Passwd === 'string' && body.p4Passwd !== '' ? body.p4Passwd : undefined;
+      let warnings: string[];
       try {
-        validateP4Source({ repoPath, depotPath, p4Port, p4User, p4Passwd });
+        warnings = validateP4Source({ repoPath, depotPath, p4Port, p4User, p4Passwd });
       } catch (error) {
         return NextResponse.json({ error: errorMessage(error) }, { status: 400 });
       }
@@ -108,7 +110,7 @@ export async function POST(request: NextRequest) {
         initMode,
         backfillCount,
       });
-      return NextResponse.json(buildScannerSourceView(memory, created), { status: 201 });
+      return NextResponse.json({ ...buildScannerSourceView(memory, created), warnings }, { status: 201 });
     }
 
     return NextResponse.json({ error: 'kind must be "git-local" or "p4"' }, { status: 400 });

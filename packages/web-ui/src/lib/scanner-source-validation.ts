@@ -17,40 +17,59 @@ export interface P4SourceValidationInput {
   p4Passwd?: string;
 }
 
-export function validateGitSource(input: GitSourceValidationInput): void {
-  if (input.repoPath) {
-    validateDirectory(input.repoPath, 'Git repo path');
+/** Throws on locally provable misconfiguration; returns warnings for what only the scanner runtime can verify. */
+export function validateGitSource(input: GitSourceValidationInput): string[] {
+  const warnings: string[] = [];
+  if (input.repoPath && directoryVisibleLocally(input.repoPath, 'Git repo path', warnings)) {
     validateGitRepository(input.repoPath);
   }
   if (input.remoteUrl && commandExists('git')) {
     validateGitRemote(input.remoteUrl, input.authToken);
   }
+  return warnings;
 }
 
-export function validateP4Source(input: P4SourceValidationInput): void {
+/** Throws on locally provable misconfiguration; returns warnings for what only the scanner runtime can verify. */
+export function validateP4Source(input: P4SourceValidationInput): string[] {
+  const warnings: string[] = [];
   validateDepotPath(input.depotPath);
   if (input.repoPath) {
-    validateDirectory(input.repoPath, 'P4 workspace path');
+    directoryVisibleLocally(input.repoPath, 'P4 workspace path', warnings);
   }
 
   // Live P4 probing requires the Perforce CLI. The web-ui container does not
   // ship p4 (scanning runs in the repo-scanner container), so when p4 is
   // absent we skip connectivity checks rather than blocking source creation.
-  if (!commandExists('p4')) return;
+  if (!commandExists('p4')) return warnings;
 
   if (!input.repoPath) {
     runP4(['where', input.depotPath], input);
   }
   runP4(['changes', '-s', 'submitted', '-m', '1', input.depotPath], input);
+  return warnings;
 }
 
-function validateDirectory(value: string, label: string): void {
+/**
+ * The configured path is consumed by the repo-scanner process, whose
+ * filesystem is not necessarily this one — web-ui commonly runs in its own
+ * container while the scanner runs on the host or in a sibling container.
+ * A path this process cannot see is therefore only a warning (the scanner
+ * validates it for real on the first run); a path that exists here but is
+ * not a directory is provably wrong and still fails hard.
+ */
+function directoryVisibleLocally(value: string, label: string, warnings: string[]): boolean {
   if (!fs.existsSync(value)) {
-    throw new Error(`${label} does not exist: ${value}`);
+    warnings.push(
+      `${label} is not visible from the web-ui process: ${value}. `
+      + 'If the scanner daemon runs on another host or container, make sure the path exists there; '
+      + 'it will be validated on the first scan run.',
+    );
+    return false;
   }
   if (!fs.statSync(value).isDirectory()) {
     throw new Error(`${label} is not a directory: ${value}`);
   }
+  return true;
 }
 
 function validateGitRepository(repoPath: string): void {

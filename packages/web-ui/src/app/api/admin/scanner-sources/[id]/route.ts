@@ -60,23 +60,23 @@ function buildPatch(body: Record<string, unknown>): UpdateScanSourceInput {
   return patch;
 }
 
-function validateSource(source: ScanSource): string | null {
+function validateSource(source: ScanSource): { error: string | null; warnings: string[] } {
   try {
     if (source.kind === 'git-local') {
-      validateGitSource({ repoPath: source.repoPath, remoteUrl: source.remoteUrl, authToken: source.authToken });
-    } else {
-      if (!source.depotPath) return 'p4 requires depotPath';
-      validateP4Source({
-        repoPath: source.repoPath,
-        depotPath: source.depotPath,
-        p4Port: source.p4Port,
-        p4User: source.p4User,
-        p4Passwd: source.p4Passwd,
-      });
+      const warnings = validateGitSource({ repoPath: source.repoPath, remoteUrl: source.remoteUrl, authToken: source.authToken });
+      return { error: null, warnings };
     }
-    return null;
+    if (!source.depotPath) return { error: 'p4 requires depotPath', warnings: [] };
+    const warnings = validateP4Source({
+      repoPath: source.repoPath,
+      depotPath: source.depotPath,
+      p4Port: source.p4Port,
+      p4User: source.p4User,
+      p4Passwd: source.p4Passwd,
+    });
+    return { error: null, warnings };
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return { error: error instanceof Error ? error.message : String(error), warnings: [] };
   }
 }
 
@@ -91,12 +91,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const patch = buildPatch(body);
-    const validationError = validateSource({ ...current, ...patch } as ScanSource);
-    if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
+    const validation = validateSource({ ...current, ...patch } as ScanSource);
+    if (validation.error) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
     }
     const updated = memory.scanner.updateSource(id, patch);
-    return NextResponse.json(updated ? buildScannerSourceView(memory, updated) : updated);
+    return NextResponse.json(
+      updated ? { ...buildScannerSourceView(memory, updated), warnings: validation.warnings } : updated,
+    );
   } catch (error) {
     return errorResponse(error);
   }
