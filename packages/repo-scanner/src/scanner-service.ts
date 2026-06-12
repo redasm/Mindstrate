@@ -353,6 +353,24 @@ export class RepoScannerService {
     this.memory.context.indexProjectGraph(project, {
       onScanProgress: this.createInitProgressReporter(runId),
     });
+    await this.enrichProjectGraph(project);
+  }
+
+  /**
+   * Mirror the local `mindstrate init` flow: after deterministic indexing,
+   * run LLM enrichment with the project's provider config (Settings → LLM
+   * Configs). Unconfigured projects come back as status `skipped`, and an
+   * enrichment failure must not fail first-run initialization — the
+   * deterministic graph is already written by then.
+   */
+  private async enrichProjectGraph(project: DetectedProject): Promise<void> {
+    try {
+      const result = await this.memory.context.enrichProjectGraph(project);
+      const reason = 'reason' in result && result.reason ? ` (${result.reason})` : '';
+      console.log(`[repo-scanner] graph enrichment for ${project.name}: ${result.status}${reason} nodes=${result.nodesCreated}`);
+    } catch (error) {
+      console.warn(`[repo-scanner] graph enrichment for ${project.name} failed: ${errorMessage(error)}`);
+    }
   }
 
   /**
