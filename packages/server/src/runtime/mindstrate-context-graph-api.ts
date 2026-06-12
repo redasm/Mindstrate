@@ -29,6 +29,7 @@ import {
   indexProjectGraph,
   planProjectGraphSystemPagesWithLlm,
   queryProjectGraphTask,
+  recordProjectGraphExternalChanges,
   summarizeProjectGraphWithLlm,
   checkGeneratedEditSafety,
   checkUnrealModuleBoundaryConsistency,
@@ -46,6 +47,8 @@ import {
   type ProjectGraphScanScope,
   type ProjectGraphChangeDetectionResult,
   type ProjectGraphChangeDetectionInput,
+  type ProjectGraphExternalChangeRecordResult,
+  type RecordProjectGraphExternalChangesInput,
   type ProjectGraphTaskQueryInput,
   type ProjectGraphTaskQueryResult,
   type UnrealModuleBoundaryConsistencyInput,
@@ -236,6 +239,19 @@ export class MindstrateContextGraphApi {
     changeSet: ChangeSet,
   ): ProjectGraphChangeDetectionResult {
     return detectProjectGraphChangeSet(this.services.contextGraphStore, project, changeSet);
+  }
+
+  /**
+   * Persist staleness markers for one upstream change event (commit /
+   * changelist) seen by an external scanner. Unlike
+   * `ingestProjectGraphChangeSet` this writes to the graph: affected nodes
+   * and the project node get an `externalChanges` marker that change
+   * detection surfaces as risk hints until the next reindex clears it.
+   */
+  recordProjectGraphExternalChanges(
+    input: RecordProjectGraphExternalChangesInput,
+  ): ProjectGraphExternalChangeRecordResult {
+    return recordProjectGraphExternalChanges(this.services.contextGraphStore, input);
   }
 
   async enrichProjectGraph(

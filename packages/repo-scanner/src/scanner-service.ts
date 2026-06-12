@@ -1,5 +1,6 @@
 import {
   CaptureSource,
+  ChangeSource,
   errorMessage,
   Mindstrate,
   KnowledgeExtractor,
@@ -499,7 +500,33 @@ export class RepoScannerService {
       captureSource: source.kind === 'p4' ? CaptureSource.P4_TRIGGER : CaptureSource.GIT_HOOK,
       dryRun: false,
     });
+    this.markProjectGraphChanges(source, commit);
     return result.status;
+  }
+
+  /**
+   * The project graph is only rebuilt from the local checkout, which stays
+   * at whatever revision the operator last synced — every ingested upstream
+   * change therefore stamps staleness markers on the affected graph nodes
+   * so impact analysis can flag possibly-outdated conclusions until the
+   * next reindex. Best-effort: a marker failure must not fail ingestion.
+   */
+  private markProjectGraphChanges(
+    source: ScanSource,
+    commit: { hash: string; files: string[] },
+  ): void {
+    if (commit.files.length === 0) return;
+    try {
+      this.memory.context.recordProjectGraphExternalChanges({
+        project: source.project,
+        source: source.kind === 'p4' ? ChangeSource.P4 : ChangeSource.GIT,
+        files: commit.files,
+        externalRef: commit.hash,
+      });
+    } catch {
+      // Knowledge ingestion already succeeded; losing one staleness marker
+      // only means the graph looks slightly fresher than it is.
+    }
   }
 }
 
