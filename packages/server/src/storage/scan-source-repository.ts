@@ -132,7 +132,7 @@ export class ScanSourceRepository {
       input.name,
       input.project,
       (input.enabled ?? true) ? 1 : 0,
-      input.repoPath,
+      input.repoPath ?? null,
       null,
       input.branch ?? null,
       input.remoteUrl ?? null,
@@ -164,7 +164,7 @@ export class ScanSourceRepository {
       input.name,
       input.project,
       (input.enabled ?? true) ? 1 : 0,
-      null,
+      input.repoPath ?? null,
       input.depotPath ?? null,
       null,
       null,
@@ -335,6 +335,24 @@ export class ScanSourceRepository {
       stats.itemsFailed,
       stats.error ?? null,
       id,
+    );
+  }
+
+  updateRunProgress(
+    id: string,
+    stats: { itemsSeen: number; itemsImported: number; itemsSkipped: number; itemsFailed: number },
+  ): void {
+    this.db.prepare(`
+      UPDATE scan_runs
+      SET items_seen = ?, items_imported = ?, items_skipped = ?, items_failed = ?
+      WHERE id = ? AND status = ?
+    `).run(
+      stats.itemsSeen,
+      stats.itemsImported,
+      stats.itemsSkipped,
+      stats.itemsFailed,
+      id,
+      'running',
     );
   }
 

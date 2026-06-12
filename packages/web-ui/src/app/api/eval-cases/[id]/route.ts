@@ -3,9 +3,9 @@ import { getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
 import { requireAdminFromRequest } from '@/lib/session';
 
-const guard = (req: NextRequest): Response | null => {
+const guard = async (req: NextRequest): Promise<Response | null> => {
   try {
-    requireAdminFromRequest(req);
+    await requireAdminFromRequest(req);
     return null;
   } catch (resp) {
     return resp as Response;
@@ -14,7 +14,7 @@ const guard = (req: NextRequest): Response | null => {
 
 /** DELETE /api/eval-cases/[id] - delete an eval case (admin) */
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = guard(request); if (denied) return denied;
+  const denied = await guard(request); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();

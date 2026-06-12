@@ -9,6 +9,11 @@ interface Props {
   initialPatches: SkillEvolutionPatch[];
 }
 
+interface OptimizeResult {
+  nodeId: string;
+  outcome: string;
+}
+
 const STATUS_STYLES: Record<SkillEvolutionPatch['status'], string> = {
   candidate: 'bg-amber-50 text-amber-700 border-amber-200',
   accepted: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -20,10 +25,10 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
   const t = tAll.skillEvolution;
   const [patches, setPatches] = useState<SkillEvolutionPatch[]>(initialPatches);
   const [selectedId, setSelectedId] = useState<string | null>(initialPatches[0]?.id ?? null);
-  const [baseline, setBaseline] = useState('0.5');
-  const [candidate, setCandidate] = useState('0.7');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizerSummary, setOptimizerSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const counts = useMemo(() => ({
@@ -43,19 +48,19 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
     }
   };
 
-  const evaluate = async () => {
+  const approve = async () => {
     if (!selected) return;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/admin/skill-evolution/${encodeURIComponent(selected.id)}?action=evaluate`, {
+      const res = await fetch(`/api/admin/skill-evolution/${encodeURIComponent(selected.id)}?action=approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baselineScore: Number(baseline), candidateScore: Number(candidate) }),
+        body: JSON.stringify({}),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || `Evaluation failed (${res.status})`);
+        setError(data.error || `Approve failed (${res.status})`);
         return;
       }
       await refresh();
@@ -86,12 +91,59 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
     }
   };
 
+  const runOptimizer = async () => {
+    setOptimizing(true);
+    setOptimizerSummary(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/skill-evolution/optimize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Optimizer run failed (${res.status})`);
+        return;
+      }
+      const data = await res.json() as { results: OptimizeResult[]; total: number };
+      if (data.total === 0) {
+        setOptimizerSummary(t.optimizerNoTargets);
+      } else {
+        const by = (outcome: string) => data.results.filter((r) => r.outcome === outcome).length;
+        setOptimizerSummary(
+          `${t.optimizerRan} ${data.total} · ${t.optimizerPending} ${by('insufficient_data')} · ${t.accepted} ${by('accepted')} · ${t.rejected} ${by('gate_rejected') + by('budget_rejected')} · ${t.optimizerNoProposal} ${by('no_proposal')} · ${t.optimizerSkipped} ${by('suppressed_known_rejection') + by('suppressed_pending_candidate') + by('missing_node')}`,
+        );
+      }
+      await refresh();
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
   return (
     <div className="p-5 max-w-6xl mx-auto">
-      <header className="mb-5">
-        <h1 className="text-lg font-semibold text-surface-900">{t.title}</h1>
-        <p className="text-sm text-surface-500">{t.description}</p>
+      <header className="mb-5 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-semibold text-surface-900">{t.title}</h1>
+          <p className="text-sm text-surface-500">{t.description}</p>
+        </div>
+        <button
+          type="button"
+          disabled={optimizing}
+          onClick={runOptimizer}
+          className="shrink-0 px-3 py-1.5 rounded-md border border-brand-300 text-brand-700 text-sm font-medium hover:bg-brand-50 disabled:opacity-50"
+        >
+          <Icon icon={optimizing ? 'lucide:loader-2' : 'lucide:sparkles'} className={`text-sm mr-1 inline ${optimizing ? 'animate-spin' : ''}`} />
+          {optimizing ? t.optimizing : t.optimize}
+        </button>
       </header>
+
+      {optimizerSummary && (
+        <p className="mb-4 text-xs text-surface-600 bg-surface-50 border border-surface-200 rounded-md px-3 py-2">
+          {optimizerSummary}
+        </p>
+      )}
 
       <div className="grid grid-cols-4 gap-3 mb-5">
         <Stat label={t.total} value={counts.total} />
@@ -146,18 +198,17 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
 
                 {selected.status === 'candidate' && (
                   <div className="border-t border-surface-100 pt-4 space-y-3">
-                    <div className="flex items-end gap-2">
-                      <Field label={t.baselineScore} value={baseline} onChange={setBaseline} />
-                      <Field label={t.candidateScore} value={candidate} onChange={setCandidate} />
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={evaluate}
+                        onClick={approve}
                         className="px-3 py-1.5 rounded-md bg-brand-600 text-white text-sm font-medium disabled:opacity-50"
                       >
-                        <Icon icon="lucide:gauge" className="text-sm mr-1 inline" />
-                        {t.evaluate}
+                        <Icon icon="lucide:check" className="text-sm mr-1 inline" />
+                        {t.approve}
                       </button>
+                      <p className="text-xs text-surface-400">{t.approveHint}</p>
                     </div>
                     <div className="flex items-end gap-2">
                       <label className="flex-1 text-xs text-surface-500">
@@ -209,20 +260,5 @@ function DiffBlock({ title, content }: { title: string; content: string }) {
       <div className="text-xs font-medium text-surface-500 mb-1">{title}</div>
       <pre className="text-xs bg-surface-50 border border-surface-100 rounded-md p-2 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">{content}</pre>
     </div>
-  );
-}
-
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <label className="text-xs text-surface-500">
-      {label}
-      <input
-        type="number"
-        step="0.01"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-24 rounded-md border border-surface-200 px-2 py-1.5 text-sm"
-      />
-    </label>
   );
 }

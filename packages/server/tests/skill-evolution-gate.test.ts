@@ -189,4 +189,78 @@ describe('SkillEvolutionGate', () => {
     expect(evolutionStore.getPatchById(patch.id)?.status).toBe(SkillEvolutionPatchStatus.REJECTED);
     expect(graphStore.getNodeById(node.id)?.content).toBe('Use broad guidance.');
   });
+
+  it('manual approval applies the patch, promotes the candidate node, and records the reviewer', () => {
+    const node = graphStore.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Skill',
+      content: 'Use broad guidance.',
+      status: ContextNodeStatus.CANDIDATE,
+    });
+    const patch = evolutionStore.createPatch({
+      sourceNodeId: node.id,
+      operation: SkillEvolutionPatchOperation.REPLACE,
+      beforeContent: node.content,
+      afterContent: 'Use validated guidance with evidence ids.',
+      rationale: 'Improve validated behavior.',
+      budget: { maxChangedBullets: 2, maxChangedTokens: 8 },
+    });
+
+    const approved = gate.approvePatch({ patchId: patch.id, approvedBy: 'admin', note: 'verified by hand' });
+
+    expect(approved.status).toBe(SkillEvolutionPatchStatus.ACCEPTED);
+    expect(approved.metadata?.['decidedBy']).toBe('manual-approval');
+    expect(approved.metadata?.['approvedBy']).toBe('admin');
+    expect(approved.metadata?.['approvalNote']).toBe('verified by hand');
+    const updated = graphStore.getNodeById(node.id);
+    expect(updated?.content).toBe('Use validated guidance with evidence ids.');
+    expect(updated?.status).toBe(ContextNodeStatus.ACTIVE);
+    // no evaluation row is fabricated for a manual decision
+    expect(evolutionStore.listEvaluations(patch.id)).toHaveLength(0);
+  });
+
+  it('manual approval refuses already-decided patches', () => {
+    const node = graphStore.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Skill',
+      content: 'Use broad guidance.',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    const patch = evolutionStore.createPatch({
+      sourceNodeId: node.id,
+      operation: SkillEvolutionPatchOperation.REPLACE,
+      beforeContent: node.content,
+      afterContent: 'Use different guidance.',
+      rationale: 'Try a change.',
+      budget: { maxChangedBullets: 2, maxChangedTokens: 8 },
+    });
+    evolutionStore.markPatchRejected(patch.id, 'not useful');
+
+    expect(() => gate.approvePatch({ patchId: patch.id })).toThrow(/already decided/);
+    expect(graphStore.getNodeById(node.id)?.content).toBe('Use broad guidance.');
+  });
+
+  it('manual approval still enforces the patch budget', () => {
+    const node = graphStore.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Skill',
+      content: 'Use broad guidance.',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    const patch = evolutionStore.createPatch({
+      sourceNodeId: node.id,
+      operation: SkillEvolutionPatchOperation.REPLACE,
+      beforeContent: node.content,
+      afterContent: 'Completely rewritten content with many new tokens beyond any reasonable bound.',
+      rationale: 'Oversized rewrite.',
+      budget: { maxChangedBullets: 1, maxChangedTokens: 1 },
+    });
+
+    expect(() => gate.approvePatch({ patchId: patch.id, approvedBy: 'admin' })).toThrow(/budget/);
+    expect(evolutionStore.getPatchById(patch.id)?.status).toBe(SkillEvolutionPatchStatus.CANDIDATE);
+    expect(graphStore.getNodeById(node.id)?.content).toBe('Use broad guidance.');
+  });
 });

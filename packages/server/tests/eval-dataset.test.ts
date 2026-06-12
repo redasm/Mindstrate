@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RetrievalEvaluator, type EvalCaseKind } from '../src/quality/eval.js';
+import { initializeEvaluationSchema } from '../src/quality/evaluation-schema.js';
 
 describe('RetrievalEvaluator dataset authoring', () => {
   let db: Database.Database;
@@ -49,5 +50,37 @@ describe('RetrievalEvaluator dataset authoring', () => {
     const c = evaluator.addCase('q1', ['k1']);
     expect(evaluator.deleteCase(c.id)).toBe(true);
     expect(evaluator.listCases()).toHaveLength(0);
+  });
+});
+
+describe('initializeEvaluationSchema migration', () => {
+  it('migrates a legacy eval_cases table without a kind column', () => {
+    const legacy = new Database(':memory:');
+    legacy.exec(`
+      CREATE TABLE eval_cases (
+        id TEXT PRIMARY KEY,
+        query TEXT NOT NULL,
+        expected_ids TEXT NOT NULL,
+        language TEXT,
+        framework TEXT,
+        created_at TEXT NOT NULL
+      );
+    `);
+    legacy.prepare(
+      `INSERT INTO eval_cases (id, query, expected_ids, created_at) VALUES (?, ?, ?, ?)`,
+    ).run('old', 'legacy query', '["k1"]', new Date().toISOString());
+
+    expect(() => initializeEvaluationSchema(legacy)).not.toThrow();
+
+    const columns = legacy.prepare(`PRAGMA table_info(eval_cases)`).all() as Array<{ name: string }>;
+    expect(columns.some((c) => c.name === 'kind')).toBe(true);
+
+    const row = legacy.prepare(`SELECT kind FROM eval_cases WHERE id = ?`).get('old') as { kind: string };
+    expect(row.kind).toBe('validation');
+
+    const indexes = legacy.prepare(`PRAGMA index_list(eval_cases)`).all() as Array<{ name: string }>;
+    expect(indexes.some((i) => i.name === 'idx_eval_cases_kind')).toBe(true);
+
+    legacy.close();
   });
 });

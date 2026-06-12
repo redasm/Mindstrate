@@ -1,6 +1,8 @@
 import {
   ContextNodeStatus,
   SkillEvolutionGateStatus,
+  SkillEvolutionPatchStatus,
+  type ContextNode,
   type SkillEvolutionEvaluation,
   type SkillEvolutionEvaluator,
   type SkillEvolutionMetric,
@@ -31,6 +33,12 @@ export interface SkillEvolutionEvaluatorResult {
   totalCases: number;
   baselineScore: number;
   candidateScore: number;
+}
+
+export interface ApproveSkillEvolutionPatchInput {
+  patchId: string;
+  approvedBy?: string;
+  note?: string;
 }
 
 export class SkillEvolutionGate {
@@ -93,6 +101,44 @@ export class SkillEvolutionGate {
     });
   }
 
+  /**
+   * Manual review decision: a human approves a candidate patch without a
+   * score. The budget validator still applies — approval cannot push a
+   * patch that exceeds its declared change bounds. No evaluation row is
+   * fabricated; the decision is audited via patch metadata
+   * (`decidedBy: 'manual-approval'`).
+   */
+  approvePatch(input: ApproveSkillEvolutionPatchInput): SkillEvolutionPatch {
+    const patch = this.requirePatch(input.patchId);
+    if (patch.status !== SkillEvolutionPatchStatus.CANDIDATE) {
+      throw new Error(`Skill evolution patch ${patch.id} is already decided (${patch.status}).`);
+    }
+    const sourceNode = this.graphStore.getNodeById(patch.sourceNodeId);
+    const budget = validateSkillEvolutionPatchBudget({
+      sourceNode,
+      operation: patch.operation,
+      beforeContent: patch.beforeContent,
+      afterContent: patch.afterContent,
+      budget: patch.budget,
+    });
+    if (!budget.valid) {
+      throw new Error(`Skill evolution patch ${patch.id} exceeds its budget: ${budget.reason ?? 'invalid_patch'}`);
+    }
+
+    const decidedAt = new Date().toISOString();
+    this.applyPatchToSourceNode(patch, sourceNode, {
+      patchId: patch.id,
+      decidedBy: 'manual-approval',
+      approvedBy: input.approvedBy,
+      acceptedAt: decidedAt,
+    });
+    return this.evolutionStore.markPatchAccepted(patch.id, {
+      decidedBy: 'manual-approval',
+      approvedBy: input.approvedBy,
+      ...(input.note ? { approvalNote: input.note } : {}),
+    })!;
+  }
+
   private requirePatch(patchId: string): SkillEvolutionPatch {
     const patch = this.evolutionStore.getPatchById(patchId);
     if (!patch) throw new Error(`Skill evolution patch not found: ${patchId}`);
@@ -152,17 +198,10 @@ export class SkillEvolutionGate {
     });
 
     if (input.status === SkillEvolutionGateStatus.ACCEPTED) {
-      this.graphStore.updateNode(patch.sourceNodeId, {
-        content: patch.afterContent,
-        status: sourceNode?.status === ContextNodeStatus.CANDIDATE ? ContextNodeStatus.ACTIVE : sourceNode?.status,
-        metadata: {
-          ...(sourceNode?.metadata ?? {}),
-          skillEvolution: {
-            patchId: patch.id,
-            evaluationId: evaluation.id,
-            acceptedAt: evaluation.createdAt,
-          },
-        },
+      this.applyPatchToSourceNode(patch, sourceNode, {
+        patchId: patch.id,
+        evaluationId: evaluation.id,
+        acceptedAt: evaluation.createdAt,
       });
       this.evolutionStore.markPatchAccepted(patch.id, { evaluationId: evaluation.id });
       return evaluation;
@@ -179,5 +218,20 @@ export class SkillEvolutionGate {
     // INSUFFICIENT_DATA: leave the patch as a candidate, record the
     // evaluation for audit, but do not mutate the source node.
     return evaluation;
+  }
+
+  private applyPatchToSourceNode(
+    patch: SkillEvolutionPatch,
+    sourceNode: ContextNode | null,
+    decision: Record<string, unknown>,
+  ): void {
+    this.graphStore.updateNode(patch.sourceNodeId, {
+      content: patch.afterContent,
+      status: sourceNode?.status === ContextNodeStatus.CANDIDATE ? ContextNodeStatus.ACTIVE : sourceNode?.status,
+      metadata: {
+        ...(sourceNode?.metadata ?? {}),
+        skillEvolution: decision,
+      },
+    });
   }
 }

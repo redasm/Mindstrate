@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+﻿import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ContextDomainType,
@@ -50,7 +50,7 @@ describe('SkillEvolutionOptimizer', () => {
         rationale: 'Add bounded evidence guidance.',
         budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
       }),
-      scoreCandidate: async () => ({ baselineScore: 0.4, candidateScore: 0.65 }),
+      scoreCandidate: async () => ({ totalCases: 5, baselineScore: 0.4, candidateScore: 0.65 }),
     });
 
     const result = await optimizer.optimizeNode({ nodeId: skill.id });
@@ -68,7 +68,7 @@ describe('SkillEvolutionOptimizer', () => {
       graphStore,
       gate,
       proposePatch: async () => null,
-      scoreCandidate: async () => ({ baselineScore: 0.4, candidateScore: 0.9 }),
+      scoreCandidate: async () => ({ totalCases: 5, baselineScore: 0.4, candidateScore: 0.9 }),
     });
 
     const result = await optimizer.optimizeNode({ nodeId: skill.id });
@@ -90,7 +90,7 @@ describe('SkillEvolutionOptimizer', () => {
         rationale: 'Rewrite everything.',
         budget: { maxChangedBullets: 1, maxChangedTokens: 3 },
       }),
-      scoreCandidate: async () => ({ baselineScore: 0.4, candidateScore: 0.9 }),
+      scoreCandidate: async () => ({ totalCases: 5, baselineScore: 0.4, candidateScore: 0.9 }),
     });
 
     const result = await optimizer.optimizeNode({ nodeId: skill.id });
@@ -116,7 +116,7 @@ describe('SkillEvolutionOptimizer', () => {
           budget: { maxChangedBullets: 2, maxChangedTokens: 8 },
         };
       },
-      scoreCandidate: async () => ({ baselineScore: 0.6, candidateScore: 0.6 }),
+      scoreCandidate: async () => ({ totalCases: 5, baselineScore: 0.6, candidateScore: 0.6 }),
     });
 
     const first = await optimizer.optimizeNode({ nodeId: skill.id });
@@ -143,12 +143,59 @@ describe('SkillEvolutionOptimizer', () => {
         rationale: 'Add bounded evidence guidance.',
         budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
       }),
-      scoreCandidate: async () => ({ baselineScore: 0.4, candidateScore: 0.65 }),
+      scoreCandidate: async () => ({ totalCases: 5, baselineScore: 0.4, candidateScore: 0.65 }),
     });
 
     const results = await optimizer.optimizeTargets([{ nodeId: a.id }, { nodeId: b.id }]);
 
     expect(results).toHaveLength(2);
     expect(results.every((r) => r.outcome === 'accepted')).toBe(true);
+  });
+
+  it('parks the patch as insufficient_data when the scorer has no eval cases', async () => {
+    const skill = makeSkill();
+    const optimizer = new SkillEvolutionOptimizer({
+      evolutionStore,
+      graphStore,
+      gate,
+      proposePatch: async () => ({
+        operation: SkillEvolutionPatchOperation.ADD,
+        afterContent: '- Use broad guidance\n- Record evaluation evidence ids',
+        rationale: 'Add bounded evidence guidance.',
+        budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
+      }),
+      scoreCandidate: async () => ({ totalCases: 0, baselineScore: 0, candidateScore: 0 }),
+    });
+
+    const result = await optimizer.optimizeNode({ nodeId: skill.id });
+
+    expect(result.outcome).toBe('insufficient_data');
+    expect(result.patchId).toBeDefined();
+    // patch stays a reviewable candidate — neither applied nor rejected
+    expect(evolutionStore.getPatchById(result.patchId!)?.status).toBe(SkillEvolutionPatchStatus.CANDIDATE);
+    expect(graphStore.getNodeById(skill.id)?.content).toBe('- Use broad guidance');
+  });
+
+  it('suppresses identical proposals while a candidate patch is still pending review', async () => {
+    const skill = makeSkill();
+    const optimizer = new SkillEvolutionOptimizer({
+      evolutionStore,
+      graphStore,
+      gate,
+      proposePatch: async () => ({
+        operation: SkillEvolutionPatchOperation.ADD,
+        afterContent: '- Use broad guidance\n- Record evaluation evidence ids',
+        rationale: 'Add bounded evidence guidance.',
+        budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
+      }),
+      scoreCandidate: async () => ({ totalCases: 0, baselineScore: 0, candidateScore: 0 }),
+    });
+
+    const first = await optimizer.optimizeNode({ nodeId: skill.id });
+    expect(first.outcome).toBe('insufficient_data');
+
+    const second = await optimizer.optimizeNode({ nodeId: skill.id });
+    expect(second.outcome).toBe('suppressed_pending_candidate');
+    expect(evolutionStore.listPatches({ sourceNodeId: skill.id })).toHaveLength(1);
   });
 });

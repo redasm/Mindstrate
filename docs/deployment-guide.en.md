@@ -29,6 +29,88 @@ Validate the CLI:
 mindstrate --help
 ```
 
+## Docker Build & Deploy
+
+The repo ships per-service multi-stage Dockerfiles under `deploy/`. They all use the repo root as the build context and rely on Turborepo to build only the dependency chain of the target service.
+
+| Service | Dockerfile | Entry | Container port |
+| --- | --- | --- | --- |
+| team-server | `deploy/team-server.Dockerfile` | `team-server/dist/server.js` | 3388 |
+| web-ui | `deploy/web-ui.Dockerfile` | Next.js standalone `web-ui/server.js` | 3377 |
+| repo-scanner | `deploy/repo-scanner.Dockerfile` | `repo-scanner/dist/cli.js daemon` | — |
+
+All three services share one named volume `mindstrate-data:/data` (the same SQLite). The web-ui reads/writes that database directly rather than through the team-server HTTP API.
+
+### Prepare configuration
+
+```bash
+cp deploy/.env.deploy.example deploy/.env.deploy
+# Edit deploy/.env.deploy: set TEAM_API_KEY (e.g. `openssl rand -hex 32`) and adjust ports if needed
+```
+
+### Build & start with Compose
+
+Build and start the core services (team-server + web-ui):
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d --build
+```
+
+Include the repo-scanner daemon (in the `scanner` profile, which is not started with the core services by default):
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner up -d --build
+```
+
+> When repo-scanner is not started under the `scanner` profile, no scanning runs and configured scanner sources stay in the "waiting" state.
+
+### Force a no-cache rebuild
+
+`docker compose up` does not accept `--no-cache` directly; run `build --no-cache` first, then `up`:
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy build --no-cache
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d
+```
+
+With the repo-scanner:
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner build --no-cache
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner up -d
+```
+
+To bake in the Helix (P4) CLI for P4 scanning (adds ~50 MB), pass the `INSTALL_P4=1` build arg:
+
+```bash
+INSTALL_P4=1 docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner build --no-cache
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner up -d
+```
+
+### Manual single-image build
+
+The build context must be the repo root `.`:
+
+```bash
+docker build -f deploy/team-server.Dockerfile  -t mindstrate/team-server:latest  .
+docker build -f deploy/web-ui.Dockerfile       -t mindstrate/web-ui:latest       .
+docker build -f deploy/repo-scanner.Dockerfile -t mindstrate/repo-scanner:latest --build-arg INSTALL_P4=1 .
+```
+
+Add `--no-cache` to ignore all layer caches and rebuild from scratch:
+
+```bash
+docker build --no-cache -f deploy/team-server.Dockerfile -t mindstrate/team-server:latest .
+```
+
+### Verify
+
+```bash
+curl http://127.0.0.1:3388/health
+```
+
+Open `http://<host>:3377` in a browser.
+
 ## Local Mode
 
 Local mode stores project data under the current project `.mindstrate/` directory and can optionally write Obsidian projections.

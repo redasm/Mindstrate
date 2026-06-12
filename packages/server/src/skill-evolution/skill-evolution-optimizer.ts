@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  SkillEvolutionGateStatus,
   SkillEvolutionPatchStatus,
   type SkillEvolutionPatch,
   type SkillEvolutionPatchBudget,
@@ -21,6 +22,12 @@ export interface SkillPatchProposal {
 }
 
 export interface SkillPatchScore {
+  /**
+   * Number of eval cases behind the scores. Zero means the scorer has no
+   * real before/after evidence; the gate then parks the patch as
+   * `insufficient_data` instead of deciding on meaningless scores.
+   */
+  totalCases: number;
   baselineScore: number;
   candidateScore: number;
 }
@@ -43,8 +50,10 @@ export type SkillEvolutionOptimizerOutcome =
   | 'accepted'
   | 'gate_rejected'
   | 'budget_rejected'
+  | 'insufficient_data'
   | 'no_proposal'
   | 'suppressed_known_rejection'
+  | 'suppressed_pending_candidate'
   | 'missing_node';
 
 export interface SkillEvolutionOptimizationResult {
@@ -75,7 +84,13 @@ export interface OptimizeNodeOptions {
  * acceptance. A rejected-edit buffer (deterministic patch fingerprint of
  * previously rejected `sourceNodeId + afterContent`) suppresses repeated
  * proposals that already failed the gate so the loop cannot thrash on the
- * same bad edit.
+ * same bad edit; identical still-pending candidates are also suppressed so
+ * repeated runs do not pile up duplicate patches awaiting review.
+ *
+ * When the scorer reports zero eval cases the gate parks the patch as
+ * `insufficient_data` — it is neither applied nor rejected, so it never
+ * enters the rejected-edit buffer and a human (or a later run with real
+ * eval data) can still decide.
  */
 export class SkillEvolutionOptimizer {
   constructor(private readonly deps: SkillEvolutionOptimizerDeps) {}
@@ -96,8 +111,12 @@ export class SkillEvolutionOptimizer {
       return { nodeId: node.id, outcome: 'no_proposal' };
     }
 
-    if (this.isKnownRejection(node.id, proposal.afterContent)) {
+    const fingerprint = rejectionFingerprint(node.id, proposal.afterContent);
+    if (this.hasPatchWithFingerprint(node.id, SkillEvolutionPatchStatus.REJECTED, fingerprint)) {
       return { nodeId: node.id, outcome: 'suppressed_known_rejection' };
+    }
+    if (this.hasPatchWithFingerprint(node.id, SkillEvolutionPatchStatus.CANDIDATE, fingerprint)) {
+      return { nodeId: node.id, outcome: 'suppressed_pending_candidate' };
     }
 
     const budget = validateSkillEvolutionPatchBudget({
@@ -122,7 +141,7 @@ export class SkillEvolutionOptimizer {
       metadata: {
         ...(proposal.metadata ?? {}),
         proposedBy: 'skill-evolution-optimizer',
-        rejectionFingerprint: rejectionFingerprint(node.id, proposal.afterContent),
+        rejectionFingerprint: fingerprint,
       },
     });
 
@@ -133,18 +152,23 @@ export class SkillEvolutionOptimizer {
       afterContent: proposal.afterContent,
     });
 
-    const evaluation = this.deps.gate.evaluateScoreGate({
-      patchId: patch.id,
-      evaluator: this.deps.evaluator ?? ('retrieval' as SkillEvolutionEvaluator),
-      metric: this.deps.metric ?? ('f1' as SkillEvolutionMetric),
-      baselineScore: score.baselineScore,
-      candidateScore: score.candidateScore,
-      details: { proposedBy: 'skill-evolution-optimizer' },
-    });
+    const evaluation = this.deps.gate.evaluateWithEvaluator(
+      {
+        patchId: patch.id,
+        evaluator: this.deps.evaluator ?? ('retrieval' as SkillEvolutionEvaluator),
+        metric: this.deps.metric ?? ('f1' as SkillEvolutionMetric),
+        details: { proposedBy: 'skill-evolution-optimizer' },
+      },
+      () => score,
+    );
 
     return {
       nodeId: node.id,
-      outcome: evaluation.accepted ? 'accepted' : 'gate_rejected',
+      outcome: evaluation.status === SkillEvolutionGateStatus.ACCEPTED
+        ? 'accepted'
+        : evaluation.status === SkillEvolutionGateStatus.REJECTED
+          ? 'gate_rejected'
+          : 'insufficient_data',
       patchId: patch.id,
       evaluationId: evaluation.id,
     };
@@ -163,10 +187,13 @@ export class SkillEvolutionOptimizer {
     return results;
   }
 
-  private isKnownRejection(nodeId: string, afterContent: string): boolean {
-    const fingerprint = rejectionFingerprint(nodeId, afterContent);
+  private hasPatchWithFingerprint(
+    nodeId: string,
+    status: SkillEvolutionPatchStatus,
+    fingerprint: string,
+  ): boolean {
     return this.deps.evolutionStore
-      .listPatches({ sourceNodeId: nodeId, status: SkillEvolutionPatchStatus.REJECTED, limit: 200 })
+      .listPatches({ sourceNodeId: nodeId, status, limit: 200 })
       .some((patch: SkillEvolutionPatch) => patch.metadata?.['rejectionFingerprint'] === fingerprint);
   }
 }

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import type { ApiKeyRole } from '@mindstrate/protocol';
 import { getMemoryReady } from './memory';
+import { listWorkspaceProjects } from './workspace-projects';
 
 export const SESSION_COOKIE = 'mindstrate_session';
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -16,7 +17,19 @@ export interface SessionPayload {
   exp: number;
 }
 
-const getSecret = (): string => process.env['TEAM_API_KEY'] ?? '';
+/**
+ * Sessions are HMAC-signed with TEAM_API_KEY. An empty secret would make
+ * every cookie forgeable, so signing/verification refuse to operate
+ * without it (the Edge middleware independently rejects all requests in
+ * that state as well).
+ */
+const getSecret = (): string => {
+  const secret = process.env['TEAM_API_KEY'] ?? '';
+  if (!secret) throw new Error('TEAM_API_KEY is not configured; sessions are disabled.');
+  return secret;
+};
+
+export const isSessionSecretConfigured = (): boolean => Boolean(process.env['TEAM_API_KEY']);
 
 const b64urlEncode = (buf: Buffer): string =>
   buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -59,15 +72,35 @@ export const verifySession = (cookie: string | undefined | null): SessionPayload
   }
 };
 
-/** Read session from cookies in a server component / route handler. */
-export async function readSession(): Promise<SessionPayload | null> {
-  const c = await cookies();
-  return verifySession(c.get(SESSION_COOKIE)?.value ?? null);
+/**
+ * The cookie bakes in role/projects for up to 30 days, so admin actions
+ * (disable, demote, project reassignment, key deletion) must not have to
+ * wait for expiry: every guarded request re-reads the account from the
+ * store and uses the stored role/projects instead of the cookie's. A
+ * revoked or deleted account invalidates the session immediately.
+ */
+async function resolveActiveSession(payload: SessionPayload | null): Promise<SessionPayload | null> {
+  if (!payload) return null;
+  const memory = await getMemoryReady();
+  const account = memory.apiKeys.getById(payload.id);
+  if (!account || account.revokedAt) return null;
+  return {
+    ...payload,
+    name: account.name,
+    role: account.role,
+    projects: account.projects,
+  };
 }
 
-/** Verify a request's session (for route handlers). */
-export function readSessionFromRequest(req: NextRequest): SessionPayload | null {
-  return verifySession(req.cookies.get(SESSION_COOKIE)?.value ?? null);
+/** Read and revalidate the session from cookies in a server component / route handler. */
+export async function readSession(): Promise<SessionPayload | null> {
+  const c = await cookies();
+  return resolveActiveSession(verifySession(c.get(SESSION_COOKIE)?.value ?? null));
+}
+
+/** Verify and revalidate a request's session (for route handlers). */
+export async function readSessionFromRequest(req: NextRequest): Promise<SessionPayload | null> {
+  return resolveActiveSession(verifySession(req.cookies.get(SESSION_COOKIE)?.value ?? null));
 }
 
 /** Throws an HTTP Response for missing/invalid session. */
@@ -87,14 +120,14 @@ export async function requireAdmin(): Promise<SessionPayload> {
   return session;
 }
 
-export function requireSessionFromRequest(req: NextRequest): SessionPayload {
-  const s = readSessionFromRequest(req);
+export async function requireSessionFromRequest(req: NextRequest): Promise<SessionPayload> {
+  const s = await readSessionFromRequest(req);
   if (!s) throw new Response('Unauthorized', { status: 401 });
   return s;
 }
 
-export function requireAdminFromRequest(req: NextRequest): SessionPayload {
-  const s = requireSessionFromRequest(req);
+export async function requireAdminFromRequest(req: NextRequest): Promise<SessionPayload> {
+  const s = await requireSessionFromRequest(req);
   if (s.role !== 'admin') throw new Response('Not Found', { status: 404 });
   return s;
 }
@@ -103,7 +136,7 @@ export function requireAdminFromRequest(req: NextRequest): SessionPayload {
 export async function resolveVisibleProjects(session: SessionPayload): Promise<string[]> {
   if (session.role === 'admin' || session.projects.includes('*')) {
     const memory = await getMemoryReady();
-    return memory.context.listKnownProjects();
+    return listWorkspaceProjects(memory);
   }
   return session.projects;
 }

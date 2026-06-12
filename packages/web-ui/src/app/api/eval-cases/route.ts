@@ -4,9 +4,9 @@ import { getMemory, getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
 import { requireAdminFromRequest } from '@/lib/session';
 
-const guard = (req: NextRequest): Response | null => {
+const guard = async (req: NextRequest): Promise<Response | null> => {
   try {
-    requireAdminFromRequest(req);
+    await requireAdminFromRequest(req);
     return null;
   } catch (resp) {
     return resp as Response;
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
 
 /** POST /api/eval-cases - add an eval case (admin) */
 export async function POST(request: NextRequest) {
-  const denied = guard(request); if (denied) return denied;
+  const denied = await guard(request); if (denied) return denied;
   try {
     const memory = await getMemoryReady();
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;

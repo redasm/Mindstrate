@@ -1,24 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type {
-  SkillEvolutionEvaluator,
-  SkillEvolutionMetric,
-} from '@mindstrate/protocol';
 import { getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
-import { requireAdminFromRequest } from '@/lib/session';
+import { requireAdminFromRequest, type SessionPayload } from '@/lib/session';
 
-const guard = (req: NextRequest): Response | null => {
+const guard = async (req: NextRequest): Promise<{ session: SessionPayload } | { denied: Response }> => {
   try {
-    requireAdminFromRequest(req);
-    return null;
+    return { session: await requireAdminFromRequest(req) };
   } catch (resp) {
-    return resp as Response;
+    return { denied: resp as Response };
   }
 };
 
-/** POST /api/admin/skill-evolution/[id]?action=evaluate|reject */
+/** POST /api/admin/skill-evolution/[id]?action=approve|reject */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = guard(request); if (denied) return denied;
+  const auth = await guard(request);
+  if ('denied' in auth) return auth.denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();
@@ -31,28 +27,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (action === 'reject') {
       const reason = typeof body.reason === 'string' ? body.reason : '';
       if (!reason) return NextResponse.json({ error: 'reason is required' }, { status: 400 });
-      const rejected = memory.metabolism.rejectSkillPatch({ patchId: id, reason });
+      const rejected = memory.metabolism.rejectSkillPatch({
+        patchId: id,
+        reason,
+        metadata: { decidedBy: 'manual-review', rejectedBy: auth.session.name },
+      });
       return NextResponse.json(rejected);
     }
 
-    if (action === 'evaluate') {
-      const baselineScore = body.baselineScore;
-      const candidateScore = body.candidateScore;
-      if (typeof baselineScore !== 'number' || typeof candidateScore !== 'number') {
-        return NextResponse.json({ error: 'baselineScore and candidateScore are required numbers' }, { status: 400 });
-      }
-      const evaluation = memory.evaluation.evaluateSkillPatchScoreGate({
+    if (action === 'approve') {
+      const note = typeof body.note === 'string' && body.note.trim() ? body.note.trim() : undefined;
+      const approved = memory.metabolism.approveSkillPatch({
         patchId: id,
-        evaluator: (body.evaluator as SkillEvolutionEvaluator) ?? ('retrieval' as SkillEvolutionEvaluator),
-        metric: (body.metric as SkillEvolutionMetric) ?? ('f1' as SkillEvolutionMetric),
-        baselineScore,
-        candidateScore,
-        details: { source: 'web-ui' },
+        approvedBy: auth.session.name,
+        note,
       });
-      return NextResponse.json(evaluation);
+      return NextResponse.json(approved);
     }
 
-    return NextResponse.json({ error: 'action must be evaluate or reject' }, { status: 400 });
+    return NextResponse.json({ error: 'action must be approve or reject' }, { status: 400 });
   } catch (error) {
     return errorResponse(error);
   }

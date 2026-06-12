@@ -37,6 +37,7 @@ import {
   validateSkillEvolutionPatchBudget,
   type MetaSkillSynthesisResult,
   type ScoreCandidateInput,
+  type SkillPatchScore,
   type SkillEvolutionOptimizationResult,
   type SkillTransferResult,
 } from '../skill-evolution/index.js';
@@ -221,12 +222,23 @@ export class MindstrateMetabolismApi {
   }
 
   /**
+   * Manual review approval: applies the candidate patch to its source node
+   * (promoting CANDIDATE nodes to ACTIVE) after budget validation, without
+   * fabricating evaluation scores. The reviewer identity is recorded in the
+   * patch metadata for audit.
+   */
+  approveSkillPatch(input: { patchId: string; approvedBy?: string; note?: string }): SkillEvolutionPatch {
+    return this.services.skillEvolutionGate.approvePatch(input);
+  }
+
+  /**
    * Run the SkillOpt-style optimizer over low-adoption / negative-feedback
    * high-order nodes. Targets come from real failure signals; an LLM
-   * proposer suggests bounded patches that still pass the budget validator
-   * and the validation gate. Score the candidate via the retrieval
-   * evaluator: with no eval cases the gate returns `insufficient_data` and
-   * nothing is auto-applied. Offline (no LLM config) yields `no_proposal`.
+   * proposer suggests bounded patches that still pass the budget validator.
+   * Until real before/after scoring exists the scorer reports zero eval
+   * cases, so every proposal parks as `insufficient_data` for human review —
+   * nothing is auto-applied and nothing is auto-rejected. Offline (no LLM
+   * config) yields `no_proposal`.
    */
   async optimizeSkillTargets(options: {
     project?: string;
@@ -255,13 +267,14 @@ export class MindstrateMetabolismApi {
     return optimizer.optimizeTargets(targets);
   }
 
-  private async scoreSkillCandidate(_input: ScoreCandidateInput): Promise<{ baselineScore: number; candidateScore: number }> {
-    const run = await this.services.evaluator.runEvaluation();
-    // No held-out eval scoring for before/after content yet: use the
-    // current retrieval F1 as both scores so the hard gate cannot
-    // auto-accept on noise. Real before/after scoring (rebuild index per
-    // candidate) is a future enhancement.
-    return { baselineScore: run.f1, candidateScore: run.f1 };
+  private async scoreSkillCandidate(_input: ScoreCandidateInput): Promise<SkillPatchScore> {
+    // No held-out before/after scoring exists yet (it would require
+    // rebuilding the retrieval index per candidate). Report zero cases so
+    // the gate parks the patch as `insufficient_data` for human review.
+    // Reporting equal fake scores instead would auto-reject the patch and
+    // fingerprint its content, permanently suppressing the same proposal
+    // even after real scoring lands.
+    return { totalCases: 0, baselineScore: 0, candidateScore: 0 };
   }
 
   /**

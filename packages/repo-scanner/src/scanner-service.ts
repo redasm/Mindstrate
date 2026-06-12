@@ -3,7 +3,9 @@ import {
   errorMessage,
   Mindstrate,
   KnowledgeExtractor,
+  detectProject,
   type CommitInfo,
+  type DetectedProject,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
 import { ensureGitClone } from './git-clone.js';
@@ -11,6 +13,7 @@ import {
   getChangelistInfo,
   getRecentChangelists,
   listChangelistsSince,
+  findP4WorkspaceRoot,
   type P4Env,
 } from './p4-source.js';
 import { createKnowledgeSink, type KnowledgeSink } from './knowledge-sink.js';
@@ -108,8 +111,8 @@ export class RepoScannerService {
 
     try {
       const result = source.kind === 'p4'
-        ? await this.executeP4Source(source)
-        : await this.executeGitLocalSource(source);
+        ? await this.executeP4Source(source, run.id)
+        : await this.executeGitLocalSource(source, run.id);
       this.scanner.finishRun(run.id, 'completed', {
         itemsSeen: result.itemsSeen,
         itemsImported: result.itemsImported,
@@ -290,11 +293,12 @@ export class RepoScannerService {
     }, input.changeSet);
   }
 
-  private async executeGitLocalSource(source: ScanSource): Promise<ScanExecutionResult> {
+  private async executeGitLocalSource(source: ScanSource, runId: string): Promise<ScanExecutionResult> {
     const repoPath = ensureGitClone(source);
     const head = getHeadCommit(repoPath, source.branch);
 
     if (!source.lastCursor) {
+      await this.initializeProjectFromPath(source, repoPath);
       if (source.initMode === 'from_now') {
         return {
           sourceId: source.id,
@@ -308,7 +312,7 @@ export class RepoScannerService {
       }
 
       const initialCommits = listRecentCommits(repoPath, source.backfillCount, source.branch);
-      const processed = await this.processCommits(source, repoPath, initialCommits);
+      const processed = await this.processCommits(source, repoPath, initialCommits, runId);
       return {
         sourceId: source.id,
         mode: 'initialized',
@@ -318,7 +322,7 @@ export class RepoScannerService {
     }
 
     const commits = listCommitsSince(repoPath, source.lastCursor, source.branch);
-    const processed = await this.processCommits(source, repoPath, commits);
+    const processed = await this.processCommits(source, repoPath, commits, runId);
     return {
       sourceId: source.id,
       mode: 'incremental',
@@ -327,11 +331,32 @@ export class RepoScannerService {
     };
   }
 
-  private async executeP4Source(source: ScanSource): Promise<ScanExecutionResult> {
+  private async initializeP4Project(source: ScanSource, env: P4Env | undefined): Promise<void> {
+    const projectRoot = source.repoPath ?? findP4WorkspaceRoot(source.depotPath, env);
+    if (!projectRoot) {
+      throw new Error(`P4 source ${source.id} needs a local workspace path for first-run project initialization`);
+    }
+    await this.initializeProjectFromPath(source, projectRoot);
+  }
+
+  private async initializeProjectFromPath(source: ScanSource, root: string): Promise<void> {
+    const detected = detectProject(root);
+    if (!detected) return;
+    const project: DetectedProject = {
+      ...detected,
+      name: source.project,
+      root,
+    };
+    await this.memory.snapshots.upsertProjectSnapshot(project, { author: 'repo-scanner' });
+    this.memory.context.indexProjectGraph(project);
+  }
+
+  private async executeP4Source(source: ScanSource, runId: string): Promise<ScanExecutionResult> {
     const depot = source.depotPath;
     const env = p4EnvOf(source);
 
     if (!source.lastCursor) {
+      await this.initializeP4Project(source, env);
       if (source.initMode === 'from_now') {
         const latest = getRecentChangelists(1, depot, env);
         return {
@@ -347,7 +372,7 @@ export class RepoScannerService {
 
       // backfill_recent — getRecentChangelists returns newest-first; reverse to chronological.
       const recent = getRecentChangelists(source.backfillCount, depot, env).slice().reverse();
-      const processed = await this.processChangelists(source, recent);
+      const processed = await this.processChangelists(source, recent, runId);
       return {
         sourceId: source.id,
         mode: 'initialized',
@@ -357,7 +382,7 @@ export class RepoScannerService {
     }
 
     const cls = listChangelistsSince(source.lastCursor, depot, env);
-    const processed = await this.processChangelists(source, cls);
+    const processed = await this.processChangelists(source, cls, runId);
     return {
       sourceId: source.id,
       mode: 'incremental',
@@ -369,13 +394,14 @@ export class RepoScannerService {
   private async processChangelists(
     source: ScanSource,
     changelists: string[],
+    runId: string,
   ): Promise<Pick<ScanExecutionResult, 'itemsSeen' | 'itemsImported' | 'itemsSkipped' | 'itemsFailed'>> {
     let itemsImported = 0;
     let itemsSkipped = 0;
     let itemsFailed = 0;
     const env = p4EnvOf(source);
 
-    for (const cl of changelists) {
+    for (const [index, cl] of changelists.entries()) {
       const externalId = `p4@${cl}`;
       try {
         const commit = getChangelistInfo(cl, env);
@@ -398,6 +424,12 @@ export class RepoScannerService {
         itemsFailed++;
         this.scanner.recordFailedItem(source.id, externalId, errorMessage(error));
       }
+      this.scanner.updateRunProgress(runId, {
+        itemsSeen: index + 1,
+        itemsImported,
+        itemsSkipped,
+        itemsFailed,
+      });
     }
 
     return {
@@ -412,12 +444,13 @@ export class RepoScannerService {
     source: ScanSource,
     repoPath: string,
     commits: string[],
+    runId: string,
   ): Promise<Pick<ScanExecutionResult, 'itemsSeen' | 'itemsImported' | 'itemsSkipped' | 'itemsFailed'>> {
     let itemsImported = 0;
     let itemsSkipped = 0;
     let itemsFailed = 0;
 
-    for (const hash of commits) {
+    for (const [index, hash] of commits.entries()) {
       try {
         const commit = readCommit(repoPath, hash);
         if (!commit) {
@@ -443,6 +476,12 @@ export class RepoScannerService {
           errorMessage(error),
         );
       }
+      this.scanner.updateRunProgress(runId, {
+        itemsSeen: index + 1,
+        itemsImported,
+        itemsSkipped,
+        itemsFailed,
+      });
     }
 
     return {

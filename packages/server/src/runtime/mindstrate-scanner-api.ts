@@ -72,6 +72,13 @@ export class MindstrateScannerApi {
     this.services.scanSourceRepository.finishRun(id, status, stats);
   }
 
+  updateRunProgress(
+    id: string,
+    stats: { itemsSeen: number; itemsImported: number; itemsSkipped: number; itemsFailed: number },
+  ): void {
+    this.services.scanSourceRepository.updateRunProgress(id, stats);
+  }
+
   listRuns(sourceId: string): ScanRun[] {
     return this.services.scanSourceRepository.listRuns(sourceId);
   }

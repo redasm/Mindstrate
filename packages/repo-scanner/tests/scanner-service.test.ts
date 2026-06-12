@@ -62,6 +62,7 @@ describe('RepoScannerService', () => {
     expect(result.mode).toBe('initialized');
     expect(result.itemsImported).toBe(0);
     expect(service.scanner.getSource(source.id)?.lastCursor).toBeTruthy();
+    expect(memory.context.listContextNodes({ project: 'proj', limit: 50 }).length).toBeGreaterThan(0);
   });
 
   it('backfills recent commits and writes extracted knowledge', async () => {
@@ -77,8 +78,8 @@ describe('RepoScannerService', () => {
     expect(result.itemsSeen).toBe(1);
     expect(result.itemsImported).toBe(1);
     const entries = memory.context.readGraphKnowledge({ project: 'proj', limit: 10 });
-    expect(entries).toHaveLength(1);
-    expect(entries[0].project).toBe('proj');
+    expect(entries.length).toBeGreaterThanOrEqual(1);
+    expect(entries.every((entry) => entry.project === 'proj')).toBe(true);
   });
 
   it('records failed commits and supports retrying them', async () => {

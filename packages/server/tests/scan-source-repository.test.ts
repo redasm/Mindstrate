@@ -38,10 +38,21 @@ describe('ScanSourceRepository', () => {
     expect(listed[0].initMode).toBe('from_now');
   });
 
+  it('allows remote git sources to omit repoPath so scanner chooses source-specific clone path', () => {
+    const source = repo.createGitLocalSource({
+      name: 'remote-app',
+      project: 'app',
+      remoteUrl: 'https://github.com/acme/app.git',
+    });
+
+    expect(repo.getSource(source.id)?.repoPath).toBeUndefined();
+  });
+
   it('creates p4 sources with per-source credentials', () => {
     const source = repo.createP4Source({
       name: 'depot',
       project: 'app',
+      repoPath: '/workspaces/app',
       depotPath: '//depot/main/...',
       p4Port: 'ssl:p4.acme.com:1666',
       p4User: 'svc-scanner',
@@ -54,7 +65,7 @@ describe('ScanSourceRepository', () => {
     expect(fetched?.p4Port).toBe('ssl:p4.acme.com:1666');
     expect(fetched?.p4User).toBe('svc-scanner');
     expect(fetched?.p4Passwd).toBe('p4-secret');
-    expect(fetched?.repoPath).toBeUndefined();
+    expect(fetched?.repoPath).toBe('/workspaces/app');
   });
 
   it('enables and disables sources', () => {
@@ -100,6 +111,25 @@ describe('ScanSourceRepository', () => {
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe('completed');
     expect(runs[0].itemsImported).toBe(2);
+  });
+
+  it('updates running scan progress before a run finishes', () => {
+    const source = repo.createGitLocalSource({ name: 'r', project: 'p', repoPath: '/r' });
+    const run = repo.createRun(source.id);
+
+    repo.updateRunProgress(run.id, {
+      itemsSeen: 5,
+      itemsImported: 2,
+      itemsSkipped: 1,
+      itemsFailed: 1,
+    });
+
+    const [updated] = repo.listRuns(source.id);
+    expect(updated.status).toBe('running');
+    expect(updated.itemsSeen).toBe(5);
+    expect(updated.itemsImported).toBe(2);
+    expect(updated.itemsSkipped).toBe(1);
+    expect(updated.itemsFailed).toBe(1);
   });
 
   it('listDueSources respects intervalSec', () => {
