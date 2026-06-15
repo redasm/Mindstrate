@@ -1,7 +1,9 @@
 import type {
+  AppendScanLogInput,
   FailedScanItem,
   GitLocalSourceInput,
   P4SourceInput,
+  ScanLog,
   ScanRun,
   ScanRunStatus,
   ScanSource,
@@ -98,5 +100,17 @@ export class MindstrateScannerApi {
 
   deleteFailedItem(id: string): void {
     this.services.scanSourceRepository.deleteFailedItem(id);
+  }
+
+  appendLog(input: AppendScanLogInput): ScanLog {
+    return this.services.scanSourceRepository.appendLog(input);
+  }
+
+  listLogs(sourceId: string, limit?: number): ScanLog[] {
+    return this.services.scanSourceRepository.listLogs(sourceId, limit);
+  }
+
+  pruneLogs(sourceId: string, keep: number): void {
+    this.services.scanSourceRepository.pruneLogs(sourceId, keep);
   }
 }

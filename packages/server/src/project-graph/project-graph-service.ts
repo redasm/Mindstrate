@@ -77,6 +77,7 @@ export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
   filesScanned: number;
   nodesExtracted: number;
   edgesExtracted: number;
+  skippedFiles: number;
 }
 
 export interface ProjectGraphIndexOptions {
@@ -118,6 +119,7 @@ export const indexProjectGraph = (
     filesScanned: extraction.filesScanned,
     nodesExtracted: extraction.nodes.length,
     edgesExtracted: extraction.edges.length,
+    skippedFiles: extraction.skippedFiles,
   };
 };
 

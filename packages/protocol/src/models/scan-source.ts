@@ -93,3 +93,23 @@ export interface FailedScanItem {
   lastTriedAt: string;
   retryCount: number;
 }
+
+export type ScanLogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface ScanLog {
+  id: string;
+  sourceId: string;
+  runId?: string;
+  level: ScanLogLevel;
+  phase?: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface AppendScanLogInput {
+  sourceId: string;
+  runId?: string | null;
+  level: ScanLogLevel;
+  phase?: string;
+  message: string;
+}

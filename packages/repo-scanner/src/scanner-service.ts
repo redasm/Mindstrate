@@ -8,6 +8,7 @@ import {
   type CommitInfo,
   type DetectedProject,
   type ProjectGraphScanProgress,
+  type ScanLogLevel,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
 import { ensureGitClone } from './git-clone.js';
@@ -34,6 +35,9 @@ export interface RepoScannerOptions {
   memory: Mindstrate;
 }
 
+/** Hard cap on persisted log rows per source; older lines are pruned at each run start. */
+const SCAN_LOG_MAX_ROWS = 500;
+
 export class RepoScannerService {
   readonly scanner: Mindstrate['scanner'];
   private sink: KnowledgeSink;
@@ -49,6 +53,29 @@ export class RepoScannerService {
 
   async init(): Promise<void> {
     await this.sink.init();
+  }
+
+  /**
+   * Append a line to the source's persisted scan log (visible in the web UI)
+   * and mirror it to the daemon's stdout. Logging must never break a scan, so
+   * a persistence failure is swallowed.
+   */
+  private log(
+    sourceId: string,
+    runId: string | null,
+    level: ScanLogLevel,
+    message: string,
+    phase?: string,
+  ): void {
+    try {
+      this.scanner.appendLog({ sourceId, runId, level, phase, message });
+    } catch {
+      // never let logging abort a scan
+    }
+    const prefix = `[repo-scanner${phase ? `:${phase}` : ''}]`;
+    if (level === 'error') console.error(`${prefix} ${message}`);
+    else if (level === 'warn') console.warn(`${prefix} ${message}`);
+    else console.log(`${prefix} ${message}`);
   }
 
   addGitLocalSource(input: GitLocalSourceInput): ScanSource {
@@ -110,6 +137,15 @@ export class RepoScannerService {
 
     this.scanner.markRunStart(sourceId);
     const run = this.scanner.createRun(sourceId);
+    this.scanner.pruneLogs(sourceId, SCAN_LOG_MAX_ROWS);
+    this.log(
+      sourceId,
+      run.id,
+      'info',
+      `Scan started for "${source.name}" — ${source.kind}, project "${source.project}", `
+        + `${source.lastCursor ? 'incremental' : `first run (init mode: ${source.initMode})`}`,
+      'start',
+    );
 
     try {
       const result = source.kind === 'p4'
@@ -124,6 +160,14 @@ export class RepoScannerService {
       if (result.cursor) {
         this.scanner.updateCursor(sourceId, result.cursor);
       }
+      this.log(
+        sourceId,
+        run.id,
+        'info',
+        `Scan completed (${result.mode}): ${result.itemsImported}/${result.itemsSeen} imported, `
+          + `${result.itemsSkipped} skipped, ${result.itemsFailed} failed`,
+        'done',
+      );
       return result;
     } catch (error) {
       const message = errorMessage(error);
@@ -135,6 +179,7 @@ export class RepoScannerService {
         itemsFailed: 1,
         error: message,
       });
+      this.log(sourceId, run.id, 'error', `Scan failed: ${message}`, 'done');
       throw error;
     }
   }
@@ -302,6 +347,14 @@ export class RepoScannerService {
     if (!source.lastCursor) {
       await this.initializeProjectFromPath(source, repoPath, runId);
       if (source.initMode === 'from_now') {
+        this.log(
+          source.id,
+          runId,
+          'info',
+          'Init mode "from_now": project graph built; no historical commits imported. '
+            + 'New commits will be imported on subsequent scans.',
+          'init',
+        );
         return {
           sourceId: source.id,
           mode: 'initialized',
@@ -314,6 +367,7 @@ export class RepoScannerService {
       }
 
       const initialCommits = listRecentCommits(repoPath, source.backfillCount, source.branch);
+      this.log(source.id, runId, 'info', `Backfilling ${initialCommits.length} recent commit(s)`, 'backfill');
       const processed = await this.processCommits(source, repoPath, initialCommits, runId);
       return {
         sourceId: source.id,
@@ -324,6 +378,7 @@ export class RepoScannerService {
     }
 
     const commits = listCommitsSince(repoPath, source.lastCursor, source.branch);
+    this.log(source.id, runId, 'info', `Incremental scan: ${commits.length} new commit(s) since last cursor`, 'incremental');
     const processed = await this.processCommits(source, repoPath, commits, runId);
     return {
       sourceId: source.id,
@@ -343,17 +398,34 @@ export class RepoScannerService {
 
   private async initializeProjectFromPath(source: ScanSource, root: string, runId: string): Promise<void> {
     const detected = detectProject(root);
-    if (!detected) return;
+    if (!detected) {
+      this.log(
+        source.id,
+        runId,
+        'warn',
+        `Project detection found nothing at ${root}; skipping project graph index`,
+        'init',
+      );
+      return;
+    }
     const project: DetectedProject = {
       ...detected,
       name: source.project,
       root,
     };
     await this.memory.snapshots.upsertProjectSnapshot(project, { author: 'repo-scanner' });
-    this.memory.context.indexProjectGraph(project, {
-      onScanProgress: this.createInitProgressReporter(runId),
+    this.log(source.id, runId, 'info', `Indexing project graph under ${root} (large checkouts can take a while)`, 'index');
+    const indexResult = this.memory.context.indexProjectGraph(project, {
+      onScanProgress: this.createInitProgressReporter(source.id, runId),
     });
-    await this.enrichProjectGraph(project);
+    this.log(
+      source.id,
+      runId,
+      'info',
+      `Project graph indexed: ${indexResult.filesScanned} files scanned, ${indexResult.skippedFiles} skipped`,
+      'index',
+    );
+    await this.enrichProjectGraph(source, project, runId);
   }
 
   /**
@@ -363,13 +435,26 @@ export class RepoScannerService {
    * enrichment failure must not fail first-run initialization — the
    * deterministic graph is already written by then.
    */
-  private async enrichProjectGraph(project: DetectedProject): Promise<void> {
+  private async enrichProjectGraph(source: ScanSource, project: DetectedProject, runId: string): Promise<void> {
     try {
       const result = await this.memory.context.enrichProjectGraph(project);
       const reason = 'reason' in result && result.reason ? ` (${result.reason})` : '';
-      console.log(`[repo-scanner] graph enrichment for ${project.name}: ${result.status}${reason} nodes=${result.nodesCreated}`);
+      const level: ScanLogLevel = result.status === 'skipped' ? 'warn' : 'info';
+      this.log(
+        source.id,
+        runId,
+        level,
+        `Graph LLM enrichment for "${project.name}": ${result.status}${reason}, nodes=${result.nodesCreated}`,
+        'enrich',
+      );
     } catch (error) {
-      console.warn(`[repo-scanner] graph enrichment for ${project.name} failed: ${errorMessage(error)}`);
+      this.log(
+        source.id,
+        runId,
+        'error',
+        `Graph LLM enrichment for "${project.name}" failed: ${errorMessage(error)}`,
+        'enrich',
+      );
     }
   }
 
@@ -378,12 +463,25 @@ export class RepoScannerService {
    * single commit is processed, leaving the run row frozen at zero. Write
    * the scanned file count into the run as a throttled heartbeat so the UI
    * "running" state shows movement; the final commit-based stats overwrite
-   * these numbers when the run finishes.
+   * these numbers when the run finishes. A coarser throttle also drops a log
+   * line so the persisted scan log shows index progress (and how far it got
+   * if the process dies mid-index).
    */
-  private createInitProgressReporter(runId: string): (event: ProjectGraphScanProgress) => void {
+  private createInitProgressReporter(sourceId: string, runId: string): (event: ProjectGraphScanProgress) => void {
     let lastWriteMs = 0;
+    let lastLogMs = 0;
     return (event) => {
       const now = Date.now();
+      if (now - lastLogMs >= 5000) {
+        lastLogMs = now;
+        this.log(
+          sourceId,
+          runId,
+          'info',
+          `Indexing… ${event.files} files scanned, ${event.skippedFiles} skipped`,
+          'index',
+        );
+      }
       if (now - lastWriteMs < 500) return;
       lastWriteMs = now;
       this.scanner.updateRunProgress(runId, {
@@ -403,6 +501,14 @@ export class RepoScannerService {
       await this.initializeP4Project(source, env, runId);
       if (source.initMode === 'from_now') {
         const latest = getRecentChangelists(1, depot, env);
+        this.log(
+          source.id,
+          runId,
+          'info',
+          'Init mode "from_now": project graph built; no historical changelists imported. '
+            + 'New changelists will be imported on subsequent scans.',
+          'init',
+        );
         return {
           sourceId: source.id,
           mode: 'initialized',
@@ -416,6 +522,7 @@ export class RepoScannerService {
 
       // backfill_recent — getRecentChangelists returns newest-first; reverse to chronological.
       const recent = getRecentChangelists(source.backfillCount, depot, env).slice().reverse();
+      this.log(source.id, runId, 'info', `Backfilling ${recent.length} recent changelist(s)`, 'backfill');
       const processed = await this.processChangelists(source, recent, runId);
       return {
         sourceId: source.id,
@@ -426,6 +533,7 @@ export class RepoScannerService {
     }
 
     const cls = listChangelistsSince(source.lastCursor, depot, env);
+    this.log(source.id, runId, 'info', `Incremental scan: ${cls.length} new changelist(s) since last cursor`, 'incremental');
     const processed = await this.processChangelists(source, cls, runId);
     return {
       sourceId: source.id,

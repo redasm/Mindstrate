@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { ScanSourceKind, ScanInitMode } from '@mindstrate/protocol';
+import type { ScanSourceKind, ScanInitMode, ScanLog } from '@mindstrate/protocol';
 import { Icon } from '@/components/ui/Icon';
 import { Toggle } from '@/components/ui/Toggle';
 import { useTranslations } from '@/lib/i18n/hooks';
@@ -82,6 +82,10 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
   const [showAuthToken, setShowAuthToken] = useState(false);
   const [errorDetailId, setErrorDetailId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const [logSource, setLogSource] = useState<{ id: string; name: string } | null>(null);
+  const [logs, setLogs] = useState<ScanLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     let active = 0;
@@ -134,6 +138,43 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
       setShowPanel(true);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!logSource) return;
+    let cancelled = false;
+    const id = logSource.id;
+    setLogsLoading(true);
+    setLogsError(null);
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/admin/scanner-sources/${encodeURIComponent(id)}/logs?limit=400`, { cache: 'no-store' });
+        if (!res.ok) {
+          if (!cancelled) setLogsError(`${t.logsLoadFailed} (${res.status})`);
+          return;
+        }
+        const body = await res.json().catch(() => null) as { logs?: ScanLog[] } | null;
+        if (!cancelled && Array.isArray(body?.logs)) setLogs(body.logs);
+      } catch {
+        if (!cancelled) setLogsError(t.logsLoadFailed);
+      } finally {
+        if (!cancelled) setLogsLoading(false);
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [logSource, t.logsLoadFailed]);
+
+  const openLogs = (source: ScannerSourceView) => {
+    setLogs([]);
+    setLogsError(null);
+    setLogSource({ id: source.id, name: source.name });
+  };
+
+  const closeLogs = () => setLogSource(null);
 
   const visibleSources = useMemo(
     () => (projectFilter ? sources.filter((s) => s.project === projectFilter) : sources),
@@ -776,6 +817,14 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                         />
                         <button
                           type="button"
+                          onClick={() => openLogs(entry)}
+                          className="action-btn w-7 h-7 flex items-center justify-center rounded-md text-surface-400 hover:text-brand-600"
+                          title={t.viewLogs}
+                        >
+                          <Icon icon="lucide:scroll-text" className="text-sm" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => openEdit(entry)}
                           className="action-btn w-7 h-7 flex items-center justify-center rounded-md text-surface-400 hover:text-surface-700"
                           title={t.edit}
@@ -812,12 +861,91 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
           {t.showing} <span className="text-surface-700 font-semibold">{visibleSources.length}</span> {visibleSources.length === 1 ? t.sourceSingular : t.sourcePlural}
         </p>
       </div>
+
+      {logSource && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={closeLogs}
+        >
+          <div
+            className="flex max-h-[80vh] w-full max-w-[820px] flex-col rounded-2xl bg-white border border-surface-200 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-surface-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center">
+                  <Icon icon="lucide:scroll-text" className="text-lg text-brand-500" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold tracking-tight text-surface-900">
+                    {t.logsTitle} · <span className="font-mono text-surface-600">{logSource.name}</span>
+                  </h2>
+                  <p className="text-xs text-surface-400 font-medium flex items-center gap-1.5">
+                    {t.logsSubtitle}
+                    <span className="inline-flex items-center gap-1 text-emerald-500">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {t.logsAutoRefresh}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeLogs}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-100 hover:text-surface-600"
+                title={t.logsClose}
+              >
+                <Icon icon="lucide:x" className="text-base" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-surface-950/95 px-4 py-3 rounded-b-2xl">
+              {logsError ? (
+                <div className="flex items-center gap-2 text-sm font-medium text-red-300">
+                  <Icon icon="lucide:alert-circle" className="text-base" />
+                  {logsError}
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="py-10 text-center text-sm text-surface-400">
+                  {logsLoading ? '…' : t.logsEmpty}
+                </div>
+              ) : (
+                <ul className="space-y-0.5 font-mono text-[12px] leading-relaxed">
+                  {logs.map((entry) => (
+                    <li key={entry.id} className="flex gap-2.5 whitespace-pre-wrap break-words">
+                      <span className="shrink-0 text-surface-500">{logTime(entry.createdAt)}</span>
+                      <span className={`shrink-0 font-semibold uppercase ${LOG_LEVEL_STYLES[entry.level] ?? 'text-surface-300'}`}>
+                        {entry.level}
+                      </span>
+                      {entry.phase && <span className="shrink-0 text-brand-300">[{entry.phase}]</span>}
+                      <span className="text-surface-100">{entry.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function byCreatedAt(a: ScannerSourceView, b: ScannerSourceView): number {
   return a.createdAt.localeCompare(b.createdAt);
+}
+
+const LOG_LEVEL_STYLES: Record<string, string> = {
+  error: 'text-red-400',
+  warn: 'text-amber-400',
+  info: 'text-emerald-400',
+  debug: 'text-surface-400',
+};
+
+function logTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString();
 }
 
 function SummaryPill({ label, value, dotColor }: { label: string; value: number; dotColor?: string }) {
