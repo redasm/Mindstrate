@@ -913,7 +913,7 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                 <ul className="space-y-0.5 font-mono text-[12px] leading-relaxed">
                   {logs.map((entry) => (
                     <li key={entry.id} className="flex gap-2.5 whitespace-pre-wrap break-words">
-                      <span className="shrink-0 text-surface-500">{logTime(entry.createdAt)}</span>
+                      <span className="shrink-0 text-surface-400">{logTime(entry.createdAt)}</span>
                       <span className={`shrink-0 font-semibold uppercase ${LOG_LEVEL_STYLES[entry.level] ?? 'text-surface-300'}`}>
                         {entry.level}
                       </span>
