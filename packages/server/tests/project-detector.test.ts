@@ -190,6 +190,21 @@ describe('detectProject', () => {
     expect(gas?.classifications).toEqual(expect.arrayContaining(['cpp-source', 'config-sensitive']));
   });
 
+  it('detects an Unreal project from .uproject alone (no Content dir)', () => {
+    // A partially-synced subtree (e.g. a P4 client mapped to Source/Client) may
+    // have the .uproject and Config but not Content. The .uproject extension is
+    // Unreal-exclusive, so it alone must be enough — otherwise the rule fails to
+    // match and the whole tree gets bare-scanned (TypeScript/Typing included).
+    write(root, 'Client.uproject', JSON.stringify({ FileVersion: 3 }));
+    fs.mkdirSync(path.join(root, 'Config'));
+    fs.mkdirSync(path.join(root, 'Source'));
+
+    const p = detectProject(root)!;
+    expect(p.detectionRule?.id).toBe('unreal-project');
+    expect(p.framework).toBe('unreal-engine');
+    expect(p.graphHints?.ignore).toContain('TypeScript/Typing');
+  });
+
   it('loads project-local detection rules before built-ins', () => {
     write(root, '.mindstrate/rules/custom-engine.json', JSON.stringify({
       id: 'custom-engine',

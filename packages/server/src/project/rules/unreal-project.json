@@ -5,13 +5,7 @@
   "systemPagesInclude": "unreal-architecture-pages.json",
   "match": {
     "all": [
-      { "glob": "*.uproject" },
-      { "dir": "Content" },
-      { "dir": "Config" }
-    ],
-    "any": [
-      { "dir": "Source" },
-      { "dir": "Plugins" }
+      { "glob": "*.uproject" }
     ]
   },
   "detect": {
