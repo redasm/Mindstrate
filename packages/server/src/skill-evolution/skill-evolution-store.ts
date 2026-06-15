@@ -98,7 +98,7 @@ export class SkillEvolutionStore {
     const rows = this.db.prepare(`
       SELECT * FROM skill_evolution_patches
       ${where}
-      ORDER BY created_at DESC, id DESC
+      ORDER BY created_at DESC, rowid DESC
       LIMIT ?
     `).all(...params) as PatchRow[];
     return rows.map(rowToPatch);
@@ -150,7 +150,7 @@ export class SkillEvolutionStore {
     const rows = this.db.prepare(`
       SELECT * FROM skill_evolution_evaluations
       WHERE patch_id = ?
-      ORDER BY created_at DESC, id DESC
+      ORDER BY created_at DESC, rowid DESC
     `).all(patchId) as EvaluationRow[];
     return rows.map(rowToEvaluation);
   }
