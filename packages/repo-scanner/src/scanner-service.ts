@@ -8,6 +8,7 @@ import {
   type CommitInfo,
   type DetectedProject,
   type ProjectGraphScanProgress,
+  type ProjectGraphIndexProgress,
   type ScanLogLevel,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
@@ -417,6 +418,7 @@ export class RepoScannerService {
     this.log(source.id, runId, 'info', `Indexing project graph under ${root} (large checkouts can take a while)`, 'index');
     const indexResult = this.memory.context.indexProjectGraph(project, {
       onScanProgress: this.createInitProgressReporter(source.id, runId),
+      onIndexProgress: this.createIndexPhaseReporter(source.id, runId),
     });
     this.log(
       source.id,
@@ -488,6 +490,40 @@ export class RepoScannerService {
         itemsSeen: event.files,
         itemsImported: 0,
         itemsSkipped: 0,
+        itemsFailed: 0,
+      });
+    };
+  }
+
+  /**
+   * The post-scan parse phase (tree-sitter parsing, fact extraction, graph
+   * write) can run for many minutes on a large source tree while emitting
+   * nothing — scan heartbeats have stopped and `items_seen` would otherwise
+   * freeze, so the run looks hung. Mirror the scan heartbeat for the parse
+   * phases: a throttled log line plus a run-progress write keep the UI and
+   * the persisted log moving (and show how far parsing got if it dies).
+   */
+  private createIndexPhaseReporter(sourceId: string, runId: string): (event: ProjectGraphIndexProgress) => void {
+    let lastLogMs = 0;
+    let lastWriteMs = 0;
+    return (event) => {
+      const now = Date.now();
+      if (now - lastLogMs >= 5000) {
+        lastLogMs = now;
+        this.log(
+          sourceId,
+          runId,
+          'info',
+          `Parsing (${event.phase})… ${event.filesProcessed}/${event.filesTotal} files, ${event.nodes} nodes`,
+          'index',
+        );
+      }
+      if (now - lastWriteMs < 500) return;
+      lastWriteMs = now;
+      this.scanner.updateRunProgress(runId, {
+        itemsSeen: event.filesProcessed,
+        itemsImported: 0,
+        itemsSkipped: event.skippedFiles,
         itemsFailed: 0,
       });
     };
