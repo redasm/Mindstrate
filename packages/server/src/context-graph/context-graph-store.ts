@@ -105,6 +105,32 @@ export class ContextGraphStore {
     return this.nodes.create(input);
   }
 
+  /**
+   * Run `fn` inside a single SQLite transaction.
+   *
+   * Used for bulk writes like the first-run project-graph index, where issuing
+   * 100k+ individual auto-committed INSERTs is both slow (one fsync per row in
+   * WAL mode) and non-atomic — a crash mid-write would leave a half-populated
+   * graph. Wrapping the whole write makes it commit once and roll back cleanly
+   * on failure. `fn` must be synchronous (better-sqlite3 transactions cannot
+   * span an await).
+   */
+  transaction<T>(fn: () => T): T {
+    return this.db.transaction(fn)();
+  }
+
+  /**
+   * Raw connection handle for whole-graph batch algorithms that must run
+   * set-based SQL (temp tables, joins, JSON updates) instead of pulling every
+   * row into JS — e.g. project-graph binding inference, which joins 100k+ nodes
+   * on a normalized symbol key. Reach for this ONLY for graph-wide passes where
+   * the typed row-by-row API would defeat the point; everything else must go
+   * through the repository methods so table ownership stays intact.
+   */
+  get rawDatabase(): Database.Database {
+    return this.db;
+  }
+
   getNodeById(id: string): ContextNode | null {
     return this.nodes.getById(id);
   }

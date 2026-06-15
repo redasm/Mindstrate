@@ -6,8 +6,8 @@
  *   2. For each scanned file, run the right extractors (generic source via
  *      tree-sitter, Unreal-specific via `unreal-fact-builder`, dependency
  *      manifests via `addPackageFacts`).
- *   3. Run second-pass binding inference (`binding-fact-builder`).
- *   4. Persist extracted nodes/edges through `graph-writer`.
+ *   3. Persist extracted nodes/edges through `graph-writer`.
+ *   4. Run second-pass binding inference in SQL (`project-graph-binding`).
  *
  * Per-engine and per-language fact recipes live in their own modules so this
  * file can stay focused on flow rather than recipes.
@@ -43,7 +43,7 @@ import {
 } from './graph-writer.js';
 import {
   readProjectGraphExtractionCache,
-  writeProjectGraphExtractionCache,
+  openProjectGraphExtractionCacheWriter,
   type ProjectGraphFileExtractionCache,
 } from './extraction-cache.js';
 import {
@@ -68,10 +68,7 @@ import {
   addUnrealConfigFacts,
   addUnrealManifestFacts,
 } from './unreal-fact-builder.js';
-import {
-  addBindingFacts,
-  addGeneratedBindingFacts,
-} from './binding-fact-builder.js';
+import { bindProjectGraph } from './project-graph-binding.js';
 
 export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
   filesScanned: number;
@@ -114,11 +111,32 @@ export const indexProjectGraph = (
     skippedFiles: extraction.skippedFiles,
   });
   const writeResult = writeProjectGraphExtraction(store, extraction);
+
+  // Binding inference runs as SQL over the persisted graph (see
+  // `project-graph-binding.ts`) rather than over in-memory node maps, so it
+  // doesn't add the whole graph back onto the heap.
+  options.onIndexProgress?.({
+    phase: 'binding',
+    filesProcessed: extraction.filesScanned,
+    filesTotal: extraction.filesScanned,
+    nodes: extraction.nodes.length,
+    edges: extraction.edges.length,
+    generatedFiles: extraction.generatedFiles,
+    metadataOnlyRoots: extraction.metadataOnlyRoots,
+    skippedFiles: extraction.skippedFiles,
+  });
+  const bindingResult = bindProjectGraph(store, project.name);
+  const bindingEdges = bindingResult.edgesCreated + bindingResult.edgesUpdated + bindingResult.edgesSkipped;
+
   return {
-    ...writeResult,
+    nodesCreated: writeResult.nodesCreated,
+    nodesUpdated: writeResult.nodesUpdated,
+    edgesCreated: writeResult.edgesCreated + bindingResult.edgesCreated,
+    edgesUpdated: writeResult.edgesUpdated + bindingResult.edgesUpdated,
+    edgesSkipped: writeResult.edgesSkipped + bindingResult.edgesSkipped,
     filesScanned: extraction.filesScanned,
     nodesExtracted: extraction.nodes.length,
-    edgesExtracted: extraction.edges.length,
+    edgesExtracted: extraction.edges.length + bindingEdges,
     skippedFiles: extraction.skippedFiles,
   };
 };
@@ -164,60 +182,51 @@ const buildProjectGraphExtraction = (
     createTreeSitterSourceParser(),
   ];
   const previousCache = readProjectGraphExtractionCache(project.root);
-  const nextCache: ProjectGraphFileExtractionCache = { version: 2, files: {} };
+  const cacheWriter = openProjectGraphExtractionCacheWriter(project.root);
 
-  addScanPlanFacts(project, scanPlan, nodes, edges);
-  files.forEach((file, index) => {
-    addNode(nodes, makeFileNode(project, file.path, scanPlan));
-    addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
-    const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache);
-    if (fileExtraction.skipped) skippedFiles += 1;
-    if (!fileExtraction.skipped) {
-      nextCache.files[file.path] = {
+  try {
+    addScanPlanFacts(project, scanPlan, nodes, edges);
+    files.forEach((file, index) => {
+      addNode(nodes, makeFileNode(project, file.path, scanPlan));
+      addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
+      const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache);
+      if (fileExtraction.skipped) skippedFiles += 1;
+      if (!fileExtraction.skipped) {
+        cacheWriter.write({
+          path: file.path,
+          hash: file.hash,
+          nodes: fileExtraction.nodes,
+          edges: fileExtraction.edges,
+        });
+      }
+      for (const node of fileExtraction.nodes) addNode(nodes, node);
+      for (const edge of fileExtraction.edges) addEdge(edges, edge);
+      options.onIndexProgress?.({
+        phase: 'extracting',
+        filesProcessed: index + 1,
+        filesTotal: files.length,
+        nodes: nodes.size,
+        edges: edges.size,
+        generatedFiles,
+        metadataOnlyRoots,
+        skippedFiles,
         path: file.path,
-        hash: file.hash,
-        nodes: fileExtraction.nodes,
-        edges: fileExtraction.edges,
-      };
-    }
-    for (const node of fileExtraction.nodes) addNode(nodes, node);
-    for (const edge of fileExtraction.edges) addEdge(edges, edge);
+      });
+    });
+    addUnrealAssetRegistryFacts(project, nodes, edges);
     options.onIndexProgress?.({
-      phase: 'extracting',
-      filesProcessed: index + 1,
+      phase: 'cache',
+      filesProcessed: files.length,
       filesTotal: files.length,
       nodes: nodes.size,
       edges: edges.size,
       generatedFiles,
       metadataOnlyRoots,
       skippedFiles,
-      path: file.path,
     });
-  });
-  addUnrealAssetRegistryFacts(project, nodes, edges);
-  options.onIndexProgress?.({
-    phase: 'binding',
-    filesProcessed: files.length,
-    filesTotal: files.length,
-    nodes: nodes.size,
-    edges: edges.size,
-    generatedFiles,
-    metadataOnlyRoots,
-    skippedFiles,
-  });
-  addBindingFacts(nodes, edges);
-  addGeneratedBindingFacts(nodes, edges);
-  options.onIndexProgress?.({
-    phase: 'cache',
-    filesProcessed: files.length,
-    filesTotal: files.length,
-    nodes: nodes.size,
-    edges: edges.size,
-    generatedFiles,
-    metadataOnlyRoots,
-    skippedFiles,
-  });
-  writeProjectGraphExtractionCache(project.root, nextCache);
+  } finally {
+    cacheWriter.close();
+  }
 
   return {
     project: project.name,

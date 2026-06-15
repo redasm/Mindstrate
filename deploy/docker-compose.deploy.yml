@@ -134,10 +134,14 @@ services:
       MINDSTRATE_DATA_DIR: "/data"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
       # First-run indexing of a large checkout builds the whole project graph
-      # in memory. Give Node a real heap (default container heap is small) and
-      # cap per-file reads so a few huge blobs can't OOM the index. Tune via
-      # .env.deploy for very large monorepos.
-      NODE_OPTIONS: "${SCANNER_NODE_OPTIONS:---max-old-space-size=1536}"
+      # in memory: the deduped node/edge set has to stay resident for the
+      # second-pass binding inference, so heap scales with graph size (a ~40k
+      # file / ~170k node checkout needs well over 1.5 GB). Give Node a real
+      # heap and cap per-file reads so a few huge blobs can't OOM the index.
+      # Bump both this and SCANNER_MEMORY_LIMIT in .env.deploy for very large
+      # monorepos — if the heap is exceeded the process is hard-killed mid-run
+      # and the scan is recovered as "orphaned" on the next start.
+      NODE_OPTIONS: "${SCANNER_NODE_OPTIONS:---max-old-space-size=4096}"
       MINDSTRATE_SCAN_MAX_FILE_BYTES: "${SCANNER_MAX_FILE_BYTES:-2097152}"
     volumes:
       - mindstrate-data:/data
@@ -156,7 +160,7 @@ services:
           # Must exceed --max-old-space-size above (heap) plus native/V8
           # overhead, or the kernel OOM-kills the container before Node's own
           # heap limit triggers.
-          memory: "${SCANNER_MEMORY_LIMIT:-2g}"
+          memory: "${SCANNER_MEMORY_LIMIT:-6g}"
 
 volumes:
   mindstrate-data:

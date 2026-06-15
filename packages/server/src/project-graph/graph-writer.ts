@@ -36,15 +36,39 @@ export const writeProjectGraphExtraction = (
   store: ContextGraphStore,
   extraction: ProjectGraphExtractionResult,
 ): ProjectGraphWriteResult => {
-  const result: ProjectGraphWriteResult = {
-    nodesCreated: 0,
-    nodesUpdated: 0,
-    edgesCreated: 0,
-    edgesUpdated: 0,
-    edgesSkipped: 0,
-  };
+  const result = emptyWriteResult();
 
-  for (const node of extraction.nodes) {
+  // One transaction for the whole graph: a first-run index of a large checkout
+  // is 100k+ node + edge writes. Outside a transaction each write fsyncs on its
+  // own (minutes of wall-clock, and a process restart mid-write strands the run
+  // as orphaned with a partial graph). Committing once makes it fast and atomic
+  // — a crash rolls back to an empty graph the next run can rebuild cleanly.
+  store.transaction(() => {
+    applyNodeWrites(store, extraction.nodes, result);
+    applyEdgeWrites(store, extraction.edges, result);
+  });
+
+  return result;
+};
+
+export const emptyWriteResult = (): ProjectGraphWriteResult => ({
+  nodesCreated: 0,
+  nodesUpdated: 0,
+  edgesCreated: 0,
+  edgesUpdated: 0,
+  edgesSkipped: 0,
+});
+
+/**
+ * Upsert nodes into the store, mutating `result` counts. Caller owns the
+ * transaction (so node + edge writes commit together).
+ */
+export const applyNodeWrites = (
+  store: ContextGraphStore,
+  nodes: ProjectGraphNodeDto[],
+  result: ProjectGraphWriteResult,
+): void => {
+  for (const node of nodes) {
     try {
       if (store.getNodeById(node.id)) {
         store.updateNode(node.id, toContextNodeUpdate(node));
@@ -57,8 +81,20 @@ export const writeProjectGraphExtraction = (
       throw new Error(`writing project graph node "${node.label}" (${node.kind}, ${node.id}) failed: ${errorMessage(error)}`);
     }
   }
+};
 
-  for (const edge of extraction.edges) {
+/**
+ * Upsert edges into the store, mutating `result` counts. Reused by the SQL
+ * binding pass so its `BINDS_TO` / `GENERATED_FROM` edges share the exact same
+ * serialization (relation mapping, strength, evidence envelope) as extraction.
+ * Caller owns the transaction.
+ */
+export const applyEdgeWrites = (
+  store: ContextGraphStore,
+  edges: ProjectGraphEdgeDto[],
+  result: ProjectGraphWriteResult,
+): void => {
+  for (const edge of edges) {
     try {
       const edgeInput = toContextEdgeInput(edge);
       const existing = store.getEdgeById(edge.id);
@@ -81,8 +117,6 @@ export const writeProjectGraphExtraction = (
       throw new Error(`writing project graph edge ${edge.kind} (${edge.sourceId} -> ${edge.targetId}, ${edge.id}) failed: ${errorMessage(error)}`);
     }
   }
-
-  return result;
 };
 
 const toContextEdgeInput = (edge: ProjectGraphEdgeDto) => ({
