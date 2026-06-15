@@ -34,6 +34,16 @@ import {
 
 const LLM_FACT_CAP = 80;
 
+// Per-fact bounds. A single extracted node can carry a very large `content` or
+// a huge evidence list (a hot dependency referenced by thousands of files), and
+// the LLM only needs a few citations — so trim aggressively. Without this the
+// serialized batch blew past providers' request-body byte caps (e.g. DashScope
+// rejects >6 MB with HTTP 400).
+const MAX_FACT_CONTENT_CHARS = 2000;
+const MAX_FACT_EVIDENCE_PATHS = 20;
+// Keep each request well under the smallest provider body cap we target (6 MB).
+const MAX_REQUEST_BODY_BYTES = 1_000_000;
+
 export interface ProjectGraphEnrichmentExtraction {
   nodes: ProjectGraphNodeDto[];
   edges: ProjectGraphEdgeDto[];
@@ -56,7 +66,7 @@ export const summarizeProjectGraphWithLlm = async (
 
   const facts = collectExtractedFacts(input.extractedNodes, LLM_FACT_CAP);
   const parsed = { summaries: [] as ParsedSummaryItem[], relationships: [] as ParsedRelationshipItem[] };
-  for (const batch of chunk(facts, projectGraphLlmFactBatchSize(input.requestPolicy))) {
+  for (const batch of batchFactsForRequest(facts, projectGraphLlmFactBatchSize(input.requestPolicy))) {
     const response = await scheduleProjectGraphLlmRequest(() => input.client.chat.completions.create({
       model: input.model,
       temperature: 0.1,
@@ -118,17 +128,38 @@ const collectExtractedFacts = (nodes: ContextNode[], cap: number): RenderedLlmFa
       id: node.id,
       kind: node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind],
       title: node.title,
-      content: node.content,
-      evidence: collectNodeEvidencePaths(node),
+      content: truncate(node.content, MAX_FACT_CONTENT_CHARS),
+      evidence: collectNodeEvidencePaths(node).slice(0, MAX_FACT_EVIDENCE_PATHS),
     }));
+
+const truncate = (value: string, max: number): string =>
+  value.length > max ? `${value.slice(0, max)}…` : value;
 
 const renderExtractedFacts = (project: string, facts: RenderedLlmFact[]): string =>
   JSON.stringify({ project, extractedFacts: facts });
 
-const chunk = <T>(items: T[], size: number): T[][] => {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
-  return chunks;
+/**
+ * Split facts into request batches bounded by BOTH count (provider rate/quality)
+ * and serialized byte size (provider body cap). Per-fact trimming in
+ * `collectExtractedFacts` keeps any single fact small, so a fact always fits in
+ * a batch; this just stops many mid-size facts from summing past the byte cap.
+ */
+const batchFactsForRequest = (facts: RenderedLlmFact[], maxCount: number): RenderedLlmFact[][] => {
+  const batches: RenderedLlmFact[][] = [];
+  let current: RenderedLlmFact[] = [];
+  let currentBytes = 0;
+  for (const fact of facts) {
+    const factBytes = Buffer.byteLength(JSON.stringify(fact), 'utf8');
+    if (current.length > 0 && (current.length >= maxCount || currentBytes + factBytes > MAX_REQUEST_BODY_BYTES)) {
+      batches.push(current);
+      current = [];
+      currentBytes = 0;
+    }
+    current.push(fact);
+    currentBytes += factBytes;
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
 };
 
 /**
