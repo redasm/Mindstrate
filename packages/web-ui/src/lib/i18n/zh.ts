@@ -106,6 +106,7 @@ const zh: Translations = {
     deleteProject: '删除项目',
     deleteProjectConfirm: '永久删除项目 “{PROJECT}” —— 它的全部知识图谱、向量和扫描源都会被清除，且无法恢复。确定删除吗？',
     deleteProjectFailed: '删除项目失败。',
+    deleteProjectVectorsWarning: '项目已删除，但向量索引因文件权限未能清除（扫描器以 root 写入、界面以普通用户运行）。可在服务器上手动删除 /data/vectors 下对应文件，或统一各容器的运行用户。',
     collapse: '收起',
     expand: '展开',
     emptyAdmin: '还没有项目。',

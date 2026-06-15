@@ -104,6 +104,7 @@ const en = {
     deleteProject: 'Delete project',
     deleteProjectConfirm: 'Permanently delete project "{PROJECT}" — its entire knowledge graph, vectors, and scanner sources? This cannot be undone.',
     deleteProjectFailed: 'Failed to delete project.',
+    deleteProjectVectorsWarning: 'Project deleted, but its vector index could not be cleared due to file permissions (the scanner writes as root, the UI runs as a non-root user). Remove the matching file under /data/vectors on the server, or align the containers to the same run-as user.',
     collapse: 'Collapse',
     expand: 'Expand',
     emptyAdmin: 'No projects yet.',

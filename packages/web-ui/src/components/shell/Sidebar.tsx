@@ -47,10 +47,14 @@ export function Sidebar({ projects, currentProject, isAdmin }: Props) {
         window.alert(body.error ?? t.sidebar.deleteProjectFailed);
         return;
       }
+      const body = await res.json().catch(() => ({}));
       if (name === currentProject) {
         router.push('/');
       } else {
         router.refresh();
+      }
+      if (body?.vectorsCleared === false) {
+        window.alert(t.sidebar.deleteProjectVectorsWarning);
       }
     } finally {
       setDeleting(null);
