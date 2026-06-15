@@ -160,6 +160,29 @@ export class ContextGraphStore {
     return this.nodes.aggregateProjectBreakdown();
   }
 
+  /**
+   * Delete every context-graph row belonging to a project — nodes plus their
+   * edges/embeddings/projections, and the project-scoped events, conflicts and
+   * metabolism runs. One transaction so a crash can't leave a half-deleted
+   * graph. Foreign keys aren't enforced on this connection, so child rows are
+   * removed explicitly (via subquery, not an id list, to avoid the variable cap
+   * on large graphs) before the nodes. Project match is case-insensitive, like
+   * the read path.
+   */
+  deleteProject(project: string): { nodesDeleted: number } {
+    const sub = 'SELECT id FROM context_nodes WHERE LOWER(project) = LOWER(?)';
+    return this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM context_edges WHERE source_id IN (${sub}) OR target_id IN (${sub})`).run(project, project);
+      this.db.prepare(`DELETE FROM node_embeddings WHERE node_id IN (${sub})`).run(project);
+      this.db.prepare(`DELETE FROM projection_records WHERE node_id IN (${sub})`).run(project);
+      const nodesDeleted = this.db.prepare('DELETE FROM context_nodes WHERE LOWER(project) = LOWER(?)').run(project).changes;
+      this.db.prepare('DELETE FROM context_events WHERE LOWER(project) = LOWER(?)').run(project);
+      this.db.prepare('DELETE FROM conflict_records WHERE LOWER(project) = LOWER(?)').run(project);
+      this.db.prepare('DELETE FROM metabolism_runs WHERE LOWER(project) = LOWER(?)').run(project);
+      return { nodesDeleted };
+    })();
+  }
+
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
     return this.nodes.update(id, input);
   }

@@ -42,6 +42,9 @@ export interface IVectorStore {
   /** Delete a document by ID */
   delete(id: string): Promise<void>;
 
+  /** Delete every document in this store (used when a project is removed). */
+  deleteAll(): Promise<void>;
+
   /** Semantic search by embedding vector */
   search(
     embedding: number[],

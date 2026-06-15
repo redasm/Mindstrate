@@ -167,4 +167,47 @@ describe('ContextGraphStore', () => {
 
     expect(store.getNodeEmbedding(node.id, 'test-embedding')).toBeNull();
   });
+
+  it('deletes every row for a project (case-insensitive) and leaves others intact', () => {
+    const seed = (project: string) => {
+      const a = store.createNode({
+        substrateType: SubstrateType.EPISODE,
+        domainType: ContextDomainType.BUG_FIX,
+        title: `${project} A`,
+        content: 'x',
+        project,
+      });
+      const b = store.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: `${project} B`,
+        content: 'y',
+        project,
+      });
+      const edge = store.createEdge({ sourceId: a.id, targetId: b.id, relationType: ContextRelationType.DERIVED_FROM });
+      store.upsertNodeEmbedding({ nodeId: a.id, model: 'm', dimensions: 3, embedding: [0.1, 0.2, 0.3] });
+      store.createEvent({
+        type: ContextEventType.SESSION_OBSERVATION,
+        project,
+        content: 'evt',
+        observedAt: '2026-01-01T00:00:00.000Z',
+      });
+      return { a, b, edge };
+    };
+    const keep = seed('keepme');
+    const drop = seed('dropme');
+
+    const result = store.deleteProject('DROPME'); // upper-case → exercises LOWER() match
+    expect(result.nodesDeleted).toBe(2);
+
+    expect(store.listNodes({ project: 'dropme' })).toHaveLength(0);
+    expect(store.getEdgeById(drop.edge.id)).toBeNull();
+    expect(store.getNodeEmbedding(drop.a.id, 'm')).toBeNull();
+    expect(store.listEvents({ project: 'dropme' })).toHaveLength(0);
+
+    expect(store.listNodes({ project: 'keepme' })).toHaveLength(2);
+    expect(store.getEdgeById(keep.edge.id)).not.toBeNull();
+    expect(store.getNodeEmbedding(keep.a.id, 'm')).not.toBeNull();
+    expect(store.listEvents({ project: 'keepme' })).toHaveLength(1);
+  });
 });

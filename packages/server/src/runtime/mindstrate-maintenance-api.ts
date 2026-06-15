@@ -23,6 +23,24 @@ export class MindstrateMaintenanceApi {
     return this.services.contextGraphStore.getProjectBreakdown();
   }
 
+  /**
+   * Permanently delete a project: its vectors, its context-graph rows
+   * (nodes/edges/embeddings/projections/events/conflicts/metabolism), and its
+   * scan-source configs so it isn't rebuilt on the next scan. Each step is
+   * idempotent, so a partial failure can be retried safely. Irreversible.
+   */
+  async deleteProject(project: string): Promise<{ nodesDeleted: number; sourcesDeleted: number }> {
+    await this.services.vectorStoreFactory.deleteProject(project);
+    const { nodesDeleted } = this.services.contextGraphStore.deleteProject(project);
+    let sourcesDeleted = 0;
+    for (const source of this.services.scanSourceRepository.listSources()) {
+      if (source.project.toLowerCase() === project.toLowerCase()) {
+        if (this.services.scanSourceRepository.deleteSource(source.id)) sourcesDeleted++;
+      }
+    }
+    return { nodesDeleted, sourcesDeleted };
+  }
+
   async getStats(): Promise<{
     total: number;
     byType: Record<string, number>;

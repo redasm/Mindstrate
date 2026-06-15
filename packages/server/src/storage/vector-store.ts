@@ -99,6 +99,14 @@ export class VectorStore implements IVectorStore {
     await this.saveAsync();
   }
 
+  /** 清空整个集合（删除项目时调用） */
+  async deleteAll(): Promise<void> {
+    this.index.documents = [];
+    this.expectedDimension = null;
+    this.dirty = true;
+    await this.saveAsync();
+  }
+
   /** 语义搜索：根据 embedding 向量查找相似文档 */
   async search(
     embedding: number[],
