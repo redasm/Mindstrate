@@ -414,6 +414,26 @@ export class RepoScannerService {
       name: source.project,
       root,
     };
+    if (!detected.detectionRule) {
+      // No rule matched (neither the project's .mindstrate/rules nor the
+      // built-in ones) → detectGenericProject ran, so there are no
+      // ignore/sourceRoots/generatedRoots hints and the whole directory gets
+      // indexed with built-in ignores only. The usual cause: the scan root is a
+      // subdirectory missing the markers a rule needs (e.g. the built-in Unreal
+      // rule requires *.uproject + Content + Config at the root), so even the
+      // bundled rules can't match. Make it loud instead of silently bare-scanning.
+      this.log(
+        source.id,
+        runId,
+        'warn',
+        `No project detection rule matched under ${root} — indexing the entire directory `
+          + 'with built-in ignores only (generated/vendor dirs like TypeScript/Typing will NOT '
+          + 'be excluded). Built-in rules need project markers at the scan root (the Unreal rule '
+          + 'needs *.uproject + Content + Config). Point the source at the project root that has '
+          + 'them, or add a .mindstrate/rules here.',
+        'init',
+      );
+    }
     await this.memory.snapshots.upsertProjectSnapshot(project, { author: 'repo-scanner' });
     this.log(source.id, runId, 'info', `Indexing project graph under ${root} (large checkouts can take a while)`, 'index');
     const indexResult = this.memory.context.indexProjectGraph(project, {
