@@ -1,4 +1,3 @@
-import { getGraphStats } from '../context-graph/graph-stats.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
 export class MindstrateMaintenanceApi {
@@ -10,10 +9,18 @@ export class MindstrateMaintenanceApi {
     outdated: number;
   } {
     return {
-      total: this.services.contextGraphStore.listNodes({ limit: 100000 }).length,
+      total: this.services.contextGraphStore.countNodes(),
       updated: 0,
       outdated: 0,
     };
+  }
+
+  /**
+   * Per-project rollup for dashboards (entry count, conflicted count, latest
+   * activity), computed in SQL so the caller never materializes the whole graph.
+   */
+  getProjectBreakdown(): Array<{ project: string; entries: number; conflicts: number; lastActivity: string | null }> {
+    return this.services.contextGraphStore.getProjectBreakdown();
   }
 
   async getStats(): Promise<{
@@ -28,9 +35,8 @@ export class MindstrateMaintenanceApi {
       avgAdoptionRate: number;
     };
   }> {
-    const nodes = this.services.contextGraphStore.listNodes({ limit: 100000 });
-    const dbStats = getGraphStats(nodes);
-    const projects = new Set(nodes.map((n) => n.project ?? '').filter(Boolean));
+    const dbStats = this.services.contextGraphStore.getGraphStats();
+    const projects = this.services.contextGraphStore.listKnownProjects();
     let vectorCount = 0;
     for (const project of projects) {
       const store = await this.services.vectorStoreFactory.forProject(project);
