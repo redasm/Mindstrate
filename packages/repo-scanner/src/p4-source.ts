@@ -172,11 +172,18 @@ function stripP4Wildcard(value: string): string {
 
 function commonParent(paths: string[]): string {
   if (paths.length === 1) return paths[0];
-  const resolved = paths.map((entry) => path.resolve(entry));
+  // `p4 where` reports local paths in the p4 *client's* OS style, which is not
+  // necessarily the host running the scanner (a Linux scanner can index a
+  // Windows workspace's paths). Pick the matching path flavor from the path
+  // itself instead of `node:path`, whose behavior follows the host OS — on a
+  // POSIX host `path.resolve('C:\\work')` is treated as relative and collapses
+  // the common parent down to cwd.
+  const p = pathFlavor(paths[0]);
+  const resolved = paths.map((entry) => p.resolve(entry));
   let common = resolved[0];
   for (const entry of resolved.slice(1)) {
-    while (!isSameOrParent(common, entry)) {
-      const parent = path.dirname(common);
+    while (!isSameOrParent(p, common, entry)) {
+      const parent = p.dirname(common);
       if (parent === common) return parent;
       common = parent;
     }
@@ -184,9 +191,15 @@ function commonParent(paths: string[]): string {
   return common;
 }
 
-function isSameOrParent(parent: string, child: string): boolean {
-  const relative = path.relative(parent, child);
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+function pathFlavor(sample: string): typeof path.win32 {
+  // Windows local paths are drive-letter (C:\...) or UNC (\\server\share\...).
+  if (/^[a-zA-Z]:[\\/]/.test(sample) || sample.startsWith('\\\\')) return path.win32;
+  return path.posix;
+}
+
+function isSameOrParent(p: typeof path.win32, parent: string, child: string): boolean {
+  const relative = p.relative(parent, child);
+  return relative === '' || (!relative.startsWith('..') && !p.isAbsolute(relative));
 }
 
 interface P4DescribeResult {
