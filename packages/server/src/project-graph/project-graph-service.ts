@@ -37,7 +37,9 @@ import { createTreeSitterSourceParser } from './tree-sitter-source-parser.js';
 import { createUnrealCppParserAdapter } from './unreal-cpp-parser-adapter.js';
 import { createScriptRegexParserAdapter } from './script-parser-adapter.js';
 import {
-  writeProjectGraphExtraction,
+  applyEdgeWrites,
+  applyStreamedNodeWrites,
+  emptyWriteResult,
   type ProjectGraphExtractionResult,
   type ProjectGraphWriteResult,
 } from './graph-writer.js';
@@ -99,63 +101,90 @@ export const indexProjectGraph = (
   project: DetectedProject,
   options: ProjectGraphIndexOptions = {},
 ): ProjectGraphIndexResult => {
-  const extraction = buildProjectGraphExtraction(project, options);
+  const stats = streamProjectGraphIntoStore(store, project, options);
   options.onIndexProgress?.({
     phase: 'writing',
-    filesProcessed: extraction.filesScanned,
-    filesTotal: extraction.filesScanned,
-    nodes: extraction.nodes.length,
-    edges: extraction.edges.length,
-    generatedFiles: extraction.generatedFiles,
-    metadataOnlyRoots: extraction.metadataOnlyRoots,
-    skippedFiles: extraction.skippedFiles,
+    filesProcessed: stats.filesScanned,
+    filesTotal: stats.filesScanned,
+    nodes: stats.nodeCount,
+    edges: stats.edgeCount,
+    generatedFiles: stats.generatedFiles,
+    metadataOnlyRoots: stats.metadataOnlyRoots,
+    skippedFiles: stats.skippedFiles,
   });
-  const writeResult = writeProjectGraphExtraction(store, extraction);
 
   // Binding inference runs as SQL over the persisted graph (see
   // `project-graph-binding.ts`) rather than over in-memory node maps, so it
   // doesn't add the whole graph back onto the heap.
   options.onIndexProgress?.({
     phase: 'binding',
-    filesProcessed: extraction.filesScanned,
-    filesTotal: extraction.filesScanned,
-    nodes: extraction.nodes.length,
-    edges: extraction.edges.length,
-    generatedFiles: extraction.generatedFiles,
-    metadataOnlyRoots: extraction.metadataOnlyRoots,
-    skippedFiles: extraction.skippedFiles,
+    filesProcessed: stats.filesScanned,
+    filesTotal: stats.filesScanned,
+    nodes: stats.nodeCount,
+    edges: stats.edgeCount,
+    generatedFiles: stats.generatedFiles,
+    metadataOnlyRoots: stats.metadataOnlyRoots,
+    skippedFiles: stats.skippedFiles,
   });
   const bindingResult = bindProjectGraph(store, project.name);
   const bindingEdges = bindingResult.edgesCreated + bindingResult.edgesUpdated + bindingResult.edgesSkipped;
 
   return {
-    nodesCreated: writeResult.nodesCreated,
-    nodesUpdated: writeResult.nodesUpdated,
-    edgesCreated: writeResult.edgesCreated + bindingResult.edgesCreated,
-    edgesUpdated: writeResult.edgesUpdated + bindingResult.edgesUpdated,
-    edgesSkipped: writeResult.edgesSkipped + bindingResult.edgesSkipped,
-    filesScanned: extraction.filesScanned,
-    nodesExtracted: extraction.nodes.length,
-    edgesExtracted: extraction.edges.length + bindingEdges,
-    skippedFiles: extraction.skippedFiles,
+    nodesCreated: stats.writeResult.nodesCreated,
+    nodesUpdated: stats.writeResult.nodesUpdated,
+    edgesCreated: stats.writeResult.edgesCreated + bindingResult.edgesCreated,
+    edgesUpdated: stats.writeResult.edgesUpdated + bindingResult.edgesUpdated,
+    edgesSkipped: stats.writeResult.edgesSkipped + bindingResult.edgesSkipped,
+    filesScanned: stats.filesScanned,
+    nodesExtracted: stats.nodeCount,
+    edgesExtracted: stats.edgeCount + bindingEdges,
+    skippedFiles: stats.skippedFiles,
   };
 };
 
-interface ProjectGraphExtractionWithStats extends ProjectGraphExtractionResult {
+interface ProjectGraphStreamStats {
   filesScanned: number;
   generatedFiles: number;
   metadataOnlyRoots: number;
   skippedFiles: number;
+  nodeCount: number;
+  edgeCount: number;
+  writeResult: ProjectGraphWriteResult;
 }
 
 interface ProjectGraphFileExtractionOutcome extends ProjectGraphExtractionResult {
   skipped: boolean;
 }
 
-const buildProjectGraphExtraction = (
+/**
+ * Files per write transaction. Each batch commits once, so the lock window on
+ * the graph DB stays short (progress logging runs on a different connection and
+ * must not be starved) while still amortizing fsyncs over many files instead of
+ * paying one per row.
+ */
+const STREAM_FLUSH_FILES = 1000;
+
+/**
+ * Extract the project graph and stream it straight into the store.
+ *
+ * Memory: the graph is never assembled in a single resident map. Each file's
+ * facts are stationed in a small batch buffer and committed every
+ * {@link STREAM_FLUSH_FILES} files; cross-file/cross-run deduplication is by id
+ * (a `Set` of ids already written this run, plus the store's upsert for rows
+ * left by a previous run). The only heap that scales with repo size is the two
+ * id `Set`s — strings, not full node/edge DTOs — so peak no longer tracks total
+ * graph size. Binding inference runs afterwards in SQL (see `indexProjectGraph`).
+ *
+ * Trade-off vs. the old in-memory merge: a node id seen in several files keeps
+ * the first file's evidence rather than the union of every file's. That union
+ * mainly bloated hot DEPENDENCY nodes (one evidence entry per importing file);
+ * per-file usage is still recoverable from the incoming edges, written in full.
+ */
+const streamProjectGraphIntoStore = (
+  store: ContextGraphStore,
   project: DetectedProject,
   options: ProjectGraphIndexOptions,
-): ProjectGraphExtractionWithStats => {
+): ProjectGraphStreamStats => {
   let skippedFiles = 0;
   const scanOptions = {
     sourceRoots: projectGraphDeepRoots(project),
@@ -174,8 +203,6 @@ const buildProjectGraphExtraction = (
   const files = scanProjectFiles(project.root, scanOptions);
   const generatedFiles = files.filter((file) => file.generated).length;
   const metadataOnlyRoots = scanOptions.metadataOnlyRoots?.length ?? 0;
-  const nodes = new Map<string, ProjectGraphNodeDto>();
-  const edges = new Map<string, ProjectGraphEdgeDto>();
   const parserAdapters = [
     createUnrealCppParserAdapter(),
     createScriptRegexParserAdapter(),
@@ -184,11 +211,47 @@ const buildProjectGraphExtraction = (
   const previousCache = readProjectGraphExtractionCache(project.root);
   const cacheWriter = openProjectGraphExtractionCacheWriter(project.root);
 
+  const writeResult = emptyWriteResult();
+  const seenNodes = new Set<string>();
+  const seenEdges = new Set<string>();
+  let batchNodes = new Map<string, ProjectGraphNodeDto>();
+  let batchEdges = new Map<string, ProjectGraphEdgeDto>();
+
+  // Buffer a file's facts, merging within the batch exactly as the old resident
+  // map did (`addNode` unions, `addEdge` is last-wins). Cross-batch merging is
+  // handled at commit by `applyStreamedNodeWrites` against the persisted row.
+  const stage = (
+    nodes: Map<string, ProjectGraphNodeDto>,
+    edges: Map<string, ProjectGraphEdgeDto>,
+  ): void => {
+    for (const node of nodes.values()) addNode(batchNodes, node);
+    for (const edge of edges.values()) addEdge(batchEdges, edge);
+  };
+
+  const commitBatch = (): void => {
+    if (batchNodes.size === 0 && batchEdges.size === 0) return;
+    const nodes = batchNodes;
+    const edges = batchEdges;
+    batchNodes = new Map();
+    batchEdges = new Map();
+    store.transaction(() => {
+      applyStreamedNodeWrites(store, Array.from(nodes.values()), seenNodes, writeResult);
+      for (const id of edges.keys()) seenEdges.add(id);
+      applyEdgeWrites(store, Array.from(edges.values()), writeResult);
+    });
+  };
+
   try {
-    addScanPlanFacts(project, scanPlan, nodes, edges);
+    const planNodes = new Map<string, ProjectGraphNodeDto>();
+    const planEdges = new Map<string, ProjectGraphEdgeDto>();
+    addScanPlanFacts(project, scanPlan, planNodes, planEdges);
+    stage(planNodes, planEdges);
+
     files.forEach((file, index) => {
-      addNode(nodes, makeFileNode(project, file.path, scanPlan));
-      addFileContainmentFact(project, file.path, scanPlan, nodes, edges);
+      const fileNodes = new Map<string, ProjectGraphNodeDto>();
+      const fileEdges = new Map<string, ProjectGraphEdgeDto>();
+      addNode(fileNodes, makeFileNode(project, file.path, scanPlan));
+      addFileContainmentFact(project, file.path, scanPlan, fileNodes, fileEdges);
       const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache);
       if (fileExtraction.skipped) skippedFiles += 1;
       if (!fileExtraction.skipped) {
@@ -199,27 +262,35 @@ const buildProjectGraphExtraction = (
           edges: fileExtraction.edges,
         });
       }
-      for (const node of fileExtraction.nodes) addNode(nodes, node);
-      for (const edge of fileExtraction.edges) addEdge(edges, edge);
+      for (const node of fileExtraction.nodes) addNode(fileNodes, node);
+      for (const edge of fileExtraction.edges) addEdge(fileEdges, edge);
+      stage(fileNodes, fileEdges);
+      if ((index + 1) % STREAM_FLUSH_FILES === 0) commitBatch();
       options.onIndexProgress?.({
         phase: 'extracting',
         filesProcessed: index + 1,
         filesTotal: files.length,
-        nodes: nodes.size,
-        edges: edges.size,
+        nodes: seenNodes.size,
+        edges: seenEdges.size,
         generatedFiles,
         metadataOnlyRoots,
         skippedFiles,
         path: file.path,
       });
     });
-    addUnrealAssetRegistryFacts(project, nodes, edges);
+
+    const assetNodes = new Map<string, ProjectGraphNodeDto>();
+    const assetEdges = new Map<string, ProjectGraphEdgeDto>();
+    addUnrealAssetRegistryFacts(project, assetNodes, assetEdges);
+    stage(assetNodes, assetEdges);
+    commitBatch();
+
     options.onIndexProgress?.({
       phase: 'cache',
       filesProcessed: files.length,
       filesTotal: files.length,
-      nodes: nodes.size,
-      edges: edges.size,
+      nodes: seenNodes.size,
+      edges: seenEdges.size,
       generatedFiles,
       metadataOnlyRoots,
       skippedFiles,
@@ -229,13 +300,13 @@ const buildProjectGraphExtraction = (
   }
 
   return {
-    project: project.name,
     filesScanned: files.length,
     generatedFiles,
     metadataOnlyRoots,
     skippedFiles,
-    nodes: Array.from(nodes.values()),
-    edges: Array.from(edges.values()),
+    nodeCount: seenNodes.size,
+    edgeCount: seenEdges.size,
+    writeResult,
   };
 };
 

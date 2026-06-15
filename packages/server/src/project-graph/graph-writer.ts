@@ -6,6 +6,7 @@ import {
   PROJECT_GRAPH_METADATA_KEYS,
   ProjectGraphEdgeKind,
   ProjectGraphProvenance,
+  type ContextNode,
   type ProjectGraphEdgeDto,
   type ProjectGraphNodeDto,
   SubstrateType,
@@ -81,6 +82,71 @@ export const applyNodeWrites = (
       throw new Error(`writing project graph node "${node.label}" (${node.kind}, ${node.id}) failed: ${errorMessage(error)}`);
     }
   }
+};
+
+/**
+ * Streaming counterpart to {@link applyNodeWrites} that preserves the in-memory
+ * `addNode` merge semantics without an in-memory graph.
+ *
+ * `seen` tracks node ids already written *this run*:
+ *  - First time a node id is seen this run, its previous-run row (if any) is
+ *    fully replaced — stale facts from an earlier index don't accumulate.
+ *  - Subsequent occurrences this run are *merged* into the current row (metadata
+ *    keys unioned with the newer file winning, evidence lists unioned), matching
+ *    what `addNode` did when every file fed one resident map.
+ *
+ * Caller owns the transaction.
+ */
+export const applyStreamedNodeWrites = (
+  store: ContextGraphStore,
+  nodes: ProjectGraphNodeDto[],
+  seen: Set<string>,
+  result: ProjectGraphWriteResult,
+): void => {
+  for (const node of nodes) {
+    try {
+      if (seen.has(node.id)) {
+        const existing = store.getNodeById(node.id);
+        if (existing) store.updateNode(node.id, mergeNodeUpdate(existing, node));
+        continue;
+      }
+      seen.add(node.id);
+      if (store.getNodeById(node.id)) {
+        store.updateNode(node.id, toContextNodeUpdate(node));
+        result.nodesUpdated++;
+      } else {
+        store.createNode(toContextNodeCreate(node));
+        result.nodesCreated++;
+      }
+    } catch (error) {
+      throw new Error(`writing project graph node "${node.label}" (${node.kind}, ${node.id}) failed: ${errorMessage(error)}`);
+    }
+  }
+};
+
+const mergeNodeUpdate = (existing: ContextNode, node: ProjectGraphNodeDto) => {
+  const update = toContextNodeUpdate(node);
+  const existingMeta = (existing.metadata ?? {}) as Record<string, unknown>;
+  const newMeta = (update.metadata ?? {}) as Record<string, unknown>;
+  return {
+    ...update,
+    metadata: {
+      ...existingMeta,
+      ...newMeta,
+      [PROJECT_GRAPH_METADATA_KEYS.evidence]: mergeEvidenceRefs(
+        existingMeta[PROJECT_GRAPH_METADATA_KEYS.evidence],
+        newMeta[PROJECT_GRAPH_METADATA_KEYS.evidence],
+      ),
+    },
+  };
+};
+
+const mergeEvidenceRefs = (left: unknown, right: unknown): unknown[] => {
+  const merged = new Map<string, unknown>();
+  for (const ref of [...(Array.isArray(left) ? left : []), ...(Array.isArray(right) ? right : [])]) {
+    merged.set(JSON.stringify(ref), ref);
+  }
+  return Array.from(merged.values());
 };
 
 /**
