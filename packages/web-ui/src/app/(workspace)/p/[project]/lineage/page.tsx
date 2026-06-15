@@ -150,7 +150,7 @@ function Inner({ project }: { project: string }) {
                         key={n.id}
                         type="button"
                         onClick={() => setSelectedId(n.id)}
-                        className={`rounded-lg border p-4 text-left transition-all ${
+                        className={`min-w-0 overflow-hidden rounded-lg border p-4 text-left transition-all ${
                           selectedId === n.id ? 'border-brand-300 bg-brand-50' : 'border-surface-100 bg-surface-50 hover:bg-surface-100'
                         }`}
                       >
@@ -158,7 +158,7 @@ function Inner({ project }: { project: string }) {
                           <span className="project-tag">{n.domainType}</span>
                           <span className="ml-auto text-xs text-surface-400">q {n.qualityScore.toFixed(0)}</span>
                         </div>
-                        <h3 className="text-sm font-semibold text-surface-900">{n.title}</h3>
+                        <h3 className="text-sm font-semibold text-surface-900 break-words">{n.title}</h3>
                         <p className="mt-1.5 text-xs text-surface-500 leading-relaxed line-clamp-3">
                           {truncateText(n.content, 180)}
                         </p>
@@ -186,8 +186,8 @@ function Inner({ project }: { project: string }) {
                     <span className="project-tag">{selected.substrateType}</span>
                     <span className="rounded bg-surface-100 px-2 py-0.5 text-xs text-surface-600 font-medium">{selected.domainType}</span>
                   </div>
-                  <h3 className="text-base font-bold text-surface-900">{selected.title}</h3>
-                  <p className="mt-2 text-sm text-surface-700 leading-6">{selected.content}</p>
+                  <h3 className="text-base font-bold text-surface-900 break-words">{selected.title}</h3>
+                  <p className="mt-2 text-sm text-surface-700 leading-6 break-words">{selected.content}</p>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Detail label={t.detailStatus} value={selected.status} />
