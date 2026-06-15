@@ -72,6 +72,29 @@ describe('P4 source helpers', () => {
     expect(execSync).not.toHaveBeenCalled();
   });
 
+  it('normalizes malformed P4PORT values', async () => {
+    const { normalizeP4Port } = await import('../src/p4-source.js');
+
+    expect(normalizeP4Port('//p4.example:1666')).toBe('p4.example:1666');
+    expect(normalizeP4Port('ssl://p4.example:1666')).toBe('ssl:p4.example:1666');
+    expect(normalizeP4Port('  ssl:p4.example:1666  ')).toBe('ssl:p4.example:1666');
+    expect(normalizeP4Port('p4.example:1666')).toBe('p4.example:1666');
+  });
+
+  it('strips a stray // from P4PORT before invoking p4', async () => {
+    execSync.mockReturnValue([
+      '... path C:\\work\\game\\...',
+      '',
+    ].join('\n'));
+
+    const { findP4WorkspaceRoot } = await import('../src/p4-source.js');
+
+    findP4WorkspaceRoot('//depot/main/...', { p4Port: '//p4.example:1666' });
+    expect(execSync).toHaveBeenCalledWith('p4 -ztag where //depot/main/...', expect.objectContaining({
+      env: expect.objectContaining({ P4PORT: 'p4.example:1666' }),
+    }));
+  });
+
   it('surfaces p4 stderr instead of swallowing failures when listing changelists', async () => {
     const failure = Object.assign(new Error('Command failed'), {
       stderr: 'Perforce client error:\n\tConnect to server failed; check $P4PORT.',

@@ -10,11 +10,21 @@ export interface P4Env {
 
 function buildEnv(env?: P4Env): NodeJS.ProcessEnv {
   const merged: NodeJS.ProcessEnv = { ...process.env };
-  if (env?.p4Port) merged.P4PORT = env.p4Port;
+  if (env?.p4Port) merged.P4PORT = normalizeP4Port(env.p4Port);
   if (env?.p4User) merged.P4USER = env.p4User;
   if (env?.p4Passwd) merged.P4PASSWD = env.p4Passwd;
   return merged;
 }
+
+/**
+ * Normalize a user-entered P4PORT. P4 wants `[protocol:]host:port` with no
+ * slashes, but users routinely paste the depot-path style `//host:port` or a
+ * URL style `ssl://host:port`. Left as-is, p4 reads `//host` as the hostname
+ * and fails with "Name or service not known". Strip the stray `//` (keeping any
+ * protocol prefix) and trim surrounding whitespace.
+ */
+export const normalizeP4Port = (value: string): string =>
+  value.trim().replace(/^(\w+:)?\/\//, '$1');
 
 /**
  * Run a p4 command and surface a useful error. execSync only exposes a generic
