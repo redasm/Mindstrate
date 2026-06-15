@@ -33,6 +33,7 @@ export function validateGitSource(input: GitSourceValidationInput): string[] {
 export function validateP4Source(input: P4SourceValidationInput): string[] {
   const warnings: string[] = [];
   validateDepotPath(input.depotPath);
+  validateP4Port(input.p4Port);
   if (input.repoPath) {
     directoryVisibleLocally(input.repoPath, 'P4 workspace path', warnings);
   }
@@ -129,5 +130,26 @@ function runCommand(command: string, args: string[], envPatch: Record<string, st
 function validateDepotPath(depotPath: string): void {
   if (!/^\/\/[a-zA-Z0-9_.\-\/]+$/.test(depotPath)) {
     throw new Error(`Invalid depot path format: ${depotPath}`);
+  }
+}
+
+/**
+ * P4PORT must be `[protocol:]host:port` with no slashes. Users routinely paste
+ * the depot-path style `//host:port` or a URL style `ssl://host:port`, which
+ * makes p4 read `//host` as the hostname and fail at scan time with "Name or
+ * service not known". Reject it here so the mistake surfaces on save, not three
+ * minutes into a scan.
+ */
+function validateP4Port(p4Port?: string): void {
+  if (!p4Port) return;
+  const value = p4Port.trim();
+  if (/\s/.test(value)) {
+    throw new Error(`Invalid P4 port: "${p4Port}" must not contain whitespace`);
+  }
+  if (value.includes('/')) {
+    throw new Error(
+      `Invalid P4 port: "${p4Port}". Use host:port or ssl:host:port (no slashes); `
+      + '"/" is for depot paths. Example: p4.example.com:1666',
+    );
   }
 }
