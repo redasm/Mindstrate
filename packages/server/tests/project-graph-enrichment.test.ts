@@ -308,6 +308,48 @@ describe('project graph LLM enrichment boundary', () => {
     expect(titles).toContain('src/App.tsx');
     expect(titles.filter((title) => title.startsWith('src/low-'))).toHaveLength(79);
   });
+
+  it('keeps each LLM request body bounded when facts have huge content and evidence', async () => {
+    const payloads: string[] = [];
+    const client = fakeChatClient(JSON.stringify({ summaries: [] }), (content) => {
+      payloads.push(content);
+    });
+
+    const hugeContent = 'x'.repeat(500_000);
+    const hugeEvidence = Array.from({ length: 5000 }, (_, i) => ({
+      path: `src/usage-${i}.ts`,
+      extractorId: 'tree-sitter-source',
+    }));
+    const nodes: ContextNode[] = Array.from({ length: 12 }, (_, index) => ({
+      ...projectGraphNode(`src/hot-${index}.ts`),
+      content: hugeContent,
+      metadata: {
+        projectGraph: true,
+        kind: ProjectGraphNodeKind.DEPENDENCY,
+        provenance: ProjectGraphProvenance.EXTRACTED,
+        evidence: hugeEvidence,
+      },
+    }));
+
+    await summarizeProjectGraphWithLlm({
+      client,
+      model: 'test-model',
+      project: 'demo',
+      requestPolicy: { factBatchSize: 20, requestDelayMs: 0 },
+      extractedNodes: nodes,
+    });
+
+    expect(payloads.length).toBeGreaterThan(0);
+    for (const payload of payloads) {
+      // Untrimmed, 12 facts × 500KB would be ~6MB and trip the provider's body cap.
+      expect(Buffer.byteLength(payload, 'utf8')).toBeLessThanOrEqual(1_000_000);
+      const parsed = JSON.parse(payload) as { extractedFacts: Array<{ content: string; evidence: string[] }> };
+      for (const fact of parsed.extractedFacts) {
+        expect(fact.content.length).toBeLessThanOrEqual(2001);
+        expect(fact.evidence.length).toBeLessThanOrEqual(20);
+      }
+    }
+  });
 });
 
 const projectGraphNode = (

@@ -529,20 +529,78 @@ export class RepoScannerService {
     };
   }
 
+  /**
+   * True when the project graph already has nodes for this project — i.e. a
+   * previous run indexed it. Lets a cursor-less retry (e.g. after a P4 outage
+   * blocked cursor setup) skip the expensive re-index.
+   */
+  private projectGraphExists(project: string): boolean {
+    return this.memory.maintenance.getProjectBreakdown().some(
+      (entry) => entry.project === project && entry.entries > 0,
+    );
+  }
+
   private async executeP4Source(source: ScanSource, runId: string): Promise<ScanExecutionResult> {
     const depot = source.depotPath;
     const env = p4EnvOf(source);
 
     if (!source.lastCursor) {
-      await this.initializeP4Project(source, env, runId);
-      if (source.initMode === 'from_now') {
-        const latest = getRecentChangelists(1, depot, env);
+      if (this.projectGraphExists(source.project)) {
         this.log(
           source.id,
           runId,
           'info',
-          'Init mode "from_now": project graph built; no historical changelists imported. '
-            + 'New changelists will be imported on subsequent scans.',
+          'Project graph already indexed by a previous run; skipping re-index and (re)establishing the P4 cursor.',
+          'init',
+        );
+      } else {
+        await this.initializeP4Project(source, env, runId);
+      }
+
+      // The deterministic project graph is indexed and persisted by this point.
+      // Everything below needs the P4 server. If it is unreachable, don't throw
+      // the index away as a failed run — finish as "initialized" without a
+      // cursor so the next scan retries the cursor/backfill (and won't re-index,
+      // thanks to the guard above).
+      try {
+        if (source.initMode === 'from_now') {
+          const latest = getRecentChangelists(1, depot, env);
+          this.log(
+            source.id,
+            runId,
+            'info',
+            'Init mode "from_now": project graph built; no historical changelists imported. '
+              + 'New changelists will be imported on subsequent scans.',
+            'init',
+          );
+          return {
+            sourceId: source.id,
+            mode: 'initialized',
+            itemsSeen: 0,
+            itemsImported: 0,
+            itemsSkipped: 0,
+            itemsFailed: 0,
+            cursor: latest[0],
+          };
+        }
+
+        // backfill_recent — getRecentChangelists returns newest-first; reverse to chronological.
+        const recent = getRecentChangelists(source.backfillCount, depot, env).slice().reverse();
+        this.log(source.id, runId, 'info', `Backfilling ${recent.length} recent changelist(s)`, 'backfill');
+        const processed = await this.processChangelists(source, recent, runId);
+        return {
+          sourceId: source.id,
+          mode: 'initialized',
+          ...processed,
+          cursor: recent.at(-1),
+        };
+      } catch (error) {
+        this.log(
+          source.id,
+          runId,
+          'warn',
+          `Project graph indexed, but P4 changelist access failed (${errorMessage(error)}); `
+            + 'cursor not set — will retry on the next scan.',
           'init',
         );
         return {
@@ -552,20 +610,8 @@ export class RepoScannerService {
           itemsImported: 0,
           itemsSkipped: 0,
           itemsFailed: 0,
-          cursor: latest[0],
         };
       }
-
-      // backfill_recent — getRecentChangelists returns newest-first; reverse to chronological.
-      const recent = getRecentChangelists(source.backfillCount, depot, env).slice().reverse();
-      this.log(source.id, runId, 'info', `Backfilling ${recent.length} recent changelist(s)`, 'backfill');
-      const processed = await this.processChangelists(source, recent, runId);
-      return {
-        sourceId: source.id,
-        mode: 'initialized',
-        ...processed,
-        cursor: recent.at(-1),
-      };
     }
 
     const cls = listChangelistsSince(source.lastCursor, depot, env);

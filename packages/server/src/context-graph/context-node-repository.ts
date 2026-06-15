@@ -220,6 +220,59 @@ export class ContextNodeRepository {
     return rows.map((row) => row.project);
   }
 
+  count(): number {
+    return (this.db.prepare('SELECT COUNT(*) AS c FROM context_nodes').get() as { c: number }).c;
+  }
+
+  /**
+   * Counts grouped by domain type, status, and metadata language, computed with
+   * SQL aggregates. Replaces loading every row into JS — the graph can hold
+   * 100k+ project-graph nodes, and materializing them (each with a JSON-parsed
+   * metadata blob) OOMs small consumers like the web-ui.
+   */
+  aggregateGraphStats(): {
+    total: number;
+    byType: Record<string, number>;
+    byStatus: Record<string, number>;
+    byLanguage: Record<string, number>;
+  } {
+    const tally = (sql: string): Record<string, number> => {
+      const out: Record<string, number> = {};
+      for (const row of this.db.prepare(sql).all() as Array<{ k: string | null; c: number }>) {
+        if (row.k) out[row.k] = row.c;
+      }
+      return out;
+    };
+    return {
+      total: this.count(),
+      byType: tally('SELECT domain_type AS k, COUNT(*) AS c FROM context_nodes GROUP BY domain_type'),
+      byStatus: tally('SELECT status AS k, COUNT(*) AS c FROM context_nodes GROUP BY status'),
+      byLanguage: tally(
+        `SELECT json_extract(metadata, '$.context.language') AS k, COUNT(*) AS c
+         FROM context_nodes
+         WHERE json_extract(metadata, '$.context.language') IS NOT NULL
+           AND json_extract(metadata, '$.context.language') != ''
+         GROUP BY k`,
+      ),
+    };
+  }
+
+  /**
+   * Per-project rollup (entry count, conflicted count, latest activity) via a
+   * single GROUP BY, so dashboards never have to pull every node.
+   */
+  aggregateProjectBreakdown(): Array<{ project: string; entries: number; conflicts: number; lastActivity: string | null }> {
+    return this.db.prepare(`
+      SELECT project,
+             COUNT(*) AS entries,
+             SUM(CASE WHEN status = 'conflicted' THEN 1 ELSE 0 END) AS conflicts,
+             MAX(COALESCE(updated_at, created_at)) AS lastActivity
+      FROM context_nodes
+      WHERE project IS NOT NULL AND project != ''
+      GROUP BY project
+    `).all() as Array<{ project: string; entries: number; conflicts: number; lastActivity: string | null }>;
+  }
+
   recordAccess(id: string, accessedAt = new Date().toISOString()): void {
     this.db.prepare(`
       UPDATE context_nodes

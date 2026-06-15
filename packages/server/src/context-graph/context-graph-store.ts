@@ -143,6 +143,23 @@ export class ContextGraphStore {
     return this.nodes.listDistinctProjects();
   }
 
+  countNodes(): number {
+    return this.nodes.count();
+  }
+
+  getGraphStats(): {
+    total: number;
+    byType: Record<string, number>;
+    byStatus: Record<string, number>;
+    byLanguage: Record<string, number>;
+  } {
+    return this.nodes.aggregateGraphStats();
+  }
+
+  getProjectBreakdown(): Array<{ project: string; entries: number; conflicts: number; lastActivity: string | null }> {
+    return this.nodes.aggregateProjectBreakdown();
+  }
+
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
     return this.nodes.update(id, input);
   }

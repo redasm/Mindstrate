@@ -72,22 +72,23 @@ export default async function SettingsOverviewPage() {
   const stats = await memory.maintenance.getStats();
   const projects = listWorkspaceProjects(memory);
   const users = memory.apiKeys.listAll();
-  const allNodes = memory.context.listContextNodes({ limit: 100000 });
+  // SQL rollup — never load the whole graph (100k+ nodes) into the web-ui heap.
+  const breakdown = new Map(
+    memory.maintenance.getProjectBreakdown().map((row) => [row.project, row]),
+  );
 
   const adminCount = users.filter((u) => u.role === 'admin' && !u.revokedAt).length;
   const memberCount = users.filter((u) => u.role === 'member' && !u.revokedAt).length;
 
   const projectStats: ProjectStat[] = projects
     .map((name) => {
-      const projectNodes = allNodes.filter((n) => n.project === name);
-      const conflicts = projectNodes.filter((n) => n.status === 'conflicted').length;
-      const lastActivity = projectNodes.reduce<string | null>((latest, n) => {
-        const ts = n.updatedAt ?? n.createdAt ?? null;
-        if (!ts) return latest;
-        if (!latest || ts > latest) return ts;
-        return latest;
-      }, null);
-      return { name, entries: projectNodes.length, lastActivity, conflicts };
+      const row = breakdown.get(name);
+      return {
+        name,
+        entries: row?.entries ?? 0,
+        lastActivity: row?.lastActivity ?? null,
+        conflicts: row?.conflicts ?? 0,
+      };
     })
     .sort((a, b) => b.entries - a.entries);
 
