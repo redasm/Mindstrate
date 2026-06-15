@@ -5,13 +5,15 @@
  */
 
 import { Command } from 'commander';
+import { errorMessage, type EvalCaseKind } from '@mindstrate/server';
 import { createMemory } from '../memory-factory.js';
 
 export function registerEvaluateCommand(program: Command): void {
-  program
+  const evalCommand = program
     .command('eval')
     .description('运行检索质量评估')
     .option('--top-k <n>', '检索结果数量', '5')
+    .option('--kind <kind>', '评估集类型：validation | holdout')
     .option('--trend', '显示评估趋势', false)
     .action(async (opts) => {
       const memory = createMemory();
@@ -35,12 +37,16 @@ export function registerEvaluateCommand(program: Command): void {
           }
       } else {
         console.log('Running retrieval evaluation...\n');
-        const result = await memory.evaluation.runEvaluation(parseInt(opts.topK, 10));
+        const kind = opts.kind as EvalCaseKind | undefined;
+        const result = await memory.evaluation.runEvaluation(
+          parseInt(opts.topK, 10),
+          kind ? { kind } : undefined,
+        );
         const project = process.cwd().split(/[/\\]/).pop();
 
         if (result.totalCases === 0) {
           console.log('No evaluation cases found.');
-          console.log('Use the addEvalCase API to add test cases for evaluation.');
+          console.log('Use `mindstrate eval cases add` to add test cases for evaluation.');
         } else {
             console.log(`Cases: ${result.totalCases}`);
             console.log(`Precision: ${(result.precision * 100).toFixed(1)}%`);
@@ -74,5 +80,75 @@ export function registerEvaluateCommand(program: Command): void {
     } finally {
       memory.close();
     }
+    });
+
+  const cases = evalCommand
+    .command('cases')
+    .description('维护评估数据集（validation / holdout）');
+
+  cases
+    .command('list')
+    .description('列出评估用例')
+    .option('--kind <kind>', '过滤类型：validation | holdout')
+    .action(async (opts: { kind?: string }) => {
+      const memory = createMemory();
+      try {
+        await memory.init();
+        const list = memory.evaluation.listEvalCases(opts.kind ? { kind: opts.kind as EvalCaseKind } : undefined);
+        if (list.length === 0) {
+          console.log('No eval cases found.');
+          return;
+        }
+        for (const c of list) {
+          console.log(`[${c.kind}] ${c.query} -> ${c.expectedIds.join(', ')}  (${c.id})`);
+        }
+      } catch (error) {
+        console.error('Eval case list failed:', errorMessage(error));
+        process.exit(1);
+      } finally {
+        memory.close();
+      }
+    });
+
+  cases
+    .command('add <query> <expectedIds...>')
+    .description('添加评估用例（expectedIds 为期望命中的知识 id 列表）')
+    .option('--kind <kind>', '类型：validation（默认）| holdout', 'validation')
+    .option('--language <language>', '查询语言上下文')
+    .option('--framework <framework>', '查询框架上下文')
+    .action(async (query: string, expectedIds: string[], opts: { kind: string; language?: string; framework?: string }) => {
+      const memory = createMemory();
+      try {
+        await memory.init();
+        const created = memory.evaluation.addEvalCase(query, expectedIds, {
+          kind: opts.kind as EvalCaseKind,
+          language: opts.language,
+          framework: opts.framework,
+        });
+        console.log(`Added ${created.kind} eval case ${created.id}.`);
+      } catch (error) {
+        console.error('Eval case add failed:', errorMessage(error));
+        process.exit(1);
+      } finally {
+        memory.close();
+      }
+    });
+
+  cases
+    .command('delete <id>')
+    .description('删除评估用例')
+    .action(async (id: string) => {
+      const memory = createMemory();
+      try {
+        await memory.init();
+        const deleted = memory.evaluation.deleteEvalCase(id);
+        console.log(deleted ? `Deleted eval case ${id}.` : `Eval case not found: ${id}`);
+        if (!deleted) process.exit(1);
+      } catch (error) {
+        console.error('Eval case delete failed:', errorMessage(error));
+        process.exit(1);
+      } finally {
+        memory.close();
+      }
     });
 }

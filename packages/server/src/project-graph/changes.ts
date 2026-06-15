@@ -2,10 +2,13 @@ import {
   ChangeSource,
   MAX_PROJECT_GRAPH_CHANGESET_FILES,
   PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+  PROJECT_GRAPH_METADATA_KEYS,
+  ProjectGraphNodeKind,
   isProjectGraphNode,
   type ChangeSet,
   type ChangedFile,
   type ContextNode,
+  type ProjectGraphExternalChangeMarker,
 } from '@mindstrate/protocol/models';
 import type { DetectedProject } from '../project/index.js';
 
@@ -54,13 +57,14 @@ export const detectProjectGraphChangeSet = (
   const nodes = store.listNodes({ project: project.name, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT })
     .filter(isProjectGraphNode);
   const affectedNodeIds = nodes
-    .filter((node) => changedFiles.some((file) => nodeMatchesFile(node, file.path)))
+    .filter((node) => changedFiles.some((file) => projectGraphNodeMatchesFile(node, file.path)))
     .map((node) => node.id);
   const affectedLayers = unique(changedFiles.map((file) => file.layerId).filter(isString));
   const changeTypes = classifyChangedFiles(project, changedFiles);
   const riskHints = unique([
     ...(generatedFileTouched(project, changedFiles) ? project.graphHints?.riskHints ?? [] : []),
     ...riskHintsForChangeTypes(changeTypes),
+    ...stalenessRiskHints(nodes, new Set(affectedNodeIds)),
   ]);
 
   return {
@@ -91,10 +95,24 @@ const normalizeChangedFile = (file: ChangedFile): ChangedFile => ({
   oldPath: file.oldPath ? normalizePath(file.oldPath) : undefined,
 });
 
-const nodeMatchesFile = (node: ContextNode, filePath: string): boolean =>
+export const projectGraphNodeMatchesFile = (node: ContextNode, filePath: string): boolean =>
   normalizePath(node.title) === filePath ||
   normalizePath(node.sourceRef ?? '') === filePath ||
   normalizePath(String(node.metadata?.['ownedByFile'] ?? '')) === filePath;
+
+/** Read and validate a node's external-change staleness marker, if any. */
+export const readExternalChangeMarker = (node: ContextNode): ProjectGraphExternalChangeMarker | null => {
+  const raw = node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.externalChanges];
+  if (!raw || typeof raw !== 'object') return null;
+  const marker = raw as Partial<ProjectGraphExternalChangeMarker>;
+  if (typeof marker.pendingChanges !== 'number' || marker.pendingChanges <= 0) return null;
+  return {
+    pendingChanges: marker.pendingChanges,
+    lastSource: marker.lastSource as ChangeSource,
+    lastExternalRef: typeof marker.lastExternalRef === 'string' ? marker.lastExternalRef : undefined,
+    lastChangedAt: typeof marker.lastChangedAt === 'string' ? marker.lastChangedAt : '',
+  };
+};
 
 const layerForPath = (project: DetectedProject, filePath: string): string | undefined => {
   const rel = normalizePath(filePath);
@@ -123,6 +141,37 @@ const classifyChangedFiles = (project: DetectedProject, files: ChangedFile[]): s
   }
   if (values.size === 0 && files.length > 0) values.add('general-source');
   return Array.from(values);
+};
+
+/**
+ * Surface external-change staleness markers (written by repo scanners
+ * between reindex runs) for the nodes this change set touches, plus the
+ * project-level marker. Turns silent graph drift into an explicit caveat
+ * on every before-edit / impact analysis.
+ */
+const stalenessRiskHints = (nodes: ContextNode[], affectedNodeIds: Set<string>): string[] => {
+  const hints: string[] = [];
+  const staleAffected = nodes
+    .filter((node) => affectedNodeIds.has(node.id))
+    .map((node) => ({ node, marker: readExternalChangeMarker(node) }))
+    .filter((entry): entry is { node: ContextNode; marker: ProjectGraphExternalChangeMarker } => entry.marker !== null);
+  if (staleAffected.length > 0) {
+    const names = staleAffected.slice(0, 3).map(({ node, marker }) => `"${node.title}" (${marker.pendingChanges})`);
+    const suffix = staleAffected.length > 3 ? ` and ${staleAffected.length - 3} more` : '';
+    hints.push(
+      `Project graph may be stale for ${names.join(', ')}${suffix}: upstream changes were seen after the last index. Re-run graph indexing for fresh impact analysis.`,
+    );
+  }
+  const projectMarker = nodes
+    .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.PROJECT)
+    .map(readExternalChangeMarker)
+    .find((marker) => marker !== null);
+  if (projectMarker) {
+    hints.push(
+      `Project graph was indexed before ${projectMarker.pendingChanges} upstream change event(s) (last: ${projectMarker.lastExternalRef ?? 'unknown'} at ${projectMarker.lastChangedAt}). Conclusions may be outdated until reindex.`,
+    );
+  }
+  return hints;
 };
 
 const riskHintsForChangeTypes = (changeTypes: string[]): string[] => {

@@ -62,6 +62,7 @@ describe('RepoScannerService', () => {
     expect(result.mode).toBe('initialized');
     expect(result.itemsImported).toBe(0);
     expect(service.scanner.getSource(source.id)?.lastCursor).toBeTruthy();
+    expect(memory.context.listContextNodes({ project: 'proj', limit: 50 }).length).toBeGreaterThan(0);
   });
 
   it('backfills recent commits and writes extracted knowledge', async () => {
@@ -77,8 +78,38 @@ describe('RepoScannerService', () => {
     expect(result.itemsSeen).toBe(1);
     expect(result.itemsImported).toBe(1);
     const entries = memory.context.readGraphKnowledge({ project: 'proj', limit: 10 });
-    expect(entries).toHaveLength(1);
-    expect(entries[0].project).toBe('proj');
+    expect(entries.length).toBeGreaterThanOrEqual(1);
+    expect(entries.every((entry) => entry.project === 'proj')).toBe(true);
+  });
+
+  it('stamps project-graph staleness markers for ingested upstream commits', async () => {
+    const source = service.addGitLocalSource({
+      name: 'repo',
+      project: 'proj',
+      repoPath: repoDir,
+      initMode: 'from_now',
+    });
+    await service.runSource(source.id); // first run: indexes the graph, sets the cursor
+
+    commitFile(repoDir, 'app.ts', [
+      'export function fixUser() {',
+      '  return getUser()?.name ?? null;',
+      '}',
+    ].join('\n'), 'refactor: simplify user lookup');
+
+    const incremental = await service.runSource(source.id);
+    expect(incremental.itemsSeen).toBe(1);
+
+    const marked = memory.context.listContextNodes({ project: 'proj', limit: 500 })
+      .filter((node) => node.metadata?.['externalChanges']);
+    expect(marked.length).toBeGreaterThan(0);
+
+    const projectNode = marked.find((node) => node.metadata?.['kind'] === 'project');
+    expect(projectNode).toBeDefined();
+    const marker = projectNode!.metadata!['externalChanges'] as { pendingChanges: number; lastSource: string; lastExternalRef?: string };
+    expect(marker.pendingChanges).toBe(1);
+    expect(marker.lastSource).toBe('git');
+    expect(marker.lastExternalRef).toBeTruthy();
   });
 
   it('records failed commits and supports retrying them', async () => {

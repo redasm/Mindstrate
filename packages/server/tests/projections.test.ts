@@ -10,6 +10,7 @@ import {
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import {
   ObsidianProjectionMaterializer,
+  BestSkillProjectionMaterializer,
   ProjectSnapshotProjectionMaterializer,
   SessionProjectionMaterializer,
 } from '../src/projections/index.js';
@@ -135,5 +136,27 @@ describe('ECS projections', () => {
     expect(result.candidateNode?.status).toBe(ContextNodeStatus.CANDIDATE);
     expect(result.candidateNode?.content).toContain('edited markdown should become a candidate');
     expect(result.event?.type).toBe('user_edit');
+  });
+
+  it('renders best skill markdown with source node projection records', () => {
+    const skill = graphStore.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Use gated patches',
+      content: 'Evaluate skill edits before accepting them.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.VERIFIED,
+      confidence: 0.9,
+      qualityScore: 92,
+    });
+
+    const materializer = new BestSkillProjectionMaterializer(graphStore);
+    const artifact = materializer.render({ project: 'mindstrate' });
+
+    expect(artifact.markdown).toContain('# Best Skill: mindstrate');
+    expect(artifact.markdown).toContain('## Skill 1: Use gated patches');
+    expect(artifact.markdown).toContain(`sourceNodeId: ${skill.id}`);
+    expect(artifact.records).toHaveLength(1);
+    expect(artifact.records[0].target).toBe(ProjectionTarget.BEST_SKILL_ARTIFACT);
   });
 });

@@ -4,9 +4,9 @@ import { getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
 import { requireAdminFromRequest } from '@/lib/session';
 
-const guard = (req: NextRequest): Response | null => {
+const guard = async (req: NextRequest): Promise<Response | null> => {
   try {
-    requireAdminFromRequest(req);
+    await requireAdminFromRequest(req);
     return null;
   } catch (resp) {
     return resp as Response;
@@ -21,7 +21,7 @@ const maskKey = (key: string): string => {
 
 // GET returns the full API key so the admin can rotate it; masking happens at the list endpoint.
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = guard(request); if (denied) return denied;
+  const denied = await guard(request); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();
@@ -59,7 +59,7 @@ function buildPatch(body: Record<string, unknown>): UpdateLlmConfigInput {
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = guard(request); if (denied) return denied;
+  const denied = await guard(request); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();
@@ -76,7 +76,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = guard(request); if (denied) return denied;
+  const denied = await guard(request); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();

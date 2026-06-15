@@ -1,5 +1,6 @@
 import type { ProjectLlmConfig } from '@mindstrate/protocol';
 import { getMemoryReady } from '@/lib/memory';
+import { listWorkspaceProjects } from '@/lib/workspace-projects';
 import { LlmConfigsClient } from './LlmConfigsClient';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ export default async function SettingsLlmConfigsPage() {
     ...c,
     openaiApiKey: maskKey(c.openaiApiKey),
   }));
-  const knownProjects = memory.context.listKnownProjects();
+  const knownProjects = listWorkspaceProjects(memory);
 
   return <LlmConfigsClient initialConfigs={configs} knownProjects={knownProjects} />;
 }

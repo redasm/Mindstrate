@@ -56,6 +56,7 @@ export enum ProjectionTarget {
   AGENTS_MD = 'agents_md',
   SYSTEM_PROMPT = 'system_prompt',
   FINE_TUNE_DATASET = 'fine_tune_dataset',
+  BEST_SKILL_ARTIFACT = 'best_skill_artifact',
 }
 
 export interface ProjectionRecord {

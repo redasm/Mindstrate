@@ -10,6 +10,7 @@ import {
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { detectProject } from '../src/project/detector.js';
 import { indexProjectGraph } from '../src/project-graph/project-graph-service.js';
+import { readProjectGraphExtractionCache } from '../src/project-graph/extraction-cache.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 const write = (root: string, rel: string, content: string): void => {
@@ -428,16 +429,11 @@ describe('project graph service', () => {
     const project = detectProject(root);
     expect(project).not.toBeNull();
     indexProjectGraph(store, project!);
-    const cachePath = path.join(root, '.mindstrate', 'project-graph-extract-cache.json');
-    const firstCache = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
-      files: Record<string, { hash: string; nodes: unknown[]; edges: unknown[] }>;
-    };
+    const firstCache = readProjectGraphExtractionCache(root);
 
     expect(firstCache.files['src/App.tsx']?.nodes.length).toBeGreaterThan(0);
     indexProjectGraph(store, project!);
-    const secondCache = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
-      files: Record<string, { hash: string; nodes: unknown[]; edges: unknown[] }>;
-    };
+    const secondCache = readProjectGraphExtractionCache(root);
 
     expect(secondCache.files['src/App.tsx']?.hash).toBe(firstCache.files['src/App.tsx']?.hash);
     expect(secondCache.files['src/App.tsx']?.nodes).toEqual(firstCache.files['src/App.tsx']?.nodes);
@@ -460,26 +456,23 @@ describe('project graph service', () => {
     }));
     const script = 'class ImportTool:\n  pass\n';
     write(root, 'Python/tools.py', script);
-    const cachePath = path.join(root, '.mindstrate', 'project-graph-extract-cache.json');
+    // A cache written by an older extractor pipeline (incompatible version
+    // header) must be ignored so the file is freshly re-extracted.
+    const cachePath = path.join(root, '.mindstrate', 'project-graph-extract-cache.ndjson');
     fs.mkdirSync(path.dirname(cachePath), { recursive: true });
-    fs.writeFileSync(cachePath, JSON.stringify({
-      version: 1,
-      files: {
-        'Python/tools.py': {
-          path: 'Python/tools.py',
-          hash: createHash('sha256').update(script).digest('hex'),
-          nodes: [],
-          edges: [],
-        },
-      },
-    }), 'utf8');
+    fs.writeFileSync(cachePath, `${JSON.stringify({ version: 1 })}\n${JSON.stringify({
+      path: 'Python/tools.py',
+      hash: createHash('sha256').update(script).digest('hex'),
+      nodes: [],
+      edges: [],
+    })}\n`, 'utf8');
 
     const project = detectProject(root);
     expect(project).not.toBeNull();
     indexProjectGraph(store, project!);
-    const rewritten = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as { version: number };
+    const rewritten = readProjectGraphExtractionCache(root);
 
-    expect(rewritten.version).toBe(2);
+    expect(rewritten.version).toBe(3);
     expect(store.listNodes({ project: 'Client', limit: 100 }).find((node) => node.title === 'ImportTool')).toBeDefined();
   });
 

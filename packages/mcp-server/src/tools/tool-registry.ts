@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { bundleTools } from './bundle-tools.js';
 import { contextTools } from './context-tools.js';
+import { evalTools } from './eval-tools.js';
 import { memoryTools } from './memory-tools.js';
 import { metabolismTools } from './metabolism-tools.js';
 import { obsidianProjectionTools } from './obsidian-projection-tools.js';
 import { sessionTools } from './session-tools.js';
+import { skillEvolutionTools } from './skill-evolution-tools.js';
 
 export const toolRegistry = [
   ...memoryTools,
@@ -13,6 +15,8 @@ export const toolRegistry = [
   ...obsidianProjectionTools,
   ...bundleTools,
   ...sessionTools,
+  ...skillEvolutionTools,
+  ...evalTools,
 ];
 
 export const toolByName = new Map(toolRegistry.map((tool) => [tool.name, tool]));

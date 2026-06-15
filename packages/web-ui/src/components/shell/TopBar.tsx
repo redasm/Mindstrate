@@ -10,6 +10,16 @@ import { useTranslations } from '@/lib/i18n/hooks';
 
 export type TopBarTab = { href: string; label: string; icon: string };
 
+export function isTopBarTabActive(tab: TopBarTab, activeHref: string, tabs: TopBarTab[]): boolean {
+  if (tab.href === '/settings') {
+    return activeHref === '/settings';
+  }
+  const matches = tabs
+    .filter((candidate) => activeHref === candidate.href || activeHref.startsWith(candidate.href + '/'))
+    .sort((a, b) => b.href.length - a.href.length);
+  return matches[0]?.href === tab.href;
+}
+
 type Props = {
   tabs: TopBarTab[];
   activeHref: string;
@@ -47,7 +57,7 @@ export function TopBar({ tabs, activeHref, user }: Props) {
 
       <nav className="flex items-center gap-1 h-full">
         {tabs.map((tab) => {
-          const active = tab.href === activeHref || activeHref.startsWith(tab.href + '/');
+          const active = isTopBarTabActive(tab, activeHref, tabs);
           return (
             <Link
               key={tab.href}

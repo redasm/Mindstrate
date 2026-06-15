@@ -11,58 +11,20 @@
 
 import Database from 'better-sqlite3';
 import { v4 as uuidv4 } from 'uuid';
+import type {
+  EvalCase,
+  EvalCaseKind,
+  EvalCaseResult,
+  EvalRunResult,
+} from '@mindstrate/protocol/models';
 import { initializeEvaluationSchema } from './evaluation-schema.js';
+
+export type { EvalCase, EvalCaseKind, EvalCaseResult, EvalRunResult } from '@mindstrate/protocol/models';
 
 export type EvaluationSearch = (
   query: string,
   options: { language?: string; framework?: string; topK: number },
 ) => Promise<string[]> | string[];
-
-/** 评估用例 */
-export interface EvalCase {
-  id: string;
-  /** 查询文本 */
-  query: string;
-  /** 期望返回的知识 ID 列表 */
-  expectedIds: string[];
-  /** 查询上下文（可选） */
-  language?: string;
-  framework?: string;
-  /** 创建时间 */
-  createdAt: string;
-}
-
-/** 单次评估运行结果 */
-export interface EvalRunResult {
-  /** 运行 ID */
-  runId: string;
-  /** 运行时间 */
-  timestamp: string;
-  /** 评估用例数 */
-  totalCases: number;
-  /** 精确率 (检索到的期望知识 / 检索到的总数) */
-  precision: number;
-  /** 召回率 (检索到的期望知识 / 期望总数) */
-  recall: number;
-  /** F1 分数 */
-  f1: number;
-  /** 平均排名（期望知识在结果中的平均位置） */
-  meanReciprocalRank: number;
-  /** 每条用例的详细结果 */
-  details: EvalCaseResult[];
-}
-
-/** 单条评估用例的结果 */
-export interface EvalCaseResult {
-  caseId: string;
-  query: string;
-  expectedIds: string[];
-  retrievedIds: string[];
-  hits: string[];
-  misses: string[];
-  precision: number;
-  recall: number;
-}
 
 export class RetrievalEvaluator {
   private db: Database.Database;
@@ -78,28 +40,33 @@ export class RetrievalEvaluator {
   addCase(query: string, expectedIds: string[], options?: {
     language?: string;
     framework?: string;
+    kind?: EvalCaseKind;
   }): EvalCase {
     const id = uuidv4();
     const now = new Date().toISOString();
+    const kind: EvalCaseKind = options?.kind ?? 'validation';
 
     this.db.prepare(`
-      INSERT INTO eval_cases (id, query, expected_ids, language, framework, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO eval_cases (id, query, expected_ids, language, framework, kind, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, query, JSON.stringify(expectedIds),
-      options?.language ?? null, options?.framework ?? null, now,
+      options?.language ?? null, options?.framework ?? null, kind, now,
     );
 
-    return { id, query, expectedIds, language: options?.language, framework: options?.framework, createdAt: now };
+    return { id, query, expectedIds, kind, language: options?.language, framework: options?.framework, createdAt: now };
   }
 
-  /** 列出所有评估用例 */
-  listCases(): EvalCase[] {
-    const rows = this.db.prepare('SELECT * FROM eval_cases ORDER BY created_at').all() as any[];
+  /** 列出评估用例（可按 kind 过滤） */
+  listCases(options?: { kind?: EvalCaseKind }): EvalCase[] {
+    const rows = options?.kind
+      ? this.db.prepare('SELECT * FROM eval_cases WHERE kind = ? ORDER BY created_at').all(options.kind) as any[]
+      : this.db.prepare('SELECT * FROM eval_cases ORDER BY created_at').all() as any[];
     return rows.map(r => ({
       id: r.id,
       query: r.query,
       expectedIds: JSON.parse(r.expected_ids),
+      kind: (r.kind ?? 'validation') as EvalCaseKind,
       language: r.language ?? undefined,
       framework: r.framework ?? undefined,
       createdAt: r.created_at,
@@ -117,8 +84,8 @@ export class RetrievalEvaluator {
    *
    * 评估循环：每次优化后都在 holdout 集上验证效果。
    */
-  async runEvaluation(topK: number = 5): Promise<EvalRunResult> {
-    const cases = this.listCases();
+  async runEvaluation(topK: number = 5, options?: { kind?: EvalCaseKind }): Promise<EvalRunResult> {
+    const cases = this.listCases(options?.kind ? { kind: options.kind } : undefined);
     if (cases.length === 0) {
       return {
         runId: uuidv4(),

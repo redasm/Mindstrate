@@ -114,6 +114,7 @@ describe('ECS enum stability', () => {
       'agents_md',
       'system_prompt',
       'fine_tune_dataset',
+      'best_skill_artifact',
     ]);
   });
 });

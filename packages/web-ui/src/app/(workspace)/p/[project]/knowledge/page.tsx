@@ -190,7 +190,7 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
               <div key={k.id} className={`anim-in d${Math.min(i + 1, 8)}`}>
                 <KnowledgeCard
                   knowledge={k}
-                  href={`/knowledge/${k.id}`}
+                  href={`/p/${encodeURIComponent(decoded)}/knowledge/${k.id}`}
                   onDelete={handleDelete}
                 />
               </div>

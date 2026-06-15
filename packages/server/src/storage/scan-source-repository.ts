@@ -1,9 +1,12 @@
 import type Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import type {
+  AppendScanLogInput,
   FailedScanItem,
   GitLocalSourceInput,
   P4SourceInput,
+  ScanLog,
+  ScanLogLevel,
   ScanRun,
   ScanRunStatus,
   ScanSource,
@@ -61,6 +64,16 @@ interface FailedScanItemRow {
   retry_count: number;
 }
 
+interface ScanLogRow {
+  id: string;
+  source_id: string;
+  run_id: string | null;
+  level: string;
+  phase: string | null;
+  message: string;
+  created_at: string;
+}
+
 const rowToSource = (row: ScanSourceRow): ScanSource => ({
   id: row.id,
   kind: row.kind as ScanSourceKind,
@@ -109,6 +122,16 @@ const rowToFailed = (row: FailedScanItemRow): FailedScanItem => ({
   retryCount: row.retry_count,
 });
 
+const rowToLog = (row: ScanLogRow): ScanLog => ({
+  id: row.id,
+  sourceId: row.source_id,
+  runId: row.run_id ?? undefined,
+  level: row.level as ScanLogLevel,
+  phase: row.phase ?? undefined,
+  message: row.message,
+  createdAt: row.created_at,
+});
+
 export class ScanSourceRepository {
   private readonly db: Database.Database;
 
@@ -132,7 +155,7 @@ export class ScanSourceRepository {
       input.name,
       input.project,
       (input.enabled ?? true) ? 1 : 0,
-      input.repoPath,
+      input.repoPath ?? null,
       null,
       input.branch ?? null,
       input.remoteUrl ?? null,
@@ -164,7 +187,7 @@ export class ScanSourceRepository {
       input.name,
       input.project,
       (input.enabled ?? true) ? 1 : 0,
-      null,
+      input.repoPath ?? null,
       input.depotPath ?? null,
       null,
       null,
@@ -242,6 +265,7 @@ export class ScanSourceRepository {
 
   deleteSource(id: string): boolean {
     const tx = this.db.transaction((sourceId: string) => {
+      this.db.prepare('DELETE FROM scan_logs WHERE source_id = ?').run(sourceId);
       this.db.prepare('DELETE FROM failed_scan_items WHERE source_id = ?').run(sourceId);
       this.db.prepare('DELETE FROM scan_runs WHERE source_id = ?').run(sourceId);
       const result = this.db.prepare('DELETE FROM scan_sources WHERE id = ?').run(sourceId);
@@ -287,6 +311,46 @@ export class ScanSourceRepository {
       'SELECT COUNT(*) AS count FROM scan_runs WHERE source_id = ? AND status = ?',
     ).get(sourceId, 'running') as { count: number };
     return row.count > 0;
+  }
+
+  /**
+   * Finalize runs left in `running` by a process that died mid-scan.
+   * Without this, a crashed/restarted scanner leaves the run row running
+   * forever and `hasRunningRun` blocks every future scan of that source.
+   * Only safe to call when no scan can be in flight (daemon startup).
+   */
+  recoverOrphanedRuns(): number {
+    const running = this.db
+      .prepare("SELECT id, source_id FROM scan_runs WHERE status = 'running'")
+      .all() as { id: string; source_id: string }[];
+    if (running.length === 0) return 0;
+
+    const now = new Date().toISOString();
+    const message = 'orphaned: scanner stopped mid-run';
+    const finalize = this.db.prepare(`
+      UPDATE scan_runs SET status = 'failed', finished_at = ?, error = ? WHERE id = ?
+    `);
+    const logStmt = this.db.prepare(`
+      INSERT INTO scan_logs (id, source_id, run_id, level, phase, message, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const tx = this.db.transaction(() => {
+      for (const run of running) {
+        finalize.run(now, message, run.id);
+        logStmt.run(
+          randomUUID(),
+          run.source_id,
+          run.id,
+          'error',
+          'recover',
+          'Previous run was orphaned — the scanner process stopped mid-run '
+            + '(crash, restart, or out-of-memory) and the run was marked failed on startup.',
+          now,
+        );
+      }
+    });
+    tx();
+    return running.length;
   }
 
   createRun(sourceId: string): ScanRun {
@@ -338,6 +402,24 @@ export class ScanSourceRepository {
     );
   }
 
+  updateRunProgress(
+    id: string,
+    stats: { itemsSeen: number; itemsImported: number; itemsSkipped: number; itemsFailed: number },
+  ): void {
+    this.db.prepare(`
+      UPDATE scan_runs
+      SET items_seen = ?, items_imported = ?, items_skipped = ?, items_failed = ?
+      WHERE id = ? AND status = ?
+    `).run(
+      stats.itemsSeen,
+      stats.itemsImported,
+      stats.itemsSkipped,
+      stats.itemsFailed,
+      id,
+      'running',
+    );
+  }
+
   listRuns(sourceId: string): ScanRun[] {
     const rows = this.db.prepare(
       'SELECT * FROM scan_runs WHERE source_id = ? ORDER BY started_at DESC',
@@ -374,5 +456,54 @@ export class ScanSourceRepository {
 
   deleteFailedItem(id: string): void {
     this.db.prepare('DELETE FROM failed_scan_items WHERE id = ?').run(id);
+  }
+
+  appendLog(input: AppendScanLogInput): ScanLog {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO scan_logs (id, source_id, run_id, level, phase, message, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      input.sourceId,
+      input.runId ?? null,
+      input.level,
+      input.phase ?? null,
+      input.message,
+      now,
+    );
+    return {
+      id,
+      sourceId: input.sourceId,
+      runId: input.runId ?? undefined,
+      level: input.level,
+      phase: input.phase,
+      message: input.message,
+      createdAt: now,
+    };
+  }
+
+  /** Returns the most recent `limit` log lines in chronological (oldest-first) order. */
+  listLogs(sourceId: string, limit = 200): ScanLog[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM scan_logs
+      WHERE source_id = ?
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT ?
+    `).all(sourceId, limit) as ScanLogRow[];
+    return rows.map(rowToLog).reverse();
+  }
+
+  /** Keep only the newest `keep` log rows for a source; a hard cap so the
+   *  table can never grow without bound regardless of scan frequency. */
+  pruneLogs(sourceId: string, keep: number): void {
+    this.db.prepare(`
+      DELETE FROM scan_logs
+      WHERE source_id = ?
+        AND rowid NOT IN (
+          SELECT rowid FROM scan_logs WHERE source_id = ? ORDER BY rowid DESC LIMIT ?
+        )
+    `).run(sourceId, sourceId, keep);
   }
 }

@@ -265,11 +265,11 @@ export class Embedder {
 function localEmbed(text: string): number[] {
   const vec = new Float64Array(LOCAL_EMBEDDING_DIM);
 
-  // 简单分词：按非字母数字字符分割，转小写
-  const tokens = text
-    .toLowerCase()
-    .split(/[^a-z0-9\u4e00-\u9fff]+/)
-    .filter(t => t.length > 0);
+  // CJK 文本没有空格分词：若把整段连续中文当作单个 token，只有逐字
+  // 完全相同的句段才会产生向量重叠，离线检索对中文基本失效。这里按
+  // “拉丁/数字词 + 单个 CJK 字符”切分，下方的 bigram 循环会天然组合出
+  // 字符二元组（近似中文双字词），使词汇级重叠可被捕捉。
+  const tokens = text.toLowerCase().match(/[a-z0-9]+|[一-鿿]/g) ?? [];
 
   // 同时处理 bigram 以捕获短语信息
   const allTokens = [...tokens];

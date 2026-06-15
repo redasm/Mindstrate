@@ -27,11 +27,13 @@ import { FeedbackCooccurrenceCompressor } from '../context-graph/feedback-cooccu
 import { MetabolismEngine, Pruner } from '../metabolism/index.js';
 import {
   KnowledgeProjectionMaterializer,
+  BestSkillProjectionMaterializer,
   ObsidianProjectionMaterializer,
   ProjectSnapshotProjectionMaterializer,
   SessionProjectionMaterializer,
 } from '../projections/index.js';
 import { PortableContextBundleManager } from '../bundles/index.js';
+import { SkillEvolutionGate, SkillEvolutionStore } from '../skill-evolution/index.js';
 import { VectorStoreFactory } from './vector-store-factory.js';
 
 export interface MindstrateRuntime {
@@ -47,6 +49,7 @@ export interface MindstrateRuntime {
   sessionProjectionMaterializer: SessionProjectionMaterializer;
   projectSnapshotProjectionMaterializer: ProjectSnapshotProjectionMaterializer;
   obsidianProjectionMaterializer: ObsidianProjectionMaterializer;
+  bestSkillProjectionMaterializer: BestSkillProjectionMaterializer;
   metabolismEngine: MetabolismEngine;
   pruner: Pruner;
   conflictDetector: ConflictDetector;
@@ -67,6 +70,8 @@ export interface MindstrateRuntime {
   bundleManager: PortableContextBundleManager;
   feedbackLoop: FeedbackLoop;
   evaluator: RetrievalEvaluator;
+  skillEvolutionStore: SkillEvolutionStore;
+  skillEvolutionGate: SkillEvolutionGate;
 }
 
 export interface MindstrateRuntimeOptions extends Partial<MindstrateConfig> {
@@ -94,6 +99,7 @@ export function createMindstrateRuntime(
   const sessionProjectionMaterializer = new SessionProjectionMaterializer(contextGraphStore);
   const projectSnapshotProjectionMaterializer = new ProjectSnapshotProjectionMaterializer(contextGraphStore);
   const obsidianProjectionMaterializer = new ObsidianProjectionMaterializer(contextGraphStore);
+  const bestSkillProjectionMaterializer = new BestSkillProjectionMaterializer(contextGraphStore);
   const llmConfigRepository = new LlmConfigRepository(databaseStore.getDb());
   const providerFactory = new ProviderFactory(llmConfigRepository);
   const conflictDetector = new ConflictDetector(contextGraphStore, providerFactory);
@@ -103,6 +109,8 @@ export function createMindstrateRuntime(
   const summaryCompressor = new SummaryCompressor(contextGraphStore, providerFactory);
   const highOrderCompressor = new HighOrderCompressor(contextGraphStore, providerFactory);
   const pruner = new Pruner(contextGraphStore);
+  const skillEvolutionStore = new SkillEvolutionStore(databaseStore.getDb());
+  const skillEvolutionGate = new SkillEvolutionGate(skillEvolutionStore, contextGraphStore);
   const metabolismEngine = new MetabolismEngine({
     graphStore: contextGraphStore,
     summaryCompressor,
@@ -116,6 +124,8 @@ export function createMindstrateRuntime(
     projectSnapshotProjectionMaterializer,
     obsidianProjectionMaterializer,
     pruner,
+    skillEvolutionStore,
+    skillEvolutionGate,
   });
   const vectorStoreFactory = new VectorStoreFactory(config, providerFactory);
   const sessionStore = new SessionStore(databaseStore.getDb());
@@ -144,6 +154,7 @@ export function createMindstrateRuntime(
     sessionProjectionMaterializer,
     projectSnapshotProjectionMaterializer,
     obsidianProjectionMaterializer,
+    bestSkillProjectionMaterializer,
     metabolismEngine,
     pruner,
     conflictDetector,
@@ -164,5 +175,7 @@ export function createMindstrateRuntime(
     bundleManager,
     feedbackLoop,
     evaluator,
+    skillEvolutionStore,
+    skillEvolutionGate,
   };
 }

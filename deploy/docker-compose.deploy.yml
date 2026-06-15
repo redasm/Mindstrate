@@ -123,21 +123,44 @@ services:
     restart: unless-stopped
     profiles: [scanner]
     networks: [mindstrate-net]
+    # Run as root so bind-mounted P4 workspaces owned by the host root
+    # user stay readable and the graph extraction cache
+    # (<workspace>/.mindstrate/) stays writable. Drop this and chown the
+    # workspace's .mindstrate dir to 1001 if you prefer the non-root user.
+    user: "0:0"
     environment:
       TEAM_SERVER_URL: "http://team-server:3388"
       TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
       MINDSTRATE_DATA_DIR: "/data"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # First-run indexing of a large checkout builds the whole project graph
+      # in memory: the deduped node/edge set has to stay resident for the
+      # second-pass binding inference, so heap scales with graph size (a ~40k
+      # file / ~170k node checkout needs well over 1.5 GB). Give Node a real
+      # heap and cap per-file reads so a few huge blobs can't OOM the index.
+      # Bump both this and SCANNER_MEMORY_LIMIT in .env.deploy for very large
+      # monorepos — if the heap is exceeded the process is hard-killed mid-run
+      # and the scan is recovered as "orphaned" on the next start.
+      NODE_OPTIONS: "${SCANNER_NODE_OPTIONS:---max-old-space-size=4096}"
+      MINDSTRATE_SCAN_MAX_FILE_BYTES: "${SCANNER_MAX_FILE_BYTES:-2097152}"
     volumes:
       - mindstrate-data:/data
       - mindstrate-scanner-repos:/repos
+      # P4 workspaces synced on the host, exposed to the scanner under
+      # /workspaces/<name>. Mount OUTSIDE the container's /root (it is
+      # mode 700) and set each scanner source's repoPath to the
+      # container-side path, e.g. /workspaces/ms_nami_dev.
+      - /root/ms_nami_dev:/workspaces/ms_nami_dev
     depends_on:
       team-server:
         condition: service_healthy
     deploy:
       resources:
         limits:
-          memory: 512M
+          # Must exceed --max-old-space-size above (heap) plus native/V8
+          # overhead, or the kernel OOM-kills the container before Node's own
+          # heap limit triggers.
+          memory: "${SCANNER_MEMORY_LIMIT:-6g}"
 
 volumes:
   mindstrate-data:

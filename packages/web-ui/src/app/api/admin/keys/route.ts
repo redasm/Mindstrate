@@ -8,7 +8,7 @@ const VALID_SCOPES: ApiKeyScope[] = ['read', 'write', 'admin'];
 
 export async function GET(req: NextRequest) {
   try {
-    requireAdminFromRequest(req);
+    await requireAdminFromRequest(req);
   } catch (resp) {
     return resp as Response;
   }
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    requireAdminFromRequest(req);
+    await requireAdminFromRequest(req);
   } catch (resp) {
     return resp as Response;
   }

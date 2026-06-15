@@ -1,7 +1,9 @@
 import type {
+  AppendScanLogInput,
   FailedScanItem,
   GitLocalSourceInput,
   P4SourceInput,
+  ScanLog,
   ScanRun,
   ScanRunStatus,
   ScanSource,
@@ -60,6 +62,11 @@ export class MindstrateScannerApi {
     return this.services.scanSourceRepository.hasRunningRun(sourceId);
   }
 
+  /** See ScanSourceRepository.recoverOrphanedRuns — daemon-startup only. */
+  recoverOrphanedRuns(): number {
+    return this.services.scanSourceRepository.recoverOrphanedRuns();
+  }
+
   createRun(sourceId: string): ScanRun {
     return this.services.scanSourceRepository.createRun(sourceId);
   }
@@ -70,6 +77,13 @@ export class MindstrateScannerApi {
     stats: { itemsSeen: number; itemsImported: number; itemsSkipped: number; itemsFailed: number; error?: string },
   ): void {
     this.services.scanSourceRepository.finishRun(id, status, stats);
+  }
+
+  updateRunProgress(
+    id: string,
+    stats: { itemsSeen: number; itemsImported: number; itemsSkipped: number; itemsFailed: number },
+  ): void {
+    this.services.scanSourceRepository.updateRunProgress(id, stats);
   }
 
   listRuns(sourceId: string): ScanRun[] {
@@ -86,5 +100,17 @@ export class MindstrateScannerApi {
 
   deleteFailedItem(id: string): void {
     this.services.scanSourceRepository.deleteFailedItem(id);
+  }
+
+  appendLog(input: AppendScanLogInput): ScanLog {
+    return this.services.scanSourceRepository.appendLog(input);
+  }
+
+  listLogs(sourceId: string, limit?: number): ScanLog[] {
+    return this.services.scanSourceRepository.listLogs(sourceId, limit);
+  }
+
+  pruneLogs(sourceId: string, keep: number): void {
+    this.services.scanSourceRepository.pruneLogs(sourceId, keep);
   }
 }

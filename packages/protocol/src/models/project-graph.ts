@@ -7,6 +7,7 @@ export const PROJECT_GRAPH_METADATA_KEYS = {
   provenance: 'provenance',
   evidence: 'evidence',
   ownedByFile: 'ownedByFile',
+  externalChanges: 'externalChanges',
 } as const;
 
 export const PROJECT_GRAPH_DEFAULT_QUERY_LIMIT = 100000;
@@ -201,6 +202,21 @@ export interface ChangeSet {
   base?: string;
   head?: string;
   files: ChangedFile[];
+}
+
+/**
+ * Staleness marker stored under `PROJECT_GRAPH_METADATA_KEYS.externalChanges`
+ * on project-graph nodes. Records upstream change events (commits /
+ * changelists) seen by external scanners after the node was last indexed,
+ * so impact analysis can flag possibly-outdated conclusions. Cleared
+ * naturally on reindex because the graph writer rebuilds node metadata.
+ */
+export interface ProjectGraphExternalChangeMarker {
+  /** Number of upstream change events touching this node since last index. */
+  pendingChanges: number;
+  lastSource: ChangeSource;
+  lastExternalRef?: string;
+  lastChangedAt: string;
 }
 
 export const isProjectGraphNode = (node: ContextNode): boolean =>

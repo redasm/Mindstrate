@@ -116,27 +116,40 @@ export function Sidebar({ projects, currentProject, isAdmin }: Props) {
         {visible.map((p) => {
           const isActive = p.name === currentProject;
           return (
-            <Link
+            <div
               key={p.name}
-              href={`/p/${encodeURIComponent(p.name)}/${subTab}`}
-              className={`sidebar-item flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer relative ${isActive ? 'active' : ''}`}
+              className={`sidebar-item group flex items-center gap-2.5 px-3 py-2 rounded-lg relative ${isActive ? 'active' : ''}`}
             >
-              <div
-                className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                  isActive ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'
-                }`}
+              <Link
+                href={`/p/${encodeURIComponent(p.name)}/${subTab}`}
+                className="flex items-center gap-2.5 flex-1 min-w-0 cursor-pointer"
               >
-                {p.name.charAt(0).toUpperCase()}
-              </div>
-              <span
-                className={`text-sm truncate ${
-                  isActive ? 'font-semibold text-brand-700' : 'font-medium text-surface-600'
-                }`}
-              >
-                {p.name}
-              </span>
-              {p.hasAlert && <div className="notification-dot" />}
-            </Link>
+                <div
+                  className={`w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    isActive ? 'bg-brand-100 text-brand-600' : 'bg-surface-100 text-surface-500'
+                  }`}
+                >
+                  {p.name.charAt(0).toUpperCase()}
+                </div>
+                <span
+                  className={`text-sm truncate ${
+                    isActive ? 'font-semibold text-brand-700' : 'font-medium text-surface-600'
+                  }`}
+                >
+                  {p.name}
+                </span>
+                {p.hasAlert && <div className="notification-dot" />}
+              </Link>
+              {isAdmin && (
+                <Link
+                  href={`/settings/scanner-sources?project=${encodeURIComponent(p.name)}`}
+                  title={t.sidebar.manageProject}
+                  className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md text-surface-400 hover:bg-surface-100 hover:text-brand-600 transition-all flex-shrink-0"
+                >
+                  <Icon icon="lucide:settings-2" className="text-sm" />
+                </Link>
+              )}
+            </div>
           );
         })}
       </div>

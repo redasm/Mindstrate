@@ -29,6 +29,88 @@ npm link
 mindstrate --help
 ```
 
+## Docker 构建与部署
+
+仓库在 `deploy/` 下提供按服务拆分的多阶段 Dockerfile，统一以仓库根作为构建上下文，并依赖 Turborepo 只构建目标服务的依赖链。
+
+| 服务 | Dockerfile | 入口 | 容器端口 |
+| --- | --- | --- | --- |
+| team-server | `deploy/team-server.Dockerfile` | `team-server/dist/server.js` | 3388 |
+| web-ui | `deploy/web-ui.Dockerfile` | Next.js standalone `web-ui/server.js` | 3377 |
+| repo-scanner | `deploy/repo-scanner.Dockerfile` | `repo-scanner/dist/cli.js daemon` | — |
+
+三个服务共享同一个命名卷 `mindstrate-data:/data`（同一份 SQLite），web-ui 直接读写该数据库而不经过 team-server HTTP。
+
+### 准备配置
+
+```bash
+cp deploy/.env.deploy.example deploy/.env.deploy
+# 编辑 deploy/.env.deploy：至少设置 TEAM_API_KEY（可用 openssl rand -hex 32 生成），按需调整端口
+```
+
+### 用 Compose 构建并启动
+
+构建并启动核心服务（team-server + web-ui）：
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d --build
+```
+
+包含 repo-scanner daemon（位于 `scanner` profile，默认不随核心服务启动）：
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner up -d --build
+```
+
+> repo-scanner 不在 `scanner` profile 下启动时不会执行任何扫描，已配置的扫描源会一直停在“等待运行”状态。
+
+### 强制不使用缓存重建
+
+`docker compose up` 不直接支持 `--no-cache`，需要先 `build --no-cache` 再 `up`：
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy build --no-cache
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy up -d
+```
+
+包含 repo-scanner：
+
+```bash
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner build --no-cache
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner up -d
+```
+
+P4 扫描需要内置 Helix CLI 时（镜像约增加 50 MB），传入 `INSTALL_P4=1` 构建参数：
+
+```bash
+INSTALL_P4=1 docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner build --no-cache
+docker compose -f deploy/docker-compose.deploy.yml --env-file deploy/.env.deploy --profile scanner up -d
+```
+
+### 单镜像手工构建
+
+构建上下文必须是仓库根 `.`：
+
+```bash
+docker build -f deploy/team-server.Dockerfile  -t mindstrate/team-server:latest  .
+docker build -f deploy/web-ui.Dockerfile       -t mindstrate/web-ui:latest       .
+docker build -f deploy/repo-scanner.Dockerfile -t mindstrate/repo-scanner:latest --build-arg INSTALL_P4=1 .
+```
+
+加 `--no-cache` 即可忽略所有层缓存重新构建：
+
+```bash
+docker build --no-cache -f deploy/team-server.Dockerfile -t mindstrate/team-server:latest .
+```
+
+### 验证
+
+```bash
+curl http://127.0.0.1:3388/health
+```
+
+浏览器打开 `http://<host>:3377`。
+
 ## 本地模式
 
 本地模式把项目数据存放在当前项目 `.mindstrate/` 目录，可选输出 Obsidian 投影。

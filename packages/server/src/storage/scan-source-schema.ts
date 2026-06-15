@@ -57,5 +57,18 @@ export const initializeScanSourceSchema = (db: Database.Database): void => {
     );
 
     CREATE INDEX IF NOT EXISTS idx_failed_scan_items_source ON failed_scan_items(source_id);
+
+    CREATE TABLE IF NOT EXISTS scan_logs (
+      id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL,
+      run_id TEXT,
+      level TEXT NOT NULL,
+      phase TEXT,
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (source_id) REFERENCES scan_sources(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_scan_logs_source ON scan_logs(source_id, created_at);
   `);
 };

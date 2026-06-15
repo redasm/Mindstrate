@@ -8,7 +8,7 @@ import { canAccessProject, requireSessionFromRequest } from '@/lib/session';
 export async function GET(request: NextRequest) {
   let session;
   try {
-    session = requireSessionFromRequest(request);
+    session = await requireSessionFromRequest(request);
   } catch (resp) {
     return resp as Response;
   }
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   let session;
   try {
-    session = requireSessionFromRequest(request);
+    session = await requireSessionFromRequest(request);
   } catch (resp) {
     return resp as Response;
   }

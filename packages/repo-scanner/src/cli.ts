@@ -58,7 +58,7 @@ async function main(): Promise<void> {
       const name = value('--name', args);
       const project = value('--project', args);
       if (!name || !project) {
-        throw new Error('Usage: mindstrate-scan source add-p4 --name <name> --project <project> [--depot //depot/main/...] [--p4-port <host>] [--p4-user <user>] [--p4-password <pwd>]');
+        throw new Error('Usage: mindstrate-scan source add-p4 --name <name> --project <project> [--repo-path <workspace-root>] [--depot //depot/main/...] [--p4-port <host>] [--p4-user <user>] [--p4-password <pwd>]');
       }
       if (!isP4Available()) {
         throw new Error('p4 command not found — install Perforce CLI (or rebuild scanner image with INSTALL_P4=1) before registering a P4 source');
@@ -66,6 +66,7 @@ async function main(): Promise<void> {
       const source = service.addP4Source({
         name,
         project,
+        repoPath: value('--repo-path', args),
         depotPath: value('--depot', args),
         p4Port: value('--p4-port', args),
         p4User: value('--p4-user', args),

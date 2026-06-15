@@ -90,6 +90,10 @@ export {
   type ProjectedKnowledgeSearchOptions,
 } from './context-graph/index.js';
 
+// Retrieval evaluation types — applications (team-server, cli, web-ui)
+// author validation/holdout eval datasets and read run results.
+export type { EvalCase, EvalCaseKind, EvalRunResult } from './quality/eval.js';
+
 // Project detection / snapshot — applications need these to detect a
 // project before they can ask sub-domain APIs to act on it.
 export {

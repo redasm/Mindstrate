@@ -11,6 +11,10 @@ import {
   ProjectGraphOverlayKind,
   ProjectGraphOverlaySource,
   ProjectionTarget,
+  SkillEvolutionEvaluator,
+  SkillEvolutionMetric,
+  SkillEvolutionPatchOperation,
+  SkillEvolutionPatchStatus,
   SubstrateType,
 } from '@mindstrate/server';
 import { createApp } from '../src/app.js';
@@ -404,6 +408,125 @@ describe('team-server HTTP integration', () => {
     const extracted = memory.context.listContextNodes({ project: 'demo', limit: 20 })
       .find((node) => node.id === 'pg:demo:file:src/App.tsx');
     expect(extracted?.metadata?.['provenance']).toBe('EXTRACTED');
+  });
+
+  it('reviews and gates skill evolution patches through the team HTTP API', async () => {
+    const { client, memory } = await startTeamServer();
+
+    const skill = memory.context.createContextNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Team skill',
+      content: '- Use broad guidance',
+      project: 'proj-skill',
+      status: ContextNodeStatus.ACTIVE,
+    });
+
+    const patch = memory.metabolism.proposeSkillPatch({
+      project: 'proj-skill',
+      sourceNodeId: skill.id,
+      operation: SkillEvolutionPatchOperation.ADD,
+      beforeContent: skill.content,
+      afterContent: '- Use broad guidance\n- Record evaluation evidence ids',
+      rationale: 'Bounded improvement.',
+      budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
+    });
+
+    const listed = await client.skillEvolution.listPatches({ project: 'proj-skill' });
+    expect(listed.map((entry) => entry.id)).toContain(patch.id);
+
+    const evaluation = await client.skillEvolution.evaluatePatch({
+      patchId: patch.id,
+      evaluator: SkillEvolutionEvaluator.RETRIEVAL,
+      metric: SkillEvolutionMetric.F1,
+      baselineScore: 0.4,
+      candidateScore: 0.7,
+    });
+    expect(evaluation.accepted).toBe(true);
+
+    const patchAfter = await client.skillEvolution.getPatch(patch.id);
+    expect(patchAfter?.status).toBe(SkillEvolutionPatchStatus.ACCEPTED);
+
+    const rejectable = memory.metabolism.proposeSkillPatch({
+      project: 'proj-skill',
+      sourceNodeId: skill.id,
+      operation: SkillEvolutionPatchOperation.ADD,
+      beforeContent: memory.context.getContextNode(skill.id)!.content,
+      afterContent: `${memory.context.getContextNode(skill.id)!.content}\n- Add a manual review note`,
+      rationale: 'Manual reviewer change.',
+      budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
+    });
+    const rejected = await client.skillEvolution.rejectPatch({
+      patchId: rejectable.id,
+      reason: 'reviewer_declined',
+    });
+    expect(rejected?.status).toBe(SkillEvolutionPatchStatus.REJECTED);
+  });
+
+  it('renders the best skill artifact through the team HTTP API', async () => {
+    const { client, memory } = await startTeamServer();
+
+    memory.context.createContextNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Team gated skill',
+      content: 'Evaluate skill edits before accepting them.',
+      project: 'proj-best-skill',
+      status: ContextNodeStatus.VERIFIED,
+      qualityScore: 92,
+      confidence: 0.9,
+    });
+
+    const artifact = await client.skillEvolution.renderBestSkillArtifact({ project: 'proj-best-skill' });
+
+    expect(artifact.markdown).toContain('# Best Skill: proj-best-skill');
+    expect(artifact.markdown).toContain('Team gated skill');
+    expect(artifact.sourceNodeIds.length).toBeGreaterThan(0);
+  });
+
+  it('transfers verified skills across projects through the team HTTP API', async () => {
+    const { client, memory } = await startTeamServer();
+
+    memory.context.createContextNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Source verified skill',
+      content: 'Reusable diagnosis procedure.',
+      project: 'proj-from',
+      status: ContextNodeStatus.VERIFIED,
+      qualityScore: 90,
+      confidence: 0.9,
+    });
+
+    const result = await client.skillEvolution.transferVerifiedSkills({
+      fromProject: 'proj-from',
+      toProject: 'proj-to',
+    });
+
+    expect(result.transferred).toBe(1);
+    const copied = memory.context.listContextNodes({ project: 'proj-to', limit: 10 });
+    expect(copied.some((node) => node.metadata?.['transferredFromProject'] === 'proj-from')).toBe(true);
+  });
+
+  it('authors and runs the eval dataset through the team HTTP API', async () => {
+    const { client } = await startTeamServer();
+
+    await client.eval.addCase({ query: 'fix hydration', expectedIds: ['k1'], kind: 'validation' });
+    await client.eval.addCase({ query: 'deploy team server', expectedIds: ['k2'], kind: 'holdout' });
+
+    const validation = await client.eval.listCases({ kind: 'validation' });
+    expect(validation).toHaveLength(1);
+    expect(validation[0].kind).toBe('validation');
+
+    const all = await client.eval.listCases();
+    expect(all).toHaveLength(2);
+
+    const run = await client.eval.run({ kind: 'validation' });
+    expect(run.totalCases).toBe(1);
+
+    const deleted = await client.eval.deleteCase(validation[0].id);
+    expect(deleted.deleted).toBe(true);
+    expect(await client.eval.listCases()).toHaveLength(1);
   });
 });
 

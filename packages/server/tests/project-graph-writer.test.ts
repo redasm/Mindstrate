@@ -191,6 +191,7 @@ describe('project graph ECS writer', () => {
 
   it('reports graph node context when store writes fail', () => {
     const failingStore = {
+      transaction: (fn: () => unknown) => fn(),
       getNodeById: () => null,
       createNode: () => {
         throw new Error('Invalid argument');
@@ -205,6 +206,7 @@ describe('project graph ECS writer', () => {
 
   it('reports graph edge context when store writes fail', () => {
     const failingStore = {
+      transaction: (fn: () => unknown) => fn(),
       getEdgeById: () => null,
       createEdge: () => {
         throw new Error('Invalid argument');

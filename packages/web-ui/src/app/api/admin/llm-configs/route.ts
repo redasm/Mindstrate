@@ -3,9 +3,9 @@ import { getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
 import { requireAdminFromRequest } from '@/lib/session';
 
-const guard = (req: NextRequest): Response | null => {
+const guard = async (req: NextRequest): Promise<Response | null> => {
   try {
-    requireAdminFromRequest(req);
+    await requireAdminFromRequest(req);
     return null;
   } catch (resp) {
     return resp as Response;
@@ -25,7 +25,7 @@ const optionalString = (value: unknown): string | undefined => {
 };
 
 export async function GET(req: NextRequest) {
-  const denied = guard(req); if (denied) return denied;
+  const denied = await guard(req); if (denied) return denied;
   try {
     const memory = await getMemoryReady();
     const configs = memory.llmConfigs.list().map((config) => ({
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = guard(request); if (denied) return denied;
+  const denied = await guard(request); if (denied) return denied;
   try {
     const body = await request.json().catch(() => ({}));
     const project = optionalString(body.project);

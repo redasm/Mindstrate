@@ -30,12 +30,14 @@ export {
   type NodeFeedbackStats,
 } from './feedback-client.js';
 export { KnowledgeClient } from './knowledge-client.js';
+export { EvalClient } from './eval-client.js';
 export {
   MetabolismClient,
   type MetabolismStage,
   type MetabolismStageResult,
 } from './metabolism-client.js';
 export { SessionClient } from './session-client.js';
+export { SkillEvolutionClient } from './skill-evolution-client.js';
 
 export {
   TeamHttpTransport,

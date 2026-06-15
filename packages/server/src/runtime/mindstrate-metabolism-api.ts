@@ -21,7 +21,26 @@ import type {
 } from '../metabolism/index.js';
 import { EvolutionEngine, MetabolismScheduler } from '../metabolism/index.js';
 import type { MetabolismRun } from '@mindstrate/protocol/models';
+import type {
+  SkillEvolutionPatch,
+  SkillEvolutionPatchOperation,
+  SkillEvolutionPatchStatus,
+  SkillEvolutionPatchBudget,
+} from '@mindstrate/protocol/models';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
+import {
+  collectSkillOptimizationTargets,
+  createLlmSkillPatchProposer,
+  SkillEvolutionOptimizer,
+  synthesizeMetaSkill,
+  transferVerifiedSkills,
+  validateSkillEvolutionPatchBudget,
+  type MetaSkillSynthesisResult,
+  type ScoreCandidateInput,
+  type SkillPatchScore,
+  type SkillEvolutionOptimizationResult,
+  type SkillTransferResult,
+} from '../skill-evolution/index.js';
 
 export class MindstrateMetabolismApi {
   private metabolismScheduler: MetabolismScheduler | null = null;
@@ -152,5 +171,133 @@ export class MindstrateMetabolismApi {
 
   listMetabolismRuns(project?: string, limit?: number): MetabolismRun[] {
     return this.services.contextGraphStore.listMetabolismRuns({ project, limit });
+  }
+
+  proposeSkillPatch(input: {
+    project?: string;
+    sourceNodeId: string;
+    targetNodeId?: string;
+    operation: SkillEvolutionPatchOperation;
+    beforeContent: string;
+    afterContent: string;
+    rationale: string;
+    budget: SkillEvolutionPatchBudget;
+    metadata?: Record<string, unknown>;
+  }): SkillEvolutionPatch {
+    const sourceNode = this.services.contextGraphStore.getNodeById(input.sourceNodeId);
+    const budget = validateSkillEvolutionPatchBudget({
+      sourceNode,
+      operation: input.operation,
+      beforeContent: input.beforeContent,
+      afterContent: input.afterContent,
+      budget: input.budget,
+    });
+    if (!budget.valid) {
+      throw new Error(`Invalid skill evolution patch: ${budget.reason}`);
+    }
+    return this.services.skillEvolutionStore.createPatch({
+      ...input,
+      metadata: {
+        ...(input.metadata ?? {}),
+        budgetValidation: budget,
+      },
+    });
+  }
+
+  getSkillPatch(id: string): SkillEvolutionPatch | null {
+    return this.services.skillEvolutionStore.getPatchById(id);
+  }
+
+  listSkillPatches(options: {
+    project?: string;
+    sourceNodeId?: string;
+    status?: SkillEvolutionPatchStatus;
+    limit?: number;
+  } = {}): SkillEvolutionPatch[] {
+    return this.services.skillEvolutionStore.listPatches(options);
+  }
+
+  rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): SkillEvolutionPatch | null {
+    return this.services.skillEvolutionStore.markPatchRejected(input.patchId, input.reason, input.metadata);
+  }
+
+  /**
+   * Manual review approval: applies the candidate patch to its source node
+   * (promoting CANDIDATE nodes to ACTIVE) after budget validation, without
+   * fabricating evaluation scores. The reviewer identity is recorded in the
+   * patch metadata for audit.
+   */
+  approveSkillPatch(input: { patchId: string; approvedBy?: string; note?: string }): SkillEvolutionPatch {
+    return this.services.skillEvolutionGate.approvePatch(input);
+  }
+
+  /**
+   * Run the SkillOpt-style optimizer over low-adoption / negative-feedback
+   * high-order nodes. Targets come from real failure signals; an LLM
+   * proposer suggests bounded patches that still pass the budget validator.
+   * Until real before/after scoring exists the scorer reports zero eval
+   * cases, so every proposal parks as `insufficient_data` for human review —
+   * nothing is auto-applied and nothing is auto-rejected. Offline (no LLM
+   * config) yields `no_proposal`.
+   */
+  async optimizeSkillTargets(options: {
+    project?: string;
+    limit?: number;
+  } = {}): Promise<SkillEvolutionOptimizationResult[]> {
+    await this.ensureInit();
+    const targets = collectSkillOptimizationTargets(
+      {
+        graphStore: this.services.contextGraphStore,
+        feedbackLoop: this.services.feedbackLoop,
+      },
+      { project: options.project, limit: options.limit },
+    );
+    if (targets.length === 0) return [];
+
+    const proposePatch = createLlmSkillPatchProposer({
+      providerFactory: this.services.providerFactory,
+    });
+    const optimizer = new SkillEvolutionOptimizer({
+      evolutionStore: this.services.skillEvolutionStore,
+      graphStore: this.services.contextGraphStore,
+      gate: this.services.skillEvolutionGate,
+      proposePatch,
+      scoreCandidate: (input: ScoreCandidateInput) => this.scoreSkillCandidate(input),
+    });
+    return optimizer.optimizeTargets(targets);
+  }
+
+  private async scoreSkillCandidate(_input: ScoreCandidateInput): Promise<SkillPatchScore> {
+    // No held-out before/after scoring exists yet (it would require
+    // rebuilding the retrieval index per candidate). Report zero cases so
+    // the gate parks the patch as `insufficient_data` for human review.
+    // Reporting equal fake scores instead would auto-reject the patch and
+    // fingerprint its content, permanently suppressing the same proposal
+    // even after real scoring lands.
+    return { totalCases: 0, baselineScore: 0, candidateScore: 0 };
+  }
+
+  /**
+   * Synthesize a candidate meta-skill HEURISTIC summarizing how accepted
+   * skill patches improved skills for this project. Candidate-first: the
+   * gate or a human still decides promotion.
+   */
+  synthesizeMetaSkill(options: { project?: string; minAcceptedPatches?: number; limit?: number } = {}): MetaSkillSynthesisResult | null {
+    return synthesizeMetaSkill(
+      {
+        graphStore: this.services.contextGraphStore,
+        evolutionStore: this.services.skillEvolutionStore,
+      },
+      options,
+    );
+  }
+
+  /**
+   * Copy a source project's verified high-order skills into a target
+   * project as candidates (cross-project transfer). The receiving
+   * project's gate / reviewers decide promotion; lineage is preserved.
+   */
+  transferVerifiedSkills(options: { fromProject: string; toProject: string; limit?: number }): SkillTransferResult {
+    return transferVerifiedSkills({ graphStore: this.services.contextGraphStore }, options);
   }
 }

@@ -50,15 +50,18 @@ RUN npm prune --omit=dev
 FROM node:20-bookworm-slim AS runtime
 
 # git is mandatory; p4 is optional and pulled in only when scanning P4 depots.
-# Set INSTALL_P4=1 at build time to add the Helix CLI.
+# Set INSTALL_P4=1 at build time to add the Perforce client. The scanner only
+# needs the `p4` client binary, so we fetch Perforce's static build directly
+# instead of adding their apt repo (which would drag in gnupg and the
+# helix-p4d server packages).
 ARG INSTALL_P4=0
+ARG P4_VERSION=r24.2
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates tini openssh-client curl \
  && if [ "$INSTALL_P4" = "1" ]; then \
-        curl -fsSL https://package.perforce.com/perforce.pubkey | gpg --dearmor -o /usr/share/keyrings/perforce.gpg \
-     && echo "deb [signed-by=/usr/share/keyrings/perforce.gpg] https://package.perforce.com/apt/debian bookworm release" \
-        > /etc/apt/sources.list.d/perforce.list \
-     && apt-get update && apt-get install -y --no-install-recommends helix-p4d-base helix-cli ; \
+        curl -fsSL "https://ftp.perforce.com/perforce/${P4_VERSION}/bin.linux26x86_64/p4" -o /usr/local/bin/p4 \
+     && chmod 0755 /usr/local/bin/p4 \
+     && /usr/local/bin/p4 -V ; \
     fi \
  && rm -rf /var/lib/apt/lists/*
 

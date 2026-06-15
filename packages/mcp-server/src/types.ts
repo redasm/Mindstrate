@@ -19,6 +19,9 @@ import type {
   ContextEventType,
   ContextNode,
   ContextNodeStatus,
+  EvalCase,
+  EvalCaseKind,
+  EvalRunResult,
   FeedbackEvent,
   GraphKnowledgeSearchResult,
   GraphKnowledgeView,
@@ -39,6 +42,11 @@ import type {
   ProjectGraphOverlaySource,
   PublishBundleOptions,
   PublishBundleResult,
+  SkillEvolutionEvaluation,
+  SkillEvolutionEvaluator,
+  SkillEvolutionMetric,
+  SkillEvolutionPatch,
+  SkillEvolutionPatchStatus,
 } from '@mindstrate/protocol';
 
 export interface InstallBundleFromRegistryOptions {
@@ -199,10 +207,41 @@ export interface LocalProjectionsSubApi {
   acceptInternalizationSuggestions(options?: { project?: string; limit?: number; targets?: InternalizationTarget[] }): AcceptInternalizationSuggestionsResult;
   writeObsidianProjectionFiles(options: { rootDir: string; project?: string; limit?: number }): string[];
   importObsidianProjectionFile(filePath: string): { sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean };
+  renderBestSkillArtifact(options?: { project?: string; limit?: number }): BestSkillArtifact;
 }
 
 export interface LocalMaintenanceSubApi {
   getStats(): Promise<unknown>;
+}
+
+export interface SkillEvolutionListOptions {
+  project?: string;
+  sourceNodeId?: string;
+  status?: SkillEvolutionPatchStatus;
+  limit?: number;
+}
+
+export interface SkillEvolutionEvaluateInput {
+  patchId: string;
+  evaluator: SkillEvolutionEvaluator;
+  metric: SkillEvolutionMetric;
+  baselineScore: number;
+  candidateScore: number;
+  details?: unknown;
+}
+
+export interface LocalSkillEvolutionSubApi {
+  listSkillPatches(options?: SkillEvolutionListOptions): SkillEvolutionPatch[];
+  getSkillPatch(id: string): SkillEvolutionPatch | null;
+  evaluateSkillPatchScoreGate(input: SkillEvolutionEvaluateInput): SkillEvolutionEvaluation;
+  rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): SkillEvolutionPatch | null;
+  optimizeSkillTargets(options?: { project?: string; limit?: number }): Promise<Array<{ nodeId: string; outcome: string; patchId?: string; evaluationId?: string }>>;
+  transferVerifiedSkills(input: { fromProject: string; toProject: string; limit?: number }): { transferred: number; skipped: number; targetNodeIds: string[] };
+}
+
+export interface BestSkillArtifact {
+  markdown: string;
+  sourceNodeIds: string[];
 }
 
 export interface LocalMemory {
@@ -213,7 +252,14 @@ export interface LocalMemory {
   readonly events: LocalEventsSubApi;
   readonly sessions: LocalSessionsSubApi;
   readonly assembly: LocalAssemblySubApi;
-  readonly metabolism: LocalMetabolismSubApi;
+  readonly metabolism: LocalMetabolismSubApi & LocalSkillEvolutionSubApi;
+  readonly evaluation: {
+    evaluateSkillPatchScoreGate(input: SkillEvolutionEvaluateInput): SkillEvolutionEvaluation;
+    addEvalCase(query: string, expectedIds: string[], options?: { language?: string; framework?: string; kind?: EvalCaseKind }): EvalCase;
+    listEvalCases(options?: { kind?: EvalCaseKind }): EvalCase[];
+    deleteEvalCase(id: string): boolean;
+    runEvaluation(topK?: number, options?: { kind?: EvalCaseKind }): Promise<EvalRunResult>;
+  };
   readonly bundles: LocalBundlesSubApi;
   readonly projections: LocalProjectionsSubApi;
   readonly maintenance: LocalMaintenanceSubApi;
@@ -288,13 +334,45 @@ export interface InternalizationApi {
   importObsidianProjectionFile(filePath: string): Promise<{ sourceNodeId?: string; candidateNode?: unknown; event?: unknown; changed: boolean }>;
 }
 
+export interface SkillOptimizationResult {
+  nodeId: string;
+  outcome: string;
+  patchId?: string;
+  evaluationId?: string;
+}
+
+export interface SkillTransferResult {
+  transferred: number;
+  skipped: number;
+  targetNodeIds: string[];
+}
+
+export interface SkillEvolutionApi {
+  listSkillPatches(options?: SkillEvolutionListOptions): Promise<SkillEvolutionPatch[]>;
+  getSkillPatch(id: string): Promise<SkillEvolutionPatch | null>;
+  evaluateSkillPatch(input: SkillEvolutionEvaluateInput): Promise<SkillEvolutionEvaluation>;
+  rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): Promise<SkillEvolutionPatch | null>;
+  renderBestSkillArtifact(options?: { project?: string; limit?: number }): Promise<BestSkillArtifact>;
+  optimizeSkillTargets(options?: { project?: string; limit?: number }): Promise<SkillOptimizationResult[]>;
+  transferVerifiedSkills(input: { fromProject: string; toProject: string; limit?: number }): Promise<SkillTransferResult>;
+}
+
+export interface EvalApi {
+  listEvalCases(options?: { kind?: EvalCaseKind }): Promise<EvalCase[]>;
+  addEvalCase(input: { query: string; expectedIds: string[]; language?: string; framework?: string; kind?: EvalCaseKind }): Promise<EvalCase>;
+  deleteEvalCase(id: string): Promise<{ deleted: boolean }>;
+  runEvalDataset(options?: { topK?: number; kind?: EvalCaseKind }): Promise<EvalRunResult>;
+}
+
 export interface McpApi
   extends KnowledgeApi,
     SessionApi,
     ContextGraphApi,
     MetabolismApi,
     BundleApi,
-    InternalizationApi {
+    InternalizationApi,
+    SkillEvolutionApi,
+    EvalApi {
   close(): void;
 }
 

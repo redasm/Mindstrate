@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { ScanInitMode, UpdateScanSourceInput } from '@mindstrate/protocol';
+import type { ScanInitMode, ScanSource, UpdateScanSourceInput } from '@mindstrate/protocol';
 import { getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
 import { requireAdminFromRequest } from '@/lib/session';
+import { buildScannerSourceView } from '@/lib/scanner-source-view';
+import { validateGitSource, validateP4Source } from '@/lib/scanner-source-validation';
 
-const guard = (req: NextRequest): Response | null => {
+const guard = async (req: NextRequest): Promise<Response | null> => {
   try {
-    requireAdminFromRequest(req);
+    await requireAdminFromRequest(req);
     return null;
   } catch (resp) {
     return resp as Response;
@@ -58,25 +60,52 @@ function buildPatch(body: Record<string, unknown>): UpdateScanSourceInput {
   return patch;
 }
 
+function validateSource(source: ScanSource): { error: string | null; warnings: string[] } {
+  try {
+    if (source.kind === 'git-local') {
+      const warnings = validateGitSource({ repoPath: source.repoPath, remoteUrl: source.remoteUrl, authToken: source.authToken });
+      return { error: null, warnings };
+    }
+    if (!source.depotPath) return { error: 'p4 requires depotPath', warnings: [] };
+    const warnings = validateP4Source({
+      repoPath: source.repoPath,
+      depotPath: source.depotPath,
+      p4Port: source.p4Port,
+      p4User: source.p4User,
+      p4Passwd: source.p4Passwd,
+    });
+    return { error: null, warnings };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error), warnings: [] };
+  }
+}
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = guard(request); if (denied) return denied;
+  const denied = await guard(request); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();
-    if (!memory.scanner.getSource(id)) {
+    const current = memory.scanner.getSource(id);
+    if (!current) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const patch = buildPatch(body);
+    const validation = validateSource({ ...current, ...patch } as ScanSource);
+    if (validation.error) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
     const updated = memory.scanner.updateSource(id, patch);
-    return NextResponse.json(updated);
+    return NextResponse.json(
+      updated ? { ...buildScannerSourceView(memory, updated), warnings: validation.warnings } : updated,
+    );
   } catch (error) {
     return errorResponse(error);
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = guard(request); if (denied) return denied;
+  const denied = await guard(request); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();

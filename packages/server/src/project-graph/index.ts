@@ -59,7 +59,8 @@ export {
 } from './unreal-asset-registry-importer.js';
 export {
   readProjectGraphExtractionCache,
-  writeProjectGraphExtractionCache,
+  openProjectGraphExtractionCacheWriter,
+  type ProjectGraphExtractionCacheWriter,
   type ProjectGraphFileExtractionCache,
   type ProjectGraphFileExtractionCacheEntry,
 } from './extraction-cache.js';
@@ -94,8 +95,14 @@ export {
 export type { SystemPageDefinition } from './obsidian-system-page-types.js';
 export { KNOWN_SYSTEM_PAGE_CLASSIFICATIONS } from './system-page-metadata.js';
 export {
+  recordProjectGraphExternalChanges,
+  type RecordProjectGraphExternalChangesInput,
+  type ProjectGraphExternalChangeRecordResult,
+} from './external-change-recorder.js';
+export {
   detectProjectGraphChangeSet,
   detectProjectGraphChanges,
+  readExternalChangeMarker,
   type ProjectGraphChangeDetectionInput,
   type ProjectGraphChangeDetectionResult,
   type ProjectGraphChangeStore,

@@ -3,6 +3,7 @@ import type { ContextGraphStore } from './context-graph-store.js';
 import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
 import {
   ContextDomainType,
+  ContextNodeStatus,
   SubstrateType,
   type ContextNode,
 } from '@mindstrate/protocol/models';
@@ -89,6 +90,13 @@ export class HighOrderCompressor {
       confidence: spec.confidence,
       qualityScore: spec.qualityScore,
       defaultSimilarityThreshold: 0.82,
+      // Candidate-first: high-order substrates (skill / heuristic /
+      // axiom) are never auto-promoted to active by the compressor. They
+      // enter as `candidate` and only the SkillOpt-style evaluation gate
+      // (or an explicit human accept) can move them to active / verified.
+      // This keeps a clustering mistake from silently shaping every
+      // future context assembly.
+      targetStatus: ContextNodeStatus.CANDIDATE,
       title: (cluster) => buildTitle(spec.targetType, cluster),
       content: (cluster) => buildContent(spec.targetType, cluster),
       metadata: (cluster) => ({

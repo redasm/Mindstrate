@@ -217,6 +217,69 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
 
     ...createBundleProjectionApi(teamClient, () => memory!),
 
+    async listSkillPatches(options) {
+      if (teamClient) return teamClient.skillEvolution.listPatches(options);
+      return memory!.metabolism.listSkillPatches(options);
+    },
+
+    async getSkillPatch(id) {
+      if (teamClient) return teamClient.skillEvolution.getPatch(id);
+      return memory!.metabolism.getSkillPatch(id);
+    },
+
+    async evaluateSkillPatch(input) {
+      if (teamClient) return teamClient.skillEvolution.evaluatePatch(input);
+      return memory!.evaluation.evaluateSkillPatchScoreGate(input);
+    },
+
+    async rejectSkillPatch(input) {
+      if (teamClient) return teamClient.skillEvolution.rejectPatch(input);
+      return memory!.metabolism.rejectSkillPatch(input);
+    },
+
+    async renderBestSkillArtifact(options) {
+      if (teamClient) {
+        const artifact = await teamClient.skillEvolution.renderBestSkillArtifact(options);
+        return { markdown: artifact.markdown, sourceNodeIds: artifact.sourceNodeIds };
+      }
+      const artifact = memory!.projections.renderBestSkillArtifact(options);
+      return { markdown: artifact.markdown, sourceNodeIds: artifact.sourceNodeIds };
+    },
+
+    async optimizeSkillTargets(options) {
+      if (teamClient) return teamClient.skillEvolution.optimizeTargets(options);
+      return memory!.metabolism.optimizeSkillTargets(options);
+    },
+
+    async transferVerifiedSkills(input) {
+      if (teamClient) return teamClient.skillEvolution.transferVerifiedSkills(input);
+      return memory!.metabolism.transferVerifiedSkills(input);
+    },
+
+    async listEvalCases(options) {
+      if (teamClient) return teamClient.eval.listCases(options);
+      return memory!.evaluation.listEvalCases(options);
+    },
+
+    async addEvalCase(input) {
+      if (teamClient) return teamClient.eval.addCase(input);
+      return memory!.evaluation.addEvalCase(input.query, input.expectedIds, {
+        language: input.language,
+        framework: input.framework,
+        kind: input.kind,
+      });
+    },
+
+    async deleteEvalCase(id) {
+      if (teamClient) return teamClient.eval.deleteCase(id);
+      return { deleted: memory!.evaluation.deleteEvalCase(id) };
+    },
+
+    async runEvalDataset(options) {
+      if (teamClient) return teamClient.eval.run(options);
+      return memory!.evaluation.runEvaluation(options?.topK, options?.kind ? { kind: options.kind } : undefined);
+    },
+
     async readGraphKnowledge(opts?: { project?: string; limit?: number }) {
       if (teamClient) return teamClient.context.readKnowledge(opts);
       return memory!.context.readGraphKnowledge(opts);

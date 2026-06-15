@@ -1,14 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import type { ScanSource, ScanSourceKind, ScanInitMode } from '@mindstrate/protocol';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import type { ScanSourceKind, ScanInitMode, ScanLog } from '@mindstrate/protocol';
 import { Icon } from '@/components/ui/Icon';
 import { Toggle } from '@/components/ui/Toggle';
 import { useTranslations } from '@/lib/i18n/hooks';
 import type { Translations } from '@/lib/i18n/en';
+import type { ScannerSourceView } from '@/lib/scanner-source-view';
 
 interface Props {
-  initialSources: ScanSource[];
+  initialSources: ScannerSourceView[];
   knownProjects: string[];
 }
 
@@ -66,16 +68,24 @@ function truncate(value: string | undefined, max = 24): string {
 }
 
 export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
+  const searchParams = useSearchParams();
   const tAll = useTranslations();
   const t = tAll.scannerSources;
-  const [sources, setSources] = useState<ScanSource[]>(initialSources);
+  const [sources, setSources] = useState<ScannerSourceView[]>(initialSources);
   const [showPanel, setShowPanel] = useState(false);
   const [form, setForm] = useState<FormState>(blankForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [revealedId, setRevealedId] = useState<string | null>(null);
   const [showAuthToken, setShowAuthToken] = useState(false);
+  const [errorDetailId, setErrorDetailId] = useState<string | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
+  const [logSource, setLogSource] = useState<{ id: string; name: string } | null>(null);
+  const [logs, setLogs] = useState<ScanLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
 
   const counts = useMemo(() => {
     let active = 0;
@@ -88,6 +98,88 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
     }
     return { total: sources.length, active, disabled, errored };
   }, [sources]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const res = await fetch('/api/admin/scanner-sources', { cache: 'no-store' });
+        if (!res.ok) return;
+        const body = await res.json().catch(() => null) as { sources?: ScannerSourceView[] } | null;
+        if (!cancelled && Array.isArray(body?.sources)) {
+          setSources(body.sources);
+        }
+      } catch {
+        return;
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(() => { void refresh(); }, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const project = searchParams.get('project');
+    setProjectFilter(project && project.trim() ? project : null);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const requestedKind = searchParams.get('new');
+    if (requestedKind === 'git' || requestedKind === 'p4') {
+      const seeded = blankForm(requestedKind === 'p4' ? 'p4' : 'git-local');
+      const project = searchParams.get('project');
+      setForm(project ? { ...seeded, project } : seeded);
+      setEditingId(null);
+      setError(null);
+      setShowAuthToken(false);
+      setShowPanel(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!logSource) return;
+    let cancelled = false;
+    const id = logSource.id;
+    setLogsLoading(true);
+    setLogsError(null);
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/admin/scanner-sources/${encodeURIComponent(id)}/logs?limit=400`, { cache: 'no-store' });
+        if (!res.ok) {
+          if (!cancelled) setLogsError(`${t.logsLoadFailed} (${res.status})`);
+          return;
+        }
+        const body = await res.json().catch(() => null) as { logs?: ScanLog[] } | null;
+        if (!cancelled && Array.isArray(body?.logs)) setLogs(body.logs);
+      } catch {
+        if (!cancelled) setLogsError(t.logsLoadFailed);
+      } finally {
+        if (!cancelled) setLogsLoading(false);
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => { void load(); }, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [logSource, t.logsLoadFailed]);
+
+  const openLogs = (source: ScannerSourceView) => {
+    setLogs([]);
+    setLogsError(null);
+    setLogSource({ id: source.id, name: source.name });
+  };
+
+  const closeLogs = () => setLogSource(null);
+
+  const visibleSources = useMemo(
+    () => (projectFilter ? sources.filter((s) => s.project === projectFilter) : sources),
+    [sources, projectFilter],
+  );
 
   const setFormField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -107,10 +199,13 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
 
   const openCreate = () => {
     resetForm();
+    if (projectFilter) {
+      setForm((prev) => ({ ...prev, project: projectFilter }));
+    }
     setShowPanel(true);
   };
 
-  const openEdit = (source: ScanSource) => {
+  const openEdit = (source: ScannerSourceView) => {
     setEditingId(source.id);
     setError(null);
     setShowAuthToken(false);
@@ -154,6 +249,7 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
     return {
       kind: 'p4' as const,
       ...base,
+      repoPath: form.repoPath.trim() || undefined,
       depotPath: form.depotPath.trim() || undefined,
       p4Port: form.p4Port.trim() || undefined,
       p4User: form.p4User.trim() || undefined,
@@ -193,15 +289,16 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
       setError(body.error ?? `${t.saveFailedPrefix} (${res.status})`);
       return;
     }
-    const saved = (await res.json()) as ScanSource;
+    const saved = (await res.json()) as ScannerSourceView & { warnings?: string[] };
     setSources((prev) => {
       const filtered = prev.filter((entry) => entry.id !== saved.id);
       return editingId ? [...filtered, saved].sort(byCreatedAt) : [saved, ...filtered];
     });
+    setNotice(saved.warnings?.length ? saved.warnings.join('\n') : null);
     closePanel();
   };
 
-  const toggleEnabled = async (source: ScanSource) => {
+  const toggleEnabled = async (source: ScannerSourceView) => {
     const res = await fetch(`/api/admin/scanner-sources/${encodeURIComponent(source.id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -212,11 +309,11 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
       setError(body.error ?? `${t.toggleFailedPrefix} (${res.status})`);
       return;
     }
-    const updated = (await res.json()) as ScanSource;
+    const updated = (await res.json()) as ScannerSourceView;
     setSources((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
   };
 
-  const handleDelete = async (source: ScanSource) => {
+  const handleDelete = async (source: ScannerSourceView) => {
     if (!confirm(t.deleteConfirm.replace('{NAME}', source.name))) return;
     const res = await fetch(`/api/admin/scanner-sources/${encodeURIComponent(source.id)}`, {
       method: 'DELETE',
@@ -260,6 +357,38 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
         <div className="mb-5 flex items-center gap-2.5 px-3.5 py-2.5 bg-red-50 border border-red-100 rounded-xl">
           <Icon icon="lucide:alert-circle" className="text-red-500 text-base" />
           <span className="text-sm font-medium text-red-700">{error}</span>
+        </div>
+      )}
+
+      {notice && (
+        <div className="mb-5 flex items-start justify-between gap-2.5 px-3.5 py-2.5 bg-amber-50 border border-amber-100 rounded-xl">
+          <span className="text-sm font-medium text-amber-700 flex items-start gap-2">
+            <Icon icon="lucide:alert-triangle" className="text-base mt-0.5 shrink-0" />
+            <span className="whitespace-pre-line">{notice}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="text-xs font-semibold text-amber-600 hover:text-amber-700 shrink-0"
+          >
+            {tAll.common.close}
+          </button>
+        </div>
+      )}
+
+      {projectFilter && (
+        <div className="mb-5 flex items-center justify-between gap-2.5 px-3.5 py-2.5 bg-brand-50 border border-brand-100 rounded-xl">
+          <span className="text-sm font-medium text-brand-700 flex items-center gap-2">
+            <Icon icon="lucide:filter" className="text-base" />
+            {t.filteredByProject} <span className="font-semibold">{projectFilter}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setProjectFilter(null)}
+            className="text-xs font-semibold text-brand-600 hover:text-brand-700"
+          >
+            {t.clearProjectFilter}
+          </button>
         </div>
       )}
 
@@ -414,6 +543,15 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                       className="flex-1 px-2.5 py-2.5 bg-transparent text-sm font-mono text-surface-800 placeholder-surface-400 outline-none"
                     />
                   </Field>
+                  <Field label={t.repoPath} icon="lucide:folder-tree" hint={t.p4RepoPathHint} colSpan={2}>
+                    <input
+                      type="text"
+                      value={form.repoPath}
+                      onChange={(e) => setFormField('repoPath', e.target.value)}
+                      placeholder={t.p4RepoPathPlaceholder}
+                      className="flex-1 px-2.5 py-2.5 bg-transparent text-sm font-mono text-surface-800 placeholder-surface-400 outline-none"
+                    />
+                  </Field>
                   <Field label={t.p4Port} icon="lucide:server">
                     <input
                       type="text"
@@ -538,14 +676,14 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
               </tr>
             </thead>
             <tbody>
-              {sources.length === 0 && (
+              {visibleSources.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-5 py-10 text-center text-surface-400">
                     {t.table.noSources}
                   </td>
                 </tr>
               )}
-              {sources.map((entry) => {
+              {visibleSources.map((entry) => {
                 const revealed = revealedId === entry.id;
                 const secret = entry.kind === 'git-local' ? entry.authToken : entry.p4Passwd;
                 const target = entry.kind === 'git-local'
@@ -558,6 +696,12 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                   ? entry.branch ? `${t.branchPrefix} ${entry.branch}` : `${t.branchPrefix} main`
                   : entry.p4User ? `${t.userPrefix} ${entry.p4User}` : '';
                 const disabled = !entry.enabled;
+                const latestRun = entry.latestRun;
+                const running = latestRun?.status === 'running';
+                const pending = entry.enabled && !latestRun && !entry.lastError;
+                const runStats = latestRun
+                  ? `${latestRun.itemsImported}/${latestRun.itemsSeen} ${t.runStatsImported}, ${entry.failedCount} ${t.runStatsFailed}`
+                  : '';
                 return (
                   <tr key={entry.id} className="border-t border-surface-100 align-middle hover:bg-surface-50">
                     <td className="px-5 py-3">
@@ -576,13 +720,24 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                         {entry.name}
                       </p>
                       {entry.lastError ? (
-                        <p className="text-[11px] text-red-500 font-medium truncate flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setErrorDetailId(errorDetailId === entry.id ? null : entry.id)}
+                          className="text-[11px] text-red-500 font-medium truncate flex items-center gap-1 hover:underline"
+                          title={t.viewErrorDetail}
+                        >
                           <Icon icon="lucide:alert-triangle" className="text-[11px]" />
                           {truncate(entry.lastError, 32)}
-                        </p>
+                          <Icon icon={errorDetailId === entry.id ? 'lucide:chevron-up' : 'lucide:chevron-down'} className="text-[11px]" />
+                        </button>
                       ) : subline ? (
                         <p className="text-[11px] text-surface-400 font-medium truncate font-mono">{subline}</p>
                       ) : null}
+                      {errorDetailId === entry.id && entry.lastError && (
+                        <pre className="mt-2 max-w-[420px] whitespace-pre-wrap break-words rounded-lg bg-red-50 border border-red-100 p-2.5 text-[11px] font-mono text-red-700">
+                          {entry.latestRun?.error ?? entry.lastError}
+                        </pre>
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       <span className={`project-tag ${disabled ? 'opacity-60' : ''}`}>{entry.project}</span>
@@ -627,12 +782,21 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                       )}
                     </td>
                     <td className={`px-3 py-3 text-xs font-medium ${entry.lastError ? 'text-red-500' : 'text-surface-600'}`}>
-                      {timeAgo(entry.lastRunAt, t)}
+                      <div>{timeAgo(entry.lastRunAt, t)}</div>
+                      {runStats && <div className="text-[10px] text-surface-400 font-mono mt-0.5">{runStats}</div>}
                     </td>
                     <td className="px-3 py-3">
                       {entry.lastError ? (
                         <span className="status-pill status-error inline-flex items-center gap-1">
                           <span className="status-dot" />{t.statusError}
+                        </span>
+                      ) : running ? (
+                        <span className="status-pill status-on inline-flex items-center gap-1">
+                          <span className="status-dot animate-pulse" />{t.statusRunning}
+                        </span>
+                      ) : pending ? (
+                        <span className="status-pill status-off inline-flex items-center gap-1" title={t.statusPendingHint}>
+                          <span className="status-dot" />{t.statusPending}
                         </span>
                       ) : entry.enabled ? (
                         <span className="status-pill status-on inline-flex items-center gap-1">
@@ -651,6 +815,14 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                           onChange={() => toggleEnabled(entry)}
                           title={entry.enabled ? tAll.common.disable : tAll.common.enable}
                         />
+                        <button
+                          type="button"
+                          onClick={() => openLogs(entry)}
+                          className="action-btn w-7 h-7 flex items-center justify-center rounded-md text-surface-400 hover:text-brand-600"
+                          title={t.viewLogs}
+                        >
+                          <Icon icon="lucide:scroll-text" className="text-sm" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => openEdit(entry)}
@@ -686,15 +858,94 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
           <span className="font-mono">P4PASSWD</span> {t.envVarsSuffix}
         </p>
         <p className="text-xs text-surface-400 font-medium">
-          {t.showing} <span className="text-surface-700 font-semibold">{sources.length}</span> {sources.length === 1 ? t.sourceSingular : t.sourcePlural}
+          {t.showing} <span className="text-surface-700 font-semibold">{visibleSources.length}</span> {visibleSources.length === 1 ? t.sourceSingular : t.sourcePlural}
         </p>
       </div>
+
+      {logSource && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={closeLogs}
+        >
+          <div
+            className="flex max-h-[80vh] w-full max-w-[820px] flex-col rounded-2xl bg-white border border-surface-200 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-surface-100">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center">
+                  <Icon icon="lucide:scroll-text" className="text-lg text-brand-500" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold tracking-tight text-surface-900">
+                    {t.logsTitle} · <span className="font-mono text-surface-600">{logSource.name}</span>
+                  </h2>
+                  <p className="text-xs text-surface-400 font-medium flex items-center gap-1.5">
+                    {t.logsSubtitle}
+                    <span className="inline-flex items-center gap-1 text-emerald-500">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      {t.logsAutoRefresh}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeLogs}
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-100 hover:text-surface-600"
+                title={t.logsClose}
+              >
+                <Icon icon="lucide:x" className="text-base" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-surface-950/95 px-4 py-3 rounded-b-2xl">
+              {logsError ? (
+                <div className="flex items-center gap-2 text-sm font-medium text-red-300">
+                  <Icon icon="lucide:alert-circle" className="text-base" />
+                  {logsError}
+                </div>
+              ) : logs.length === 0 ? (
+                <div className="py-10 text-center text-sm text-surface-400">
+                  {logsLoading ? '…' : t.logsEmpty}
+                </div>
+              ) : (
+                <ul className="space-y-0.5 font-mono text-[12px] leading-relaxed">
+                  {logs.map((entry) => (
+                    <li key={entry.id} className="flex gap-2.5 whitespace-pre-wrap break-words">
+                      <span className="shrink-0 text-surface-400">{logTime(entry.createdAt)}</span>
+                      <span className={`shrink-0 font-semibold uppercase ${LOG_LEVEL_STYLES[entry.level] ?? 'text-surface-300'}`}>
+                        {entry.level}
+                      </span>
+                      {entry.phase && <span className="shrink-0 text-brand-300">[{entry.phase}]</span>}
+                      <span className="text-surface-100">{entry.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function byCreatedAt(a: ScanSource, b: ScanSource): number {
+function byCreatedAt(a: ScannerSourceView, b: ScannerSourceView): number {
   return a.createdAt.localeCompare(b.createdAt);
+}
+
+const LOG_LEVEL_STYLES: Record<string, string> = {
+  error: 'text-red-400',
+  warn: 'text-amber-400',
+  info: 'text-emerald-400',
+  debug: 'text-surface-400',
+};
+
+function logTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString();
 }
 
 function SummaryPill({ label, value, dotColor }: { label: string; value: number; dotColor?: string }) {

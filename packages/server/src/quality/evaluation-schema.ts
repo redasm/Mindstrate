@@ -1,6 +1,10 @@
 import type Database from 'better-sqlite3';
 
 export const initializeEvaluationSchema = (db: Database.Database): void => {
+  // Create base tables first. Do NOT create the kind index here: on a
+  // pre-existing eval_cases table from before the kind column landed,
+  // CREATE TABLE IF NOT EXISTS is skipped and the index would reference a
+  // missing column, aborting the whole statement before migration runs.
   db.exec(`
     CREATE TABLE IF NOT EXISTS eval_cases (
       id TEXT PRIMARY KEY,
@@ -8,6 +12,7 @@ export const initializeEvaluationSchema = (db: Database.Database): void => {
       expected_ids TEXT NOT NULL,
       language TEXT,
       framework TEXT,
+      kind TEXT NOT NULL DEFAULT 'validation',
       created_at TEXT NOT NULL
     );
 
@@ -25,4 +30,15 @@ export const initializeEvaluationSchema = (db: Database.Database): void => {
     CREATE INDEX IF NOT EXISTS idx_eval_runs_timestamp
       ON eval_runs(timestamp);
   `);
+
+  // Backfill the kind column on databases created before dataset
+  // authoring landed. SQLite has no "ADD COLUMN IF NOT EXISTS", so probe
+  // the schema first.
+  const columns = db.prepare(`PRAGMA table_info(eval_cases)`).all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'kind')) {
+    db.exec(`ALTER TABLE eval_cases ADD COLUMN kind TEXT NOT NULL DEFAULT 'validation'`);
+  }
+
+  // Safe to index now that the kind column is guaranteed to exist.
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_eval_cases_kind ON eval_cases(kind)`);
 };

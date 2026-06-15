@@ -26,6 +26,8 @@ import {
   type ProjectMeta,
   type ProjectGraphArtifactResult,
   type ProjectGraphScanScope,
+  type ProjectGraphScanProgress,
+  type ProjectGraphIndexProgress,
 } from '@mindstrate/server';
 import { writeMcpConfig } from './setup-mcp.js';
 import { loadProjectEnv, writeProjectCliConfig } from '../cli-config.js';
@@ -138,7 +140,12 @@ export const initCommand = new Command('init')
           ...scope,
         })) console.log(line);
         console.log('  [1/3] Extracting deterministic parser/config facts');
-        const graph = memory.context.indexProjectGraph(project);
+        const graph = memory.context.indexProjectGraph(project, {
+          onScanProgress: throttleProgress<ProjectGraphScanProgress>((event) =>
+            console.log(`        scanning… ${event.files} files (${event.skippedFiles} skipped)`)),
+          onIndexProgress: throttleProgress<ProjectGraphIndexProgress>((event) =>
+            console.log(`        parsing (${event.phase})… ${event.filesProcessed}/${event.filesTotal} files, ${event.nodes} nodes`)),
+        });
         console.log('  [2/3] Running optional LLM enrichment');
         const enrichment = await runProjectGraphEnrichment(memory, project);
         console.log(`  Enrichment: ${formatProjectGraphEnrichment(enrichment)}`);
@@ -214,6 +221,22 @@ export function writeLocalProjectGraphArtifacts(
 function normalizeOptionalPath(input: string | undefined): string | undefined {
   const trimmed = input?.trim();
   return trimmed || undefined;
+}
+
+/**
+ * Wrap a progress callback so it fires at most once per second. The project
+ * graph index is synchronous and emits per-file events; without throttling a
+ * large tree would flood the terminal. Mirrors the repo-scanner heartbeats so
+ * local and team scans report progress the same way.
+ */
+function throttleProgress<T>(fn: (event: T) => void, intervalMs = 1000): (event: T) => void {
+  let last = 0;
+  return (event: T) => {
+    const now = Date.now();
+    if (now - last < intervalMs) return;
+    last = now;
+    fn(event);
+  };
 }
 
 export const buildProjectGraphAnalysisLines = (

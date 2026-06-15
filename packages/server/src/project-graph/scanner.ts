@@ -64,6 +64,25 @@ export interface ProjectGraphScanScopeOptions extends ScanProjectFilesOptions {
   llmProviderConfigured?: boolean;
 }
 
+/**
+ * Files larger than this are recorded as skipped instead of being read into
+ * memory for hashing/parsing. A code graph gains nothing from multi-MB blobs
+ * (vendored bundles, game assets, generated data), and on a large checkout
+ * reading every file in full is what exhausts the scanner's heap — the first
+ * full index of a 38k-file P4 workspace was OOM-crash-looping under the
+ * container memory cap before this guard existed. Override with
+ * `MINDSTRATE_SCAN_MAX_FILE_BYTES` (bytes); set to 0 to disable.
+ */
+const DEFAULT_PROJECT_GRAPH_MAX_FILE_BYTES = 2 * 1024 * 1024;
+
+export const PROJECT_GRAPH_MAX_FILE_BYTES = ((): number => {
+  const raw = process.env['MINDSTRATE_SCAN_MAX_FILE_BYTES'];
+  if (raw === undefined) return DEFAULT_PROJECT_GRAPH_MAX_FILE_BYTES;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_PROJECT_GRAPH_MAX_FILE_BYTES;
+  return parsed; // 0 disables the cap
+})();
+
 export const DEFAULT_PROJECT_GRAPH_IGNORES = [
   '.git',
   '.gitignore',
@@ -280,8 +299,20 @@ const addFileEntry = (input: AddFileEntryInput): void => {
 
   const abs = path.join(root, normalizedRel);
   const stat = statFile(abs);
+  if (!stat) {
+    progress.skippedFiles += 1;
+    emitProgress(onProgress, progress, 'skipped', normalizedRel);
+    return;
+  }
+  // Skip oversized files before reading them: a full read of a huge blob is
+  // the per-file memory spike that OOM-kills the scanner on large checkouts.
+  if (PROJECT_GRAPH_MAX_FILE_BYTES > 0 && stat.size > PROJECT_GRAPH_MAX_FILE_BYTES) {
+    progress.skippedFiles += 1;
+    emitProgress(onProgress, progress, 'skipped', normalizedRel);
+    return;
+  }
   const content = readFileContent(abs, readFile);
-  if (!stat || !content) {
+  if (!content) {
     progress.skippedFiles += 1;
     emitProgress(onProgress, progress, 'skipped', normalizedRel);
     return;

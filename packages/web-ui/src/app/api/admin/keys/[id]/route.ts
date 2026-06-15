@@ -3,9 +3,9 @@ import { getMemoryReady } from '@/lib/memory';
 import { errorResponse } from '@/app/api/error-response';
 import { requireAdminFromRequest } from '@/lib/session';
 
-const guard = (req: NextRequest): Response | null => {
+const guard = async (req: NextRequest): Promise<Response | null> => {
   try {
-    requireAdminFromRequest(req);
+    await requireAdminFromRequest(req);
     return null;
   } catch (resp) {
     return resp as Response;
@@ -16,7 +16,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = guard(req); if (denied) return denied;
+  const denied = await guard(req); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();
@@ -30,7 +30,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = guard(req); if (denied) return denied;
+  const denied = await guard(req); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();
@@ -82,7 +82,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const denied = guard(req); if (denied) return denied;
+  const denied = await guard(req); if (denied) return denied;
   try {
     const { id } = await params;
     const memory = await getMemoryReady();

@@ -5,7 +5,7 @@ export type ScanRunStatus = 'running' | 'completed' | 'failed';
 export interface GitLocalSourceInput {
   name: string;
   project: string;
-  repoPath: string;
+  repoPath?: string;
   branch?: string;
   remoteUrl?: string;
   authToken?: string;
@@ -18,6 +18,7 @@ export interface GitLocalSourceInput {
 export interface P4SourceInput {
   name: string;
   project: string;
+  repoPath?: string;
   depotPath?: string;
   p4Port?: string;
   p4User?: string;
@@ -91,4 +92,24 @@ export interface FailedScanItem {
   firstSeenAt: string;
   lastTriedAt: string;
   retryCount: number;
+}
+
+export type ScanLogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface ScanLog {
+  id: string;
+  sourceId: string;
+  runId?: string;
+  level: ScanLogLevel;
+  phase?: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface AppendScanLogInput {
+  sourceId: string;
+  runId?: string | null;
+  level: ScanLogLevel;
+  phase?: string;
+  message: string;
 }

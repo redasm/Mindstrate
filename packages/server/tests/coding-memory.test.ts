@@ -7,7 +7,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { Mindstrate } from '../src/mindstrate.js';
 import { KnowledgeType } from '@mindstrate/protocol';
-import { ContextDomainType, ContextNodeStatus, MetabolismRunStatus, ProjectionTarget, SubstrateType } from '@mindstrate/protocol/models';
+import {
+  ContextDomainType,
+  ContextNodeStatus,
+  MetabolismRunStatus,
+  ProjectionTarget,
+  SkillEvolutionEvaluator,
+  SkillEvolutionMetric,
+  SkillEvolutionPatchOperation,
+  SkillEvolutionPatchStatus,
+  SubstrateType,
+} from '@mindstrate/protocol/models';
 import { createTempDir, removeTempDir, makeKnowledgeInput } from './test-support.js';
 import type { DetectedProject } from '../src/project/detector.js';
 
@@ -564,6 +574,95 @@ describe('Mindstrate', () => {
   });
 
   describe('metabolism framework', () => {
+    it('should expose gated skill evolution through metabolism and evaluation subdomains', () => {
+      const skill = memory.context.createContextNode({
+        substrateType: SubstrateType.SKILL,
+        domainType: ContextDomainType.WORKFLOW,
+        title: 'Patchable skill',
+        content: '- Use broad guidance',
+        project: 'proj-skill-evolution',
+        status: ContextNodeStatus.ACTIVE,
+      });
+
+      const patch = memory.metabolism.proposeSkillPatch({
+        project: 'proj-skill-evolution',
+        sourceNodeId: skill.id,
+        operation: SkillEvolutionPatchOperation.ADD,
+        beforeContent: skill.content,
+        afterContent: '- Use broad guidance\n- Preserve evaluation evidence ids',
+        rationale: 'SkillOpt-style bounded skill improvement.',
+        budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
+      });
+
+      expect(patch.status).toBe(SkillEvolutionPatchStatus.CANDIDATE);
+
+      const evaluation = memory.evaluation.evaluateSkillPatchScoreGate({
+        patchId: patch.id,
+        evaluator: SkillEvolutionEvaluator.RETRIEVAL,
+        metric: SkillEvolutionMetric.F1,
+        baselineScore: 0.45,
+        candidateScore: 0.6,
+        details: { evalCases: 4 },
+      });
+
+      expect(evaluation.accepted).toBe(true);
+      expect(memory.metabolism.getSkillPatch(patch.id)?.status).toBe(SkillEvolutionPatchStatus.ACCEPTED);
+      expect(memory.context.getContextNode(skill.id)?.content).toContain('Preserve evaluation evidence ids');
+    });
+
+    it('should not auto-accept a skill patch when there are no eval cases', async () => {
+      const skill = memory.context.createContextNode({
+        substrateType: SubstrateType.SKILL,
+        domainType: ContextDomainType.WORKFLOW,
+        title: 'Patchable skill no eval',
+        content: '- Use broad guidance',
+        project: 'proj-skill-no-eval',
+        status: ContextNodeStatus.CANDIDATE,
+      });
+
+      const patch = memory.metabolism.proposeSkillPatch({
+        project: 'proj-skill-no-eval',
+        sourceNodeId: skill.id,
+        operation: SkillEvolutionPatchOperation.ADD,
+        beforeContent: skill.content,
+        afterContent: '- Use broad guidance\n- Preserve evaluation evidence ids',
+        rationale: 'Bounded skill improvement without eval data.',
+        budget: { maxChangedBullets: 1, maxChangedTokens: 6 },
+      });
+
+      const evaluation = await memory.evaluation.evaluateSkillPatchWithEvaluator({
+        patchId: patch.id,
+        evaluator: SkillEvolutionEvaluator.RETRIEVAL,
+        metric: SkillEvolutionMetric.F1,
+      });
+
+      expect(evaluation.accepted).toBe(false);
+      expect(evaluation.status).toBe('insufficient_data');
+      expect(memory.metabolism.getSkillPatch(patch.id)?.status).toBe(SkillEvolutionPatchStatus.CANDIDATE);
+      expect(memory.context.getContextNode(skill.id)?.content).toBe('- Use broad guidance');
+    });
+
+    it('optimizes skill targets without an LLM config and reports no_proposal', async () => {
+      const skill = memory.context.createContextNode({
+        substrateType: SubstrateType.SKILL,
+        domainType: ContextDomainType.WORKFLOW,
+        title: 'Weak skill needing optimization',
+        content: '- Vague guidance',
+        project: 'proj-skill-optimize',
+        status: ContextNodeStatus.ACTIVE,
+      });
+      // Make it a negative-feedback optimization target.
+      memory.context.updateContextNode(skill.id, { negativeFeedback: 5 });
+
+      const results = await memory.metabolism.optimizeSkillTargets({ project: 'proj-skill-optimize' });
+
+      const target = results.find((r) => r.nodeId === skill.id);
+      expect(target).toBeDefined();
+      // Offline test memory has no LLM config, so the proposer fails closed.
+      expect(target?.outcome).toBe('no_proposal');
+      expect(memory.context.getContextNode(skill.id)?.content).toBe('- Vague guidance');
+    });
+
     it('should expose metabolism runs and projection records through the facade', async () => {
 
       memory.context.createContextNode({

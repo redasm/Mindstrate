@@ -4,9 +4,11 @@ import type { Mindstrate } from '@mindstrate/server';
 import { createAuthMiddleware } from './http/auth-middleware.js';
 import { registerAdminKeysRoutes } from './routes/admin-keys-routes.js';
 import { registerContextRoutes } from './routes/context-routes.js';
+import { registerEvalRoutes } from './routes/eval-routes.js';
 import { registerKnowledgeRoutes } from './routes/knowledge-routes.js';
 import { registerProjectsRoutes } from './routes/projects-routes.js';
 import { registerSessionRoutes } from './routes/session-routes.js';
+import { registerSkillEvolutionRoutes } from './routes/skill-evolution-routes.js';
 
 interface CreateAppOptions {
   adminKey: string;
@@ -26,8 +28,10 @@ export const createApp = ({ adminKey, memory }: CreateAppOptions): Express => {
 
   registerKnowledgeRoutes(app, { memory });
   registerContextRoutes(app, { memory });
+  registerEvalRoutes(app, { memory });
   registerProjectsRoutes(app, { memory });
   registerSessionRoutes(app, { memory });
+  registerSkillEvolutionRoutes(app, { memory });
   registerAdminKeysRoutes(app, { memory });
 
   return app;

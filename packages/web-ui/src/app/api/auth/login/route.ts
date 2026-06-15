@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getMemoryReady } from '@/lib/memory';
-import { SESSION_COOKIE, signSession } from '@/lib/session';
+import { isSessionSecretConfigured, SESSION_COOKIE, signSession } from '@/lib/session';
 
 export async function POST(req: NextRequest) {
+  if (!isSessionSecretConfigured()) {
+    return NextResponse.json(
+      { error: 'TEAM_API_KEY is not configured on the server; sign-in is disabled.' },
+      { status: 503 },
+    );
+  }
   let body: { name?: string; key?: string };
   try {
     body = (await req.json()) as { name?: string; key?: string };

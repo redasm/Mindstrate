@@ -38,10 +38,21 @@ describe('ScanSourceRepository', () => {
     expect(listed[0].initMode).toBe('from_now');
   });
 
+  it('allows remote git sources to omit repoPath so scanner chooses source-specific clone path', () => {
+    const source = repo.createGitLocalSource({
+      name: 'remote-app',
+      project: 'app',
+      remoteUrl: 'https://github.com/acme/app.git',
+    });
+
+    expect(repo.getSource(source.id)?.repoPath).toBeUndefined();
+  });
+
   it('creates p4 sources with per-source credentials', () => {
     const source = repo.createP4Source({
       name: 'depot',
       project: 'app',
+      repoPath: '/workspaces/app',
       depotPath: '//depot/main/...',
       p4Port: 'ssl:p4.acme.com:1666',
       p4User: 'svc-scanner',
@@ -54,7 +65,7 @@ describe('ScanSourceRepository', () => {
     expect(fetched?.p4Port).toBe('ssl:p4.acme.com:1666');
     expect(fetched?.p4User).toBe('svc-scanner');
     expect(fetched?.p4Passwd).toBe('p4-secret');
-    expect(fetched?.repoPath).toBeUndefined();
+    expect(fetched?.repoPath).toBe('/workspaces/app');
   });
 
   it('enables and disables sources', () => {
@@ -102,6 +113,25 @@ describe('ScanSourceRepository', () => {
     expect(runs[0].itemsImported).toBe(2);
   });
 
+  it('updates running scan progress before a run finishes', () => {
+    const source = repo.createGitLocalSource({ name: 'r', project: 'p', repoPath: '/r' });
+    const run = repo.createRun(source.id);
+
+    repo.updateRunProgress(run.id, {
+      itemsSeen: 5,
+      itemsImported: 2,
+      itemsSkipped: 1,
+      itemsFailed: 1,
+    });
+
+    const [updated] = repo.listRuns(source.id);
+    expect(updated.status).toBe('running');
+    expect(updated.itemsSeen).toBe(5);
+    expect(updated.itemsImported).toBe(2);
+    expect(updated.itemsSkipped).toBe(1);
+    expect(updated.itemsFailed).toBe(1);
+  });
+
   it('listDueSources respects intervalSec', () => {
     const source = repo.createGitLocalSource({
       name: 'r',
@@ -125,5 +155,25 @@ describe('ScanSourceRepository', () => {
     expect(repo.getSource(source.id)).toBeNull();
     expect(repo.listRuns(source.id)).toHaveLength(0);
     expect(repo.listFailedItems(source.id)).toHaveLength(0);
+  });
+
+  it('recoverOrphanedRuns fails stuck running runs and unblocks the source', () => {
+    const source = repo.createGitLocalSource({ name: 'app', project: 'app', repoPath: '/repos/app' });
+    const orphan = repo.createRun(source.id);
+    const finished = repo.createRun(source.id);
+    repo.finishRun(finished.id, 'completed', { itemsSeen: 1, itemsImported: 1, itemsSkipped: 0, itemsFailed: 0 });
+    expect(repo.hasRunningRun(source.id)).toBe(true);
+
+    const recovered = repo.recoverOrphanedRuns();
+
+    expect(recovered).toBe(1);
+    expect(repo.hasRunningRun(source.id)).toBe(false);
+    const runs = repo.listRuns(source.id);
+    const orphanRow = runs.find((run) => run.id === orphan.id);
+    expect(orphanRow?.status).toBe('failed');
+    expect(orphanRow?.error).toContain('orphaned');
+    expect(orphanRow?.finishedAt).toBeTruthy();
+    // completed runs are untouched
+    expect(runs.find((run) => run.id === finished.id)?.status).toBe('completed');
   });
 });

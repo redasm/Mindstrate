@@ -3,6 +3,7 @@ import { Icon } from '@/components/ui/Icon';
 import { getMemoryReady } from '@/lib/memory';
 import { detectLocale } from '@/lib/i18n/index';
 import { getTranslations } from '@/lib/i18n/translations';
+import { listWorkspaceProjects } from '@/lib/workspace-projects';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,7 +70,7 @@ export default async function SettingsOverviewPage() {
   const t = getTranslations(locale);
   const memory = await getMemoryReady();
   const stats = await memory.maintenance.getStats();
-  const projects = memory.context.listKnownProjects();
+  const projects = listWorkspaceProjects(memory);
   const users = memory.apiKeys.listAll();
   const allNodes = memory.context.listContextNodes({ limit: 100000 });
 

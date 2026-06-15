@@ -70,10 +70,14 @@ export const createAuthMiddleware = ({ adminKey, memory }: AuthMiddlewareOptions
     return;
   }
 
+  // Fail closed: a key with no scopes or no projects gets exactly that —
+  // nothing. Every legitimately created key has explicit scopes/projects
+  // (web-ui members get read+write, the bootstrap admin gets admin/*), so
+  // an empty list is a data problem, not a request for full access.
   req.teamPrincipal = {
     name: memberKey.name,
-    scopes: memberKey.scopes.length > 0 ? memberKey.scopes : ['read', 'write', 'admin'],
-    projects: memberKey.projects.length > 0 ? memberKey.projects : ['*'],
+    scopes: memberKey.scopes,
+    projects: memberKey.projects,
   };
   next();
 };
