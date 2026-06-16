@@ -15,6 +15,7 @@ import {
   type MetabolismRun,
   type ProjectionRecord,
   ContextRelationType,
+  isProjectGraphEdge,
 } from '@mindstrate/protocol/models';
 import {
   ContextEdgeRepository,
@@ -158,6 +159,39 @@ export class ContextGraphStore {
 
   getProjectBreakdown(): Array<{ project: string; entries: number; conflicts: number; lastActivity: string | null }> {
     return this.nodes.aggregateProjectBreakdown();
+  }
+
+  /**
+   * Bounded project-graph subgraph for the relationship-graph UI.
+   *
+   * Without `focusNodeId`: a "skeleton" of the project — nodes of the given
+   * kinds (default directory+file), most-salient first, capped at `limit`, plus
+   * the edges among them. With `focusNodeId`: that node plus its one-hop
+   * project-graph neighbors (outgoing + incoming edges, capped). This keeps the
+   * payload small so a 100k+ node graph can be explored incrementally instead
+   * of shipped whole.
+   */
+  queryProjectSubgraph(opts: {
+    project: string;
+    focusNodeId?: string;
+    nodeKinds?: string[];
+    limit?: number;
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } {
+    const limit = Math.min(Math.max(opts.limit ?? 300, 1), 2000);
+    if (opts.focusNodeId) {
+      const focus = this.nodes.getById(opts.focusNodeId);
+      if (!focus) return { nodes: [], edges: [] };
+      const touching = [
+        ...this.edges.listOutgoing(opts.focusNodeId),
+        ...this.edges.listIncoming(opts.focusNodeId),
+      ].filter(isProjectGraphEdge).slice(0, limit);
+      const ids = Array.from(new Set([opts.focusNodeId, ...touching.flatMap((e) => [e.sourceId, e.targetId])]));
+      return { nodes: this.nodes.listByIds(ids), edges: touching };
+    }
+    const kinds = opts.nodeKinds && opts.nodeKinds.length > 0 ? opts.nodeKinds : ['directory', 'file'];
+    const nodes = this.nodes.listByProjectKinds(opts.project, kinds, limit);
+    const edges = this.edges.listAmongNodes(nodes.map((n) => n.id));
+    return { nodes, edges };
   }
 
   /**

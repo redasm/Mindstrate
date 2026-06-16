@@ -210,4 +210,41 @@ describe('ContextGraphStore', () => {
     expect(store.getNodeEmbedding(keep.a.id, 'm')).not.toBeNull();
     expect(store.listEvents({ project: 'keepme' })).toHaveLength(1);
   });
+
+  it('queryProjectSubgraph: skeleton, focus neighborhood, and kind filter', () => {
+    const pgNode = (title: string, kind: string) => store.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title,
+      content: `${kind}: ${title}`,
+      project: 'demo',
+      metadata: { projectGraph: true, kind },
+    });
+    const pgEdge = (s: string, t: string, kind: string) => store.createEdge({
+      sourceId: s,
+      targetId: t,
+      relationType: ContextRelationType.APPLIES_TO,
+      evidence: { projectGraph: true, kind },
+    });
+
+    const dir = pgNode('src', 'directory');
+    const file = pgNode('src/app.ts', 'file');
+    const cls = pgNode('App', 'class');
+    const contains = pgEdge(dir.id, file.id, 'contains');
+    const defines = pgEdge(file.id, cls.id, 'defines');
+
+    // skeleton: directory + file only, internal edges only
+    const skel = store.queryProjectSubgraph({ project: 'demo' });
+    expect(skel.nodes.map((n) => n.id).sort()).toEqual([dir.id, file.id].sort());
+    expect(skel.edges.map((e) => e.id)).toEqual([contains.id]);
+
+    // focus: file + one-hop neighbors (dir, cls) + both touching edges
+    const focus = store.queryProjectSubgraph({ project: 'demo', focusNodeId: file.id });
+    expect(focus.nodes.map((n) => n.id).sort()).toEqual([cls.id, dir.id, file.id].sort());
+    expect(focus.edges.map((e) => e.id).sort()).toEqual([contains.id, defines.id].sort());
+
+    // kind filter
+    const classes = store.queryProjectSubgraph({ project: 'demo', nodeKinds: ['class'] });
+    expect(classes.nodes.map((n) => n.id)).toEqual([cls.id]);
+  });
 });

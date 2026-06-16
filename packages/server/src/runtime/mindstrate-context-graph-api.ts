@@ -170,6 +170,16 @@ export class MindstrateContextGraphApi {
     return this.services.contextGraphStore.listEdges(options);
   }
 
+  /** Bounded project-graph subgraph (skeleton or one-hop around a focus node). */
+  queryProjectSubgraph(opts: {
+    project: string;
+    focusNodeId?: string;
+    nodeKinds?: string[];
+    limit?: number;
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } {
+    return this.services.contextGraphStore.queryProjectSubgraph(opts);
+  }
+
   queryContextGraph(options?: {
     query?: string;
     project?: string;

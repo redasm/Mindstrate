@@ -123,6 +123,19 @@ export class ContextEdgeRepository {
     const rows = this.db.prepare(sql).all(...params) as EdgeRow[];
     return rows.map(rowToEdge);
   }
+
+  /**
+   * Edges whose BOTH endpoints are in `ids` — the internal edges of a node set,
+   * used to draw a bounded subgraph without pulling the whole edge table.
+   */
+  listAmongNodes(ids: string[]): ContextEdge[] {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = this.db.prepare(
+      `SELECT * FROM context_edges WHERE source_id IN (${placeholders}) AND target_id IN (${placeholders})`,
+    ).all(...ids, ...ids) as EdgeRow[];
+    return rows.map(rowToEdge);
+  }
 }
 
 function rowToEdge(row: EdgeRow): ContextEdge {
