@@ -420,17 +420,17 @@ export class RepoScannerService {
       // ignore/sourceRoots/generatedRoots hints and the whole directory gets
       // indexed with built-in ignores only. The usual cause: the scan root is a
       // subdirectory missing the markers a rule needs (e.g. the built-in Unreal
-      // rule requires *.uproject + Content + Config at the root), so even the
-      // bundled rules can't match. Make it loud instead of silently bare-scanning.
+      // rule needs a *.uproject at the scan root), so even the bundled rules
+      // can't match. Make it loud instead of silently bare-scanning.
       this.log(
         source.id,
         runId,
         'warn',
         `No project detection rule matched under ${root} — indexing the entire directory `
-          + 'with built-in ignores only (generated/vendor dirs like TypeScript/Typing will NOT '
-          + 'be excluded). Built-in rules need project markers at the scan root (the Unreal rule '
-          + 'needs *.uproject + Content + Config). Point the source at the project root that has '
-          + 'them, or add a .mindstrate/rules here.',
+          + 'with built-in ignores only (generated dirs like TypeScript/Typing will NOT be '
+          + 'excluded). Built-in rules need a marker at the scan root (e.g. a *.uproject file '
+          + 'for Unreal). Point the source at the directory that has it, or add a '
+          + '.mindstrate/rules folder here, then re-scan.',
         'init',
       );
     }
