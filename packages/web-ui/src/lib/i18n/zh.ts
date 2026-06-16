@@ -539,6 +539,10 @@ const zh: Translations = {
   projectGraph: {
     title: '项目图谱',
     description: '在不改动原始提取数据的前提下查看图谱节点并编辑覆盖层。',
+    graphDescription: '点击节点查看详情并展开其关系；搜索可定位节点。',
+    searchPlaceholder: '搜索节点…',
+    relationships: '关系',
+    relationshipsNone: '该节点暂无关系。',
     refresh: '刷新',
     loading: '加载项目图谱…',
     extractedNodes: '已提取节点',

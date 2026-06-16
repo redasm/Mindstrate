@@ -537,6 +537,10 @@ const en = {
   projectGraph: {
     title: 'Project Graph',
     description: 'Extracted graph nodes and editable overlays without changing canonical extraction data.',
+    graphDescription: 'Click a node to see details and expand its relationships; search to locate a node.',
+    searchPlaceholder: 'Search nodes…',
+    relationships: 'Relationships',
+    relationshipsNone: 'This node has no relationships yet.',
     refresh: 'Refresh',
     loading: 'Loading project graph…',
     extractedNodes: 'Extracted nodes',

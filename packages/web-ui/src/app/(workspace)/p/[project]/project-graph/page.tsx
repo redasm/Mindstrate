@@ -1,10 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, use } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, use } from 'react';
+import dynamic from 'next/dynamic';
 import { PROJECT_GRAPH_METADATA_KEYS } from '@mindstrate/protocol';
-import { fetchContextGraph, type ContextGraphNodeDto } from '@/lib/context-graph-api';
+import {
+  fetchProjectSubgraph,
+  type ContextGraphNodeDto,
+  type ContextGraphEdgeDto,
+} from '@/lib/context-graph-api';
 import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from '@/lib/i18n/hooks';
+
+// react-force-graph touches `window` at import time, so it must be client-only.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), { ssr: false }) as any;
 
 type ProjectGraphOverlay = {
   id: string;
@@ -19,40 +28,61 @@ type ProjectGraphOverlay = {
 
 const OVERLAY_KINDS = ['note', 'confirmation', 'correction', 'rejection', 'risk', 'convention'];
 
+const NODE_KIND_COLOR: Record<string, string> = {
+  project: '#4f46e5',
+  directory: '#64748b',
+  file: '#6366f1',
+  module: '#0ea5e9',
+  class: '#7c3aed',
+  function: '#0891b2',
+  type: '#10b981',
+  component: '#ec4899',
+  dependency: '#f59e0b',
+  config: '#d97706',
+  concept: '#16a34a',
+};
+const DEFAULT_NODE_COLOR = '#94a3b8';
+const kindColor = (kind: string): string => NODE_KIND_COLOR[kind] ?? DEFAULT_NODE_COLOR;
+
+type GNode = { id: string; name: string; kind: string; x?: number; y?: number };
+type GLink = { id: string; source: string; target: string; kind: string };
+
+const nodeKindOf = (n: ContextGraphNodeDto): string =>
+  String(n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? 'node');
+const edgeKindOf = (e: ContextGraphEdgeDto): string =>
+  String(e.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? e.relationType);
+
 export default function ProjectGraphPage({ params }: { params: Promise<{ project: string }> }) {
   const { project } = use(params);
   const decoded = decodeURIComponent(project);
-  const tAll = useTranslations();
-  const t = tAll.projectGraph;
-  const [nodes, setNodes] = useState<ContextGraphNodeDto[]>([]);
-  const [overlays, setOverlays] = useState<ProjectGraphOverlay[]>([]);
-  const [selectedId, setSelectedId] = useState('');
-  const [kind, setKind] = useState('note');
-  const [content, setContent] = useState('');
-  const [author, setAuthor] = useState('');
+  const t = useTranslations().projectGraph;
+
+  // Raw maps are the source of truth; the force-graph view is derived from them.
+  const [rawNodes, setRawNodes] = useState<Map<string, ContextGraphNodeDto>>(new Map());
+  const [rawEdges, setRawEdges] = useState<Map<string, ContextGraphEdgeDto>>(new Map());
+  const [graph, setGraph] = useState<{ nodes: GNode[]; links: GLink[] }>({ nodes: [], links: [] });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+
+  const [overlays, setOverlays] = useState<ProjectGraphOverlay[]>([]);
+  const [overlayKind, setOverlayKind] = useState('note');
+  const [overlayContent, setOverlayContent] = useState('');
+  const [overlayAuthor, setOverlayAuthor] = useState('');
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
 
-  const projectNodes = useMemo(
-    () =>
-      nodes.filter(
-        (node) =>
-          node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.projectGraph] === true &&
-          (node.project ?? '') === decoded,
-      ),
-    [nodes, decoded],
-  );
-  const selectedNode = projectNodes.find((n) => n.id === selectedId) ?? projectNodes[0];
-  const visibleOverlays = overlays.filter(
-    (o) => o.project === decoded && (!selectedNode || o.targetNodeId === selectedNode.id),
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fgRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(800);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await fetchContextGraph(500);
-      setNodes(all);
+      const sub = await fetchProjectSubgraph(decoded, { limit: 300 });
+      setRawNodes(new Map(sub.nodes.map((n) => [n.id, n])));
+      setRawEdges(new Map(sub.edges.map((e) => [e.id, e])));
       const resp = await fetch(`/api/project-graph-overlays?limit=500&project=${encodeURIComponent(decoded)}`);
       if (resp.ok) {
         const data = await resp.json();
@@ -67,8 +97,95 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
     void load();
   }, [load]);
 
+  // Derive force-graph data, reusing existing node objects (preserve x/y so the
+  // layout doesn't reset/jitter when neighbors are merged in).
+  useEffect(() => {
+    setGraph((prev) => {
+      const prevById = new Map(prev.nodes.map((n) => [n.id, n]));
+      const nodes: GNode[] = Array.from(rawNodes.values()).map((n) => {
+        const existing = prevById.get(n.id);
+        if (existing) {
+          existing.name = n.title;
+          existing.kind = nodeKindOf(n);
+          return existing;
+        }
+        return { id: n.id, name: n.title, kind: nodeKindOf(n) };
+      });
+      const ids = new Set(nodes.map((n) => n.id));
+      const links: GLink[] = Array.from(rawEdges.values())
+        .filter((e) => ids.has(e.sourceId) && ids.has(e.targetId))
+        .map((e) => ({ id: e.id, source: e.sourceId, target: e.targetId, kind: edgeKindOf(e) }));
+      return { nodes, links };
+    });
+  }, [rawNodes, rawEdges]);
+
+  // Track container width so the canvas is responsive.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setWidth(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading]);
+
+  const mergeSubgraph = useCallback((sub: { nodes: ContextGraphNodeDto[]; edges: ContextGraphEdgeDto[] }) => {
+    setRawNodes((prev) => {
+      const m = new Map(prev);
+      for (const n of sub.nodes) m.set(n.id, n);
+      return m;
+    });
+    setRawEdges((prev) => {
+      const m = new Map(prev);
+      for (const e of sub.edges) m.set(e.id, e);
+      return m;
+    });
+  }, []);
+
+  const expandNode = useCallback(
+    async (id: string) => {
+      const sub = await fetchProjectSubgraph(decoded, { focus: id, limit: 200 });
+      mergeSubgraph(sub);
+    },
+    [decoded, mergeSubgraph],
+  );
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleNodeClick = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (node: any) => {
+      setSelectedId(node.id);
+      void expandNode(node.id);
+      if (fgRef.current && typeof node.x === 'number') {
+        fgRef.current.centerAt(node.x, node.y, 500);
+        fgRef.current.zoom(2.2, 500);
+      }
+    },
+    [expandNode],
+  );
+
+  const doSearch = useCallback(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return;
+    const hit = Array.from(rawNodes.values()).find((n) => n.title.toLowerCase().includes(q));
+    if (hit) {
+      setSelectedId(hit.id);
+      void expandNode(hit.id);
+    }
+  }, [search, rawNodes, expandNode]);
+
+  const selectedNode = selectedId ? rawNodes.get(selectedId) ?? null : null;
+  const selectedEdges = useMemo(() => {
+    if (!selectedId) return [];
+    return Array.from(rawEdges.values()).filter((e) => e.sourceId === selectedId || e.targetId === selectedId);
+  }, [rawEdges, selectedId]);
+  const visibleOverlays = overlays.filter(
+    (o) => o.project === decoded && (!selectedId || o.targetNodeId === selectedId),
+  );
+
   const saveOverlay = async () => {
-    if (!selectedNode || !content.trim()) return;
+    if (!selectedId || !overlayContent.trim()) return;
     setSaving(true);
     setStatus('');
     try {
@@ -77,16 +194,16 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project: decoded,
-          targetNodeId: selectedNode.id,
-          kind,
-          content: content.trim(),
-          author: author.trim() || undefined,
+          targetNodeId: selectedId,
+          kind: overlayKind,
+          content: overlayContent.trim(),
+          author: overlayAuthor.trim() || undefined,
         }),
       });
       if (!resp.ok) throw new Error(`${t.saveFailedPrefix}: ${resp.status}`);
       const data = await resp.json();
       setOverlays((cur) => [data.overlay, ...cur]);
-      setContent('');
+      setOverlayContent('');
       setStatus(t.overlaySaved);
     } catch (err) {
       setStatus(err instanceof Error ? err.message : t.saveFailed);
@@ -96,8 +213,8 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-5">
-      <div className="mb-5 anim-in d1 flex items-end justify-between gap-4">
+    <div className="max-w-[1600px] mx-auto px-6 py-5">
+      <div className="mb-4 anim-in d1 flex items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-xl font-bold tracking-tight text-surface-900">{t.title}</h1>
@@ -105,11 +222,13 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
               {decoded}
             </span>
           </div>
-          <p className="text-sm text-surface-500 font-medium">
-            {t.description}
-          </p>
+          <p className="text-sm text-surface-500 font-medium">{t.graphDescription}</p>
         </div>
-        <button type="button" onClick={load} className="btn-outline px-3 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={load}
+          className="btn-outline px-3 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5"
+        >
           <Icon icon="lucide:refresh-cw" className="text-sm" />
           {t.refresh}
         </button>
@@ -118,130 +237,156 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
       {loading ? (
         <div className="py-16 text-center text-sm text-surface-400">{t.loading}</div>
       ) : (
-        <section className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-          <aside className="bg-white rounded-2xl border border-surface-200 anim-in d2 overflow-hidden">
-            <div className="px-4 py-3 border-b border-surface-100">
-              <h2 className="text-sm font-bold text-surface-800">{t.extractedNodes}</h2>
-              <p className="text-xs text-surface-400 mt-0.5">{projectNodes.length} {t.indexed}</p>
-            </div>
-            <div className="max-h-[640px] overflow-y-auto">
-              {projectNodes.length === 0 ? (
-                <p className="p-4 text-sm text-surface-400">{t.noNodesIndexed}</p>
-              ) : (
-                projectNodes.map((node) => {
-                  const active = selectedNode?.id === node.id;
-                  return (
-                    <button
-                      key={node.id}
-                      type="button"
-                      onClick={() => setSelectedId(node.id)}
-                      className={`block w-full border-b border-surface-100 px-4 py-3 text-left transition-colors ${
-                        active ? 'bg-brand-50' : 'hover:bg-surface-50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="truncate text-sm font-semibold text-surface-800">{node.title}</span>
-                        <span className="shrink-0 rounded bg-surface-100 px-2 py-0.5 text-[11px] text-surface-500 font-medium">
-                          {String(node.metadata?.kind ?? 'node')}
-                        </span>
-                      </div>
-                      <div className="mt-1 truncate text-xs text-surface-400 font-mono">{node.id}</div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </aside>
-
-          <div className="space-y-5">
-            <section className="bg-white rounded-2xl border border-surface-200 p-5 anim-in d3">
-              {selectedNode ? (
-                <>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-bold text-surface-900">{selectedNode.title}</h2>
-                      <p className="mt-1 text-xs text-surface-400 font-mono">{selectedNode.id}</p>
-                    </div>
-                    <span className="rounded bg-surface-100 px-2 py-1 text-xs text-surface-600 font-medium">
-                      {String(selectedNode.metadata?.provenance ?? 'unknown')}
-                    </span>
-                  </div>
-                  <p className="mt-4 whitespace-pre-wrap rounded-lg bg-surface-50 p-3 text-sm text-surface-700">
-                    {selectedNode.content}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-surface-400">{t.selectNodeReview}</p>
-              )}
-            </section>
-
-            <section className="bg-white rounded-2xl border border-surface-200 p-5 anim-in d4">
-              <h2 className="text-base font-bold text-surface-900 mb-4">{t.addOverlay}</h2>
-              <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)] mb-3">
-                <select
-                  value={kind}
-                  onChange={(e) => setKind(e.target.value)}
-                  className="px-3 py-2 border border-surface-200 rounded-lg text-sm font-medium text-surface-700 focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none"
-                >
-                  {OVERLAY_KINDS.map((v) => (
-                    <option key={v} value={v}>
-                      {t.overlayKind[v] ?? v}
-                    </option>
-                  ))}
-                </select>
+        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="bg-white rounded-2xl border border-surface-200 anim-in d2 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-100">
+              <div className="relative flex-1">
+                <Icon icon="lucide:search" className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-400" />
                 <input
-                  value={author}
-                  onChange={(e) => setAuthor(e.target.value)}
-                  placeholder={t.overlayAuthorPlaceholder}
-                  className="px-3 py-2 border border-surface-200 rounded-lg text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && doSearch()}
+                  placeholder={t.searchPlaceholder}
+                  className="w-full pl-9 pr-3 py-1.5 border border-surface-200 rounded-lg text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none"
                 />
               </div>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={t.overlayContentPlaceholder}
-                className="w-full min-h-32 px-3 py-2 border border-surface-200 rounded-lg text-sm focus:border-brand-400 focus:ring-2 focus:ring-brand-100 outline-none"
-              />
-              <div className="mt-3 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={saveOverlay}
-                  disabled={saving || !selectedNode || !content.trim()}
-                  className="btn-primary px-4 py-2 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5"
-                >
-                  {saving ? t.savingOverlay : t.saveOverlay}
-                  {!saving && <Icon icon="lucide:check" className="text-sm" />}
-                </button>
-                {status && <span className="text-sm text-surface-500">{status}</span>}
-              </div>
-            </section>
-
-            <section className="bg-white rounded-2xl border border-surface-200 p-5 anim-in d5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-bold text-surface-900">{t.nodeOverlays}</h2>
-                <span className="rounded bg-surface-100 px-2 py-0.5 text-xs text-surface-600 font-medium">
-                  {visibleOverlays.length}
-                </span>
-              </div>
-              {visibleOverlays.length === 0 ? (
-                <p className="py-6 text-sm text-surface-400">{t.noOverlays}</p>
+              <span className="text-xs text-surface-400 font-medium shrink-0">{graph.nodes.length} {t.indexed}</span>
+            </div>
+            <div ref={containerRef} className="relative" style={{ height: 640 }}>
+              {graph.nodes.length === 0 ? (
+                <p className="p-6 text-sm text-surface-400">{t.noNodesIndexed}</p>
               ) : (
-                <div className="space-y-3">
-                  {visibleOverlays.map((o) => (
-                    <article key={o.id} className="rounded-lg border border-surface-100 bg-surface-50 p-4">
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-surface-500">
-                        <span className="rounded bg-white px-2 py-0.5 font-semibold text-surface-800">{t.overlayKind[o.kind] ?? o.kind}</span>
-                        <span>{o.source}</span>
-                        {o.author && <span>{o.author}</span>}
-                        <span>{new Date(o.createdAt).toLocaleString()}</span>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-surface-700">{o.content}</p>
-                    </article>
-                  ))}
-                </div>
+                <ForceGraph2D
+                  ref={fgRef}
+                  width={width}
+                  height={640}
+                  graphData={graph}
+                  nodeId="id"
+                  nodeLabel="name"
+                  nodeRelSize={5}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  nodeColor={(n: any) => (n.id === selectedId ? '#ef4444' : kindColor(n.kind))}
+                  linkColor={() => '#cbd5e1'}
+                  linkDirectionalArrowLength={3}
+                  linkDirectionalArrowRelPos={1}
+                  cooldownTicks={80}
+                  onNodeClick={handleNodeClick}
+                />
               )}
-            </section>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2 border-t border-surface-100">
+              {Object.entries(NODE_KIND_COLOR).slice(0, 8).map(([k, c]) => (
+                <span key={k} className="inline-flex items-center gap-1.5 text-[11px] text-surface-500">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c }} />
+                  {k}
+                </span>
+              ))}
+            </div>
           </div>
+
+          <aside className="bg-white rounded-2xl border border-surface-200 p-5 anim-in d3 h-fit">
+            {!selectedNode ? (
+              <p className="text-sm text-surface-400">{t.selectNodeReview}</p>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="rounded px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: kindColor(nodeKindOf(selectedNode)) }}>
+                      {nodeKindOf(selectedNode)}
+                    </span>
+                  </div>
+                  <h2 className="text-base font-bold text-surface-900 break-words">{selectedNode.title}</h2>
+                  {selectedNode.sourceRef && (
+                    <p className="mt-1 text-xs text-surface-400 font-mono break-words">{selectedNode.sourceRef}</p>
+                  )}
+                  <p className="mt-2 whitespace-pre-wrap break-words rounded-lg bg-surface-50 p-3 text-sm text-surface-700">
+                    {selectedNode.content}
+                  </p>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-surface-900 mb-2">{t.relationships}</h3>
+                  {selectedEdges.length === 0 ? (
+                    <p className="text-sm text-surface-400">{t.relationshipsNone}</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {selectedEdges.map((e) => {
+                        const outbound = e.sourceId === selectedId;
+                        const otherId = outbound ? e.targetId : e.sourceId;
+                        const other = rawNodes.get(otherId);
+                        return (
+                          <button
+                            key={e.id}
+                            type="button"
+                            onClick={() => { setSelectedId(otherId); void expandNode(otherId); }}
+                            className="block w-full text-left rounded-lg border border-surface-100 bg-surface-50 p-2 text-xs hover:bg-surface-100"
+                          >
+                            <span className="font-semibold text-surface-700">{outbound ? '→' : '←'} {edgeKindOf(e)}</span>
+                            <span className="block mt-0.5 truncate text-surface-600">{other?.title ?? otherId}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-semibold text-surface-900 mb-2">{t.addOverlay}</h3>
+                  <div className="flex gap-2 mb-2">
+                    <select
+                      value={overlayKind}
+                      onChange={(e) => setOverlayKind(e.target.value)}
+                      className="px-2 py-1.5 border border-surface-200 rounded-lg text-sm font-medium text-surface-700 outline-none focus:border-brand-400"
+                    >
+                      {OVERLAY_KINDS.map((v) => (
+                        <option key={v} value={v}>{t.overlayKind[v] ?? v}</option>
+                      ))}
+                    </select>
+                    <input
+                      value={overlayAuthor}
+                      onChange={(e) => setOverlayAuthor(e.target.value)}
+                      placeholder={t.overlayAuthorPlaceholder}
+                      className="flex-1 min-w-0 px-2 py-1.5 border border-surface-200 rounded-lg text-sm outline-none focus:border-brand-400"
+                    />
+                  </div>
+                  <textarea
+                    value={overlayContent}
+                    onChange={(e) => setOverlayContent(e.target.value)}
+                    placeholder={t.overlayContentPlaceholder}
+                    className="w-full min-h-24 px-3 py-2 border border-surface-200 rounded-lg text-sm outline-none focus:border-brand-400"
+                  />
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={saveOverlay}
+                      disabled={saving || !overlayContent.trim()}
+                      className="btn-primary px-3 py-1.5 rounded-lg text-sm font-semibold inline-flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {saving ? t.savingOverlay : t.saveOverlay}
+                    </button>
+                    {status && <span className="text-xs text-surface-500">{status}</span>}
+                  </div>
+                </div>
+
+                {visibleOverlays.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-surface-900 mb-2">{t.nodeOverlays}</h3>
+                    <div className="space-y-2">
+                      {visibleOverlays.map((o) => (
+                        <article key={o.id} className="rounded-lg border border-surface-100 bg-surface-50 p-2.5">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-surface-500">
+                            <span className="rounded bg-white px-1.5 py-0.5 font-semibold text-surface-800">{t.overlayKind[o.kind] ?? o.kind}</span>
+                            {o.author && <span>{o.author}</span>}
+                          </div>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-xs text-surface-700">{o.content}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
         </section>
       )}
     </div>
