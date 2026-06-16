@@ -56,7 +56,8 @@
   ],
   "sourceRoots": [
     "Source",
-    "Plugins"
+    "Plugins",
+    "TypeScript"
   ],
   "generatedRoots": [
     "Binaries",
@@ -246,6 +247,14 @@
       "label": "Unreal Config",
       "roots": ["Config"],
       "parserAdapters": ["unreal-config"],
+      "changeAdapters": ["git", "p4"]
+    },
+    {
+      "id": "scripting-ts",
+      "label": "TypeScript Gameplay Scripts",
+      "roots": ["TypeScript"],
+      "language": "typescript",
+      "parserAdapters": ["tree-sitter-source"],
       "changeAdapters": ["git", "p4"]
     },
     {

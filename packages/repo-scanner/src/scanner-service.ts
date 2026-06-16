@@ -447,6 +447,21 @@ export class RepoScannerService {
       `Project graph indexed: ${indexResult.filesScanned} files scanned, ${indexResult.skippedFiles} skipped`,
       'index',
     );
+    // Internalize the system pages (architecture / operation-manual book) into
+    // the graph so the MCP before-edit / impact tools surface the same
+    // project-specific editing rules in team mode as `mindstrate init` gives
+    // locally. Local mode gets this as a side effect of the Obsidian projection;
+    // the scanner has no vault, so it runs the deterministic internalization
+    // directly. Idempotent.
+    const systemPages = this.memory.context.internalizeSystemPages(project);
+    this.log(
+      source.id,
+      runId,
+      'info',
+      `System pages internalized: ${systemPages.created.length} created, `
+        + `${systemPages.updated.length} updated, ${systemPages.unchanged.length} unchanged`,
+      'index',
+    );
     await this.enrichProjectGraph(source, project, runId);
   }
 

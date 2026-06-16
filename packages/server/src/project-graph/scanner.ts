@@ -466,7 +466,7 @@ const globToRegex = (pattern: string): RegExp => {
 const isSafeRelativePath = (value: string): boolean =>
   !!value && !path.isAbsolute(value) && !normalizePath(value).split('/').includes('..');
 
-const languageForExtension = (extension: string): string | undefined => {
+export const languageForExtension = (extension: string): string | undefined => {
   if (extension === '.ts') return 'typescript';
   if (extension === '.tsx') return 'tsx';
   if (extension === '.js' || extension === '.mjs' || extension === '.cjs') return 'javascript';

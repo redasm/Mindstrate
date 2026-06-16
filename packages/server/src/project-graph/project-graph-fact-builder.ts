@@ -13,6 +13,7 @@
  * modules.
  */
 
+import * as path from 'node:path';
 import {
   ProjectGraphEdgeKind,
   ProjectGraphNodeKind,
@@ -27,7 +28,7 @@ import {
   createProjectGraphNodeId,
 } from './node-id.js';
 import type { ParserCapture } from './parser-adapter.js';
-import type { ProjectGraphScanPlan } from './scanner.js';
+import { languageForExtension, type ProjectGraphScanPlan } from './scanner.js';
 
 // ============================================================
 // Path classifiers
@@ -142,9 +143,21 @@ export const makeFileNode = (
   scanPlan?: ProjectGraphScanPlan,
 ): ProjectGraphNodeDto => makeNode(project, ProjectGraphNodeKind.FILE, filePath, filePath, evidence(filePath), {
   ownedByFile: filePath,
+  ...fileLanguageMetadata(filePath),
   ...fileImpactMetadata(filePath),
   ...generatedFileMetadata(filePath, scanPlan),
 });
+
+/**
+ * Stamp the file's detected language under `context.language` so the overview
+ * language distribution (which tallies `metadata.context.language` across
+ * context nodes) reflects the actual scanned codebase, not just the project's
+ * single detected primary language carried by the project snapshot.
+ */
+const fileLanguageMetadata = (filePath: string): Record<string, unknown> => {
+  const language = languageForExtension(path.extname(filePath));
+  return language ? { context: { language } } : {};
+};
 
 export const makeEdge = (
   sourceId: string,

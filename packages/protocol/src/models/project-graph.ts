@@ -13,6 +13,13 @@ export const PROJECT_GRAPH_METADATA_KEYS = {
 export const PROJECT_GRAPH_DEFAULT_QUERY_LIMIT = 100000;
 export const MAX_PROJECT_GRAPH_CHANGESET_FILES = 5000;
 
+/**
+ * Tag attached to the LLM-enrichment idempotence cache node. It is internal
+ * bookkeeping (not user-facing knowledge), so the knowledge projector excludes
+ * it and the metabolism pruner protects it from stale-snapshot archival.
+ */
+export const LLM_ENRICHMENT_CACHE_TAG = 'llm-enrichment-cache';
+
 export enum ProjectGraphNodeKind {
   PROJECT = 'project',
   DIRECTORY = 'directory',
