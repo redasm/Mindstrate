@@ -188,8 +188,23 @@ export class ContextGraphStore {
       const ids = Array.from(new Set([opts.focusNodeId, ...touching.flatMap((e) => [e.sourceId, e.targetId])]));
       return { nodes: this.nodes.listByIds(ids), edges: touching };
     }
-    const kinds = opts.nodeKinds && opts.nodeKinds.length > 0 ? opts.nodeKinds : ['directory', 'file'];
-    const nodes = this.nodes.listByProjectKinds(opts.project, kinds, limit);
+    if (opts.nodeKinds && opts.nodeKinds.length > 0) {
+      const nodes = this.nodes.listByProjectKinds(opts.project, opts.nodeKinds, limit);
+      const edges = this.edges.listAmongNodes(nodes.map((n) => n.id));
+      return { nodes, edges };
+    }
+    // Default skeleton: pull the structural backbone (project + directories)
+    // first so file→directory/project CONTAINS edges always have both endpoints
+    // present, then fill the remaining budget with files. Picking only top files
+    // by salience would otherwise drop their parent nodes and leave an edgeless
+    // scatter of dots.
+    const structural = this.nodes.listByProjectKinds(opts.project, ['project', 'directory'], limit);
+    const files = this.nodes.listByProjectKinds(
+      opts.project,
+      ['file'],
+      Math.max(0, limit - structural.length),
+    );
+    const nodes = [...structural, ...files];
     const edges = this.edges.listAmongNodes(nodes.map((n) => n.id));
     return { nodes, edges };
   }

@@ -23,7 +23,6 @@ export function SettingsShell({
     { href: '/settings/ecs',             label: t.nav.settings.ecs,            icon: 'lucide:cpu' },
     { href: '/settings/skill-evolution', label: t.nav.settings.skillEvolution, icon: 'lucide:sparkles' },
     { href: '/settings/eval-dataset',    label: t.nav.settings.evalDataset,    icon: 'lucide:flask-conical' },
-    { href: '/settings/lineage',         label: t.nav.settings.lineage,        icon: 'lucide:git-branch' },
   ];
   return (
     <div className="flex flex-col h-screen">

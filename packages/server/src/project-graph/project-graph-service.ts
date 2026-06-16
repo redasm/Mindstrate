@@ -23,6 +23,7 @@ import {
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import type { DetectedProject } from '../project/index.js';
+import { noopLogger, type Logger } from '../runtime/logger.js';
 import { safeJson } from '../project/detection-support.js';
 import { createProjectGraphNodeId } from './node-id.js';
 import type { ParserAdapter, ParserCapture } from './parser-adapter.js';
@@ -82,6 +83,8 @@ export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
 export interface ProjectGraphIndexOptions {
   onScanProgress?: (event: ProjectGraphScanProgress) => void;
   onIndexProgress?: (event: ProjectGraphIndexProgress) => void;
+  /** Diagnostics sink for skipped/failed files. Defaults to {@link noopLogger}. */
+  logger?: Logger;
 }
 
 export interface ProjectGraphIndexProgress {
@@ -252,7 +255,7 @@ const streamProjectGraphIntoStore = (
       const fileEdges = new Map<string, ProjectGraphEdgeDto>();
       addNode(fileNodes, makeFileNode(project, file.path, scanPlan));
       addFileContainmentFact(project, file.path, scanPlan, fileNodes, fileEdges);
-      const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache);
+      const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache, options.logger ?? noopLogger);
       if (fileExtraction.skipped) skippedFiles += 1;
       if (!fileExtraction.skipped) {
         cacheWriter.write({
@@ -315,6 +318,7 @@ const extractFileFacts = (
   file: ProjectFileInventoryEntry,
   parserAdapters: ParserAdapter[],
   previousCache: ProjectGraphFileExtractionCache,
+  logger: Logger,
 ): ProjectGraphFileExtractionOutcome => {
   const cached = previousCache.files[file.path];
   if (cached?.hash === file.hash) {
@@ -327,29 +331,43 @@ const extractFileFacts = (
   if (file.generated) {
     return { project: project.name, nodes: [], edges: [], skipped };
   }
+
+  // Read the file at most once: the Unreal manifest/build/config recipes and the
+  // source parsers all want the same bytes, and re-reading the same path 2–4×
+  // turned large scans into an I/O-bound crawl.
+  let contentLoaded = false;
+  let contentValue: string | null = null;
+  const content = (): string | null => {
+    if (!contentLoaded) {
+      contentValue = readSourceFile(file.absolutePath);
+      contentLoaded = true;
+    }
+    return contentValue;
+  };
+
   if (file.path === 'package.json') {
     addPackageFacts(project, file.path, nodes, edges);
   }
   if (isUnrealManifestFile(file.path)) {
-    const content = readSourceFile(file.absolutePath);
-    if (content !== null) addUnrealManifestFacts(project, file.path, content, nodes, edges);
+    const c = content();
+    if (c !== null) addUnrealManifestFacts(project, file.path, c, nodes, edges);
   }
   if (isUnrealBuildFile(file.path)) {
-    const content = readSourceFile(file.absolutePath);
-    if (content !== null) addUnrealBuildFacts(project, file.path, content, nodes, edges, dependencyScopeFromCapture);
+    const c = content();
+    if (c !== null) addUnrealBuildFacts(project, file.path, c, nodes, edges, dependencyScopeFromCapture);
   }
   if (isUnrealConfigFile(file.path)) {
-    const content = readSourceFile(file.absolutePath);
-    if (content !== null) addUnrealConfigFacts(project, file.path, content, nodes, edges);
+    const c = content();
+    if (c !== null) addUnrealConfigFacts(project, file.path, c, nodes, edges);
   }
   const matchingParsers = file.language
     ? parserAdapters.filter((parser) => parser.languages.includes(file.language as never))
     : [];
   if (matchingParsers.length > 0) {
-    const content = readSourceFile(file.absolutePath);
+    const c = content();
     for (const parser of matchingParsers) {
-      if (content === null) continue;
-      const parsed = parseFileFacts(parser, file, content);
+      if (c === null) continue;
+      const parsed = parseFileFacts(parser, file, c, logger);
       if (!parsed) {
         skipped = true;
         continue;
@@ -364,6 +382,7 @@ const parseFileFacts = (
   parser: ParserAdapter,
   file: ProjectFileInventoryEntry,
   content: string,
+  logger: Logger,
 ) => {
   try {
     return parser.parse({
@@ -371,7 +390,16 @@ const parseFileFacts = (
       language: file.language ?? '',
       content,
     });
-  } catch {
+  } catch (error) {
+    // Don't abort the scan, but surface *why* a file was skipped: a thrown
+    // parse is a tree-sitter/adapter failure, distinct from an unsupported
+    // language (which never reaches here). Silent `return null` made these
+    // indistinguishable and undebuggable.
+    logger.warn('[project-graph] parser failed; file skipped', {
+      path: file.path,
+      language: file.language ?? '',
+      error: error instanceof Error ? error.message : String(error),
+    });
     return null;
   }
 };

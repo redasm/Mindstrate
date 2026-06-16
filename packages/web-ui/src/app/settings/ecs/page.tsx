@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   SUBSTRATE_ORDER,
   fetchContextEdges,
@@ -10,6 +9,7 @@ import {
   type ContextGraphNodeDto,
 } from '@/lib/context-graph-api';
 import { Icon } from '@/components/ui/Icon';
+import { ContextNodeBrowser } from '@/components/ContextNodeBrowser';
 import { useTranslations } from '@/lib/i18n/hooks';
 
 type ConflictRecord = {
@@ -53,6 +53,13 @@ export default function SettingsEcsPage() {
   const [triggering, setTriggering] = useState(false);
   const [stage, setStage] = useState('');
   const [stageResult, setStageResult] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const browserRef = useRef<HTMLDivElement>(null);
+
+  const inspectNode = useCallback((id: string | null) => {
+    setSelectedNodeId(id);
+    browserRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,8 +68,8 @@ export default function SettingsEcsPage() {
         fetch('/api/context-conflicts?limit=20'),
         fetch('/api/metabolism-runs?limit=10'),
         fetch('/api/projection-records?limit=10'),
-        fetchContextGraph(120),
-        fetchContextEdges(400),
+        fetchContextGraph(400),
+        fetchContextEdges(800),
       ]);
       if (conflictsRes.ok) {
         const data = await conflictsRes.json();
@@ -155,13 +162,14 @@ export default function SettingsEcsPage() {
           <Icon icon="lucide:play" className="text-sm" />
           {triggering ? t.ecs.running : stage ? t.ecs.runStage : t.ecs.runMetabolism}
         </button>
-        <Link
-          href="/settings/lineage"
+        <button
+          type="button"
+          onClick={() => inspectNode(selectedNodeId)}
           className="text-sm font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1"
         >
           <Icon icon="lucide:network" className="text-sm" />
           {t.ecs.openLineage}
-        </Link>
+        </button>
       </div>
 
       {stageResult && (
@@ -189,9 +197,9 @@ export default function SettingsEcsPage() {
               <h2 className="text-base font-bold text-surface-900">{t.ecs.projectGraph}</h2>
               <p className="mt-0.5 text-xs text-surface-400 font-medium">{t.ecs.projectGraphHint}</p>
             </div>
-            <Link href="/settings/lineage" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
+            <button type="button" onClick={() => inspectNode(selectedNodeId)} className="text-xs font-semibold text-brand-600 hover:text-brand-700">
               {t.ecs.inspectLineage}
-            </Link>
+            </button>
           </div>
 
           <div className="space-y-3">
@@ -257,13 +265,14 @@ export default function SettingsEcsPage() {
                     <div>{t.ecs.detected}: {new Date(c.detectedAt).toLocaleString()}</div>
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {c.nodeIds.map((id) => (
-                        <Link
+                        <button
                           key={id}
-                          href={`/settings/lineage?node=${encodeURIComponent(id)}`}
+                          type="button"
+                          onClick={() => inspectNode(id)}
                           className="rounded-md bg-white border border-surface-200 px-2 py-0.5 font-mono text-[11px] text-brand-700 hover:bg-brand-50"
                         >
                           {id.slice(0, 8)}…
-                        </Link>
+                        </button>
                       ))}
                     </div>
                     {c.resolution && <div>{t.ecs.resolution}: {c.resolution}</div>}
@@ -362,6 +371,19 @@ export default function SettingsEcsPage() {
             </table>
           </div>
         )}
+      </section>
+
+      <section ref={browserRef} className="bg-white rounded-2xl border border-surface-200 p-5 anim-in d6 scroll-mt-4">
+        <div className="mb-4">
+          <h2 className="text-base font-bold text-surface-900">{t.ecs.nodeBrowser}</h2>
+          <p className="mt-0.5 text-xs text-surface-400 font-medium">{t.ecs.nodeBrowserHint}</p>
+        </div>
+        <ContextNodeBrowser
+          nodes={nodes}
+          edges={edges}
+          selectedId={selectedNodeId}
+          onSelect={setSelectedNodeId}
+        />
       </section>
     </div>
   );

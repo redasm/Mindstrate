@@ -234,7 +234,10 @@ export class MindstrateContextGraphApi {
   }
 
   indexProjectGraph(project: DetectedProject, options?: ProjectGraphIndexOptions): ProjectGraphIndexResult {
-    return indexProjectGraph(this.services.contextGraphStore, project, options);
+    return indexProjectGraph(this.services.contextGraphStore, project, {
+      logger: this.services.logger,
+      ...options,
+    });
   }
 
   detectProjectGraphChanges(

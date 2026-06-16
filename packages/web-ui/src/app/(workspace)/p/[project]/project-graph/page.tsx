@@ -71,11 +71,12 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
   const [overlayAuthor, setOverlayAuthor] = useState('');
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('');
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(800);
+  const [size, setSize] = useState({ width: 800, height: 600 });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,16 +120,16 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
     });
   }, [rawNodes, rawEdges]);
 
-  // Track container width so the canvas is responsive.
+  // Track container size so the canvas fills the available area (width + height).
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const update = () => setWidth(el.clientWidth);
+    const update = () => setSize({ width: el.clientWidth, height: el.clientHeight });
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [loading]);
+  }, [loading, panelCollapsed]);
 
   const mergeSubgraph = useCallback((sub: { nodes: ContextGraphNodeDto[]; edges: ContextGraphEdgeDto[] }) => {
     setRawNodes((prev) => {
@@ -213,8 +214,8 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto px-6 py-5">
-      <div className="mb-4 anim-in d1 flex items-end justify-between gap-4">
+    <div className="h-full flex flex-col px-6 py-5">
+      <div className="mb-4 anim-in d1 flex items-end justify-between gap-4 flex-shrink-0">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-xl font-bold tracking-tight text-surface-900">{t.title}</h1>
@@ -235,11 +236,15 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-sm text-surface-400">{t.loading}</div>
+        <div className="flex-1 flex items-center justify-center text-sm text-surface-400">{t.loading}</div>
       ) : (
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="bg-white rounded-2xl border border-surface-200 anim-in d2 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-100">
+        <section
+          className={`flex-1 min-h-0 grid gap-5 ${
+            panelCollapsed || !selectedNode ? 'grid-cols-1' : 'xl:grid-cols-[minmax(0,1fr)_360px]'
+          }`}
+        >
+          <div className="relative bg-white rounded-2xl border border-surface-200 anim-in d2 overflow-hidden flex flex-col min-h-0">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-surface-100 flex-shrink-0">
               <div className="relative flex-1">
                 <Icon icon="lucide:search" className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-400" />
                 <input
@@ -252,14 +257,14 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
               </div>
               <span className="text-xs text-surface-400 font-medium shrink-0">{graph.nodes.length} {t.indexed}</span>
             </div>
-            <div ref={containerRef} className="relative" style={{ height: 640 }}>
+            <div ref={containerRef} className="relative flex-1 min-h-0">
               {graph.nodes.length === 0 ? (
                 <p className="p-6 text-sm text-surface-400">{t.noNodesIndexed}</p>
               ) : (
                 <ForceGraph2D
                   ref={fgRef}
-                  width={width}
-                  height={640}
+                  width={size.width}
+                  height={size.height}
                   graphData={graph}
                   nodeId="id"
                   nodeLabel="name"
@@ -273,8 +278,19 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
                   onNodeClick={handleNodeClick}
                 />
               )}
+              {selectedNode && panelCollapsed && (
+                <button
+                  type="button"
+                  onClick={() => setPanelCollapsed(false)}
+                  title={t.expandPanel}
+                  aria-label={t.expandPanel}
+                  className="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-surface-200 shadow-sm hover:bg-surface-50 text-surface-600"
+                >
+                  <Icon icon="lucide:panel-right-open" className="text-base" />
+                </button>
+              )}
             </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2 border-t border-surface-100">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 px-4 py-2 border-t border-surface-100 flex-shrink-0">
               {Object.entries(NODE_KIND_COLOR).slice(0, 8).map(([k, c]) => (
                 <span key={k} className="inline-flex items-center gap-1.5 text-[11px] text-surface-500">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c }} />
@@ -284,17 +300,24 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
             </div>
           </div>
 
-          <aside className="bg-white rounded-2xl border border-surface-200 p-5 anim-in d3 h-fit">
-            {!selectedNode ? (
-              <p className="text-sm text-surface-400">{t.selectNodeReview}</p>
-            ) : (
-              <div className="space-y-4">
+          {selectedNode && !panelCollapsed && (
+            <aside className="bg-white rounded-2xl border border-surface-200 anim-in d3 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex items-center justify-between gap-2 px-5 py-3 border-b border-surface-100 flex-shrink-0">
+                <span className="rounded px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: kindColor(nodeKindOf(selectedNode)) }}>
+                  {nodeKindOf(selectedNode)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPanelCollapsed(true)}
+                  title={t.collapsePanel}
+                  aria-label={t.collapsePanel}
+                  className="inline-flex items-center justify-center w-8 h-8 rounded-lg hover:bg-surface-100 text-surface-500"
+                >
+                  <Icon icon="lucide:panel-right-close" className="text-base" />
+                </button>
+              </div>
+              <div className="space-y-4 p-5 overflow-y-auto">
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="rounded px-2 py-0.5 text-[11px] font-semibold text-white" style={{ backgroundColor: kindColor(nodeKindOf(selectedNode)) }}>
-                      {nodeKindOf(selectedNode)}
-                    </span>
-                  </div>
                   <h2 className="text-base font-bold text-surface-900 break-words">{selectedNode.title}</h2>
                   {selectedNode.sourceRef && (
                     <p className="mt-1 text-xs text-surface-400 font-mono break-words">{selectedNode.sourceRef}</p>
@@ -385,8 +408,8 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
                   </div>
                 )}
               </div>
-            )}
-          </aside>
+            </aside>
+          )}
         </section>
       )}
     </div>
