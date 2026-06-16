@@ -91,4 +91,71 @@ describe('P4 source helpers', () => {
 
     expect(() => getRecentChangelists(1, '//depot/main/...')).toThrow(/p4 executable not found/);
   });
+
+  it('logs in to mint a ticket and retries when a plaintext password is rejected', async () => {
+    const authError = Object.assign(new Error('Command failed'), {
+      stderr: 'Perforce password (P4PASSWD) invalid or unset.',
+    });
+    execSync
+      .mockImplementationOnce(() => { throw authError; })                                  // p4 changes (plaintext) -> rejected
+      .mockImplementationOnce(() => 'User svc logged in.\nABCDEF0123456789ABCDEF0123456789\n') // p4 login -p -> ticket
+      .mockImplementationOnce(() => 'Change 42 on 2024/01/01 by svc@ws\n');                // p4 changes (ticket) -> ok
+
+    const { getRecentChangelists } = await import('../src/p4-source.js');
+
+    const result = getRecentChangelists(1, '//depot/main/...', {
+      p4Port: 'p4.example:1666',
+      p4User: 'svc',
+      p4Passwd: 'plaintextpw',
+    });
+
+    expect(result).toEqual(['42']);
+    expect(execSync).toHaveBeenNthCalledWith(2, 'p4 login -p', expect.objectContaining({
+      input: expect.stringContaining('plaintextpw'),
+    }));
+    expect(execSync).toHaveBeenNthCalledWith(3, expect.stringContaining('p4 changes'), expect.objectContaining({
+      env: expect.objectContaining({ P4PASSWD: 'ABCDEF0123456789ABCDEF0123456789' }),
+    }));
+  });
+
+  it('does not attempt login when the configured secret is already a ticket', async () => {
+    const authError = Object.assign(new Error('Command failed'), {
+      stderr: 'Perforce password (P4PASSWD) invalid or unset.',
+    });
+    execSync.mockImplementation(() => { throw authError; });
+
+    const { getRecentChangelists } = await import('../src/p4-source.js');
+
+    expect(() => getRecentChangelists(1, '//depot/main/...', {
+      p4Port: 'p4.example:1666',
+      p4User: 'svc',
+      p4Passwd: 'ABCDEF0123456789ABCDEF0123456789',
+    })).toThrow(/invalid or unset/);
+    expect(execSync).toHaveBeenCalledTimes(1);
+    expect(execSync).not.toHaveBeenCalledWith('p4 login -p', expect.anything());
+  });
+
+  it('appends the ... wildcard to a directory depot path for p4 changes', async () => {
+    execSync.mockReturnValue('Change 7 on 2024/01/01 by svc@ws\n');
+
+    const { getRecentChangelists } = await import('../src/p4-source.js');
+
+    expect(getRecentChangelists(1, '//depot/main/Source/Client')).toEqual(['7']);
+    expect(execSync).toHaveBeenCalledWith(
+      'p4 changes -s submitted -m 1 //depot/main/Source/Client/...',
+      expect.anything(),
+    );
+  });
+
+  it('leaves a depot path that already ends in ... unchanged', async () => {
+    execSync.mockReturnValue('');
+
+    const { getRecentChangelists } = await import('../src/p4-source.js');
+
+    getRecentChangelists(1, '//depot/main/...');
+    expect(execSync).toHaveBeenCalledWith(
+      'p4 changes -s submitted -m 1 //depot/main/...',
+      expect.anything(),
+    );
+  });
 });

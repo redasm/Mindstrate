@@ -4,6 +4,7 @@ import {
   authorizeProject,
   authorizeProjectForResource,
   readParam,
+  requireScope,
   withInitializedMemory,
   type TeamRouteDeps,
 } from '../http/route-support.js';
@@ -67,14 +68,22 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/session/restore', asyncRoute((req, res) => {
-    const project = typeof req.query.project === 'string' ? req.query.project : '';
+    const requested = typeof req.query.project === 'string' ? req.query.project : undefined;
+    const authorized = authorizeProject(req, res, requested, 'read');
+    if (authorized === null) return;
+
+    const project = authorized ?? requested ?? '';
     const context = memory.sessions.restoreSessionContext(project);
     const formatted = memory.sessions.formatSessionContext(project);
     res.json({ context, formatted: formatted || null });
   }));
 
   app.get('/api/session/active', asyncRoute((req, res) => {
-    const project = typeof req.query.project === 'string' ? req.query.project : '';
+    const requested = typeof req.query.project === 'string' ? req.query.project : undefined;
+    const authorized = authorizeProject(req, res, requested, 'read');
+    if (authorized === null) return;
+
+    const project = authorized ?? requested ?? '';
     res.json({ session: memory.sessions.getActiveSession(project) });
   }));
 
@@ -84,6 +93,14 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
       res.status(404).json({ error: 'Not found' });
       return;
     }
+
+    const authorized = authorizeProjectForResource(
+      req,
+      res,
+      () => memory.sessions.getSession(id)?.project,
+      'read',
+    );
+    if (authorized === null) return;
 
     const session = memory.sessions.getSession(id);
     if (!session) {
@@ -95,6 +112,8 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.post('/api/feedback', asyncRoute((req, res) => {
+    if (!requireScope(req, res, 'write')) return;
+
     const { retrievalId, signal, context } = req.body;
     if (!retrievalId || !signal) {
       res.status(400).json({ error: 'retrievalId and signal are required' });
@@ -121,10 +140,14 @@ export const registerSessionRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    if (!requireScope(req, res, 'read')) return;
+
     res.json(memory.context.getFeedbackStats(nodeId));
   }));
 
   app.get('/api/stats', asyncRoute(async (_req, res) => {
+    if (!requireScope(_req, res, 'read')) return;
+
     res.json(await memory.maintenance.getStats());
   }));
 };

@@ -273,6 +273,35 @@ export class ContextNodeRepository {
     `).all() as Array<{ project: string; entries: number; conflicts: number; lastActivity: string | null }>;
   }
 
+  /**
+   * Project-graph nodes filtered by kind (kind lives in metadata JSON, so this
+   * uses json_extract). Ordered by quality so a bounded `limit` keeps the most
+   * salient nodes. Used to build the subgraph "skeleton" (directory/file) for
+   * the relationship-graph view without loading the whole project.
+   */
+  listByProjectKinds(project: string, kinds: string[], limit: number): ContextNode[] {
+    if (kinds.length === 0) return [];
+    const placeholders = kinds.map(() => '?').join(',');
+    const rows = this.db.prepare(`
+      SELECT * FROM context_nodes
+      WHERE LOWER(project) = LOWER(?)
+        AND json_extract(metadata, '$.kind') IN (${placeholders})
+      ORDER BY quality_score DESC, updated_at DESC
+      LIMIT ?
+    `).all(project, ...kinds, limit) as NodeRow[];
+    return rows.map(rowToNode);
+  }
+
+  /** Fetch nodes by an explicit id list (subgraph neighbor expansion). */
+  listByIds(ids: string[]): ContextNode[] {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = this.db.prepare(
+      `SELECT * FROM context_nodes WHERE id IN (${placeholders})`,
+    ).all(...ids) as NodeRow[];
+    return rows.map(rowToNode);
+  }
+
   recordAccess(id: string, accessedAt = new Date().toISOString()): void {
     this.db.prepare(`
       UPDATE context_nodes

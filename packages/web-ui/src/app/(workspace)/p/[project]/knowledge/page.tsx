@@ -86,7 +86,7 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
 
   const handleDelete = async (id: string) => {
     if (!confirm(t.deleteConfirm)) return;
-    await fetch(`/api/knowledge/${id}`, { method: 'DELETE' });
+    await fetch(`/api/knowledge/${encodeURIComponent(id)}`, { method: 'DELETE' });
     void load();
   };
 
@@ -190,7 +190,7 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
               <div key={k.id} className={`anim-in d${Math.min(i + 1, 8)}`}>
                 <KnowledgeCard
                   knowledge={k}
-                  href={`/p/${encodeURIComponent(decoded)}/knowledge/${k.id}`}
+                  href={`/p/${encodeURIComponent(decoded)}/knowledge/${encodeURIComponent(k.id)}`}
                   onDelete={handleDelete}
                 />
               </div>

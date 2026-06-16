@@ -66,6 +66,12 @@ describe('RepoScannerService P4 first-run initialization', () => {
     expect(result.itemsImported).toBe(0);
     expect(service.scanner.getSource(source.id)?.lastCursor).toBe('42');
     expect(memory.context.listContextNodes({ project: 'proj', limit: 50 }).length).toBeGreaterThan(0);
+    // System pages are internalized so the MCP before-edit/impact tools have
+    // project-specific guidance in team mode, matching local `mindstrate init`.
+    const systemPageNodes = memory.context
+      .listContextNodes({ project: 'proj', limit: 500 })
+      .filter((node) => node.metadata?.['systemPage'] === true);
+    expect(systemPageNodes.length).toBeGreaterThan(0);
     expect(p4Mocks.findP4WorkspaceRoot).not.toHaveBeenCalled();
   });
 

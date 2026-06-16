@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import {
   SUBSTRATE_ORDER,
@@ -155,13 +154,6 @@ export default function SettingsEcsPage() {
           <Icon icon="lucide:play" className="text-sm" />
           {triggering ? t.ecs.running : stage ? t.ecs.runStage : t.ecs.runMetabolism}
         </button>
-        <Link
-          href="/settings/lineage"
-          className="text-sm font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1"
-        >
-          <Icon icon="lucide:network" className="text-sm" />
-          {t.ecs.openLineage}
-        </Link>
       </div>
 
       {stageResult && (
@@ -184,14 +176,9 @@ export default function SettingsEcsPage() {
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] anim-in d4">
         <div className="bg-white rounded-2xl border border-surface-200 p-5">
-          <div className="mb-4 flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-base font-bold text-surface-900">{t.ecs.projectGraph}</h2>
-              <p className="mt-0.5 text-xs text-surface-400 font-medium">{t.ecs.projectGraphHint}</p>
-            </div>
-            <Link href="/settings/lineage" className="text-xs font-semibold text-brand-600 hover:text-brand-700">
-              {t.ecs.inspectLineage}
-            </Link>
+          <div className="mb-4">
+            <h2 className="text-base font-bold text-surface-900">{t.ecs.projectGraph}</h2>
+            <p className="mt-0.5 text-xs text-surface-400 font-medium">{t.ecs.projectGraphHint}</p>
           </div>
 
           <div className="space-y-3">
@@ -257,13 +244,13 @@ export default function SettingsEcsPage() {
                     <div>{t.ecs.detected}: {new Date(c.detectedAt).toLocaleString()}</div>
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {c.nodeIds.map((id) => (
-                        <Link
+                        <span
                           key={id}
-                          href={`/settings/lineage?node=${encodeURIComponent(id)}`}
-                          className="rounded-md bg-white border border-surface-200 px-2 py-0.5 font-mono text-[11px] text-brand-700 hover:bg-brand-50"
+                          className="rounded-md bg-white border border-surface-200 px-2 py-0.5 font-mono text-[11px] text-surface-600"
+                          title={id}
                         >
                           {id.slice(0, 8)}…
-                        </Link>
+                        </span>
                       ))}
                     </div>
                     {c.resolution && <div>{t.ecs.resolution}: {c.resolution}</div>}

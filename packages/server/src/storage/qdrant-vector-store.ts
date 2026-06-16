@@ -81,6 +81,12 @@ export class QdrantVectorStore implements IVectorStore {
     });
   }
 
+  async deleteAll(): Promise<void> {
+    // Drop the whole collection, then recreate it empty so the store stays usable.
+    await this.request(`/collections/${encodeURIComponent(this.collectionName)}`, { method: 'DELETE' });
+    await this.initialize();
+  }
+
   async search(
     embedding: number[],
     topK: number = 5,

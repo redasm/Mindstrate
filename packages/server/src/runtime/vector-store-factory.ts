@@ -40,6 +40,15 @@ export class VectorStoreFactory {
     }
   }
 
+  /** Drop every vector for a project (used when the project is deleted). */
+  async deleteProject(project: string): Promise<void> {
+    const store = await this.forProject(project);
+    await store.deleteAll();
+    const key = project || '__default__';
+    this.cache.delete(key);
+    this.initialized.delete(key);
+  }
+
   async initializeAll(): Promise<void> {
     // Lazy init per-project; nothing to do up front.
   }

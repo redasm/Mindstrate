@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Icon } from '../ui/Icon';
 import { useTranslations } from '@/lib/i18n/hooks';
 
@@ -19,7 +19,9 @@ const STORAGE_KEY = 'ms.sidebar.collapsed';
 export function Sidebar({ projects, currentProject, isAdmin }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [filter, setFilter] = useState('');
+  const [deleting, setDeleting] = useState<string | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
   const t = useTranslations();
 
   useEffect(() => {
@@ -32,6 +34,31 @@ export function Sidebar({ projects, currentProject, isAdmin }: Props) {
       window.localStorage.setItem(STORAGE_KEY, next ? '1' : '0');
       return next;
     });
+  };
+
+  const handleDelete = async (name: string) => {
+    if (deleting) return;
+    if (!window.confirm(t.sidebar.deleteProjectConfirm.replace('{PROJECT}', name))) return;
+    setDeleting(name);
+    try {
+      const res = await fetch(`/api/admin/projects/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        window.alert(body.error ?? t.sidebar.deleteProjectFailed);
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      if (name === currentProject) {
+        router.push('/');
+      } else {
+        router.refresh();
+      }
+      if (body?.vectorsCleared === false) {
+        window.alert(t.sidebar.deleteProjectVectorsWarning);
+      }
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const visible = useMemo(() => {
@@ -141,13 +168,27 @@ export function Sidebar({ projects, currentProject, isAdmin }: Props) {
                 {p.hasAlert && <div className="notification-dot" />}
               </Link>
               {isAdmin && (
-                <Link
-                  href={`/settings/scanner-sources?project=${encodeURIComponent(p.name)}`}
-                  title={t.sidebar.manageProject}
-                  className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center rounded-md text-surface-400 hover:bg-surface-100 hover:text-brand-600 transition-all flex-shrink-0"
-                >
-                  <Icon icon="lucide:settings-2" className="text-sm" />
-                </Link>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <Link
+                    href={`/settings/scanner-sources?project=${encodeURIComponent(p.name)}`}
+                    title={t.sidebar.manageProject}
+                    className="w-6 h-6 flex items-center justify-center rounded-md text-surface-400 hover:bg-surface-100 hover:text-brand-600 transition-all"
+                  >
+                    <Icon icon="lucide:settings-2" className="text-sm" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(p.name)}
+                    disabled={deleting === p.name}
+                    title={t.sidebar.deleteProject}
+                    className="w-6 h-6 flex items-center justify-center rounded-md text-surface-400 hover:bg-red-50 hover:text-red-600 transition-all disabled:opacity-50"
+                  >
+                    <Icon
+                      icon={deleting === p.name ? 'lucide:loader-2' : 'lucide:trash-2'}
+                      className={`text-sm ${deleting === p.name ? 'animate-spin' : ''}`}
+                    />
+                  </button>
+                </div>
               )}
             </div>
           );

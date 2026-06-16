@@ -167,4 +167,84 @@ describe('ContextGraphStore', () => {
 
     expect(store.getNodeEmbedding(node.id, 'test-embedding')).toBeNull();
   });
+
+  it('deletes every row for a project (case-insensitive) and leaves others intact', () => {
+    const seed = (project: string) => {
+      const a = store.createNode({
+        substrateType: SubstrateType.EPISODE,
+        domainType: ContextDomainType.BUG_FIX,
+        title: `${project} A`,
+        content: 'x',
+        project,
+      });
+      const b = store.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: `${project} B`,
+        content: 'y',
+        project,
+      });
+      const edge = store.createEdge({ sourceId: a.id, targetId: b.id, relationType: ContextRelationType.DERIVED_FROM });
+      store.upsertNodeEmbedding({ nodeId: a.id, model: 'm', dimensions: 3, embedding: [0.1, 0.2, 0.3] });
+      store.createEvent({
+        type: ContextEventType.SESSION_OBSERVATION,
+        project,
+        content: 'evt',
+        observedAt: '2026-01-01T00:00:00.000Z',
+      });
+      return { a, b, edge };
+    };
+    const keep = seed('keepme');
+    const drop = seed('dropme');
+
+    const result = store.deleteProject('DROPME'); // upper-case → exercises LOWER() match
+    expect(result.nodesDeleted).toBe(2);
+
+    expect(store.listNodes({ project: 'dropme' })).toHaveLength(0);
+    expect(store.getEdgeById(drop.edge.id)).toBeNull();
+    expect(store.getNodeEmbedding(drop.a.id, 'm')).toBeNull();
+    expect(store.listEvents({ project: 'dropme' })).toHaveLength(0);
+
+    expect(store.listNodes({ project: 'keepme' })).toHaveLength(2);
+    expect(store.getEdgeById(keep.edge.id)).not.toBeNull();
+    expect(store.getNodeEmbedding(keep.a.id, 'm')).not.toBeNull();
+    expect(store.listEvents({ project: 'keepme' })).toHaveLength(1);
+  });
+
+  it('queryProjectSubgraph: skeleton, focus neighborhood, and kind filter', () => {
+    const pgNode = (title: string, kind: string) => store.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title,
+      content: `${kind}: ${title}`,
+      project: 'demo',
+      metadata: { projectGraph: true, kind },
+    });
+    const pgEdge = (s: string, t: string, kind: string) => store.createEdge({
+      sourceId: s,
+      targetId: t,
+      relationType: ContextRelationType.APPLIES_TO,
+      evidence: { projectGraph: true, kind },
+    });
+
+    const dir = pgNode('src', 'directory');
+    const file = pgNode('src/app.ts', 'file');
+    const cls = pgNode('App', 'class');
+    const contains = pgEdge(dir.id, file.id, 'contains');
+    const defines = pgEdge(file.id, cls.id, 'defines');
+
+    // skeleton: directory + file only, internal edges only
+    const skel = store.queryProjectSubgraph({ project: 'demo' });
+    expect(skel.nodes.map((n) => n.id).sort()).toEqual([dir.id, file.id].sort());
+    expect(skel.edges.map((e) => e.id)).toEqual([contains.id]);
+
+    // focus: file + one-hop neighbors (dir, cls) + both touching edges
+    const focus = store.queryProjectSubgraph({ project: 'demo', focusNodeId: file.id });
+    expect(focus.nodes.map((n) => n.id).sort()).toEqual([cls.id, dir.id, file.id].sort());
+    expect(focus.edges.map((e) => e.id).sort()).toEqual([contains.id, defines.id].sort());
+
+    // kind filter
+    const classes = store.queryProjectSubgraph({ project: 'demo', nodeKinds: ['class'] });
+    expect(classes.nodes.map((n) => n.id)).toEqual([cls.id]);
+  });
 });

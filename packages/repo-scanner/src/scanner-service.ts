@@ -414,6 +414,26 @@ export class RepoScannerService {
       name: source.project,
       root,
     };
+    if (!detected.detectionRule) {
+      // No rule matched (neither the project's .mindstrate/rules nor the
+      // built-in ones) → detectGenericProject ran, so there are no
+      // ignore/sourceRoots/generatedRoots hints and the whole directory gets
+      // indexed with built-in ignores only. The usual cause: the scan root is a
+      // subdirectory missing the markers a rule needs (e.g. the built-in Unreal
+      // rule needs a *.uproject at the scan root), so even the bundled rules
+      // can't match. Make it loud instead of silently bare-scanning.
+      this.log(
+        source.id,
+        runId,
+        'warn',
+        `No project detection rule matched under ${root} — indexing the entire directory `
+          + 'with built-in ignores only (generated dirs like TypeScript/Typing will NOT be '
+          + 'excluded). Built-in rules need a marker at the scan root (e.g. a *.uproject file '
+          + 'for Unreal). Point the source at the directory that has it, or add a '
+          + '.mindstrate/rules folder here, then re-scan.',
+        'init',
+      );
+    }
     await this.memory.snapshots.upsertProjectSnapshot(project, { author: 'repo-scanner' });
     this.log(source.id, runId, 'info', `Indexing project graph under ${root} (large checkouts can take a while)`, 'index');
     const indexResult = this.memory.context.indexProjectGraph(project, {
@@ -425,6 +445,21 @@ export class RepoScannerService {
       runId,
       'info',
       `Project graph indexed: ${indexResult.filesScanned} files scanned, ${indexResult.skippedFiles} skipped`,
+      'index',
+    );
+    // Internalize the system pages (architecture / operation-manual book) into
+    // the graph so the MCP before-edit / impact tools surface the same
+    // project-specific editing rules in team mode as `mindstrate init` gives
+    // locally. Local mode gets this as a side effect of the Obsidian projection;
+    // the scanner has no vault, so it runs the deterministic internalization
+    // directly. Idempotent.
+    const systemPages = this.memory.context.internalizeSystemPages(project);
+    this.log(
+      source.id,
+      runId,
+      'info',
+      `System pages internalized: ${systemPages.created.length} created, `
+        + `${systemPages.updated.length} updated, ${systemPages.unchanged.length} unchanged`,
       'index',
     );
     await this.enrichProjectGraph(source, project, runId);

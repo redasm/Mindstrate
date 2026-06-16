@@ -15,6 +15,7 @@ import {
   type MetabolismRun,
   type ProjectionRecord,
   ContextRelationType,
+  isProjectGraphEdge,
 } from '@mindstrate/protocol/models';
 import {
   ContextEdgeRepository,
@@ -158,6 +159,77 @@ export class ContextGraphStore {
 
   getProjectBreakdown(): Array<{ project: string; entries: number; conflicts: number; lastActivity: string | null }> {
     return this.nodes.aggregateProjectBreakdown();
+  }
+
+  /**
+   * Bounded project-graph subgraph for the relationship-graph UI.
+   *
+   * Without `focusNodeId`: a "skeleton" of the project — nodes of the given
+   * kinds (default directory+file), most-salient first, capped at `limit`, plus
+   * the edges among them. With `focusNodeId`: that node plus its one-hop
+   * project-graph neighbors (outgoing + incoming edges, capped). This keeps the
+   * payload small so a 100k+ node graph can be explored incrementally instead
+   * of shipped whole.
+   */
+  queryProjectSubgraph(opts: {
+    project: string;
+    focusNodeId?: string;
+    nodeKinds?: string[];
+    limit?: number;
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } {
+    const limit = Math.min(Math.max(opts.limit ?? 300, 1), 2000);
+    if (opts.focusNodeId) {
+      const focus = this.nodes.getById(opts.focusNodeId);
+      if (!focus) return { nodes: [], edges: [] };
+      const touching = [
+        ...this.edges.listOutgoing(opts.focusNodeId),
+        ...this.edges.listIncoming(opts.focusNodeId),
+      ].filter(isProjectGraphEdge).slice(0, limit);
+      const ids = Array.from(new Set([opts.focusNodeId, ...touching.flatMap((e) => [e.sourceId, e.targetId])]));
+      return { nodes: this.nodes.listByIds(ids), edges: touching };
+    }
+    if (opts.nodeKinds && opts.nodeKinds.length > 0) {
+      const nodes = this.nodes.listByProjectKinds(opts.project, opts.nodeKinds, limit);
+      const edges = this.edges.listAmongNodes(nodes.map((n) => n.id));
+      return { nodes, edges };
+    }
+    // Default skeleton: pull the structural backbone (project + directories)
+    // first so file→directory/project CONTAINS edges always have both endpoints
+    // present, then fill the remaining budget with files. Picking only top files
+    // by salience would otherwise drop their parent nodes and leave an edgeless
+    // scatter of dots.
+    const structural = this.nodes.listByProjectKinds(opts.project, ['project', 'directory'], limit);
+    const files = this.nodes.listByProjectKinds(
+      opts.project,
+      ['file'],
+      Math.max(0, limit - structural.length),
+    );
+    const nodes = [...structural, ...files];
+    const edges = this.edges.listAmongNodes(nodes.map((n) => n.id));
+    return { nodes, edges };
+  }
+
+  /**
+   * Delete every context-graph row belonging to a project — nodes plus their
+   * edges/embeddings/projections, and the project-scoped events, conflicts and
+   * metabolism runs. One transaction so a crash can't leave a half-deleted
+   * graph. Foreign keys aren't enforced on this connection, so child rows are
+   * removed explicitly (via subquery, not an id list, to avoid the variable cap
+   * on large graphs) before the nodes. Project match is case-insensitive, like
+   * the read path.
+   */
+  deleteProject(project: string): { nodesDeleted: number } {
+    const sub = 'SELECT id FROM context_nodes WHERE LOWER(project) = LOWER(?)';
+    return this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM context_edges WHERE source_id IN (${sub}) OR target_id IN (${sub})`).run(project, project);
+      this.db.prepare(`DELETE FROM node_embeddings WHERE node_id IN (${sub})`).run(project);
+      this.db.prepare(`DELETE FROM projection_records WHERE node_id IN (${sub})`).run(project);
+      const nodesDeleted = this.db.prepare('DELETE FROM context_nodes WHERE LOWER(project) = LOWER(?)').run(project).changes;
+      this.db.prepare('DELETE FROM context_events WHERE LOWER(project) = LOWER(?)').run(project);
+      this.db.prepare('DELETE FROM conflict_records WHERE LOWER(project) = LOWER(?)').run(project);
+      this.db.prepare('DELETE FROM metabolism_runs WHERE LOWER(project) = LOWER(?)').run(project);
+      return { nodesDeleted };
+    })();
   }
 
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {

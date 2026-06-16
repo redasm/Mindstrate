@@ -59,6 +59,9 @@ import {
 import {
   writeProjectGraphArtifacts,
   writeProjectGraphObsidianProjection,
+  internalizeSystemPagesAsRules,
+  systemPageDefinitionsForProject,
+  type InternalizeSystemPagesResult,
   type ProjectGraphArtifactResult,
   type ProjectGraphObsidianProjectionOptions,
   type SystemPageDefinition,
@@ -170,6 +173,16 @@ export class MindstrateContextGraphApi {
     return this.services.contextGraphStore.listEdges(options);
   }
 
+  /** Bounded project-graph subgraph (skeleton or one-hop around a focus node). */
+  queryProjectSubgraph(opts: {
+    project: string;
+    focusNodeId?: string;
+    nodeKinds?: string[];
+    limit?: number;
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } {
+    return this.services.contextGraphStore.queryProjectSubgraph(opts);
+  }
+
   queryContextGraph(options?: {
     query?: string;
     project?: string;
@@ -224,7 +237,10 @@ export class MindstrateContextGraphApi {
   }
 
   indexProjectGraph(project: DetectedProject, options?: ProjectGraphIndexOptions): ProjectGraphIndexResult {
-    return indexProjectGraph(this.services.contextGraphStore, project, options);
+    return indexProjectGraph(this.services.contextGraphStore, project, {
+      logger: this.services.logger,
+      ...options,
+    });
   }
 
   detectProjectGraphChanges(
@@ -317,6 +333,22 @@ export class MindstrateContextGraphApi {
     options?: ProjectGraphObsidianProjectionOptions,
   ): ProjectGraphArtifactResult {
     return writeProjectGraphObsidianProjection(this.services.contextGraphStore, project, vaultRoot, options);
+  }
+
+  /**
+   * Internalize the project's system pages (architecture/operation-manual book)
+   * as queryable `systemPage` RULE nodes — the same nodes the MCP before-edit /
+   * impact task report reads for project-specific guidance. The Obsidian
+   * projection does this as a side effect for local mode; team-mode scanning has
+   * no vault, so this exposes it as a standalone step to keep AI guidance at
+   * parity across modes. Deterministic and idempotent.
+   */
+  internalizeSystemPages(
+    project: DetectedProject,
+    systemPages?: SystemPageDefinition[],
+  ): InternalizeSystemPagesResult {
+    const pages = systemPages ?? systemPageDefinitionsForProject(project);
+    return internalizeSystemPagesAsRules(this.services.contextGraphStore, project.name, pages);
   }
 
   createProjectGraphOverlay(input: CreateProjectGraphOverlayInput): ProjectGraphOverlay {

@@ -20,9 +20,7 @@ export function WorkspaceShell({ user, projects, children }: Props) {
     ? [
         { href: `/p/${encodeURIComponent(currentProject)}/knowledge`,     label: t.nav.workspace.knowledge,    icon: 'lucide:book-open' },
         { href: `/p/${encodeURIComponent(currentProject)}/project-graph`, label: t.nav.workspace.projectGraph, icon: 'lucide:network' },
-        { href: `/p/${encodeURIComponent(currentProject)}/graph`,         label: t.nav.workspace.graph,        icon: 'lucide:share-2' },
         { href: `/p/${encodeURIComponent(currentProject)}/bundles`,       label: t.nav.workspace.bundles,      icon: 'lucide:package' },
-        { href: `/p/${encodeURIComponent(currentProject)}/lineage`,       label: t.nav.workspace.lineage,      icon: 'lucide:git-branch' },
         { href: `/p/${encodeURIComponent(currentProject)}/knowledge/new`, label: t.nav.workspace.add,          icon: 'lucide:plus' },
       ]
     : [];

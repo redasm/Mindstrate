@@ -1,6 +1,7 @@
 import type { GraphKnowledgeView } from '@mindstrate/protocol';
 import {
   ContextNodeStatus,
+  LLM_ENRICHMENT_CACHE_TAG,
   SubstrateType,
   type ContextNode,
   isProjectGraphNode,
@@ -46,6 +47,7 @@ export class GraphKnowledgeProjector {
     }).filter((node) =>
       includeStatuses.includes(node.status) &&
       isProjectable(node.substrateType) &&
+      !node.tags.includes(LLM_ENRICHMENT_CACHE_TAG) &&
       (options.includeProjectGraphNodes === true || !isProjectGraphNode(node)),
     );
 

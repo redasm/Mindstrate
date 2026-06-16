@@ -23,6 +23,39 @@ export class MindstrateMaintenanceApi {
     return this.services.contextGraphStore.getProjectBreakdown();
   }
 
+  /**
+   * Permanently delete a project: its context-graph rows
+   * (nodes/edges/embeddings/projections/events/conflicts/metabolism), its
+   * scan-source configs (so it isn't rebuilt on the next scan), and its
+   * vectors. Irreversible.
+   *
+   * The durable SQLite data is deleted first — that's what makes the project
+   * disappear from the UI. The vector index is a file that may be owned by a
+   * different container user (the scanner runs as root, web-ui/team-server as
+   * uid 1001), so a permission error clearing it must NOT abort the deletion;
+   * it's reported via `vectorsCleared: false` instead.
+   */
+  async deleteProject(project: string): Promise<{ nodesDeleted: number; sourcesDeleted: number; vectorsCleared: boolean }> {
+    const { nodesDeleted } = this.services.contextGraphStore.deleteProject(project);
+    let sourcesDeleted = 0;
+    for (const source of this.services.scanSourceRepository.listSources()) {
+      if (source.project.toLowerCase() === project.toLowerCase()) {
+        if (this.services.scanSourceRepository.deleteSource(source.id)) sourcesDeleted++;
+      }
+    }
+    let vectorsCleared = true;
+    try {
+      await this.services.vectorStoreFactory.deleteProject(project);
+    } catch (error) {
+      vectorsCleared = false;
+      this.services.logger.warn(
+        `Deleted project "${project}" graph + sources, but could not clear its vector index `
+          + `(likely a cross-container file-ownership issue): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    return { nodesDeleted, sourcesDeleted, vectorsCleared };
+  }
+
   async getStats(): Promise<{
     total: number;
     byType: Record<string, number>;

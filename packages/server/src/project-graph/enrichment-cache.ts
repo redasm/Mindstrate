@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import {
   ContextDomainType,
   ContextNodeStatus,
+  LLM_ENRICHMENT_CACHE_TAG,
   PROJECT_GRAPH_METADATA_KEYS,
   ProjectGraphProvenance,
   SubstrateType,
@@ -24,9 +25,12 @@ import type { ContextGraphStore } from '../context-graph/context-graph-store.js'
 /**
  * Tag attached to the LLM enrichment cache node. Read by
  * `metabolism/pruner.ts` so stale-snapshot heuristics never archive
- * a cache record by accident.
+ * a cache record by accident, and by the knowledge projector so the cache
+ * node never surfaces as a user-facing knowledge card. The canonical
+ * definition lives in `@mindstrate/protocol/models`; re-exported here for the
+ * existing import sites.
  */
-export const LLM_ENRICHMENT_CACHE_TAG = 'llm-enrichment-cache';
+export { LLM_ENRICHMENT_CACHE_TAG };
 
 export const hashExtractedFacts = (nodes: ContextNode[]): string => {
   const facts = nodes
@@ -63,7 +67,9 @@ export const upsertEnrichmentCacheNode = (
     tags: ['project-graph', LLM_ENRICHMENT_CACHE_TAG],
     project,
     status: ContextNodeStatus.ACTIVE,
-    metadata: { inputHash },
+    // Mark as a project-graph node so it's excluded from the user-facing
+    // knowledge projection (same gate that hides file/dir/symbol nodes).
+    metadata: { inputHash, [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true },
   };
   if (store.getNodeById(id)) {
     store.updateNode(id, update);

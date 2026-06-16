@@ -198,3 +198,59 @@ describe('write path ACL enforcement for scoped keys', () => {
     expect(overlay.project).toBe('proj-allowed');
   });
 });
+
+describe('read path ACL enforcement for scoped keys', () => {
+  const get = (baseUrl: string, path: string, apiKey?: string): Promise<Response> =>
+    fetch(`${baseUrl}${path}`, apiKey ? { headers: { Authorization: `Bearer ${apiKey}` } } : undefined);
+
+  it('rejects unauthenticated reads with 401 across newly-guarded endpoints', async () => {
+    const { baseUrl } = await startTeamServer({ projects: ['proj-a'] });
+    for (const path of [
+      '/api/session/restore?project=proj-a',
+      '/api/session/active?project=proj-a',
+      '/api/stats',
+      '/api/context/edges',
+      '/api/context/projections',
+      '/api/graph/knowledge?project=proj-a',
+    ]) {
+      const resp = await get(baseUrl, path);
+      expect(resp.status, path).toBe(401);
+    }
+  });
+
+  it('rejects GET /api/graph/knowledge for a project outside the whitelist', async () => {
+    const { baseUrl, apiKey } = await startTeamServer({ projects: ['proj-a'] });
+    const denied = await get(baseUrl, '/api/graph/knowledge?project=proj-b', apiKey);
+    expect(denied.status).toBe(403);
+    const allowed = await get(baseUrl, '/api/graph/knowledge?project=proj-a', apiKey);
+    expect(allowed.status).toBe(200);
+  });
+
+  it('rejects GET /api/context/graph for a project outside the whitelist', async () => {
+    const { baseUrl, apiKey } = await startTeamServer({ projects: ['proj-a'] });
+    const denied = await get(baseUrl, '/api/context/graph?project=proj-b', apiKey);
+    expect(denied.status).toBe(403);
+    const allowed = await get(baseUrl, '/api/context/graph?project=proj-a', apiKey);
+    expect(allowed.status).toBe(200);
+  });
+
+  it('rejects GET /api/session/restore + active for a project outside the whitelist', async () => {
+    const { baseUrl, apiKey } = await startTeamServer({ projects: ['proj-a'] });
+    expect((await get(baseUrl, '/api/session/restore?project=proj-b', apiKey)).status).toBe(403);
+    expect((await get(baseUrl, '/api/session/active?project=proj-b', apiKey)).status).toBe(403);
+    expect((await get(baseUrl, '/api/session/restore?project=proj-a', apiKey)).status).toBe(200);
+  });
+
+  it('rejects GET /api/session/:id when the session belongs to another project', async () => {
+    const { baseUrl, apiKey, memory } = await startTeamServer({ projects: ['proj-a'] });
+    const session = await memory.sessions.startSession({ project: 'proj-b' });
+    const denied = await get(baseUrl, `/api/session/${session.id}`, apiKey);
+    expect(denied.status).toBe(403);
+  });
+
+  it('allows wildcard keys to read across projects', async () => {
+    const { baseUrl, apiKey } = await startTeamServer({ projects: ['*'] });
+    expect((await get(baseUrl, '/api/graph/knowledge?project=anything', apiKey)).status).toBe(200);
+    expect((await get(baseUrl, '/api/stats', apiKey)).status).toBe(200);
+  });
+});

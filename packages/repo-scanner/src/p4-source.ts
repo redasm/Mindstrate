@@ -16,22 +16,94 @@ function buildEnv(env?: P4Env): NodeJS.ProcessEnv {
   return merged;
 }
 
+// A Perforce ticket is a 32-char hex string. A configured secret that already
+// looks like one is passed straight through as P4PASSWD; anything else is
+// treated as a plaintext password that must be exchanged for a ticket.
+const P4_TICKET_RE = /^[0-9a-fA-F]{32}$/;
+
+// Process-scoped ticket cache so a scan (which issues many p4 commands —
+// `changes` plus a `describe` per changelist) logs in once, not per command.
+// Keyed by port+user and refreshed on auth failure, so a long-running daemon
+// survives ticket expiry mid-run.
+const p4TicketCache = new Map<string, string>();
+const credKey = (env?: P4Env): string => `${env?.p4Port ?? ''}|${env?.p4User ?? ''}`;
+
+const isAuthError = (message: string): boolean =>
+  /(password|p4passwd|login|ticket|session|expired)/i.test(message);
+
+function execP4(command: string, env?: P4Env, maxBuffer?: number): string {
+  return execSync(command, {
+    encoding: 'utf-8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: buildEnv(env),
+    ...(maxBuffer ? { maxBuffer } : {}),
+  });
+}
+
+/**
+ * Exchange the configured plaintext password for a Perforce ticket via
+ * `p4 login -p`, which prints the ticket instead of writing the ticket file —
+ * so it doesn't depend on P4TICKETS being writable/persistent in a container.
+ * Servers at security level >= 2 reject a plaintext P4PASSWD for commands like
+ * `p4 changes`, so the scanner must mint a ticket and pass THAT as P4PASSWD.
+ */
+function mintP4Ticket(env: P4Env, force: boolean): string {
+  const key = credKey(env);
+  if (!force) {
+    const cached = p4TicketCache.get(key);
+    if (cached) return cached;
+  }
+  let out: string;
+  try {
+    out = execSync('p4 login -p', {
+      input: `${env.p4Passwd ?? ''}\n`,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: buildEnv(env),
+    });
+  } catch (error) {
+    throw new Error(`p4 login failed: ${describeExecError(error)}`);
+  }
+  const ticket = out.match(/[0-9a-fA-F]{32}/)?.[0];
+  if (!ticket) {
+    throw new Error('p4 login -p returned no ticket; check the configured P4 password');
+  }
+  p4TicketCache.set(key, ticket);
+  return ticket;
+}
+
+// Prefer a cached ticket on the first attempt when we have one; otherwise run
+// with the configured secret as-is (a ticket, or a plaintext password that a
+// low-security server still accepts).
+function firstAttemptEnv(env?: P4Env): P4Env | undefined {
+  if (!env?.p4Passwd || P4_TICKET_RE.test(env.p4Passwd)) return env;
+  const cached = p4TicketCache.get(credKey(env));
+  return cached ? { ...env, p4Passwd: cached } : env;
+}
+
 /**
  * Run a p4 command and surface a useful error. execSync only exposes a generic
  * "Command failed" message; the real cause (connect refused, login required,
  * unknown depot, p4 not installed) lives in stderr. We extract it so scan runs
  * record an actionable error instead of silently returning empty results.
+ *
+ * On a ticket-level server the configured plaintext password is rejected; when
+ * that happens we transparently `p4 login` to mint a ticket and retry once.
  */
 function runP4Command(command: string, env?: P4Env, maxBuffer?: number): string {
   try {
-    return execSync(command, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: buildEnv(env),
-      ...(maxBuffer ? { maxBuffer } : {}),
-    });
+    return execP4(command, firstAttemptEnv(env), maxBuffer);
   } catch (error) {
-    throw new Error(`${command} failed: ${describeExecError(error)}`);
+    const message = describeExecError(error);
+    if (env?.p4Passwd && !P4_TICKET_RE.test(env.p4Passwd) && isAuthError(message)) {
+      const ticket = mintP4Ticket(env, true);
+      try {
+        return execP4(command, { ...env, p4Passwd: ticket }, maxBuffer);
+      } catch (retryError) {
+        throw new Error(`${command} failed: ${describeExecError(retryError)}`);
+      }
+    }
+    throw new Error(`${command} failed: ${message}`);
   }
 }
 
@@ -105,12 +177,27 @@ export function getChangelistInfo(changelist: string, env?: P4Env): CommitInfo |
 export function getRecentChangelists(n: number = 10, depotPath?: string, env?: P4Env): string[] {
   const count = Math.max(1, Math.min(Math.floor(n) || 10, 1000));
   validateDepotPath(depotPath);
-  const pathArg = depotPath ? ` ${depotPath}` : '';
+  const normalized = depotPathForChanges(depotPath);
+  const pathArg = normalized ? ` ${normalized}` : '';
   const output = runP4Command(`p4 changes -s submitted -m ${count}${pathArg}`, env);
   return output
     .split('\n')
     .map((line) => line.match(/^Change\s+(\d+)\s+on/)?.[1])
     .filter((value): value is string => Boolean(value));
+}
+
+/**
+ * `p4 changes //depot/dir` treats the trailing segment as a *file* spec and
+ * matches nothing for a directory — the silent "0 changelists" that leaves the
+ * knowledge base empty. Append the `...` wildcard so a depot path configured as
+ * a plain directory lists the changes under that subtree. Paths that already
+ * carry a wildcard (`...` or `*`) are left untouched.
+ */
+function depotPathForChanges(depotPath?: string): string | undefined {
+  if (!depotPath) return undefined;
+  const trimmed = depotPath.trim();
+  if (trimmed.endsWith('...') || trimmed.includes('*')) return trimmed;
+  return trimmed.endsWith('/') ? `${trimmed}...` : `${trimmed}/...`;
 }
 
 /**
@@ -121,8 +208,8 @@ export function listChangelistsSince(cursor: string, depotPath?: string, env?: P
   const cl = sanitizeChangelist(cursor);
   validateDepotPath(depotPath);
   const next = String(BigInt(cl) + 1n);
-  const path = depotPath ?? '//...';
-  const output = runP4Command(`p4 changes -s submitted ${path}@${next},#head`, env);
+  const depot = depotPathForChanges(depotPath) ?? '//...';
+  const output = runP4Command(`p4 changes -s submitted ${depot}@${next},#head`, env);
   const newestFirst = output
     .split('\n')
     .map((line) => line.match(/^Change\s+(\d+)\s+on/)?.[1])
@@ -133,7 +220,8 @@ export function listChangelistsSince(cursor: string, depotPath?: string, env?: P
 export function findP4WorkspaceRoot(depotPath?: string, env?: P4Env): string | null {
   validateDepotPath(depotPath);
   try {
-    const pathArg = depotPath ? ` ${depotPath}` : ' //...';
+    const normalized = depotPathForChanges(depotPath);
+    const pathArg = normalized ? ` ${normalized}` : ' //...';
     const output = runP4Command(`p4 -ztag where${pathArg}`, env);
     const localPaths = parseZtagWhereLocalPaths(output);
     if (localPaths.length === 0) return null;

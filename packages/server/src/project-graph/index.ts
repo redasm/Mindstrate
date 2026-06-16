@@ -95,6 +95,13 @@ export {
 export type { SystemPageDefinition } from './obsidian-system-page-types.js';
 export { KNOWN_SYSTEM_PAGE_CLASSIFICATIONS } from './system-page-metadata.js';
 export {
+  internalizeSystemPagesAsRules,
+  systemPageRuleId,
+  SYSTEM_PAGE_RULE_TAG,
+  type InternalizeSystemPagesResult,
+} from './internalize-system-pages.js';
+export { systemPageDefinitionsForProject } from './obsidian-system-pages.js';
+export {
   recordProjectGraphExternalChanges,
   type RecordProjectGraphExternalChangesInput,
   type ProjectGraphExternalChangeRecordResult,

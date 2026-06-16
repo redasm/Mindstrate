@@ -47,6 +47,30 @@ export const readStringArray = (value: unknown): string[] | undefined => {
   return undefined;
 };
 
+/**
+ * Guard a global (non-project) endpoint: requires an authenticated principal
+ * holding `scope` (or admin). Returns true when authorized; otherwise writes the
+ * 401/403 response and returns false so the route can short-circuit. Use for
+ * endpoints with no project dimension (system stats, dataset-wide curation,
+ * structural bundle validation, feedback keyed by an opaque retrieval id).
+ */
+export const requireScope = (
+  req: Request,
+  res: Response,
+  scope: TeamScope,
+): boolean => {
+  const principal = req.teamPrincipal;
+  if (!principal) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+  if (!principal.scopes.includes(scope) && !principal.scopes.includes('admin')) {
+    res.status(403).json({ error: `Forbidden: ${scope} scope is required.` });
+    return false;
+  }
+  return true;
+};
+
 export const authorizeProject = (
   req: Request,
   res: Response,

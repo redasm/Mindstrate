@@ -12,6 +12,7 @@ import {
   authorizeProject,
   authorizeProjectForResource,
   parseLimit,
+  requireScope,
   withInitializedMemory,
   type TeamRouteDeps,
 } from '../http/route-support.js';
@@ -38,9 +39,12 @@ const authorizeAllBundleProjects = (
 
 export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): void => {
   app.get('/api/graph/knowledge', withInitializedMemory(memory, async (req, res) => {
-    const project = typeof req.query.project === 'string' ? req.query.project : undefined;
+    const requested = typeof req.query.project === 'string' ? req.query.project : undefined;
+    const authorized = authorizeProject(req, res, requested, 'read');
+    if (authorized === null) return;
+
     const entries = memory.context.readGraphKnowledge({
-      project,
+      project: authorized ?? requested,
       limit: parseLimit(req.query.limit, 20),
     });
 
@@ -54,8 +58,11 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    const authorized = authorizeProject(req, res, project, 'read');
+    if (authorized === null) return;
+
     res.json(memory.context.queryGraphKnowledge(query, {
-      project,
+      project: authorized ?? project,
       topK: topK || 10,
       limit: limit || 50,
       sessionId,
@@ -89,9 +96,13 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/context/graph', withInitializedMemory(memory, async (req, res) => {
+    const requested = typeof req.query.project === 'string' ? req.query.project : undefined;
+    const authorized = authorizeProject(req, res, requested, 'read');
+    if (authorized === null) return;
+
     const nodes = memory.context.queryContextGraph({
       query: typeof req.query.query === 'string' ? req.query.query : undefined,
-      project: typeof req.query.project === 'string' ? req.query.project : undefined,
+      project: authorized ?? requested,
       substrateType: req.query.substrateType as SubstrateType | undefined,
       domainType: req.query.domainType as ContextDomainType | undefined,
       status: req.query.status as ContextNodeStatus | undefined,
@@ -102,8 +113,12 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/context/conflicts', withInitializedMemory(memory, async (req, res) => {
+    const requested = typeof req.query.project === 'string' ? req.query.project : undefined;
+    const authorized = authorizeProject(req, res, requested, 'read');
+    if (authorized === null) return;
+
     const conflicts = memory.context.listConflictRecords(
-      typeof req.query.project === 'string' ? req.query.project : undefined,
+      authorized ?? requested,
       parseLimit(req.query.limit, 20),
     );
 
@@ -111,6 +126,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/context/projections', withInitializedMemory(memory, async (req, res) => {
+    if (!requireScope(req, res, 'read')) return;
+
     const records = memory.projections.listProjectionRecords({
       nodeId: typeof req.query.nodeId === 'string' ? req.query.nodeId : undefined,
       target: typeof req.query.target === 'string' ? req.query.target : undefined,
@@ -157,6 +174,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/context/edges', withInitializedMemory(memory, async (req, res) => {
+    if (!requireScope(req, res, 'read')) return;
+
     const edges = memory.context.listContextEdges({
       sourceId: typeof req.query.sourceId === 'string' ? req.query.sourceId : undefined,
       targetId: typeof req.query.targetId === 'string' ? req.query.targetId : undefined,
@@ -168,6 +187,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.post('/api/curate', withInitializedMemory(memory, async (req, res) => {
+    if (!requireScope(req, res, 'read')) return;
+
     const { task, language, framework } = req.body;
     if (!task) {
       res.status(400).json({ error: 'task is required' });
@@ -189,11 +210,15 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
       return;
     }
 
+    const authorized = authorizeProject(req, res, project, 'read');
+    if (authorized === null) return;
+    const scopedProject = authorized ?? project;
+
     const assembled = await memory.assembly.assembleContext(task, {
-      project,
+      project: scopedProject,
       sessionId,
       context: {
-        project,
+        project: scopedProject,
         currentLanguage: language,
         currentFramework: framework,
       },
@@ -296,8 +321,12 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.get('/api/context/project-graph/overlays', withInitializedMemory(memory, async (req, res) => {
+    const requested = typeof req.query.project === 'string' ? req.query.project : undefined;
+    const authorized = authorizeProject(req, res, requested, 'read');
+    if (authorized === null) return;
+
     const overlays = memory.context.listProjectGraphOverlays({
-      project: typeof req.query.project === 'string' ? req.query.project : undefined,
+      project: authorized ?? requested,
       target: typeof req.query.target === 'string' ? req.query.target : undefined,
       targetNodeId: typeof req.query.targetNodeId === 'string' ? req.query.targetNodeId : undefined,
       targetEdgeId: typeof req.query.targetEdgeId === 'string' ? req.query.targetEdgeId : undefined,
@@ -369,6 +398,8 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
   }));
 
   app.post('/api/bundles/validate', withInitializedMemory(memory, async (req, res) => {
+    if (!requireScope(req, res, 'read')) return;
+
     const bundle = req.body.bundle as PortableContextBundle | undefined;
     if (!bundle) {
       res.status(400).json({ error: 'bundle is required' });
