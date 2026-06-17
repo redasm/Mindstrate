@@ -175,6 +175,21 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       return memory!.context.queryContextGraph(queryOptions as any);
     },
 
+    async getContextNode(id: string) {
+      if (teamClient) return teamClient.context.getNode(id);
+      return memory!.context.getContextNode(id);
+    },
+
+    async queryProjectSubgraph(opts) {
+      if (teamClient) return teamClient.context.getSubgraph(opts);
+      return memory!.context.queryProjectSubgraph({
+        project: opts.project ?? '',
+        focusNodeId: opts.focus,
+        nodeKinds: opts.kinds,
+        limit: opts.limit,
+      });
+    },
+
     async listContextEdges(queryOptions) {
       if (teamClient) return teamClient.context.listEdges(queryOptions);
       return memory!.context.listContextEdges(queryOptions as any);

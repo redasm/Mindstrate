@@ -138,6 +138,10 @@ export interface LocalContextSubApi {
     },
   ): GraphKnowledgeSearchResult[];
   queryContextGraph(options?: ContextGraphQueryOptions): ContextNode[];
+  getContextNode(id: string): ContextNode | null;
+  queryProjectSubgraph(
+    options: { project: string; focusNodeId?: string; nodeKinds?: string[]; limit?: number },
+  ): { nodes: ContextNode[]; edges: ContextEdge[] };
   listContextEdges(options?: ContextEdgeQueryOptions): ContextEdge[];
   listConflictRecords(project?: string, limit?: number): ConflictRecord[];
   createProjectGraphOverlay(input: ProjectGraphOverlayInput): ProjectGraphOverlay;
@@ -290,6 +294,12 @@ export interface SessionApi {
 export interface ContextGraphApi {
   ingestContextEvent(input: ContextEventInput): Promise<{ eventId: string; nodeId: string }>;
   queryContextGraph(options?: ContextGraphQueryOptions): Promise<ContextNode[]>;
+  /** Direct primary-key lookup — bounded, unlike the list scan in queryContextGraph. */
+  getContextNode(id: string): Promise<ContextNode | null>;
+  /** Bounded project-graph subgraph: skeleton (no focus) or one-hop around `focus`. */
+  queryProjectSubgraph(
+    options: { project?: string; focus?: string; kinds?: string[]; limit?: number },
+  ): Promise<{ nodes: ContextNode[]; edges: ContextEdge[] }>;
   listContextEdges(options?: ContextEdgeQueryOptions): Promise<ContextEdge[]>;
   listContextConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]>;
   createProjectGraphOverlay(input: ProjectGraphOverlayInput): Promise<ProjectGraphOverlay>;
