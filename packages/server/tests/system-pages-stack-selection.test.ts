@@ -73,6 +73,12 @@ describe('system page stack selection', () => {
     ]) {
       expect(keys, `missing ${expected}`).toContain(expected);
     }
+
+    // Regression: the Unreal preset titles carry literal `${project.name}`
+    // placeholders that must be interpolated, not surfaced raw on the card.
+    const overview = pages.find((page) => page.key === '00-overview');
+    expect(overview?.title).not.toContain('${project');
+    expect(overview?.title).toContain(project.name);
   });
 
   it('lets a project-local rule override the built-in unreal preset', () => {

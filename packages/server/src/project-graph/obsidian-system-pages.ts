@@ -49,7 +49,18 @@ export const systemPageDefinitionsForProject = (project: DetectedProject): Syste
   const stackPreset = stackPresetForProject(project);
   const custom = loadCustomSystemPages(project);
   // Order matters: later inputs override earlier ones via `mergeSystemPages`.
-  return mergeSystemPages(mergeSystemPages(skeleton, stackPreset), custom);
+  const merged = mergeSystemPages(mergeSystemPages(skeleton, stackPreset), custom);
+  // JSON-authored presets carry literal `${project.*}` placeholders in their
+  // title/body (the generic skeleton is already interpolated via JS template
+  // literals). Expand them here at the single source so BOTH the Obsidian file
+  // and the internalized RULE node (the knowledge card) get the project name —
+  // otherwise the card title showed a raw `${project.name} 架构总览`. The
+  // per-line expansion in `renderSystemPage` then becomes an idempotent no-op.
+  return merged.map((page) => ({
+    ...page,
+    title: expandProjectTokens(page.title, project),
+    body: page.body.map((line) => expandProjectTokens(line, project)),
+  }));
 };
 
 /**
