@@ -24,8 +24,13 @@ interface KnowledgeDetail {
 }
 
 export default function KnowledgeDetailPage({ params }: { params: Promise<{ project: string; id: string }> }) {
-  const { project, id } = use(params);
+  const { project, id: rawId } = use(params);
   const decoded = decodeURIComponent(project);
+  // Route params arrive percent-encoded. System-page rule ids contain colons
+  // (e.g. `architecture:system-page:<project>:<page-key>`), so the id must be
+  // decoded here before it is re-encoded for the API call — otherwise the colon
+  // is encoded twice (':' → '%3A' → '%253A') and the detail lookup 404s.
+  const id = decodeURIComponent(rawId);
   const listHref = `/p/${encodeURIComponent(decoded)}/knowledge`;
   const router = useRouter();
   const tAll = useTranslations();

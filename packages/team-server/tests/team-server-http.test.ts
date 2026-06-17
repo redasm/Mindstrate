@@ -150,6 +150,29 @@ describe('team-server HTTP integration', () => {
     expect(result.view?.summary).toBe('Follow the rotation workflow.');
   });
 
+  it('fetches a knowledge entry by id through the HTTP detail path', async () => {
+    const { client, memory } = await startTeamServer();
+
+    const created = await client.knowledge.add(makeKnowledgeInput({
+      type: KnowledgeType.WORKFLOW,
+      title: 'Detail lookup target',
+      solution: 'This entry must be retrievable by its primary-key id.',
+      context: { project: 'detail-project' },
+    }));
+    expect(created.success).toBe(true);
+    const id = created.view!.id;
+
+    // Regression: GET /api/knowledge/:id used to run the id through a
+    // free-text search (queryContextGraph), so a uuid id never matched any
+    // node text and every detail lookup 404'd even though list returned it.
+    const fetched = await client.knowledge.get(id);
+    expect(fetched?.id).toBe(id);
+    expect(fetched?.title).toBe('Detail lookup target');
+
+    const stored = memory.context.getContextNode(id);
+    expect(stored?.id).toBe(id);
+  });
+
   it('preserves quality warnings through the HTTP create path', async () => {
     const { client } = await startTeamServer();
 

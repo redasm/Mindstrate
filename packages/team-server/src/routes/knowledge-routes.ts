@@ -76,15 +76,26 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
 
   app.get('/api/knowledge/:id', asyncRoute((req, res) => {
     const id = readParam(req.params.id);
-    const view = id
-      ? memory.context.queryContextGraph({ query: id, limit: 50 }).find((node) => node.id === id)
-      : null;
-    if (!view) {
+    if (!id) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
 
-    res.json(toGraphKnowledgeView(view));
+    // Look the node up by primary key. The previous implementation ran the id
+    // through queryContextGraph (a free-text search that tokenizes the query
+    // and scores it against title/content/tags), so a uuid-shaped id never
+    // matched any node text and every detail lookup 404'd even though the list
+    // endpoint returned the same id. Mirror the DELETE route: direct fetch +
+    // resource-scoped authorization.
+    const node = memory.context.getContextNode(id);
+    const project = authorizeProjectForResource(req, res, () => node?.project, 'read');
+    if (project === null) return;
+    if (!node) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
+    res.json(toGraphKnowledgeView(node));
   }));
 
   app.delete('/api/knowledge/:id', withInitializedMemory(memory, async (req, res) => {
