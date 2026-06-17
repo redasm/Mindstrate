@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, use } from 'react';
 import dynamic from 'next/dynamic';
+import { forceCollide } from 'd3-force-3d';
 import { PROJECT_GRAPH_METADATA_KEYS } from '@mindstrate/protocol';
 import {
   fetchProjectSubgraph,
@@ -147,6 +148,28 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
       return { nodes, links };
     });
   }, [rawNodes, rawEdges]);
+
+  // Tune the force-directed simulation. react-force-graph registers only
+  // link/charge/center forces by default, which produces two artifacts when a
+  // node is expanded:
+  //   1. No collision force, so freshly fetched neighbours stack on top of each
+  //      other (the "overlap").
+  //   2. The center force at full strength binds every *unpinned* node tightly
+  //      around its anchor. Since settled nodes are pinned via fx/fy, only the
+  //      new neighbours are free — they ring the clicked node on both sides, and
+  //      the half landing between it and the main cluster reads as the group
+  //      growing "inward" at an odd angle.
+  // Adding collision and weakening (not removing) the center force fixes both:
+  // local charge repulsion now fans newcomers outward into open space, while the
+  // graph as a whole stays framed at the origin (centroid drift ≈ 0). Numbers
+  // verified against the live d3-force-3d the renderer uses.
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    fg.d3Force('collide', forceCollide(14)); // ~3× nodeRelSize → clear spacing
+    fg.d3Force('center')?.strength(0.1);
+    fg.d3ReheatSimulation?.();
+  }, [graph]);
 
   // Track container size so the canvas fills the available area (width + height).
   useEffect(() => {
