@@ -76,6 +76,9 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Id of the most recently expanded node — used to seed newly fetched
+  // neighbours next to it instead of at the canvas origin.
+  const focusRef = useRef<string | null>(null);
   const [size, setSize] = useState({ width: 800, height: 600 });
 
   const load = useCallback(async () => {
@@ -103,6 +106,12 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
   useEffect(() => {
     setGraph((prev) => {
       const prevById = new Map(prev.nodes.map((n) => [n.id, n]));
+      // The node we just expanded: newcomers are seeded around it so they grow
+      // out of the clicked node instead of flying in from the canvas origin
+      // (which made them land mirrored/overlapping on the far side).
+      const focus = focusRef.current ? prevById.get(focusRef.current) : undefined;
+      const focusHasPos = !!focus && typeof focus.x === 'number' && typeof focus.y === 'number';
+      let added = 0;
       const nodes: GNode[] = Array.from(rawNodes.values()).map((n) => {
         const existing = prevById.get(n.id);
         if (existing) {
@@ -119,7 +128,17 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
           }
           return existing;
         }
-        return { id: n.id, name: n.title, kind: nodeKindOf(n) };
+        const node: GNode = { id: n.id, name: n.title, kind: nodeKindOf(n) };
+        if (focusHasPos) {
+          // Spread newcomers on a small golden-angle spiral around the focus so
+          // they fan out evenly rather than stacking on one point.
+          const angle = added * 2.399963; // golden angle (radians)
+          const radius = 24 + added * 6;
+          node.x = (focus!.x as number) + Math.cos(angle) * radius;
+          node.y = (focus!.y as number) + Math.sin(angle) * radius;
+          added += 1;
+        }
+        return node;
       });
       const ids = new Set(nodes.map((n) => n.id));
       const links: GLink[] = Array.from(rawEdges.values())
@@ -195,6 +214,7 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
 
   const expandNode = useCallback(
     async (id: string) => {
+      focusRef.current = id;
       const sub = await fetchProjectSubgraph(decoded, { focus: id, limit: 200 });
       mergeSubgraph(sub);
     },
