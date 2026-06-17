@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, use } from 'react';
 import dynamic from 'next/dynamic';
-import { forceCollide } from 'd3-force-3d';
 import { PROJECT_GRAPH_METADATA_KEYS } from '@mindstrate/protocol';
 import {
   fetchProjectSubgraph,
@@ -45,7 +44,7 @@ const NODE_KIND_COLOR: Record<string, string> = {
 const DEFAULT_NODE_COLOR = '#94a3b8';
 const kindColor = (kind: string): string => NODE_KIND_COLOR[kind] ?? DEFAULT_NODE_COLOR;
 
-type GNode = { id: string; name: string; kind: string; x?: number; y?: number; fx?: number; fy?: number };
+type GNode = { id: string; name: string; kind: string; x?: number; y?: number };
 type GLink = { id: string; source: string; target: string; kind: string };
 
 const nodeKindOf = (n: ContextGraphNodeDto): string =>
@@ -77,9 +76,6 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  // Id of the most recently expanded node — used to seed newly fetched
-  // neighbours next to it instead of at the canvas origin.
-  const focusRef = useRef<string | null>(null);
   const [size, setSize] = useState({ width: 800, height: 600 });
 
   const load = useCallback(async () => {
@@ -107,39 +103,14 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
   useEffect(() => {
     setGraph((prev) => {
       const prevById = new Map(prev.nodes.map((n) => [n.id, n]));
-      // The node we just expanded: newcomers are seeded around it so they grow
-      // out of the clicked node instead of flying in from the canvas origin
-      // (which made them land mirrored/overlapping on the far side).
-      const focus = focusRef.current ? prevById.get(focusRef.current) : undefined;
-      const focusHasPos = !!focus && typeof focus.x === 'number' && typeof focus.y === 'number';
-      let added = 0;
       const nodes: GNode[] = Array.from(rawNodes.values()).map((n) => {
         const existing = prevById.get(n.id);
         if (existing) {
           existing.name = n.title;
           existing.kind = nodeKindOf(n);
-          // Pin nodes that already have a settled position. Without this, merging
-          // a focus node's neighbours reheats the whole d3-force simulation; since
-          // a force layout is rotation-invariant it can settle into a flipped
-          // orientation, which reads as the entire canvas spinning ~180°. Fixing
-          // existing coordinates means only the newcomers get placed.
-          if (typeof existing.x === 'number' && typeof existing.y === 'number') {
-            existing.fx = existing.x;
-            existing.fy = existing.y;
-          }
           return existing;
         }
-        const node: GNode = { id: n.id, name: n.title, kind: nodeKindOf(n) };
-        if (focusHasPos) {
-          // Spread newcomers on a small golden-angle spiral around the focus so
-          // they fan out evenly rather than stacking on one point.
-          const angle = added * 2.399963; // golden angle (radians)
-          const radius = 24 + added * 6;
-          node.x = (focus!.x as number) + Math.cos(angle) * radius;
-          node.y = (focus!.y as number) + Math.sin(angle) * radius;
-          added += 1;
-        }
-        return node;
+        return { id: n.id, name: n.title, kind: nodeKindOf(n) };
       });
       const ids = new Set(nodes.map((n) => n.id));
       const links: GLink[] = Array.from(rawEdges.values())
@@ -148,28 +119,6 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
       return { nodes, links };
     });
   }, [rawNodes, rawEdges]);
-
-  // Tune the force-directed simulation. react-force-graph registers only
-  // link/charge/center forces by default, which produces two artifacts when a
-  // node is expanded:
-  //   1. No collision force, so freshly fetched neighbours stack on top of each
-  //      other (the "overlap").
-  //   2. The center force at full strength binds every *unpinned* node tightly
-  //      around its anchor. Since settled nodes are pinned via fx/fy, only the
-  //      new neighbours are free — they ring the clicked node on both sides, and
-  //      the half landing between it and the main cluster reads as the group
-  //      growing "inward" at an odd angle.
-  // Adding collision and weakening (not removing) the center force fixes both:
-  // local charge repulsion now fans newcomers outward into open space, while the
-  // graph as a whole stays framed at the origin (centroid drift ≈ 0). Numbers
-  // verified against the live d3-force-3d the renderer uses.
-  useEffect(() => {
-    const fg = fgRef.current;
-    if (!fg) return;
-    fg.d3Force('collide', forceCollide(14)); // ~3× nodeRelSize → clear spacing
-    fg.d3Force('center')?.strength(0.1);
-    fg.d3ReheatSimulation?.();
-  }, [graph]);
 
   // Track container size so the canvas fills the available area (width + height).
   useEffect(() => {
@@ -181,46 +130,6 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
     ro.observe(el);
     return () => ro.disconnect();
   }, [loading, panelCollapsed]);
-
-  // Custom canvas navigation: hold the RIGHT mouse button to pan, left button is
-  // reserved for selecting nodes. The library's built-in pan is disabled via
-  // `enablePanInteraction={false}` (it only ever binds the left button anyway),
-  // so this never fights it; wheel-zoom stays on through `enableZoomInteraction`.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || loading) return;
-    let panning = false;
-    let last = { x: 0, y: 0 };
-
-    const onDown = (e: MouseEvent) => {
-      if (e.button !== 2) return; // right button only
-      panning = true;
-      last = { x: e.clientX, y: e.clientY };
-      e.preventDefault();
-    };
-    const onMove = (e: MouseEvent) => {
-      if (!panning || !fgRef.current) return;
-      const k = fgRef.current.zoom() || 1;
-      const dx = e.clientX - last.x;
-      const dy = e.clientY - last.y;
-      last = { x: e.clientX, y: e.clientY };
-      const c = fgRef.current.centerAt(); // current center in graph coords
-      fgRef.current.centerAt(c.x - dx / k, c.y - dy / k, 0);
-    };
-    const onUp = () => { panning = false; };
-    const onContextMenu = (e: MouseEvent) => e.preventDefault();
-
-    el.addEventListener('mousedown', onDown);
-    el.addEventListener('contextmenu', onContextMenu);
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    return () => {
-      el.removeEventListener('mousedown', onDown);
-      el.removeEventListener('contextmenu', onContextMenu);
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-  }, [loading]);
 
   const mergeSubgraph = useCallback((sub: { nodes: ContextGraphNodeDto[]; edges: ContextGraphEdgeDto[] }) => {
     setRawNodes((prev) => {
@@ -237,7 +146,6 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
 
   const expandNode = useCallback(
     async (id: string) => {
-      focusRef.current = id;
       const sub = await fetchProjectSubgraph(decoded, { focus: id, limit: 200 });
       mergeSubgraph(sub);
     },
@@ -367,8 +275,6 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
                   linkDirectionalArrowLength={3}
                   linkDirectionalArrowRelPos={1}
                   cooldownTicks={80}
-                  enableNodeDrag={false}
-                  enablePanInteraction={false}
                   onNodeClick={handleNodeClick}
                 />
               )}
