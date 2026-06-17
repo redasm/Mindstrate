@@ -44,7 +44,7 @@ const NODE_KIND_COLOR: Record<string, string> = {
 const DEFAULT_NODE_COLOR = '#94a3b8';
 const kindColor = (kind: string): string => NODE_KIND_COLOR[kind] ?? DEFAULT_NODE_COLOR;
 
-type GNode = { id: string; name: string; kind: string; x?: number; y?: number };
+type GNode = { id: string; name: string; kind: string; x?: number; y?: number; fx?: number; fy?: number };
 type GLink = { id: string; source: string; target: string; kind: string };
 
 const nodeKindOf = (n: ContextGraphNodeDto): string =>
@@ -108,6 +108,15 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
         if (existing) {
           existing.name = n.title;
           existing.kind = nodeKindOf(n);
+          // Pin nodes that already have a settled position. Without this, merging
+          // a focus node's neighbours reheats the whole d3-force simulation; since
+          // a force layout is rotation-invariant it can settle into a flipped
+          // orientation, which reads as the entire canvas spinning ~180°. Fixing
+          // existing coordinates means only the newcomers get placed.
+          if (typeof existing.x === 'number' && typeof existing.y === 'number') {
+            existing.fx = existing.x;
+            existing.fy = existing.y;
+          }
           return existing;
         }
         return { id: n.id, name: n.title, kind: nodeKindOf(n) };
@@ -130,6 +139,46 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
     ro.observe(el);
     return () => ro.disconnect();
   }, [loading, panelCollapsed]);
+
+  // Custom canvas navigation: hold the RIGHT mouse button to pan, left button is
+  // reserved for selecting nodes. The library's built-in pan is disabled via
+  // `enablePanInteraction={false}` (it only ever binds the left button anyway),
+  // so this never fights it; wheel-zoom stays on through `enableZoomInteraction`.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || loading) return;
+    let panning = false;
+    let last = { x: 0, y: 0 };
+
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 2) return; // right button only
+      panning = true;
+      last = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+    };
+    const onMove = (e: MouseEvent) => {
+      if (!panning || !fgRef.current) return;
+      const k = fgRef.current.zoom() || 1;
+      const dx = e.clientX - last.x;
+      const dy = e.clientY - last.y;
+      last = { x: e.clientX, y: e.clientY };
+      const c = fgRef.current.centerAt(); // current center in graph coords
+      fgRef.current.centerAt(c.x - dx / k, c.y - dy / k, 0);
+    };
+    const onUp = () => { panning = false; };
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+    el.addEventListener('mousedown', onDown);
+    el.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      el.removeEventListener('mousedown', onDown);
+      el.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [loading]);
 
   const mergeSubgraph = useCallback((sub: { nodes: ContextGraphNodeDto[]; edges: ContextGraphEdgeDto[] }) => {
     setRawNodes((prev) => {
@@ -275,6 +324,8 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
                   linkDirectionalArrowLength={3}
                   linkDirectionalArrowRelPos={1}
                   cooldownTicks={80}
+                  enableNodeDrag={false}
+                  enablePanInteraction={false}
                   onNodeClick={handleNodeClick}
                 />
               )}
