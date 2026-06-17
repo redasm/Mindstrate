@@ -131,6 +131,46 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
     return () => ro.disconnect();
   }, [loading, panelCollapsed]);
 
+  // Custom canvas navigation: hold the RIGHT mouse button to pan, left button is
+  // reserved for selecting nodes. The library's built-in pan is disabled via
+  // `enablePanInteraction={false}` (it only ever binds the left button anyway),
+  // so this never fights it; wheel-zoom stays on through `enableZoomInteraction`.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || loading) return;
+    let panning = false;
+    let last = { x: 0, y: 0 };
+
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 2) return; // right button only
+      panning = true;
+      last = { x: e.clientX, y: e.clientY };
+      e.preventDefault();
+    };
+    const onMove = (e: MouseEvent) => {
+      if (!panning || !fgRef.current) return;
+      const k = fgRef.current.zoom() || 1;
+      const dx = e.clientX - last.x;
+      const dy = e.clientY - last.y;
+      last = { x: e.clientX, y: e.clientY };
+      const c = fgRef.current.centerAt(); // current center in graph coords
+      fgRef.current.centerAt(c.x - dx / k, c.y - dy / k, 0);
+    };
+    const onUp = () => { panning = false; };
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+
+    el.addEventListener('mousedown', onDown);
+    el.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      el.removeEventListener('mousedown', onDown);
+      el.removeEventListener('contextmenu', onContextMenu);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [loading]);
+
   const mergeSubgraph = useCallback((sub: { nodes: ContextGraphNodeDto[]; edges: ContextGraphEdgeDto[] }) => {
     setRawNodes((prev) => {
       const m = new Map(prev);
@@ -275,6 +315,8 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
                   linkDirectionalArrowLength={3}
                   linkDirectionalArrowRelPos={1}
                   cooldownTicks={80}
+                  enableNodeDrag={false}
+                  enablePanInteraction={false}
                   onNodeClick={handleNodeClick}
                 />
               )}
