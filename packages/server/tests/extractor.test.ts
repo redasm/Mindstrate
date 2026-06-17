@@ -77,6 +77,19 @@ describe('KnowledgeExtractor', () => {
       expect(result.extracted).toBe(false);
     });
 
+    it('should extract from a Perforce ed-style (>) diff', async () => {
+      // P4's default `describe` diff marks added lines with `>`, not git's `+`.
+      // Regression: these were counted as zero changes and every changelist
+      // was skipped as "not worth extracting".
+      const result = await extractor.extractFromCommit(
+        makeCommit({
+          message: 'fix: null check in inventory service',
+          diff: '==== //depot/src/inventory.cpp#3 (text) ====\n12a13\n> if (!item) return;\n> log("guard");\n> reconcile();\n',
+        })
+      );
+      expect(result.extracted).toBe(true);
+    });
+
     it('should detect typescript from file extensions', async () => {
       const result = await extractor.extractFromCommit(
         makeCommit({ files: ['src/app.ts', 'src/utils.ts'] })

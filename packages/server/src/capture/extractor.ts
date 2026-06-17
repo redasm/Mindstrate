@@ -77,9 +77,12 @@ export class KnowledgeExtractor {
       return false;
     }
 
-    // diff 太短（< 5 行有效变更）可能不值得
-    const addedLines = (commit.diff.match(/^\+[^+]/gm) || []).length;
-    if (addedLines < 3) {
+    // diff 太短（< 3 行有效变更）可能不值得。统计 git 统一 diff 的 `+`
+    // 新增行,同时兼容 Perforce 默认 ed 格式的 `>` 新增行,避免 P4 来源
+    // 因 diff 格式不同而被整体误判为"无变更"。
+    const gitAdded = (commit.diff.match(/^\+[^+]/gm) || []).length;
+    const p4Added = (commit.diff.match(/^>/gm) || []).length;
+    if (gitAdded + p4Added < 3) {
       return false;
     }
 

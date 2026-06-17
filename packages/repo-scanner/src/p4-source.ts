@@ -160,7 +160,12 @@ export function getChangelistInfo(changelist: string, env?: P4Env): CommitInfo |
 
   let diff = '';
   try {
-    diff = extractDiffFromDescribe(runP4Command(`p4 describe ${cl}`, env, 10 * 1024 * 1024));
+    // `-du` forces a UNIFIED diff (git-style `+`/`-` lines). Without it p4
+    // emits its default ed-style diff (`>`/`<`), which the knowledge
+    // extractor's `isWorthExtracting` heuristic (counts `+` added lines)
+    // reads as zero changes — so every changelist was skipped as "not
+    // worth extracting" and nothing ever reached the metabolism pipeline.
+    diff = extractDiffFromDescribe(runP4Command(`p4 describe -du ${cl}`, env, 10 * 1024 * 1024));
   } catch {
     diff = '';
   }
