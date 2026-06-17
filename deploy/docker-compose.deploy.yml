@@ -45,6 +45,10 @@ services:
       TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
       MINDSTRATE_DATA_DIR: "/data"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # Language for generated project-graph system pages / reports. Containers
+      # default to a C/en locale, so without this the generator emits English
+      # even when the team wants Chinese.
+      MINDSTRATE_LOCALE: "${MINDSTRATE_LOCALE:-zh-CN}"
       # LLM provider config moved to the Web UI (Settings → LLM Configs).
       # Per-project keys/models live in SQLite, not env vars.
     volumes:
@@ -133,6 +137,12 @@ services:
       TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
       MINDSTRATE_DATA_DIR: "/data"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # The repo-scanner is what generates the project-graph system pages
+      # (`internalizeSystemPages`) and LLM enrichment summaries, so the locale
+      # MUST be set here too — otherwise the container's default C/en locale
+      # makes 00-overview / 01-entrypoints / … come out in English while local
+      # mode (Chinese OS locale) produces Chinese.
+      MINDSTRATE_LOCALE: "${MINDSTRATE_LOCALE:-zh-CN}"
       # First-run indexing of a large checkout builds the whole project graph
       # in memory: the deduped node/edge set has to stay resident for the
       # second-pass binding inference, so heap scales with graph size (a ~40k
