@@ -8,8 +8,8 @@ import type {
 } from '@mindstrate/protocol';
 import {
   ContextDomainType,
-  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   SubstrateType,
+  isProjectGraphNode,
   type ConflictRecord,
   type ContextNode,
 } from '@mindstrate/protocol/models';
@@ -17,6 +17,28 @@ import { runContextAssemblyDag } from '../context-graph/context-assembly-dag.js'
 import { generateGraphCurationSummary } from '../context-graph/graph-curation-summary.js';
 import { selectProjectGraphAssemblyFacts } from '../context-graph/project-graph-assembly-selector.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
+
+/**
+ * Build the bounded set of substring terms used to find project-graph seed
+ * nodes for context assembly: task keywords plus the current file's full,
+ * `packages/`-relative, and bare-filename forms (mirrors the path candidates
+ * `selectProjectGraphAssemblyFacts` matches against in-memory).
+ */
+function collectAssemblySeedTerms(taskDescription: string, currentFile?: string): string[] {
+  const terms = new Set<string>();
+  for (const token of taskDescription.toLowerCase().split(/[^a-z0-9_./-]+/i)) {
+    if (token.length >= 3) terms.add(token);
+  }
+  if (currentFile) {
+    const normalized = currentFile.replace(/\\/g, '/').toLowerCase();
+    if (normalized) terms.add(normalized);
+    const packagesIndex = normalized.lastIndexOf('packages/');
+    if (packagesIndex > 0) terms.add(normalized.slice(packagesIndex));
+    const slash = normalized.lastIndexOf('/');
+    if (slash >= 0 && slash < normalized.length - 1) terms.add(normalized.slice(slash + 1));
+  }
+  return Array.from(terms);
+}
 
 export class MindstrateContextAssemblyApi {
   constructor(
@@ -179,10 +201,10 @@ export class MindstrateContextAssemblyApi {
   }
 
   /**
-   * Pull project graph relationship facts for the assembled context. Loads
-   * the project-scoped subset of project graph nodes + edges (capped at
-   * `PROJECT_GRAPH_DEFAULT_QUERY_LIMIT`) and delegates the seed selection
-   * + 1-hop expansion to `selectProjectGraphAssemblyFacts`.
+   * Pull project graph relationship facts for the assembled context. Finds
+   * seed nodes with a bounded substring search (task keywords + current file)
+   * and asks the store for just their one-hop neighbourhood, then delegates
+   * the precise seed selection + expansion to `selectProjectGraphAssemblyFacts`.
    *
    * Returns `[]` when no project is in scope; the upstream summary
    * formatter then drops the section entirely instead of emitting an
@@ -194,18 +216,29 @@ export class MindstrateContextAssemblyApi {
     retrievalContext: RetrievalContext | undefined,
   ): ProjectGraphContextFact[] {
     if (!project) return [];
-    const nodes = this.services.contextGraphStore.listNodes({
-      project,
-      domainType: ContextDomainType.ARCHITECTURE,
-      limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-    });
-    if (nodes.length === 0) return [];
-    const edges = this.services.contextGraphStore.listEdges({
-      limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+    const store = this.services.contextGraphStore;
+
+    // Bounded seed discovery instead of the previous
+    // `listNodes({ limit: 100000 })` + `listEdges({ limit: 100000 })` pull,
+    // which loaded the whole architecture layer on every assemble call and
+    // timed out on large graphs (notably the 512 MB team-server). Match
+    // file-path candidates + task keywords via a bounded SQL search, then
+    // ask for just their one-hop neighbourhood. `selectProjectGraphAssemblyFacts`
+    // re-derives the precise seeds and expansion within this bounded set, so
+    // the resulting facts are unchanged for the common case.
+    const terms = collectAssemblySeedTerms(taskDescription, retrievalContext?.currentFile);
+    if (terms.length === 0) return [];
+    const seeds = store.searchNodesByText({ project, terms, limit: 120 }).filter(isProjectGraphNode);
+    if (seeds.length === 0) return [];
+
+    const hood = store.projectGraphNeighborhood({
+      seedIds: seeds.map((node) => node.id),
+      depth: 1,
+      limit: 400,
     });
     return selectProjectGraphAssemblyFacts({
-      nodes,
-      edges,
+      nodes: hood.nodes,
+      edges: hood.edges,
       taskDescription,
       context: retrievalContext,
     }).facts;

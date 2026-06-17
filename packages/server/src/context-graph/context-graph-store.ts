@@ -141,6 +141,11 @@ export class ContextGraphStore {
     return this.nodes.list(options);
   }
 
+  /** Bounded substring search over node title / source_ref (assembly seeding). */
+  searchNodesByText(opts: { project?: string; terms: string[]; limit: number }): ContextNode[] {
+    return this.nodes.searchByTextTerms(opts);
+  }
+
   listKnownProjects(): string[] {
     return this.nodes.listDistinctProjects();
   }
