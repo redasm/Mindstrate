@@ -247,4 +247,54 @@ describe('ContextGraphStore', () => {
     const classes = store.queryProjectSubgraph({ project: 'demo', nodeKinds: ['class'] });
     expect(classes.nodes.map((n) => n.id)).toEqual([cls.id]);
   });
+
+  it('projectGraphNeighborhood and projectGraphShortestPath: bounded BFS', () => {
+    const pgNode = (title: string, kind: string) => store.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title,
+      content: `${kind}: ${title}`,
+      project: 'demo',
+      metadata: { projectGraph: true, kind },
+    });
+    const pgEdge = (s: string, t: string, kind: string) => store.createEdge({
+      sourceId: s,
+      targetId: t,
+      relationType: ContextRelationType.APPLIES_TO,
+      evidence: { projectGraph: true, kind },
+    });
+
+    const dir = pgNode('src', 'directory');
+    const file = pgNode('src/app.ts', 'file');
+    const cls = pgNode('App', 'class');
+    const far = pgNode('Unrelated', 'class');
+    pgEdge(dir.id, file.id, 'contains');
+    pgEdge(file.id, cls.id, 'defines');
+
+    // depth 0 → only the seed
+    const seedOnly = store.projectGraphNeighborhood({ seedIds: [file.id], depth: 0, limit: 50 });
+    expect(seedOnly.nodes.map((n) => n.id)).toEqual([file.id]);
+
+    // depth 1 from file → file + dir + cls
+    const oneHop = store.projectGraphNeighborhood({ seedIds: [file.id], depth: 1, limit: 50 });
+    expect(oneHop.nodes.map((n) => n.id).sort()).toEqual([cls.id, dir.id, file.id].sort());
+
+    // limit caps the result set
+    const capped = store.projectGraphNeighborhood({ seedIds: [file.id], depth: 2, limit: 2 });
+    expect(capped.nodes.length).toBe(2);
+
+    // far node is unreachable, never included
+    const reachable = store.projectGraphNeighborhood({ seedIds: [dir.id], depth: 5, limit: 50 });
+    expect(reachable.nodes.map((n) => n.id)).not.toContain(far.id);
+
+    // shortest path dir → cls is dir → file → cls
+    const path = store.projectGraphShortestPath({ fromId: dir.id, toId: cls.id, maxDepth: 5 });
+    expect(path?.nodes.map((n) => n.id)).toEqual([dir.id, file.id, cls.id]);
+    expect(path?.edges.length).toBe(2);
+
+    // no path to the disconnected node
+    expect(store.projectGraphShortestPath({ fromId: dir.id, toId: far.id, maxDepth: 5 })).toBeNull();
+    // unknown endpoint
+    expect(store.projectGraphShortestPath({ fromId: dir.id, toId: 'nope', maxDepth: 5 })).toBeNull();
+  });
 });

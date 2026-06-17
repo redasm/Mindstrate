@@ -174,6 +174,50 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     res.json({ nodes: sub.nodes, edges: sub.edges });
   }));
 
+  // Bounded BFS neighbourhood from seed nodes — server-side traversal so the
+  // MCP task-query / blast-radius tools no longer pull the whole graph.
+  app.post('/api/context/project-graph/neighborhood', withInitializedMemory(memory, async (req, res) => {
+    const { project, seedIds, depth, limit, edgeKinds } = req.body ?? {};
+    const authorized = authorizeProject(req, res, project, 'read');
+    if (authorized === null) return;
+    if (!Array.isArray(seedIds) || seedIds.length === 0) {
+      res.status(400).json({ error: 'seedIds (non-empty array) is required' });
+      return;
+    }
+    const result = memory.context.projectGraphNeighborhood({
+      seedIds: seedIds.filter((s: unknown): s is string => typeof s === 'string'),
+      depth: typeof depth === 'number' ? depth : 1,
+      limit: typeof limit === 'number' ? limit : 300,
+      edgeKinds: Array.isArray(edgeKinds)
+        ? edgeKinds.filter((k: unknown): k is string => typeof k === 'string')
+        : undefined,
+    });
+    res.json({ nodes: result.nodes, edges: result.edges });
+  }));
+
+  // Bounded BFS shortest path between two nodes — server-side traversal.
+  app.get('/api/context/project-graph/path', withInitializedMemory(memory, async (req, res) => {
+    const from = readParam(req.query.from);
+    const to = readParam(req.query.to);
+    if (!from || !to) {
+      res.status(400).json({ error: 'from and to are required' });
+      return;
+    }
+    const authorized = authorizeProjectForResource(
+      req,
+      res,
+      () => memory.context.getContextNode(from)?.project,
+      'read',
+    );
+    if (authorized === null) return;
+    const path = memory.context.projectGraphShortestPath({
+      fromId: from,
+      toId: to,
+      maxDepth: parseLimit(req.query.maxDepth, 6),
+    });
+    res.json({ path });
+  }));
+
   app.get('/api/context/conflicts', withInitializedMemory(memory, async (req, res) => {
     const requested = typeof req.query.project === 'string' ? req.query.project : undefined;
     const authorized = authorizeProject(req, res, requested, 'read');

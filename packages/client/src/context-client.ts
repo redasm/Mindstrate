@@ -143,6 +143,40 @@ export class ContextClient extends TeamDomainClient {
     return { nodes: data.nodes ?? [], edges: data.edges ?? [] };
   }
 
+  /** Bounded BFS neighbourhood from seed nodes (server-side traversal). */
+  async projectGraphNeighborhood(options: {
+    project?: string;
+    seedIds: string[];
+    depth?: number;
+    limit?: number;
+    edgeKinds?: string[];
+  }): Promise<{ nodes: ContextNode[]; edges: ContextEdge[] }> {
+    const data = await this.post<{ nodes?: ContextNode[]; edges?: ContextEdge[] }>(
+      '/api/context/project-graph/neighborhood',
+      options,
+    );
+    return { nodes: data.nodes ?? [], edges: data.edges ?? [] };
+  }
+
+  /** Bounded BFS shortest path between two nodes (server-side traversal). */
+  async projectGraphPath(options: {
+    project?: string;
+    from: string;
+    to: string;
+    maxDepth?: number;
+  }): Promise<{ nodes: ContextNode[]; edges: ContextEdge[] } | null> {
+    const params = new URLSearchParams();
+    params.set('from', options.from);
+    params.set('to', options.to);
+    if (options.project) params.set('project', options.project);
+    if (options.maxDepth) params.set('maxDepth', String(options.maxDepth));
+
+    const data = await this.fetch<{ path?: { nodes: ContextNode[]; edges: ContextEdge[] } | null }>(
+      `/api/context/project-graph/path?${params}`,
+    );
+    return data.path ?? null;
+  }
+
   async listConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]> {
     const params = new URLSearchParams();
     if (options?.project) params.set('project', options.project);

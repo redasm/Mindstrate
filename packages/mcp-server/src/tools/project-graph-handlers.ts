@@ -1,7 +1,8 @@
 import {
   ContextDomainType,
-  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   ProjectGraphOverlaySource,
+  type ContextEdge,
+  type ContextNode,
   type ProjectGraphOverlayKind,
 } from '@mindstrate/protocol';
 import type { McpApi, McpToolResponse } from '../types.js';
@@ -13,14 +14,11 @@ import {
   formatProjectGraphOverlays,
 } from './project-graph-render.js';
 import {
-  collectBlastRadius,
   collectTaskQuerySeeds,
   findProjectGraphNode,
-  findProjectGraphNodeInList,
   loadSystemPageRules,
   projectGraphEdges,
   projectGraphNodes,
-  shortestProjectGraphPath,
 } from './project-graph-handler-utils.js';
 import {
   buildBeforeEditReport,
@@ -50,35 +48,59 @@ export async function handleProjectGraphTaskQuery(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
-  const nodes = projectGraphNodes(await api.queryContextGraph({
-    project: input.project,
-    domainType: ContextDomainType.ARCHITECTURE,
-    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-  }));
-  const edges = projectGraphEdges(await api.listContextEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }));
-  // Path-aware seed selection. When the caller passed a file path (as
-  // AGENTS.md tells them to for the `before-edit` workflow), match
-  // against node title / sourceRef / evidence paths instead of doing a
-  // free-form `title.includes(query)` — the latter used to return
-  // global-hot but unrelated nodes (README.md / tsconfig.base.json /
-  // web-ui/i18n) for deep paths like
-  // `packages/server/src/metabolism/scheduler.ts`.
-  const matching = collectTaskQuerySeeds(nodes, input.query);
-  const selected = selectTaskNodes(input.task, nodes, edges, matching).slice(0, input.limit ?? 10);
-  const evidence = Array.from(new Set(selected.flatMap(evidencePaths))).slice(0, input.limit ?? 10);
+  const limit = input.limit ?? 10;
+
+  // Bounded working set instead of the old `queryContextGraph({limit:100000})`
+  // + `listContextEdges({limit:100000})` full-graph pull (which timed out over
+  // HTTP in team mode). `entry-points` needs the file layer; every other task
+  // is seed-driven, so we resolve seeds with a bounded text query and then ask
+  // the server for just their neighbourhood.
+  let workingNodes: ContextNode[];
+  let workingEdges: ContextEdge[];
+  let seeds: ContextNode[];
+  if (input.task === 'entry-points') {
+    const sub = await api.queryProjectSubgraph({ project: input.project, kinds: ['file'], limit: 500 });
+    workingNodes = projectGraphNodes(sub.nodes);
+    workingEdges = projectGraphEdges(sub.edges);
+    seeds = [];
+  } else {
+    const candidates = projectGraphNodes(await api.queryContextGraph({
+      query: input.query,
+      project: input.project,
+      domainType: ContextDomainType.ARCHITECTURE,
+      limit: 200,
+    }));
+    seeds = collectTaskQuerySeeds(candidates, input.query);
+    if (seeds.length === 0) {
+      workingNodes = candidates;
+      workingEdges = [];
+    } else {
+      const hood = await api.projectGraphNeighborhood({
+        project: input.project,
+        seedIds: seeds.map((node) => node.id),
+        depth: 2,
+        limit: 500,
+      });
+      workingNodes = projectGraphNodes(hood.nodes);
+      workingEdges = projectGraphEdges(hood.edges);
+    }
+  }
+
+  const selected = selectTaskNodes(input.task, workingNodes, workingEdges, seeds).slice(0, limit);
+  const evidence = Array.from(new Set(selected.flatMap(evidencePaths))).slice(0, limit);
   if (input.task === 'before-edit' || input.task === 'impact') {
     const overlays = await api.listProjectGraphOverlays({ project: input.project, limit: 100 });
     const systemPageRules = await loadSystemPageRules(api, input.project);
     const report = buildBeforeEditReport({
       task: input.task,
       query: input.query,
-      nodes,
-      edges,
+      nodes: workingNodes,
+      edges: workingEdges,
       selected,
       evidence,
       overlays,
       systemPageRules,
-      limit: input.limit ?? 10,
+      limit,
     });
     return { content: [{ type: 'text', text: report }] };
   }
@@ -167,14 +189,24 @@ export async function handleProjectGraphPath(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
-  const nodes = projectGraphNodes(await api.queryContextGraph({
+  // Resolve endpoints to ids (callers may pass a title / path) with bounded
+  // lookups, then let the server do the BFS instead of pulling the whole graph.
+  const [from, to] = await Promise.all([
+    findProjectGraphNode(api, input.from, input.project),
+    findProjectGraphNode(api, input.to, input.project),
+  ]);
+  if (!from || !to) {
+    return { content: [{ type: 'text', text: 'No project graph path found (unknown endpoint).' }] };
+  }
+  const path = await api.projectGraphPath({
     project: input.project,
-    domainType: ContextDomainType.ARCHITECTURE,
-    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-  }));
-  const edges = projectGraphEdges(await api.listContextEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }));
-  const path = shortestProjectGraphPath(nodes, edges, input.from, input.to, input.maxDepth ?? 6);
-  if (!path) return { content: [{ type: 'text', text: 'No project graph path found.' }] };
+    from: from.id,
+    to: to.id,
+    maxDepth: input.maxDepth ?? 6,
+  });
+  if (!path || path.nodes.length === 0) {
+    return { content: [{ type: 'text', text: 'No project graph path found.' }] };
+  }
   const text = [
     `Found project graph path with ${path.nodes.length} node(s).`,
     '',
@@ -192,25 +224,27 @@ export async function handleProjectGraphBlastRadius(
   api: McpApi,
   input: ToolInput,
 ): Promise<McpToolResponse> {
-  const nodes = projectGraphNodes(await api.queryContextGraph({
-    project: input.project,
-    domainType: ContextDomainType.ARCHITECTURE,
-    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-  }));
-  const edges = projectGraphEdges(await api.listContextEdges({ limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT }));
-  const root = findProjectGraphNodeInList(nodes, input.id);
+  const root = await findProjectGraphNode(api, input.id, input.project);
   if (!root) return { content: [{ type: 'text', text: 'Project graph node not found.' }], isError: true };
 
-  const affected = collectBlastRadius(nodes, edges, root.id, input.depth ?? 1, input.limit ?? 20);
+  // Server-side bounded BFS instead of pulling 100k nodes + 100k edges.
+  const hood = await api.projectGraphNeighborhood({
+    project: input.project,
+    seedIds: [root.id],
+    depth: input.depth ?? 1,
+    limit: input.limit ?? 20,
+  });
+  const affectedNodes = projectGraphNodes(hood.nodes).filter((node) => node.id !== root.id);
+  const affectedEdges = projectGraphEdges(hood.edges);
   const text = [
     `### Blast Radius: ${root.title}`,
-    `Affected nodes: ${affected.nodes.length}`,
-    `Edges: ${affected.edges.length}`,
+    `Affected nodes: ${affectedNodes.length}`,
+    `Edges: ${affectedEdges.length}`,
     '',
-    formatProjectGraphNodes(affected.nodes),
+    formatProjectGraphNodes(affectedNodes),
     '',
     '### Connecting Edges',
-    formatProjectGraphEdges(affected.edges),
+    formatProjectGraphEdges(affectedEdges),
   ].join('\n');
   return { content: [{ type: 'text', text }] };
 }

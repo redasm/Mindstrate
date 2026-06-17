@@ -190,6 +190,25 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       });
     },
 
+    async projectGraphNeighborhood(opts) {
+      if (teamClient) return teamClient.context.projectGraphNeighborhood(opts);
+      return memory!.context.projectGraphNeighborhood({
+        seedIds: opts.seedIds,
+        depth: opts.depth ?? 1,
+        limit: opts.limit ?? 300,
+        edgeKinds: opts.edgeKinds,
+      });
+    },
+
+    async projectGraphPath(opts) {
+      if (teamClient) return teamClient.context.projectGraphPath(opts);
+      return memory!.context.projectGraphShortestPath({
+        fromId: opts.from,
+        toId: opts.to,
+        maxDepth: opts.maxDepth ?? 6,
+      });
+    },
+
     async listContextEdges(queryOptions) {
       if (teamClient) return teamClient.context.listEdges(queryOptions);
       return memory!.context.listContextEdges(queryOptions as any);

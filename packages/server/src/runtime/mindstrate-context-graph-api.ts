@@ -183,6 +183,25 @@ export class MindstrateContextGraphApi {
     return this.services.contextGraphStore.queryProjectSubgraph(opts);
   }
 
+  /** Bounded BFS neighbourhood over project-graph edges from seed nodes. */
+  projectGraphNeighborhood(opts: {
+    seedIds: string[];
+    depth: number;
+    limit: number;
+    edgeKinds?: string[];
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } {
+    return this.services.contextGraphStore.projectGraphNeighborhood(opts);
+  }
+
+  /** Bounded BFS shortest path between two project-graph nodes. */
+  projectGraphShortestPath(opts: {
+    fromId: string;
+    toId: string;
+    maxDepth: number;
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } | null {
+    return this.services.contextGraphStore.projectGraphShortestPath(opts);
+  }
+
   queryContextGraph(options?: {
     query?: string;
     project?: string;

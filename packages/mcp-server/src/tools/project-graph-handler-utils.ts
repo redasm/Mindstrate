@@ -9,9 +9,9 @@
 
 import {
   ContextDomainType,
-  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   PROJECT_GRAPH_METADATA_KEYS,
   ProjectGraphEdgeKind,
+  SubstrateType,
   isProjectGraphEdge,
   isProjectGraphNode,
   type ContextEdge,
@@ -89,10 +89,15 @@ export const findProjectGraphNode = async (
  * "Known Constraints" / "Do Not Edit Directly" / etc.
  */
 export const loadSystemPageRules = async (api: McpApi, project?: string): Promise<ContextNode[]> => {
+  // System-page rules are RULE + ARCHITECTURE substrate, only a handful per
+  // project. A bounded RULE/ARCHITECTURE query isolates them without pulling
+  // the whole architecture layer (the file/module nodes are SNAPSHOT
+  // substrate, so the RULE filter excludes them).
   const nodes = await api.queryContextGraph({
     project,
     domainType: ContextDomainType.ARCHITECTURE,
-    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+    substrateType: SubstrateType.RULE,
+    limit: 200,
   });
   return nodes.filter((node) => node.metadata?.['systemPage'] === true);
 };
