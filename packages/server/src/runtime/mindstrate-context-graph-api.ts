@@ -28,6 +28,7 @@ import {
   findProjectGraphPath,
   indexProjectGraph,
   planProjectGraphSystemPagesWithLlm,
+  collectCuratedProjectDocs,
   queryProjectGraphTask,
   recordProjectGraphExternalChanges,
   summarizeProjectGraphWithLlm,
@@ -321,6 +322,7 @@ export class MindstrateContextGraphApi {
         domainType: ContextDomainType.ARCHITECTURE,
         limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
       }),
+      curatedDocs: collectCuratedProjectDocs(project),
       requestPolicy: this.services.config.projectGraphLlm,
     });
   }

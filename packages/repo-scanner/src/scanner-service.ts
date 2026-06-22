@@ -10,6 +10,7 @@ import {
   type ProjectGraphScanProgress,
   type ProjectGraphIndexProgress,
   type ScanLogLevel,
+  type SystemPageDefinition,
 } from '@mindstrate/server';
 import { getHeadCommit, listCommitsSince, listRecentCommits, readCommit } from './git-scanner.js';
 import { ensureGitClone } from './git-clone.js';
@@ -451,18 +452,62 @@ export class RepoScannerService {
     // the graph so the MCP before-edit / impact tools surface the same
     // project-specific editing rules in team mode as `mindstrate init` gives
     // locally. Local mode gets this as a side effect of the Obsidian projection;
-    // the scanner has no vault, so it runs the deterministic internalization
-    // directly. Idempotent.
-    const systemPages = this.memory.context.internalizeSystemPages(project);
+    // the scanner has no vault, so it runs the internalization directly.
+    //
+    // Run LLM enrichment FIRST so the graph has the richest set of extracted
+    // architecture facts, then ask the LLM planner to design project-specific
+    // system pages from those facts. Without the planner the pages fall back to
+    // the static skeleton/stack templates, which read as placeholders. Planner
+    // failure or an unconfigured project degrades gracefully to the templates.
+    await this.enrichProjectGraph(source, project, runId);
+    const plannedPages = await this.planSystemPages(source, project, runId);
+    const systemPages = this.memory.context.internalizeSystemPages(project, plannedPages ?? undefined);
     this.log(
       source.id,
       runId,
       'info',
-      `System pages internalized: ${systemPages.created.length} created, `
+      `System pages internalized (${plannedPages ? 'LLM-planned' : 'template'}): `
+        + `${systemPages.created.length} created, `
         + `${systemPages.updated.length} updated, ${systemPages.unchanged.length} unchanged`,
       'index',
     );
-    await this.enrichProjectGraph(source, project, runId);
+  }
+
+  /**
+   * Ask the LLM planner to design project-specific system pages from the
+   * extracted graph facts. Returns null (and logs) when the project has no LLM
+   * config, the planner finds no evidence, or the call fails — callers then fall
+   * back to the deterministic templates.
+   */
+  private async planSystemPages(
+    source: ScanSource,
+    project: DetectedProject,
+    runId: string,
+  ): Promise<SystemPageDefinition[] | null> {
+    try {
+      const pages = await this.memory.context.planProjectGraphSystemPages(project);
+      if (!pages || pages.length === 0) {
+        this.log(
+          source.id,
+          runId,
+          'info',
+          `System page LLM planning for "${project.name}": no plan produced (no LLM config or no extracted evidence), using templates`,
+          'index',
+        );
+        return null;
+      }
+      this.log(source.id, runId, 'info', `System page LLM planning for "${project.name}": ${pages.length} pages planned`, 'index');
+      return pages;
+    } catch (error) {
+      this.log(
+        source.id,
+        runId,
+        'error',
+        `System page LLM planning for "${project.name}" failed, using templates: ${errorMessage(error)}`,
+        'index',
+      );
+      return null;
+    }
   }
 
   /**

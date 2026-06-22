@@ -25,7 +25,7 @@ import {
   type ProjectGraphLlmRequestPolicy,
 } from './llm-request-policy.js';
 import { createProjectGraphEdgeId, createProjectGraphNodeId } from './node-id.js';
-import { projectGraphLanguageInstruction } from './project-graph-locale.js';
+import { contentLanguageInstruction } from '../content-locale.js';
 import {
   parseSummaryResponse,
   type ParsedRelationshipItem,
@@ -77,7 +77,7 @@ export const summarizeProjectGraphWithLlm = async (
           role: 'system',
           content: [
             'You summarize a project graph for coding agents.',
-            projectGraphLanguageInstruction(),
+            contentLanguageInstruction(),
             'Infer responsibilities, subsystem summaries, risks, open questions, and relationships only from provided extracted facts.',
             'Return JSON: {"summaries":[{"label":"...","summary":"...","evidencePaths":["path"],"confidence":"inferred|ambiguous"}],"relationships":[{"sourceId":"provided node id","targetId":"provided node id","kind":"related_to|depends_on|calls|imports|configures|renders|binds_to|references_asset","evidencePaths":["path"],"confidence":"inferred|ambiguous"}]}.',
             'Every item must cite at least one provided evidence path.',

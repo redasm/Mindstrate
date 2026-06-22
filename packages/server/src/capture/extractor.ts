@@ -9,12 +9,13 @@
  * - 无 API key 时退化为基于规则的提取
  */
 
-import type { CreateKnowledgeInput } from '@mindstrate/protocol';
+import type { CreateKnowledgeInput, CodeSnippet, ActionableGuide } from '@mindstrate/protocol';
 import { KnowledgeType, CaptureSource } from '@mindstrate/protocol';
 import {
-  EXTRACTION_SYSTEM_PROMPT,
+  buildExtractionSystemPrompt,
   buildExtractionUserPrompt,
 } from '../prompts.js';
+import { contentLanguageInstruction } from '../content-locale.js';
 import { LLMError } from '@mindstrate/protocol';
 import type { ProviderFactory } from '../processing/provider-factory.js';
 import { errorMessage, truncateText } from '@mindstrate/protocol/text';
@@ -47,7 +48,7 @@ export class KnowledgeExtractor {
 
     // 如果有配置，使用 LLM 提取
     if (providers.hasConfig) {
-      return this.llmExtract(commit, providers);
+      return this.llmExtract(commit, providers, project);
     }
 
     // 否则使用基于规则的提取
@@ -93,6 +94,7 @@ export class KnowledgeExtractor {
   private async llmExtract(
     commit: CommitInfo,
     providers: { llmClientPromise: Promise<unknown>; llmModel: string },
+    project: string,
   ): Promise<ExtractionResult> {
     try {
       const client = (await providers.llmClientPromise) as Awaited<ReturnType<typeof import('../openai-client.js').getOpenAIClient>>;
@@ -100,17 +102,21 @@ export class KnowledgeExtractor {
         return { extracted: false, reason: 'OpenAI client unavailable (apiKey missing or openai package not installed)' };
       }
 
-      // 限制 diff 长度避免 token 过大
-      const truncatedDiff = truncateText(commit.diff, 4016, '\n... (truncated)');
+      // 限制 diff 长度避免 token 过大。结构化富提取需要更多上下文,
+      // 因此放宽到 ~12k 字符(原 4016 只能看到大改动的开头)。
+      const truncatedDiff = truncateText(commit.diff, 12000, '\n... (truncated)');
 
       const response = await client.chat.completions.create({
         model: providers.llmModel,
-        temperature: 0.1,
+        temperature: 0.2,
+        // 富结构化输出(多段 solution + 代码片段 + actionable)需要足够的
+        // 输出预算,否则会被服务端默认上限截断成半句话。
+        max_tokens: 2400,
         response_format: { type: 'json_object' },
         messages: [
           {
             role: 'system',
-            content: EXTRACTION_SYSTEM_PROMPT,
+            content: buildExtractionSystemPrompt(contentLanguageInstruction()),
           },
           {
             role: 'user',
@@ -136,15 +142,22 @@ export class KnowledgeExtractor {
         return { extracted: false, reason: 'LLM determined commit is not knowledge-worthy' };
       }
 
+      const codeSnippets = this.mapCodeSnippets(parsed.code_snippets, commit.files);
+      const actionable = this.mapActionable(parsed.actionable);
+      const solution = this.composeSolutionBody(parsed.solution, parsed.key_points, codeSnippets);
+
       return {
         extracted: true,
         input: {
           type: parsed.type as KnowledgeType,
           title: parsed.title,
           problem: parsed.problem || undefined,
-          solution: parsed.solution,
+          solution,
+          codeSnippets: codeSnippets.length > 0 ? codeSnippets : undefined,
+          actionable,
           tags: parsed.tags || [],
           context: {
+            project: project || undefined,
             language: parsed.language,
             framework: parsed.framework || undefined,
             filePaths: commit.files,
@@ -164,6 +177,83 @@ export class KnowledgeExtractor {
       });
       return { extracted: false, reason: llmErr.message };
     }
+  }
+
+  /**
+   * 将 LLM 返回的结构化片段组装成卡片正文(Markdown)。
+   * 卡片只渲染 content(=solution),所以把要点和关键代码拼进正文,
+   * 让读者在卡片里就能看到完整信息;结构化字段(codeSnippets/actionable)
+   * 仍单独保留,用于质量门评分与未来的程序化消费。
+   */
+  private composeSolutionBody(
+    solution: unknown,
+    keyPoints: unknown,
+    codeSnippets: CodeSnippet[],
+  ): string {
+    const sections: string[] = [];
+    const body = typeof solution === 'string' ? solution.trim() : '';
+    if (body) sections.push(body);
+
+    const points = Array.isArray(keyPoints)
+      ? keyPoints.filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+      : [];
+    if (points.length > 0 && !body.includes('## 要点')) {
+      sections.push(['## 要点 / Key points', ...points.map((p) => `- ${p.trim()}`)].join('\n'));
+    }
+
+    if (codeSnippets.length > 0 && !/```/.test(body)) {
+      const blocks = codeSnippets.map((s) => {
+        const header = [s.description, s.filePath ? `(${s.filePath})` : '']
+          .filter(Boolean)
+          .join(' ');
+        return [header ? `**${header}**` : '', '```' + (s.language || ''), s.code, '```']
+          .filter(Boolean)
+          .join('\n');
+      });
+      sections.push(['## 关键代码 / Key code', ...blocks].join('\n\n'));
+    }
+
+    const composed = sections.join('\n\n').trim();
+    return composed.length > 0 ? composed : (body || 'No solution extracted.');
+  }
+
+  /** 规整 LLM 返回的代码片段 */
+  private mapCodeSnippets(raw: unknown, files: string[]): CodeSnippet[] {
+    if (!Array.isArray(raw)) return [];
+    const fallbackLang = this.detectLanguage(files);
+    const snippets: CodeSnippet[] = [];
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const rec = item as Record<string, unknown>;
+      const code = typeof rec['code'] === 'string' ? rec['code'].trim() : '';
+      if (!code) continue;
+      snippets.push({
+        language: typeof rec['language'] === 'string' && rec['language'] ? rec['language'] : fallbackLang,
+        code,
+        filePath: typeof rec['file_path'] === 'string' ? rec['file_path'] : undefined,
+        description: typeof rec['description'] === 'string' ? rec['description'] : undefined,
+      });
+    }
+    return snippets.slice(0, 6);
+  }
+
+  /** 规整 LLM 返回的可执行指导 */
+  private mapActionable(raw: unknown): ActionableGuide | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const rec = raw as Record<string, unknown>;
+    const strArray = (v: unknown): string[] | undefined => {
+      if (!Array.isArray(v)) return undefined;
+      const arr = v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((x) => x.trim());
+      return arr.length > 0 ? arr : undefined;
+    };
+    const guide: ActionableGuide = {
+      preconditions: strArray(rec['preconditions']),
+      steps: strArray(rec['steps']),
+      verification: typeof rec['verification'] === 'string' && rec['verification'].trim() ? rec['verification'].trim() : undefined,
+      antiPatterns: strArray(rec['anti_patterns']),
+    };
+    const hasContent = guide.preconditions || guide.steps || guide.verification || guide.antiPatterns;
+    return hasContent ? guide : undefined;
   }
 
   /** 基于规则的简单提取（无 LLM 时的 fallback） */

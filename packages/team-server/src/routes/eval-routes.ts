@@ -31,6 +31,16 @@ export const registerEvalRoutes = (app: Express, { memory }: TeamRouteDeps): voi
     res.status(201).json(created);
   }));
 
+  app.post('/api/eval/cases/generate', withInitializedMemory(memory, async (req, res) => {
+    if (authorizeProject(req, res, undefined, 'write') === null) return;
+    const project = typeof req.body.project === 'string' ? req.body.project : undefined;
+    const limit = typeof req.body.limit === 'number' ? req.body.limit : undefined;
+    const kind = typeof req.body.kind === 'string' ? (req.body.kind as EvalCaseKind) : undefined;
+    const holdoutEveryNth = typeof req.body.holdoutEveryNth === 'number' ? req.body.holdoutEveryNth : undefined;
+    const result = await memory.evaluation.generateEvalCases({ project, limit, kind, holdoutEveryNth });
+    res.status(201).json(result);
+  }));
+
   app.delete('/api/eval/cases/:id', withInitializedMemory(memory, async (req, res) => {
     if (authorizeProject(req, res, undefined, 'write') === null) return;
     const id = readParam(req.params.id);

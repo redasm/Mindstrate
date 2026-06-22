@@ -22,12 +22,26 @@ export interface SchedulerEnvConfig {
   enabled: boolean;
   intervalMs: number;
   project?: string;
+  optimizeSkills: boolean;
+  skillOptimizationEveryTicks: number;
+  generateEvalCases: boolean;
+  evalCaseGenerationEveryTicks: number;
 }
 
 export const readSchedulerEnvConfig = (env: NodeJS.ProcessEnv = process.env): SchedulerEnvConfig => ({
   enabled: env['MINDSTRATE_METABOLISM_SCHEDULER'] === 'true',
   intervalMs: parseInt(env['MINDSTRATE_METABOLISM_INTERVAL_MS'] ?? '300000', 10),
   project: env['MINDSTRATE_METABOLISM_PROJECT'] || undefined,
+  optimizeSkills: env['MINDSTRATE_SKILL_EVOLUTION_SCHEDULER'] === 'true',
+  skillOptimizationEveryTicks: Math.max(
+    1,
+    parseInt(env['MINDSTRATE_SKILL_EVOLUTION_EVERY_TICKS'] ?? '12', 10) || 1,
+  ),
+  generateEvalCases: env['MINDSTRATE_EVAL_DATASET_SCHEDULER'] === 'true',
+  evalCaseGenerationEveryTicks: Math.max(
+    1,
+    parseInt(env['MINDSTRATE_EVAL_DATASET_EVERY_TICKS'] ?? '12', 10) || 1,
+  ),
 });
 
 const warnIfAuthDisabled = (): void => {
@@ -55,10 +69,20 @@ const main = async (): Promise<void> => {
     memory.metabolism.startMetabolismScheduler({
       project: scheduler.project,
       intervalMs: scheduler.intervalMs,
+      optimizeSkills: scheduler.optimizeSkills,
+      skillOptimizationEveryTicks: scheduler.skillOptimizationEveryTicks,
+      generateEvalCases: scheduler.generateEvalCases,
+      evalCaseGenerationEveryTicks: scheduler.evalCaseGenerationEveryTicks,
     });
     logger.info({
       intervalMs: scheduler.intervalMs,
       project: scheduler.project ?? 'global',
+      skillOptimization: scheduler.optimizeSkills
+        ? `every ${scheduler.skillOptimizationEveryTicks} ticks`
+        : 'disabled',
+      evalDatasetGeneration: scheduler.generateEvalCases
+        ? `every ${scheduler.evalCaseGenerationEveryTicks} ticks`
+        : 'disabled',
     }, 'ECS metabolism scheduler started');
   }
 

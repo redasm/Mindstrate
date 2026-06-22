@@ -9,9 +9,10 @@
 
 import type { Session, CompressSessionInput, SessionObservation } from '@mindstrate/protocol';
 import {
-  SESSION_COMPRESSION_SYSTEM_PROMPT,
+  buildSessionCompressionSystemPrompt,
   buildSessionCompressionUserPrompt,
 } from '../prompts.js';
+import { contentLanguageInstruction } from '../content-locale.js';
 import { noopLogger, type Logger } from '../runtime/logger.js';
 import type { ProviderFactory } from './provider-factory.js';
 
@@ -57,7 +58,7 @@ export class SessionCompressor {
         messages: [
           {
             role: 'system',
-            content: SESSION_COMPRESSION_SYSTEM_PROMPT,
+            content: buildSessionCompressionSystemPrompt(contentLanguageInstruction()),
           },
           {
             role: 'user',

@@ -35,7 +35,7 @@ import { loadCustomSystemPages, mergeSystemPages } from './custom-system-pages.j
 import { writeProjectGraphTextFileAtomically } from './project-graph-file-io.js';
 import { importProjectGraphOverlayBlock } from './project-graph-overlay-import.js';
 import { preserveProjectGraphBlock } from './project-graph-report-shared.js';
-import { resolveProjectGraphLocale } from './project-graph-locale.js';
+import { resolveContentLocale } from '../content-locale.js';
 import { renderProjectOperationManualSections } from './operation-manual.js';
 import { normalizeSystemPageMetadata } from './system-page-metadata.js';
 
@@ -113,7 +113,7 @@ export const writeObsidianSystemPages = (
 const stackPresetForProject = (project: DetectedProject): SystemPageDefinition[] => {
   const presets = project.graphHints?.systemPagePresets;
   if (!presets) return [];
-  const locale: SystemPagePresetLocale = resolveProjectGraphLocale() === 'zh' ? 'zh' : 'en';
+  const locale: SystemPagePresetLocale = resolveContentLocale() === 'zh' ? 'zh' : 'en';
   // Fall back to the alternate locale rather than dropping the preset
   // entirely when the user runs in zh but the include file only ships
   // an `en` array (or vice versa). The translated body is still better

@@ -20,6 +20,10 @@ import type {
   RunMetabolismOptions,
 } from '../metabolism/index.js';
 import { EvolutionEngine, MetabolismScheduler } from '../metabolism/index.js';
+import {
+  generateEvalCasesFromKnowledge,
+  type GenerateEvalCasesResult,
+} from '../quality/eval-case-generator.js';
 import type { MetabolismRun } from '@mindstrate/protocol/models';
 import type {
   SkillEvolutionPatch,
@@ -118,13 +122,49 @@ export class MindstrateMetabolismApi {
     return this.services.metabolismEngine.run(options);
   }
 
-  startMetabolismScheduler(options: Omit<MetabolismSchedulerOptions, 'runMetabolism'>): void {
+  startMetabolismScheduler(
+    options: Omit<
+      MetabolismSchedulerOptions,
+      'runMetabolism' | 'optimizeSkills' | 'generateEvalCases'
+    > & {
+      /** Also run skill-evolution optimization on the scheduler cadence. */
+      optimizeSkills?: boolean;
+      /** Also auto-generate retrieval eval cases on the scheduler cadence. */
+      generateEvalCases?: boolean;
+    },
+  ): void {
     this.stopMetabolismScheduler();
+    const { optimizeSkills, generateEvalCases, ...schedulerOptions } = options;
     this.metabolismScheduler = new MetabolismScheduler({
-      ...options,
+      ...schedulerOptions,
       runMetabolism: (runOptions) => this.runMetabolism(runOptions),
+      optimizeSkills: optimizeSkills
+        ? (skillOptions) => this.optimizeSkillTargets(skillOptions)
+        : undefined,
+      generateEvalCases: generateEvalCases
+        ? (genOptions) => this.generateScheduledEvalCases(genOptions)
+        : undefined,
     });
     this.metabolismScheduler.start();
+  }
+
+  /**
+   * Scheduler-driven eval dataset bootstrap. Mirrors
+   * `MindstrateEvaluationApi.generateEvalCases` but wired straight from the
+   * runtime services so the scheduler does not depend on the evaluation API
+   * facade. Idempotent; only newly-covered knowledge yields new cases.
+   */
+  private generateScheduledEvalCases(options: { project?: string }): GenerateEvalCasesResult {
+    return generateEvalCasesFromKnowledge(
+      {
+        projectKnowledge: (projectionOptions) =>
+          this.services.graphKnowledgeProjector.project(projectionOptions),
+        listCases: (listOptions) => this.services.evaluator.listCases(listOptions),
+        addCase: (query, expectedIds, addOptions) =>
+          this.services.evaluator.addCase(query, expectedIds, addOptions),
+      },
+      options,
+    );
   }
 
   stopMetabolismScheduler(): void {

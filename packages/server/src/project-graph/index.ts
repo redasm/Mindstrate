@@ -126,6 +126,12 @@ export {
   type PlanProjectGraphSystemPagesWithLlmInput,
 } from './system-page-planner.js';
 export {
+  collectCuratedProjectDocs,
+  curatedDocRootsForProject,
+  type CuratedProjectDoc,
+  type CollectCuratedProjectDocsOptions,
+} from './curated-docs.js';
+export {
   estimateProjectGraphBlastRadius,
   findProjectGraphPath,
   queryProjectGraphTask,

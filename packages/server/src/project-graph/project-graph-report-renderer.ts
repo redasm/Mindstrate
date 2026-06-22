@@ -4,7 +4,7 @@ import type { ProjectGraphModule } from './clustering.js';
 import { renderProjectGraphOverlayBlock } from './overlay.js';
 import type { ProjectGraphReportItem, ProjectGraphStatsExport } from './project-graph-report-types.js';
 import { renderProjectOperationManualSections } from './operation-manual.js';
-import { resolveProjectGraphLocale, type ProjectGraphLocale } from './project-graph-locale.js';
+import { resolveContentLocale, type ContentLocale } from '../content-locale.js';
 import {
   listOrFallback,
   overlaySections,
@@ -90,9 +90,9 @@ const text = {
     noneRaised: '- 暂无。',
     noneDetected: '- 暂未检测到。',
   },
-} satisfies Record<ProjectGraphLocale, Record<string, string>>;
+} satisfies Record<ContentLocale, Record<string, string>>;
 
-const labels = () => text[resolveProjectGraphLocale()];
+const labels = () => text[resolveContentLocale()];
 
 export const renderProjectGraphReport = (
   project: DetectedProject,

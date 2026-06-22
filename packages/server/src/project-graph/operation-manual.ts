@@ -1,5 +1,5 @@
 import type { DetectedProject, ProjectOperationManual } from '../project/index.js';
-import { resolveProjectGraphLocale, type ProjectGraphLocale } from './project-graph-locale.js';
+import { resolveContentLocale, type ContentLocale } from '../content-locale.js';
 import { listOrFallback } from './project-graph-report-shared.js';
 
 export interface ProjectGraphTaskGuidance {
@@ -52,7 +52,7 @@ const labels = {
     verify: '验证',
     validationSteps: '验证',
   },
-} satisfies Record<ProjectGraphLocale, Record<string, string>>;
+} satisfies Record<ContentLocale, Record<string, string>>;
 
 export const operationManualForProject = (project: DetectedProject): ProjectOperationManual | undefined =>
   project.graphHints?.operationManual;
@@ -60,7 +60,7 @@ export const operationManualForProject = (project: DetectedProject): ProjectOper
 export const renderProjectOperationManualSections = (project: DetectedProject): string[] => {
   const manual = operationManualForProject(project);
   if (!manual) return [];
-  const t = labels[resolveProjectGraphLocale()];
+  const t = labels[resolveContentLocale()];
   return compactSections([
     section(t.architecture, manual.architecture),
     section(t.invariants, manual.criticalInvariants),
@@ -80,7 +80,7 @@ export const taskGuidanceFromOperationManual = (
 ): ProjectGraphTaskGuidance[] => {
   const manual = project ? operationManualForProject(project) : undefined;
   if (!manual) return [];
-  const t = labels[resolveProjectGraphLocale()];
+  const t = labels[resolveContentLocale()];
   const relevantModules = (manual.moduleResponsibilities ?? []).filter((entry) => matchesQuery(query, [entry.path, entry.role, ...(entry.editingRules ?? [])]));
   const relevantFlows = (manual.flows ?? []).filter((entry) => matchesQuery(query, [entry.name, ...(entry.appliesTo ?? []), ...entry.steps]));
   const relevantPlaybooks = (manual.playbooks ?? []).filter((entry) => matchesQuery(query, [entry.changeType, ...(entry.appliesTo ?? [])]));

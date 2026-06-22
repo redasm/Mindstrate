@@ -23,6 +23,15 @@ export class EvalClient extends TeamDomainClient {
     return response.json() as Promise<{ deleted: boolean }>;
   }
 
+  async generateCases(options?: {
+    project?: string;
+    limit?: number;
+    kind?: EvalCaseKind;
+    holdoutEveryNth?: number;
+  }): Promise<{ created: number; skippedExisting: number; consideredNodes: number }> {
+    return this.post('/api/eval/cases/generate', options ?? {});
+  }
+
   async run(options?: { topK?: number; kind?: EvalCaseKind }): Promise<EvalRunResult> {
     return this.post<EvalRunResult>('/api/eval/run', options ?? {});
   }

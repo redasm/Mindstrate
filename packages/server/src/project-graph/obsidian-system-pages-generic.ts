@@ -20,7 +20,7 @@
 
 import type { DetectedProject } from '../project/index.js';
 import type { SystemPageDefinition } from './obsidian-system-page-types.js';
-import { resolveProjectGraphLocale } from './project-graph-locale.js';
+import { resolveContentLocale } from '../content-locale.js';
 
 interface Labels {
   userNotesPlaceholder: string;
@@ -111,7 +111,7 @@ const labels: Record<'en' | 'zh', Labels> = {
 };
 
 export const genericSystemPageDefinitions = (project: DetectedProject): SystemPageDefinition[] => {
-  const t = labels[resolveProjectGraphLocale()];
+  const t = labels[resolveContentLocale()];
   return [
     overviewPage(project, t),
     entryAndScriptsPage(project, t),
@@ -121,7 +121,7 @@ export const genericSystemPageDefinitions = (project: DetectedProject): SystemPa
 
 const overviewPage = (project: DetectedProject, t: Labels): SystemPageDefinition => ({
   key: '00-overview',
-  name: resolveProjectGraphLocale() === 'zh' ? '00-总览.md' : '00-overview.md',
+  name: resolveContentLocale() === 'zh' ? '00-总览.md' : '00-overview.md',
   title: `${project.name} ${t.overviewTitleSuffix}`,
   body: [
     `## ${t.purpose}`,
@@ -155,7 +155,7 @@ const entryAndScriptsPage = (project: DetectedProject, t: Labels): SystemPageDef
   const scripts = Object.entries(project.scripts).slice(0, 30);
   return {
     key: '01-entry-and-scripts',
-    name: resolveProjectGraphLocale() === 'zh' ? '01-入口与脚本.md' : '01-entry-and-scripts.md',
+    name: resolveContentLocale() === 'zh' ? '01-入口与脚本.md' : '01-entry-and-scripts.md',
     title: t.entryPointsTitle,
     body: [
       `## ${t.entryPointsTitle}`,
@@ -183,7 +183,7 @@ const validationPlaybookPage = (project: DetectedProject, t: Labels): SystemPage
     .filter(([name]) => /^(test|build|typecheck|lint|check|verify|ci)/i.test(name));
   return {
     key: '02-validation-playbook',
-    name: resolveProjectGraphLocale() === 'zh' ? '02-验证手册.md' : '02-validation-playbook.md',
+    name: resolveContentLocale() === 'zh' ? '02-验证手册.md' : '02-validation-playbook.md',
     title: t.validationTitle,
     body: [
       `## ${t.validationTitle}`,
