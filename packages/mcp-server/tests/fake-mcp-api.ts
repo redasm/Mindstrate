@@ -110,6 +110,35 @@ export const createFakeMcpApi = (options: FakeMcpApiOptions = {}): FakeMcpApi =>
         ...(options.systemPageRules ?? []),
       ];
     },
+    async getContextNode(id) {
+      record('getContextNode', id);
+      const all = [...(options.contextNodes ?? []), ...(options.systemPageRules ?? [])];
+      return all.find((node) => node.id === id) ?? null;
+    },
+    async queryProjectSubgraph(query) {
+      record('queryProjectSubgraph', query);
+      return {
+        nodes: [...(options.contextNodes ?? []), ...(options.systemPageRules ?? [])],
+        edges: options.contextEdges ?? [],
+      };
+    },
+    async projectGraphNeighborhood(query) {
+      record('projectGraphNeighborhood', query);
+      return {
+        nodes: [...(options.contextNodes ?? []), ...(options.systemPageRules ?? [])],
+        edges: options.contextEdges ?? [],
+      };
+    },
+    async projectGraphPath(query) {
+      record('projectGraphPath', query);
+      const edges = options.contextEdges ?? [];
+      // No edges fixture -> no path (mirrors the server's bounded BFS).
+      if (edges.length === 0) return null;
+      return {
+        nodes: options.contextNodes ?? [],
+        edges,
+      };
+    },
     async listContextEdges(query) {
       record('listContextEdges', query);
       return options.contextEdges ?? [];
