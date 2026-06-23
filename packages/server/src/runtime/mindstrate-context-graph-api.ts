@@ -369,7 +369,7 @@ export class MindstrateContextGraphApi {
     systemPages?: SystemPageDefinition[],
   ): InternalizeSystemPagesResult {
     const pages = systemPages ?? systemPageDefinitionsForProject(project);
-    return internalizeSystemPagesAsRules(this.services.contextGraphStore, project.name, pages);
+    return internalizeSystemPagesAsRules(this.services.contextGraphStore, project, pages);
   }
 
   createProjectGraphOverlay(input: CreateProjectGraphOverlayInput): ProjectGraphOverlay {

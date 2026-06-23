@@ -163,7 +163,7 @@ const renderSystemPage = (page: SystemPageDefinition, existing: string, project:
  * while still letting per-project runtime data flow into the rendered
  * Markdown.
  */
-const expandBodyPlaceholders = (body: string[], project: DetectedProject): string[] => {
+export const expandBodyPlaceholders = (body: string[], project: DetectedProject): string[] => {
   const result: string[] = [];
   for (const line of body) {
     if (line.trim() === '<!-- mindstrate:operation-manual -->') {

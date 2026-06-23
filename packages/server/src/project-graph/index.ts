@@ -100,7 +100,7 @@ export {
   SYSTEM_PAGE_RULE_TAG,
   type InternalizeSystemPagesResult,
 } from './internalize-system-pages.js';
-export { systemPageDefinitionsForProject } from './obsidian-system-pages.js';
+export { systemPageDefinitionsForProject, expandBodyPlaceholders } from './obsidian-system-pages.js';
 export {
   recordProjectGraphExternalChanges,
   type RecordProjectGraphExternalChangesInput,

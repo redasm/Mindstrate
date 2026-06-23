@@ -25,6 +25,7 @@ import type { SystemPageDefinition } from '../src/project-graph/obsidian-system-
 import { createTempDir, removeTempDir } from './test-support.js';
 
 const PROJECT = 'demo';
+const PROJECT_INPUT = { name: PROJECT, root: '/tmp/demo', dependencies: [], entryPoints: [] } as never;
 
 const buildPage = (overrides: Partial<SystemPageDefinition> = {}): SystemPageDefinition => ({
   key: '01-runtime-lifecycle',
@@ -62,7 +63,7 @@ describe('internalizeSystemPagesAsRules', () => {
   it('creates one RULE node per page on first run', () => {
     const pages = [buildPage(), buildPage({ key: '02-bridge', name: '02-bridge.md', title: 'Bridge' })];
 
-    const result = internalizeSystemPagesAsRules(store, PROJECT, pages);
+    const result = internalizeSystemPagesAsRules(store, PROJECT_INPUT, pages);
 
     expect(result.pagesProcessed).toBe(2);
     expect(result.created).toHaveLength(2);
@@ -80,8 +81,37 @@ describe('internalizeSystemPagesAsRules', () => {
       .toBe('architecture:system-page:demo:01-runtime-lifecycle');
   });
 
+  it('expands the operation-manual placeholder into the node content', () => {
+    const projectWithManual = {
+      name: PROJECT,
+      root: '/tmp/demo',
+      dependencies: [],
+      entryPoints: [],
+      graphHints: {
+        operationManual: {
+          architecture: ['NAMI is a TypeScript business layer bridged via PuerTS.'],
+        },
+      },
+    } as never;
+    const page = buildPage({
+      key: '00-overview',
+      name: '00-overview.md',
+      title: 'Overview',
+      body: ['## Purpose', '', '- Entry point.', '', '<!-- mindstrate:operation-manual -->'],
+    });
+
+    internalizeSystemPagesAsRules(store, projectWithManual, [page]);
+
+    const node = store.getNodeById(systemPageRuleId(PROJECT, '00-overview'));
+    expect(node).not.toBeNull();
+    // The literal placeholder must NOT survive into the knowledge card...
+    expect(node?.content).not.toContain('<!-- mindstrate:operation-manual -->');
+    // ...and the operation-manual content must be injected instead.
+    expect(node?.content).toContain('NAMI is a TypeScript business layer bridged via PuerTS.');
+  });
+
   it('persists structured metadata so task-report can read it back', () => {
-    internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+    internalizeSystemPagesAsRules(store, PROJECT_INPUT, [buildPage()]);
 
     const node = store.getNodeById(systemPageRuleId(PROJECT, '01-runtime-lifecycle'));
     expect(node?.metadata?.['systemPage']).toBe(true);
@@ -92,7 +122,7 @@ describe('internalizeSystemPagesAsRules', () => {
   });
 
   it('attaches canonical tags plus classification + page tags', () => {
-    internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+    internalizeSystemPagesAsRules(store, PROJECT_INPUT, [buildPage()]);
 
     const node = store.getNodeById(systemPageRuleId(PROJECT, '01-runtime-lifecycle'));
     expect(node?.tags).toContain('architecture');
@@ -103,9 +133,9 @@ describe('internalizeSystemPagesAsRules', () => {
   });
 
   it('is idempotent: a second run with identical pages reports no changes', () => {
-    internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+    internalizeSystemPagesAsRules(store, PROJECT_INPUT, [buildPage()]);
 
-    const second = internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+    const second = internalizeSystemPagesAsRules(store, PROJECT_INPUT, [buildPage()]);
 
     expect(second.created).toHaveLength(0);
     expect(second.updated).toHaveLength(0);
@@ -113,9 +143,9 @@ describe('internalizeSystemPagesAsRules', () => {
   });
 
   it('updates existing nodes when page content changes', () => {
-    internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+    internalizeSystemPagesAsRules(store, PROJECT_INPUT, [buildPage()]);
 
-    const result = internalizeSystemPagesAsRules(store, PROJECT, [buildPage({
+    const result = internalizeSystemPagesAsRules(store, PROJECT_INPUT, [buildPage({
       body: ['## Flow', '', '- .uproject defines plugins.', '- new line.'],
     })]);
 
@@ -129,7 +159,7 @@ describe('internalizeSystemPagesAsRules', () => {
   it('handles pages without metadata (only canonical fields are persisted)', () => {
     const page = buildPage({ metadata: undefined });
 
-    const result = internalizeSystemPagesAsRules(store, PROJECT, [page]);
+    const result = internalizeSystemPagesAsRules(store, PROJECT_INPUT, [page]);
 
     expect(result.created).toHaveLength(1);
     const node = store.getNodeById(systemPageRuleId(PROJECT, '01-runtime-lifecycle'));
@@ -157,12 +187,12 @@ describe('internalizeSystemPagesAsRules', () => {
       metadata: { importer: 'obsidian-architecture-markdown' },
     });
 
-    const result = internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+    const result = internalizeSystemPagesAsRules(store, PROJECT_INPUT, [buildPage()]);
 
     expect(result.prunedLegacy).toContain(legacyId);
     expect(store.getNodeById(legacyId)).toBeNull();
     // A second run should report no further prunes — the cleanup is idempotent.
-    const second = internalizeSystemPagesAsRules(store, PROJECT, [buildPage()]);
+    const second = internalizeSystemPagesAsRules(store, PROJECT_INPUT, [buildPage()]);
     expect(second.prunedLegacy).toHaveLength(0);
   });
 });

@@ -65,7 +65,7 @@ export const writeProjectGraphObsidianProjection = (
   // overlay re-import sweep, so MCP retrieval (assemble / before-edit /
   // search_graph_knowledge) sees them as project-specific architecture
   // rules rather than orphan Markdown files.
-  internalizeSystemPagesAsRules(store, project.name, plannedSystemPages);
+  internalizeSystemPagesAsRules(store, project, plannedSystemPages);
   importProjectGraphOverlayBlock(store, project.name, existing);
   importExistingSystemPageOverlays(
     store,

@@ -31,8 +31,10 @@ import {
   type ContextNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from '../context-graph/context-graph-store.js';
+import type { DetectedProject } from '../project/index.js';
 import type { SystemPageDefinition } from './obsidian-system-page-types.js';
 import { hasSystemPageTriggerEntries, uniqueSystemPageStrings } from './system-page-metadata.js';
+import { expandBodyPlaceholders } from './obsidian-system-pages.js';
 
 export const SYSTEM_PAGE_RULE_TAG = 'system-page';
 export const SYSTEM_PAGE_RULE_ID_PREFIX = 'architecture:system-page:';
@@ -71,9 +73,10 @@ const LEGACY_OBSIDIAN_ARCHITECTURE_ID_PREFIX = 'obsidian-architecture:';
  */
 export const internalizeSystemPagesAsRules = (
   store: ContextGraphStore,
-  projectName: string,
+  project: DetectedProject,
   pages: SystemPageDefinition[],
 ): InternalizeSystemPagesResult => {
+  const projectName = project.name;
   const result: InternalizeSystemPagesResult = {
     pagesProcessed: pages.length,
     created: [],
@@ -84,7 +87,7 @@ export const internalizeSystemPagesAsRules = (
 
   for (const page of pages) {
     const id = systemPageRuleId(projectName, page.key);
-    const desired = renderSystemPageRule(projectName, page);
+    const desired = renderSystemPageRule(projectName, project, page);
     const existing = store.getNodeById(id);
 
     if (!existing) {
@@ -134,7 +137,7 @@ interface DesiredSystemPageRule {
   metadata: Record<string, unknown>;
 }
 
-const renderSystemPageRule = (projectName: string, page: SystemPageDefinition): DesiredSystemPageRule => {
+const renderSystemPageRule = (projectName: string, project: DetectedProject, page: SystemPageDefinition): DesiredSystemPageRule => {
   const pageMetadata = page.metadata ?? {};
   const tags = uniqueSystemPageStrings([
     'architecture',
@@ -161,7 +164,7 @@ const renderSystemPageRule = (projectName: string, page: SystemPageDefinition): 
 
   return {
     title: page.title,
-    content: page.body.join('\n'),
+    content: expandBodyPlaceholders(page.body, project).join('\n'),
     tags,
     metadata,
   };
