@@ -175,6 +175,40 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
       return memory!.context.queryContextGraph(queryOptions as any);
     },
 
+    async getContextNode(id: string) {
+      if (teamClient) return teamClient.context.getNode(id);
+      return memory!.context.getContextNode(id);
+    },
+
+    async queryProjectSubgraph(opts) {
+      if (teamClient) return teamClient.context.getSubgraph(opts);
+      return memory!.context.queryProjectSubgraph({
+        project: opts.project ?? '',
+        focusNodeId: opts.focus,
+        nodeKinds: opts.kinds,
+        limit: opts.limit,
+      });
+    },
+
+    async projectGraphNeighborhood(opts) {
+      if (teamClient) return teamClient.context.projectGraphNeighborhood(opts);
+      return memory!.context.projectGraphNeighborhood({
+        seedIds: opts.seedIds,
+        depth: opts.depth ?? 1,
+        limit: opts.limit ?? 300,
+        edgeKinds: opts.edgeKinds,
+      });
+    },
+
+    async projectGraphPath(opts) {
+      if (teamClient) return teamClient.context.projectGraphPath(opts);
+      return memory!.context.projectGraphShortestPath({
+        fromId: opts.from,
+        toId: opts.to,
+        maxDepth: opts.maxDepth ?? 6,
+      });
+    },
+
     async listContextEdges(queryOptions) {
       if (teamClient) return teamClient.context.listEdges(queryOptions);
       return memory!.context.listContextEdges(queryOptions as any);

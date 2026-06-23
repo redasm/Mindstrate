@@ -28,6 +28,7 @@ import {
   findProjectGraphPath,
   indexProjectGraph,
   planProjectGraphSystemPagesWithLlm,
+  collectCuratedProjectDocs,
   queryProjectGraphTask,
   recordProjectGraphExternalChanges,
   summarizeProjectGraphWithLlm,
@@ -183,6 +184,25 @@ export class MindstrateContextGraphApi {
     return this.services.contextGraphStore.queryProjectSubgraph(opts);
   }
 
+  /** Bounded BFS neighbourhood over project-graph edges from seed nodes. */
+  projectGraphNeighborhood(opts: {
+    seedIds: string[];
+    depth: number;
+    limit: number;
+    edgeKinds?: string[];
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } {
+    return this.services.contextGraphStore.projectGraphNeighborhood(opts);
+  }
+
+  /** Bounded BFS shortest path between two project-graph nodes. */
+  projectGraphShortestPath(opts: {
+    fromId: string;
+    toId: string;
+    maxDepth: number;
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } | null {
+    return this.services.contextGraphStore.projectGraphShortestPath(opts);
+  }
+
   queryContextGraph(options?: {
     query?: string;
     project?: string;
@@ -302,6 +322,7 @@ export class MindstrateContextGraphApi {
         domainType: ContextDomainType.ARCHITECTURE,
         limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
       }),
+      curatedDocs: collectCuratedProjectDocs(project),
       requestPolicy: this.services.config.projectGraphLlm,
     });
   }
@@ -348,7 +369,7 @@ export class MindstrateContextGraphApi {
     systemPages?: SystemPageDefinition[],
   ): InternalizeSystemPagesResult {
     const pages = systemPages ?? systemPageDefinitionsForProject(project);
-    return internalizeSystemPagesAsRules(this.services.contextGraphStore, project.name, pages);
+    return internalizeSystemPagesAsRules(this.services.contextGraphStore, project, pages);
   }
 
   createProjectGraphOverlay(input: CreateProjectGraphOverlayInput): ProjectGraphOverlay {

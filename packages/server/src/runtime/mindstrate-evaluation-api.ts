@@ -9,6 +9,11 @@ import {
   type RenderProjectGraphEvaluationDatasetInput,
 } from '../project-graph/index.js';
 import type { EvalRunResult, EvalCaseKind } from '../quality/eval.js';
+import {
+  generateEvalCasesFromKnowledge,
+  type GenerateEvalCasesOptions,
+  type GenerateEvalCasesResult,
+} from '../quality/eval-case-generator.js';
 import type {
   SkillEvolutionEvaluation,
   SkillEvolutionEvaluator,
@@ -41,6 +46,26 @@ export class MindstrateEvaluationApi {
 
   deleteEvalCase(id: string): boolean {
     return this.services.evaluator.deleteCase(id);
+  }
+
+  /**
+   * Auto-generate eval cases from the knowledge the graph already holds, so a
+   * team gets a measurable retrieval dataset without hand-authoring one. Each
+   * case is a self-retrieval probe (query = knowledge title, expected = that
+   * node's id). Idempotent: only newly-covered knowledge produces new cases.
+   */
+  async generateEvalCases(options?: GenerateEvalCasesOptions): Promise<GenerateEvalCasesResult> {
+    await this.ensureInit();
+    return generateEvalCasesFromKnowledge(
+      {
+        projectKnowledge: (projectionOptions) =>
+          this.services.graphKnowledgeProjector.project(projectionOptions),
+        listCases: (listOptions) => this.services.evaluator.listCases(listOptions),
+        addCase: (query, expectedIds, addOptions) =>
+          this.services.evaluator.addCase(query, expectedIds, addOptions),
+      },
+      options,
+    );
   }
 
   getEvalTrend(limit?: number) {

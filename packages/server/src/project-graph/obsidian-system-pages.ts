@@ -35,7 +35,7 @@ import { loadCustomSystemPages, mergeSystemPages } from './custom-system-pages.j
 import { writeProjectGraphTextFileAtomically } from './project-graph-file-io.js';
 import { importProjectGraphOverlayBlock } from './project-graph-overlay-import.js';
 import { preserveProjectGraphBlock } from './project-graph-report-shared.js';
-import { resolveProjectGraphLocale } from './project-graph-locale.js';
+import { resolveContentLocale } from '../content-locale.js';
 import { renderProjectOperationManualSections } from './operation-manual.js';
 import { normalizeSystemPageMetadata } from './system-page-metadata.js';
 
@@ -49,7 +49,18 @@ export const systemPageDefinitionsForProject = (project: DetectedProject): Syste
   const stackPreset = stackPresetForProject(project);
   const custom = loadCustomSystemPages(project);
   // Order matters: later inputs override earlier ones via `mergeSystemPages`.
-  return mergeSystemPages(mergeSystemPages(skeleton, stackPreset), custom);
+  const merged = mergeSystemPages(mergeSystemPages(skeleton, stackPreset), custom);
+  // JSON-authored presets carry literal `${project.*}` placeholders in their
+  // title/body (the generic skeleton is already interpolated via JS template
+  // literals). Expand them here at the single source so BOTH the Obsidian file
+  // and the internalized RULE node (the knowledge card) get the project name —
+  // otherwise the card title showed a raw `${project.name} 架构总览`. The
+  // per-line expansion in `renderSystemPage` then becomes an idempotent no-op.
+  return merged.map((page) => ({
+    ...page,
+    title: expandProjectTokens(page.title, project),
+    body: page.body.map((line) => expandProjectTokens(line, project)),
+  }));
 };
 
 /**
@@ -102,7 +113,7 @@ export const writeObsidianSystemPages = (
 const stackPresetForProject = (project: DetectedProject): SystemPageDefinition[] => {
   const presets = project.graphHints?.systemPagePresets;
   if (!presets) return [];
-  const locale: SystemPagePresetLocale = resolveProjectGraphLocale() === 'zh' ? 'zh' : 'en';
+  const locale: SystemPagePresetLocale = resolveContentLocale() === 'zh' ? 'zh' : 'en';
   // Fall back to the alternate locale rather than dropping the preset
   // entirely when the user runs in zh but the include file only ships
   // an `en` array (or vice versa). The translated body is still better
@@ -152,7 +163,7 @@ const renderSystemPage = (page: SystemPageDefinition, existing: string, project:
  * while still letting per-project runtime data flow into the rendered
  * Markdown.
  */
-const expandBodyPlaceholders = (body: string[], project: DetectedProject): string[] => {
+export const expandBodyPlaceholders = (body: string[], project: DetectedProject): string[] => {
   const result: string[] = [];
   for (const line of body) {
     if (line.trim() === '<!-- mindstrate:operation-manual -->') {

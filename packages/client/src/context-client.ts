@@ -114,6 +114,69 @@ export class ContextClient extends TeamDomainClient {
     return data.nodes ?? [];
   }
 
+  /** Direct primary-key lookup for a single context node (null on 404). */
+  async getNode(id: string): Promise<ContextNode | null> {
+    try {
+      const data = await this.fetch<{ node?: ContextNode }>(`/api/context/node/${encodeURIComponent(id)}`);
+      return data.node ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Bounded project-graph subgraph: skeleton (no focus) or one-hop around `focus`. */
+  async getSubgraph(options: {
+    project?: string;
+    focus?: string;
+    kinds?: string[];
+    limit?: number;
+  }): Promise<{ nodes: ContextNode[]; edges: ContextEdge[] }> {
+    const params = new URLSearchParams();
+    if (options.project) params.set('project', options.project);
+    if (options.focus) params.set('focus', options.focus);
+    if (options.kinds && options.kinds.length > 0) params.set('kinds', options.kinds.join(','));
+    if (options.limit) params.set('limit', String(options.limit));
+
+    const data = await this.fetch<{ nodes?: ContextNode[]; edges?: ContextEdge[] }>(
+      `/api/context/subgraph?${params}`,
+    );
+    return { nodes: data.nodes ?? [], edges: data.edges ?? [] };
+  }
+
+  /** Bounded BFS neighbourhood from seed nodes (server-side traversal). */
+  async projectGraphNeighborhood(options: {
+    project?: string;
+    seedIds: string[];
+    depth?: number;
+    limit?: number;
+    edgeKinds?: string[];
+  }): Promise<{ nodes: ContextNode[]; edges: ContextEdge[] }> {
+    const data = await this.post<{ nodes?: ContextNode[]; edges?: ContextEdge[] }>(
+      '/api/context/project-graph/neighborhood',
+      options,
+    );
+    return { nodes: data.nodes ?? [], edges: data.edges ?? [] };
+  }
+
+  /** Bounded BFS shortest path between two nodes (server-side traversal). */
+  async projectGraphPath(options: {
+    project?: string;
+    from: string;
+    to: string;
+    maxDepth?: number;
+  }): Promise<{ nodes: ContextNode[]; edges: ContextEdge[] } | null> {
+    const params = new URLSearchParams();
+    params.set('from', options.from);
+    params.set('to', options.to);
+    if (options.project) params.set('project', options.project);
+    if (options.maxDepth) params.set('maxDepth', String(options.maxDepth));
+
+    const data = await this.fetch<{ path?: { nodes: ContextNode[]; edges: ContextEdge[] } | null }>(
+      `/api/context/project-graph/path?${params}`,
+    );
+    return data.path ?? null;
+  }
+
   async listConflicts(options?: { project?: string; limit?: number }): Promise<ConflictRecord[]> {
     const params = new URLSearchParams();
     if (options?.project) params.set('project', options.project);

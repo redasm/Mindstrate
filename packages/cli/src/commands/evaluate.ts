@@ -135,6 +135,38 @@ export function registerEvaluateCommand(program: Command): void {
     });
 
   cases
+    .command('generate')
+    .description('从现有知识自动生成评估用例（自检索探针：查询=知识标题，期望=该知识 id）')
+    .option('-p, --project <project>', '限定项目（默认全部）')
+    .option('--limit <n>', '本次最多生成的用例数', '50')
+    .option('--kind <kind>', '主分区类型：validation（默认）| holdout', 'validation')
+    .option('--holdout-every <n>', '每第 N 条改写入 holdout 分区（0=关闭）', '0')
+    .action(async (opts: { project?: string; limit: string; kind: string; holdoutEvery: string }) => {
+      const memory = createMemory();
+      try {
+        await memory.init();
+        const result = await memory.evaluation.generateEvalCases({
+          project: opts.project,
+          limit: parseInt(opts.limit, 10),
+          kind: opts.kind as EvalCaseKind,
+          holdoutEveryNth: parseInt(opts.holdoutEvery, 10) || 0,
+        });
+        console.log(
+          `Generated ${result.created} eval case(s) `
+          + `(${result.skippedExisting} already covered, ${result.consideredNodes} knowledge nodes considered).`,
+        );
+        if (result.created === 0 && result.consideredNodes === 0) {
+          console.log('No projectable knowledge found. Ingest/scan a project first so the graph has knowledge to probe.');
+        }
+      } catch (error) {
+        console.error('Eval case generate failed:', errorMessage(error));
+        process.exit(1);
+      } finally {
+        memory.close();
+      }
+    });
+
+  cases
     .command('delete <id>')
     .description('删除评估用例')
     .action(async (id: string) => {

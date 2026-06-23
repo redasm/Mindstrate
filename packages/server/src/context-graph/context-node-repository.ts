@@ -302,6 +302,39 @@ export class ContextNodeRepository {
     return rows.map(rowToNode);
   }
 
+  /**
+   * Bounded substring search over title / source_ref for any of `terms`
+   * (OR-combined, case-insensitive). Used by context assembly to find
+   * project-graph seed nodes by file path / task keyword WITHOUT loading
+   * the whole architecture layer into memory. `_` and `%` in terms are
+   * escaped so path fragments don't act as LIKE wildcards.
+   */
+  searchByTextTerms(opts: { project?: string; terms: string[]; limit: number }): ContextNode[] {
+    const terms = Array.from(new Set(
+      opts.terms.map((t) => t.trim().toLowerCase()).filter((t) => t.length >= 2),
+    )).slice(0, 24);
+    if (terms.length === 0) return [];
+
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    if (opts.project) {
+      conditions.push('LOWER(project) = LOWER(?)');
+      params.push(opts.project);
+    }
+    const likeClauses: string[] = [];
+    for (const term of terms) {
+      const escaped = term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+      likeClauses.push("(LOWER(title) LIKE ? ESCAPE '\\' OR LOWER(source_ref) LIKE ? ESCAPE '\\')");
+      params.push(`%${escaped}%`, `%${escaped}%`);
+    }
+    conditions.push(`(${likeClauses.join(' OR ')})`);
+
+    const sql = `SELECT * FROM context_nodes WHERE ${conditions.join(' AND ')} ORDER BY updated_at DESC LIMIT ?`;
+    params.push(opts.limit);
+    const rows = this.db.prepare(sql).all(...params) as NodeRow[];
+    return rows.map(rowToNode);
+  }
+
   recordAccess(id: string, accessedAt = new Date().toISOString()): void {
     this.db.prepare(`
       UPDATE context_nodes

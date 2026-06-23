@@ -4,7 +4,7 @@ import {
   type ContextNode,
   type ProjectGraphOverlay,
 } from '@mindstrate/protocol/models';
-import { resolveProjectGraphLocale, type ProjectGraphLocale } from './project-graph-locale.js';
+import { resolveContentLocale, type ContentLocale } from '../content-locale.js';
 
 const text = {
   en: {
@@ -27,9 +27,9 @@ const text = {
     targetNode: '目标节点',
     targetEdge: '目标边',
   },
-} satisfies Record<ProjectGraphLocale, Record<string, string>>;
+} satisfies Record<ContentLocale, Record<string, string>>;
 
-const labels = () => text[resolveProjectGraphLocale()];
+const labels = () => text[resolveContentLocale()];
 
 export const listOrFallback = (items: string[]): string[] =>
   items.length > 0 ? items.map((item) => `- ${item}`) : [labels().noneDetected];

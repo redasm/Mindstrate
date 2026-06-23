@@ -45,6 +45,31 @@ services:
       TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
       MINDSTRATE_DATA_DIR: "/data"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # Language for generated project-graph system pages / reports. Containers
+      # default to a C/en locale, so without this the generator emits English
+      # even when the team wants Chinese.
+      MINDSTRATE_LOCALE: "${MINDSTRATE_LOCALE:-zh-CN}"
+      # Background metabolism scheduler. The team-server process is the ONLY
+      # place that runs ECS metabolism (digest/assimilate/compress/reflect/
+      # prune) on a timer — web-ui is read/write-passive and the scanner only
+      # pushes events. Without this flag the metabolism_runs table stays empty
+      # and knowledge is never assimilated/compressed unless triggered by hand.
+      MINDSTRATE_METABOLISM_SCHEDULER: "${MINDSTRATE_METABOLISM_SCHEDULER:-true}"
+      MINDSTRATE_METABOLISM_INTERVAL_MS: "${MINDSTRATE_METABOLISM_INTERVAL_MS:-300000}"
+      # Optional: limit the scheduler to a single project (empty = all projects).
+      MINDSTRATE_METABOLISM_PROJECT: "${MINDSTRATE_METABOLISM_PROJECT:-}"
+      # Skill-evolution optimizer on the scheduler cadence. Off by default
+      # because it runs an LLM proposer per low-adoption / negatively-rated
+      # high-order node. When on, it produces CANDIDATE skill patches for human
+      # review (nothing is auto-applied). Runs every Nth metabolism tick.
+      MINDSTRATE_SKILL_EVOLUTION_SCHEDULER: "${MINDSTRATE_SKILL_EVOLUTION_SCHEDULER:-false}"
+      MINDSTRATE_SKILL_EVOLUTION_EVERY_TICKS: "${MINDSTRATE_SKILL_EVOLUTION_EVERY_TICKS:-12}"
+      # Auto-bootstrap the retrieval eval dataset from accumulated knowledge on
+      # the scheduler cadence (self-retrieval probes). Idempotent; only newly
+      # covered knowledge yields new cases. Off by default; enable once a project
+      # has knowledge worth measuring.
+      MINDSTRATE_EVAL_DATASET_SCHEDULER: "${MINDSTRATE_EVAL_DATASET_SCHEDULER:-false}"
+      MINDSTRATE_EVAL_DATASET_EVERY_TICKS: "${MINDSTRATE_EVAL_DATASET_EVERY_TICKS:-12}"
       # LLM provider config moved to the Web UI (Settings → LLM Configs).
       # Per-project keys/models live in SQLite, not env vars.
     volumes:
@@ -133,6 +158,12 @@ services:
       TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
       MINDSTRATE_DATA_DIR: "/data"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # The repo-scanner is what generates the project-graph system pages
+      # (`internalizeSystemPages`) and LLM enrichment summaries, so the locale
+      # MUST be set here too — otherwise the container's default C/en locale
+      # makes 00-overview / 01-entrypoints / … come out in English while local
+      # mode (Chinese OS locale) produces Chinese.
+      MINDSTRATE_LOCALE: "${MINDSTRATE_LOCALE:-zh-CN}"
       # First-run indexing of a large checkout builds the whole project graph
       # in memory: the deduped node/edge set has to stay resident for the
       # second-pass binding inference, so heap scales with graph size (a ~40k

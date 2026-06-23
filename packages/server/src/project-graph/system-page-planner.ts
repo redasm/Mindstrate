@@ -12,8 +12,9 @@ import {
   scheduleProjectGraphLlmRequest,
   type ProjectGraphLlmRequestPolicy,
 } from './llm-request-policy.js';
-import { projectGraphLanguageInstruction, resolveProjectGraphLocale } from './project-graph-locale.js';
+import { contentLanguageInstruction, resolveContentLocale } from '../content-locale.js';
 import type { SystemPageDefinition } from './obsidian-system-page-types.js';
+import type { CuratedProjectDoc } from './curated-docs.js';
 
 // System page planner 一次性产出多页章节，必须看到足够多的 facts 才能聚类；但对
 // DashScope 等严格 TPS/TPM provider，payload 太大会让请求排队或超时。因此它默认
@@ -24,19 +25,38 @@ const MAX_PAGES = 10;
 const MAX_SECTIONS_PER_PAGE = 8;
 const MAX_BULLETS_PER_SECTION = 8;
 
+// Per-fact / per-doc bounds. A single extracted node can carry a very large
+// `content` and a huge evidence list; a curated doc excerpt can be long too.
+// Without trimming, the serialized payload blew past provider request caps —
+// DashScope rejects oversized input with HTTP 400
+// "Range of input length should be [1, 1000000]".
+const MAX_FACT_CONTENT_CHARS = 2000;
+const MAX_FACT_TITLE_CHARS = 300;
+const MAX_FACT_EVIDENCE_PATHS = 20;
+const MAX_CURATED_DOC_EXCERPT_CHARS = 1500;
+// Keep the whole request body well under the smallest provider input cap.
+const MAX_PLANNING_PAYLOAD_CHARS = 600_000;
+
 export interface PlanProjectGraphSystemPagesWithLlmInput {
   client: OpenAIClient;
   model: string;
   project: DetectedProject;
   extractedNodes: ContextNode[];
+  /** Optional human-authored architecture docs to ground the plan in. */
+  curatedDocs?: CuratedProjectDoc[];
   timeoutMs?: number;
   requestPolicy?: ProjectGraphLlmRequestPolicy;
 }
 
+const MAX_CURATED_DOCS = 16;
+
 export const planProjectGraphSystemPagesWithLlm = async (
   input: PlanProjectGraphSystemPagesWithLlmInput,
 ): Promise<SystemPageDefinition[] | null> => {
+  const curatedDocs = (input.curatedDocs ?? []).slice(0, MAX_CURATED_DOCS);
   const evidencePaths = collectEvidencePaths(input.extractedNodes);
+  for (const doc of curatedDocs) evidencePaths.add(doc.path);
+  // Need at least one grounding source — extracted facts or curated docs.
   if (evidencePaths.size === 0) return null;
   const factCap = Math.min(SYSTEM_PAGE_FACT_CAP, projectGraphLlmFactBatchSize(input.requestPolicy));
 
@@ -50,8 +70,9 @@ export const planProjectGraphSystemPagesWithLlm = async (
         role: 'system',
         content: [
           'You design Obsidian project-graph system architecture pages for coding agents.',
-          projectGraphLanguageInstruction(),
-          'Return only JSON. Use only provided facts and evidence paths; do not invent files, commands, or subsystems.',
+          contentLanguageInstruction(),
+          'Return only JSON. Ground every page in the provided extracted facts and curated documentation; do not invent files, commands, or subsystems.',
+          'Curated documentation is human-authored and authoritative — prefer it for architecture intent, conventions, and rationale, and cite its path as an evidence path.',
           'Create 4 to 10 pages. Prefer project-specific pages over generic templates.',
           'Each page must have a stable kebab-case key, a safe markdown fileName, a title, sections, and optional defaultOverlays.',
           'Schema: {"pages":[{"key":"stable-key","fileName":"00-name.md","title":"...","sections":[{"heading":"...","bullets":[{"text":"...","evidencePaths":["path"]}]}],"defaultOverlays":[{"kind":"note|risk|convention|confirmation|correction|rejection","target":"optional target","content":"..."}]}]}.',
@@ -59,7 +80,7 @@ export const planProjectGraphSystemPagesWithLlm = async (
       },
       {
         role: 'user',
-        content: renderSystemPagePlanningInput(input.project, input.extractedNodes, factCap),
+        content: renderSystemPagePlanningInput(input.project, input.extractedNodes, factCap, curatedDocs),
       },
     ],
   }, { timeout: input.timeoutMs ?? input.requestPolicy?.requestTimeoutMs ?? SYSTEM_PAGE_TIMEOUT_MS }), input.requestPolicy);
@@ -69,7 +90,12 @@ export const planProjectGraphSystemPagesWithLlm = async (
   return parseSystemPagePlan(content, evidencePaths);
 };
 
-const renderSystemPagePlanningInput = (project: DetectedProject, nodes: ContextNode[], factCap: number): string => {
+const renderSystemPagePlanningInput = (
+  project: DetectedProject,
+  nodes: ContextNode[],
+  factCap: number,
+  curatedDocs: CuratedProjectDoc[],
+): string => {
   const facts = nodes
     .filter(isProjectGraphNode)
     .filter((node) => node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.provenance] === ProjectGraphProvenance.EXTRACTED)
@@ -78,22 +104,43 @@ const renderSystemPagePlanningInput = (project: DetectedProject, nodes: ContextN
     .map((node) => ({
       id: node.id,
       kind: node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind],
-      title: node.title,
-      content: node.content,
-      evidence: collectNodeEvidencePaths(node),
+      title: truncate(node.title, MAX_FACT_TITLE_CHARS),
+      content: truncate(node.content, MAX_FACT_CONTENT_CHARS),
+      evidence: collectNodeEvidencePaths(node).slice(0, MAX_FACT_EVIDENCE_PATHS),
       impactTags: Array.isArray(node.metadata?.['impactTags']) ? node.metadata?.['impactTags'] : [],
     }));
-  return JSON.stringify({
-    project: {
-      name: project.name,
-      framework: project.framework,
-      language: project.language,
-      generatedRoots: project.graphHints?.generatedRoots ?? [],
-      sourceRoots: project.graphHints?.sourceRoots ?? [],
-    },
-    facts,
-  });
+  const docs = curatedDocs.map((doc) => ({
+    path: doc.path,
+    title: truncate(doc.title, MAX_FACT_TITLE_CHARS),
+    excerpt: truncate(doc.excerpt, MAX_CURATED_DOC_EXCERPT_CHARS),
+  }));
+
+  const project_ = {
+    name: project.name,
+    framework: project.framework,
+    language: project.language,
+    generatedRoots: project.graphHints?.generatedRoots ?? [],
+    sourceRoots: project.graphHints?.sourceRoots ?? [],
+  };
+
+  // Final safety net: even after per-item trimming, a very large graph can
+  // still exceed the provider input cap. Shed the lowest-salience facts (kept
+  // last by the salience sort) — then curated docs — until the serialized
+  // payload fits, so the planner degrades gracefully instead of 400-ing.
+  let payload = JSON.stringify({ project: project_, curatedDocs: docs, facts });
+  while (payload.length > MAX_PLANNING_PAYLOAD_CHARS && facts.length > 1) {
+    facts.pop();
+    payload = JSON.stringify({ project: project_, curatedDocs: docs, facts });
+  }
+  while (payload.length > MAX_PLANNING_PAYLOAD_CHARS && docs.length > 0) {
+    docs.pop();
+    payload = JSON.stringify({ project: project_, curatedDocs: docs, facts });
+  }
+  return payload;
 };
+
+const truncate = (value: string, max: number): string =>
+  typeof value === 'string' && value.length > max ? `${value.slice(0, max)}…` : (value ?? '');
 
 const parseSystemPagePlan = (content: string, allowedEvidencePaths: Set<string>): SystemPageDefinition[] | null => {
   let parsed: unknown;
@@ -106,7 +153,7 @@ const parseSystemPagePlan = (content: string, allowedEvidencePaths: Set<string>)
   const pages = (parsed as Record<string, unknown>)['pages'];
   if (!Array.isArray(pages)) return null;
 
-  const locale = resolveProjectGraphLocale();
+  const locale = resolveContentLocale();
   const normalized = pages
     .slice(0, MAX_PAGES)
     .map((page) => normalizeSystemPage(page, allowedEvidencePaths, locale))

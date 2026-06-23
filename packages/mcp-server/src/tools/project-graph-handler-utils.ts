@@ -9,9 +9,9 @@
 
 import {
   ContextDomainType,
-  PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
   PROJECT_GRAPH_METADATA_KEYS,
   ProjectGraphEdgeKind,
+  SubstrateType,
   isProjectGraphEdge,
   isProjectGraphNode,
   type ContextEdge,
@@ -53,13 +53,26 @@ export const findProjectGraphNode = async (
   id: string,
   project?: string,
 ): Promise<ContextNode | null> => {
+  // Fast path: direct primary-key lookup. Covers uuid node ids and the
+  // deterministic system-page rule ids
+  // (`architecture:system-page:<project>:<page-key>`). This replaces the
+  // previous `queryContextGraph({ limit: 100000 })` full-graph pull that
+  // timed out over HTTP in team mode.
+  const direct = await api.getContextNode(id);
+  if (direct && (isProjectGraphNode(direct) || direct.metadata?.['systemPage'] === true)) {
+    return direct;
+  }
+  // Fallback: the caller passed a title / sourceRef rather than an id. Use
+  // a BOUNDED text query (id as the search term) instead of pulling the
+  // whole graph.
   const nodes = await api.queryContextGraph({
+    query: id,
     project,
     domainType: ContextDomainType.ARCHITECTURE,
-    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+    limit: 50,
   });
-  const direct = findProjectGraphNodeInList(projectGraphNodes(nodes), id);
-  if (direct) return direct;
+  const match = findProjectGraphNodeInList(projectGraphNodes(nodes), id);
+  if (match) return match;
   const systemPage = nodes.find((node) =>
     node.metadata?.['systemPage'] === true
       && (node.id === id || node.title === id || node.sourceRef === id),
@@ -76,10 +89,15 @@ export const findProjectGraphNode = async (
  * "Known Constraints" / "Do Not Edit Directly" / etc.
  */
 export const loadSystemPageRules = async (api: McpApi, project?: string): Promise<ContextNode[]> => {
+  // System-page rules are RULE + ARCHITECTURE substrate, only a handful per
+  // project. A bounded RULE/ARCHITECTURE query isolates them without pulling
+  // the whole architecture layer (the file/module nodes are SNAPSHOT
+  // substrate, so the RULE filter excludes them).
   const nodes = await api.queryContextGraph({
     project,
     domainType: ContextDomainType.ARCHITECTURE,
-    limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
+    substrateType: SubstrateType.RULE,
+    limit: 200,
   });
   return nodes.filter((node) => node.metadata?.['systemPage'] === true);
 };

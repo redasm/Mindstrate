@@ -17,7 +17,7 @@ import type {
 import type { listProjectGraphOverlays } from './overlay.js';
 import { projectGraphOverlayProjectionForNode } from './overlay-application.js';
 import { writeProjectGraphTextFileAtomically } from './project-graph-file-io.js';
-import { resolveProjectGraphLocale } from './project-graph-locale.js';
+import { resolveContentLocale } from '../content-locale.js';
 import { slugifyProjectGraphValue } from './project-graph-report-shared.js';
 import { formatEvidenceLocation } from './obsidian-rendering-shared.js';
 
@@ -69,7 +69,7 @@ export const nodePageSlug = (node: ProjectGraphArtifactNode): string => {
 };
 
 const renderObsidianNodeIndex = (nodes: ProjectGraphArtifactNode[], overlays: Overlays): string => {
-  const zh = resolveProjectGraphLocale() === 'zh';
+  const zh = resolveContentLocale() === 'zh';
   return [
     `# ${zh ? '图节点索引' : 'Graph Node Index'}`,
     '',
@@ -88,7 +88,7 @@ const renderObsidianNodePage = (input: {
   nodeById: Map<string, ProjectGraphArtifactNode>;
   overlays: Overlays;
 }): string => {
-  const zh = resolveProjectGraphLocale() === 'zh';
+  const zh = resolveContentLocale() === 'zh';
   const overlayProjection = projectGraphOverlayProjectionForNode(input.node, input.overlays);
   return [
     `# ${overlayProjection.displayLabel}`,

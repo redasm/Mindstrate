@@ -100,7 +100,7 @@ export {
   SYSTEM_PAGE_RULE_TAG,
   type InternalizeSystemPagesResult,
 } from './internalize-system-pages.js';
-export { systemPageDefinitionsForProject } from './obsidian-system-pages.js';
+export { systemPageDefinitionsForProject, expandBodyPlaceholders } from './obsidian-system-pages.js';
 export {
   recordProjectGraphExternalChanges,
   type RecordProjectGraphExternalChangesInput,
@@ -125,6 +125,12 @@ export {
   planProjectGraphSystemPagesWithLlm,
   type PlanProjectGraphSystemPagesWithLlmInput,
 } from './system-page-planner.js';
+export {
+  collectCuratedProjectDocs,
+  curatedDocRootsForProject,
+  type CuratedProjectDoc,
+  type CollectCuratedProjectDocsOptions,
+} from './curated-docs.js';
 export {
   estimateProjectGraphBlastRadius,
   findProjectGraphPath,

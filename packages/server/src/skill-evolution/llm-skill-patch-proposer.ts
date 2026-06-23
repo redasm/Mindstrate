@@ -4,6 +4,7 @@ import {
 } from '@mindstrate/protocol/models';
 import type { ProviderFactory } from '../processing/provider-factory.js';
 import type { OpenAIClient } from '../openai-client.js';
+import { contentLanguageInstruction } from '../content-locale.js';
 import type { ProposePatchInput, SkillPatchProposal } from './skill-evolution-optimizer.js';
 
 export interface LlmSkillPatchProposerDeps {
@@ -12,7 +13,7 @@ export interface LlmSkillPatchProposerDeps {
   defaultBudget?: SkillEvolutionPatchBudget;
 }
 
-const SYSTEM_PROMPT = [
+const buildSystemPrompt = (): string => [
   'You optimize a single reusable agent skill document.',
   'Return ONLY a JSON object with these fields:',
   '- operation: "add" | "delete" | "replace"',
@@ -22,6 +23,7 @@ const SYSTEM_PROMPT = [
   '- maxChangedTokens: integer change budget for tokens',
   'Rules: make the smallest useful edit. For "add", afterContent must contain the original text verbatim.',
   'Never rewrite the whole document. Preserve evidence and intent.',
+  contentLanguageInstruction(),
 ].join('\n');
 
 const DEFAULT_BUDGET: SkillEvolutionPatchBudget = {
@@ -55,7 +57,7 @@ export const createLlmSkillPatchProposer = (
         temperature: 0.1,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: buildSystemPrompt() },
           {
             role: 'user',
             content: [

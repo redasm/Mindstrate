@@ -15,6 +15,7 @@ import {
   type MetabolismRun,
   type ProjectionRecord,
   ContextRelationType,
+  PROJECT_GRAPH_METADATA_KEYS,
   isProjectGraphEdge,
 } from '@mindstrate/protocol/models';
 import {
@@ -140,6 +141,11 @@ export class ContextGraphStore {
     return this.nodes.list(options);
   }
 
+  /** Bounded substring search over node title / source_ref (assembly seeding). */
+  searchNodesByText(opts: { project?: string; terms: string[]; limit: number }): ContextNode[] {
+    return this.nodes.searchByTextTerms(opts);
+  }
+
   listKnownProjects(): string[] {
     return this.nodes.listDistinctProjects();
   }
@@ -207,6 +213,102 @@ export class ContextGraphStore {
     const nodes = [...structural, ...files];
     const edges = this.edges.listAmongNodes(nodes.map((n) => n.id));
     return { nodes, edges };
+  }
+
+  /**
+   * Bounded BFS over project-graph edges from one or more seed nodes.
+   * Returns the reachable nodes (capped at `limit`) plus the project-graph
+   * edges among them. Used by the MCP task-query / blast-radius tools so
+   * team mode no longer pulls the entire graph over HTTP to traverse it
+   * in-process.
+   */
+  projectGraphNeighborhood(opts: {
+    seedIds: string[];
+    depth: number;
+    limit: number;
+    edgeKinds?: string[];
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } {
+    const limit = Math.min(Math.max(opts.limit, 1), 2000);
+    const depth = Math.min(Math.max(opts.depth, 0), 6);
+    const kindFilter = opts.edgeKinds && opts.edgeKinds.length > 0 ? new Set(opts.edgeKinds) : null;
+    const included = new Set<string>();
+    for (const id of opts.seedIds) {
+      if (included.size >= limit) break;
+      if (this.nodes.getById(id)) included.add(id);
+    }
+    const edgesById = new Map<string, ContextEdge>();
+    let frontier = [...included];
+    for (let d = 0; d < depth && included.size < limit; d += 1) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        if (included.size >= limit) break;
+        const touching = [...this.edges.listOutgoing(id), ...this.edges.listIncoming(id)]
+          .filter(isProjectGraphEdge)
+          .filter((edge) => !kindFilter
+            || kindFilter.has(String(edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] ?? '')));
+        for (const edge of touching) {
+          edgesById.set(edge.id, edge);
+          const other = edge.sourceId === id ? edge.targetId : edge.sourceId;
+          if (!included.has(other)) {
+            if (included.size >= limit) break;
+            included.add(other);
+            next.push(other);
+          }
+        }
+      }
+      frontier = next;
+    }
+    const nodes = this.nodes.listByIds([...included]);
+    const edges = [...edgesById.values()].filter(
+      (edge) => included.has(edge.sourceId) && included.has(edge.targetId),
+    );
+    return { nodes, edges };
+  }
+
+  /**
+   * Bounded BFS shortest path between two nodes over project-graph edges.
+   * Returns null when either endpoint is missing or no path is found within
+   * `maxDepth` hops.
+   */
+  projectGraphShortestPath(opts: {
+    fromId: string;
+    toId: string;
+    maxDepth: number;
+  }): { nodes: ContextNode[]; edges: ContextEdge[] } | null {
+    const start = this.nodes.getById(opts.fromId);
+    const target = this.nodes.getById(opts.toId);
+    if (!start || !target) return null;
+    if (opts.fromId === opts.toId) return { nodes: [start], edges: [] };
+
+    const maxDepth = Math.min(Math.max(opts.maxDepth, 1), 12);
+    const seen = new Set<string>([opts.fromId]);
+    const queue: Array<{ id: string; nodeIds: string[]; edges: ContextEdge[] }> = [
+      { id: opts.fromId, nodeIds: [opts.fromId], edges: [] },
+    ];
+    // Guard against pathological fan-out on huge graphs.
+    let visitBudget = 50000;
+    while (queue.length > 0 && visitBudget > 0) {
+      const current = queue.shift()!;
+      if (current.edges.length >= maxDepth) continue;
+      const touching = [...this.edges.listOutgoing(current.id), ...this.edges.listIncoming(current.id)]
+        .filter(isProjectGraphEdge);
+      for (const edge of touching) {
+        visitBudget -= 1;
+        const nextId = edge.sourceId === current.id ? edge.targetId : edge.sourceId;
+        if (seen.has(nextId)) continue;
+        const nodeIds = [...current.nodeIds, nextId];
+        const pathEdges = [...current.edges, edge];
+        if (nextId === opts.toId) {
+          const nodes = nodeIds
+            .map((id) => this.nodes.getById(id))
+            .filter((node): node is ContextNode => node !== null);
+          return { nodes, edges: pathEdges };
+        }
+        seen.add(nextId);
+        queue.push({ id: nextId, nodeIds, edges: pathEdges });
+      }
+    }
+    return null;
   }
 
   /**

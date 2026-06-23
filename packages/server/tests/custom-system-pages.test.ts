@@ -173,7 +173,7 @@ describe('end-to-end: custom pages flow through to internalized RULE nodes', () 
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     const store = new ContextGraphStore(dbPath);
     try {
-      internalizeSystemPagesAsRules(store, project.name, pages);
+      internalizeSystemPagesAsRules(store, project, pages);
       const node = store.getNodeById(systemPageRuleId(project.name, '40-asset-loading'));
       expect(node).not.toBeNull();
       expect(node?.metadata?.['classifications']).toEqual(['asset-reference-sensitive']);

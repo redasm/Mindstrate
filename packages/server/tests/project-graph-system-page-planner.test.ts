@@ -123,6 +123,29 @@ describe('project graph LLM system page planner', () => {
     expect(timeout).toBe(30000);
   });
 
+  it('bounds oversized fact content and sheds facts to keep payload under the provider input cap', async () => {
+    let payload = '';
+    // Each node carries ~50k chars of content; 60 of them would serialize to
+    // ~3 MB and trip DashScope's "Range of input length should be [1, 1000000]"
+    // 400 without per-fact trimming + total-payload shedding.
+    const huge = 'x'.repeat(50_000);
+    await planProjectGraphSystemPagesWithLlm({
+      client: fakeChatClient(JSON.stringify({ pages: [] }), (body) => {
+        payload = String(body.messages[1]?.content ?? '');
+      }),
+      model: 'test-model',
+      project: { name: 'planner-demo', root: process.cwd(), dependencies: [], entryPoints: [] } as never,
+      requestPolicy: { factBatchSize: 100, requestDelayMs: 0 },
+      extractedNodes: Array.from({ length: 60 }, (_, index) => projectGraphNode(`src/file-${index}.ts`, huge)),
+    });
+
+    expect(payload.length).toBeLessThanOrEqual(600_000);
+    // Per-fact content was trimmed (no untrimmed 50k blob survived).
+    expect(payload).not.toContain(huge);
+    // At least one fact still made it through.
+    expect(JSON.parse(payload).facts.length).toBeGreaterThan(0);
+  });
+
   it('writes planned pages through the Obsidian projection fallback boundary', async () => {
     const root = createTempDir('mindstrate-project-graph-planned-pages-');
     const dataDir = createTempDir('mindstrate-project-graph-planned-pages-data-');
@@ -167,12 +190,12 @@ describe('project graph LLM system page planner', () => {
   });
 });
 
-const projectGraphNode = (filePath: string): ContextNode => ({
+const projectGraphNode = (filePath: string, content?: string): ContextNode => ({
   id: `pg:demo:file:${filePath}`,
   substrateType: SubstrateType.SNAPSHOT,
   domainType: ContextDomainType.ARCHITECTURE,
   title: filePath,
-  content: `file: ${filePath}`,
+  content: content ?? `file: ${filePath}`,
   tags: ['project-graph', 'file'],
   project: 'demo',
   compressionLevel: 1,

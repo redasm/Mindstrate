@@ -12,6 +12,7 @@ import {
   authorizeProject,
   authorizeProjectForResource,
   parseLimit,
+  readParam,
   requireScope,
   withInitializedMemory,
   type TeamRouteDeps,
@@ -110,6 +111,111 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     });
 
     res.json({ nodes, total: nodes.length });
+  }));
+
+  // Direct primary-key node lookup. Bounded, unlike `/api/context/graph`
+  // (which the MCP project-graph tools used to call with limit=100000 to
+  // pull the whole graph and find one node in-process — the cause of the
+  // team-mode "node detail / neighbors" timeouts).
+  app.get('/api/context/node/:id', withInitializedMemory(memory, async (req, res) => {
+    const id = readParam(req.params.id);
+    if (!id) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    const node = memory.context.getContextNode(id);
+    const authorized = authorizeProjectForResource(req, res, () => node?.project, 'read');
+    if (authorized === null) return;
+    if (!node) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    res.json({ node });
+  }));
+
+  // Bounded project-graph subgraph: skeleton (no focus) or the one-hop
+  // neighbourhood around `focus`. Replaces full-graph pulls for the MCP
+  // task/neighbor/blast/path tools.
+  app.get('/api/context/subgraph', withInitializedMemory(memory, async (req, res) => {
+    const focus = typeof req.query.focus === 'string' ? req.query.focus : undefined;
+    const requested = typeof req.query.project === 'string' ? req.query.project : undefined;
+    const kinds = typeof req.query.kinds === 'string'
+      ? req.query.kinds.split(',').map((k) => k.trim()).filter(Boolean)
+      : undefined;
+    const limit = parseLimit(req.query.limit, 300);
+
+    // Focus mode: authorize against the focus node's own project so a
+    // scoped key can't read another project's neighbourhood by id.
+    if (focus) {
+      const authorized = authorizeProjectForResource(
+        req,
+        res,
+        () => memory.context.getContextNode(focus)?.project,
+        'read',
+      );
+      if (authorized === null) return;
+      const sub = memory.context.queryProjectSubgraph({
+        project: (authorized ?? requested ?? '') as string,
+        focusNodeId: focus,
+        nodeKinds: kinds,
+        limit,
+      });
+      res.json({ nodes: sub.nodes, edges: sub.edges });
+      return;
+    }
+
+    const authorized = authorizeProject(req, res, requested, 'read');
+    if (authorized === null) return;
+    const sub = memory.context.queryProjectSubgraph({
+      project: (authorized ?? requested ?? '') as string,
+      nodeKinds: kinds,
+      limit,
+    });
+    res.json({ nodes: sub.nodes, edges: sub.edges });
+  }));
+
+  // Bounded BFS neighbourhood from seed nodes — server-side traversal so the
+  // MCP task-query / blast-radius tools no longer pull the whole graph.
+  app.post('/api/context/project-graph/neighborhood', withInitializedMemory(memory, async (req, res) => {
+    const { project, seedIds, depth, limit, edgeKinds } = req.body ?? {};
+    const authorized = authorizeProject(req, res, project, 'read');
+    if (authorized === null) return;
+    if (!Array.isArray(seedIds) || seedIds.length === 0) {
+      res.status(400).json({ error: 'seedIds (non-empty array) is required' });
+      return;
+    }
+    const result = memory.context.projectGraphNeighborhood({
+      seedIds: seedIds.filter((s: unknown): s is string => typeof s === 'string'),
+      depth: typeof depth === 'number' ? depth : 1,
+      limit: typeof limit === 'number' ? limit : 300,
+      edgeKinds: Array.isArray(edgeKinds)
+        ? edgeKinds.filter((k: unknown): k is string => typeof k === 'string')
+        : undefined,
+    });
+    res.json({ nodes: result.nodes, edges: result.edges });
+  }));
+
+  // Bounded BFS shortest path between two nodes — server-side traversal.
+  app.get('/api/context/project-graph/path', withInitializedMemory(memory, async (req, res) => {
+    const from = readParam(req.query.from);
+    const to = readParam(req.query.to);
+    if (!from || !to) {
+      res.status(400).json({ error: 'from and to are required' });
+      return;
+    }
+    const authorized = authorizeProjectForResource(
+      req,
+      res,
+      () => memory.context.getContextNode(from)?.project,
+      'read',
+    );
+    if (authorized === null) return;
+    const path = memory.context.projectGraphShortestPath({
+      fromId: from,
+      toId: to,
+      maxDepth: parseLimit(req.query.maxDepth, 6),
+    });
+    res.json({ path });
   }));
 
   app.get('/api/context/conflicts', withInitializedMemory(memory, async (req, res) => {

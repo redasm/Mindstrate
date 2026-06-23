@@ -77,6 +77,55 @@ describe('KnowledgeExtractor', () => {
       expect(result.extracted).toBe(false);
     });
 
+    it('should skip commits that only touch generated output', async () => {
+      const result = await extractor.extractFromCommit(
+        makeCommit({ files: ['TypeScript/Typing/UE.d.ts', 'dist/bundle.js'] })
+      );
+      expect(result.extracted).toBe(false);
+    });
+
+    it('should skip commits that only touch test files', async () => {
+      const result = await extractor.extractFromCommit(
+        makeCommit({ files: ['src/user.test.ts', 'Src/Test/TestCase/TestLogin.ts'] })
+      );
+      expect(result.extracted).toBe(false);
+    });
+
+    it('should skip commits that only touch lockfiles / config / assets', async () => {
+      const result = await extractor.extractFromCommit(
+        makeCommit({ files: ['package-lock.json', 'config/app.yaml', 'Content/icon.png'] })
+      );
+      expect(result.extracted).toBe(false);
+    });
+
+    it('should still extract when at least one meaningful source file changed', async () => {
+      const result = await extractor.extractFromCommit(
+        makeCommit({ files: ['package-lock.json', 'src/user.ts'] })
+      );
+      expect(result.extracted).toBe(true);
+    });
+
+    it('should not over-filter when no file list is provided', async () => {
+      // P4/older sources may not populate `files`; fall back to diff-based gating.
+      const result = await extractor.extractFromCommit(
+        makeCommit({ files: [] })
+      );
+      expect(result.extracted).toBe(true);
+    });
+
+    it('should extract from a Perforce ed-style (>) diff', async () => {
+      // P4's default `describe` diff marks added lines with `>`, not git's `+`.
+      // Regression: these were counted as zero changes and every changelist
+      // was skipped as "not worth extracting".
+      const result = await extractor.extractFromCommit(
+        makeCommit({
+          message: 'fix: null check in inventory service',
+          diff: '==== //depot/src/inventory.cpp#3 (text) ====\n12a13\n> if (!item) return;\n> log("guard");\n> reconcile();\n',
+        })
+      );
+      expect(result.extracted).toBe(true);
+    });
+
     it('should detect typescript from file extensions', async () => {
       const result = await extractor.extractFromCommit(
         makeCommit({ files: ['src/app.ts', 'src/utils.ts'] })
