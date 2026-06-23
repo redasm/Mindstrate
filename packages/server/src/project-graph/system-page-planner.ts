@@ -25,6 +25,18 @@ const MAX_PAGES = 10;
 const MAX_SECTIONS_PER_PAGE = 8;
 const MAX_BULLETS_PER_SECTION = 8;
 
+// Per-fact / per-doc bounds. A single extracted node can carry a very large
+// `content` and a huge evidence list; a curated doc excerpt can be long too.
+// Without trimming, the serialized payload blew past provider request caps —
+// DashScope rejects oversized input with HTTP 400
+// "Range of input length should be [1, 1000000]".
+const MAX_FACT_CONTENT_CHARS = 2000;
+const MAX_FACT_TITLE_CHARS = 300;
+const MAX_FACT_EVIDENCE_PATHS = 20;
+const MAX_CURATED_DOC_EXCERPT_CHARS = 1500;
+// Keep the whole request body well under the smallest provider input cap.
+const MAX_PLANNING_PAYLOAD_CHARS = 600_000;
+
 export interface PlanProjectGraphSystemPagesWithLlmInput {
   client: OpenAIClient;
   model: string;
@@ -92,23 +104,43 @@ const renderSystemPagePlanningInput = (
     .map((node) => ({
       id: node.id,
       kind: node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind],
-      title: node.title,
-      content: node.content,
-      evidence: collectNodeEvidencePaths(node),
+      title: truncate(node.title, MAX_FACT_TITLE_CHARS),
+      content: truncate(node.content, MAX_FACT_CONTENT_CHARS),
+      evidence: collectNodeEvidencePaths(node).slice(0, MAX_FACT_EVIDENCE_PATHS),
       impactTags: Array.isArray(node.metadata?.['impactTags']) ? node.metadata?.['impactTags'] : [],
     }));
-  return JSON.stringify({
-    project: {
-      name: project.name,
-      framework: project.framework,
-      language: project.language,
-      generatedRoots: project.graphHints?.generatedRoots ?? [],
-      sourceRoots: project.graphHints?.sourceRoots ?? [],
-    },
-    curatedDocs: curatedDocs.map((doc) => ({ path: doc.path, title: doc.title, excerpt: doc.excerpt })),
-    facts,
-  });
+  const docs = curatedDocs.map((doc) => ({
+    path: doc.path,
+    title: truncate(doc.title, MAX_FACT_TITLE_CHARS),
+    excerpt: truncate(doc.excerpt, MAX_CURATED_DOC_EXCERPT_CHARS),
+  }));
+
+  const project_ = {
+    name: project.name,
+    framework: project.framework,
+    language: project.language,
+    generatedRoots: project.graphHints?.generatedRoots ?? [],
+    sourceRoots: project.graphHints?.sourceRoots ?? [],
+  };
+
+  // Final safety net: even after per-item trimming, a very large graph can
+  // still exceed the provider input cap. Shed the lowest-salience facts (kept
+  // last by the salience sort) — then curated docs — until the serialized
+  // payload fits, so the planner degrades gracefully instead of 400-ing.
+  let payload = JSON.stringify({ project: project_, curatedDocs: docs, facts });
+  while (payload.length > MAX_PLANNING_PAYLOAD_CHARS && facts.length > 1) {
+    facts.pop();
+    payload = JSON.stringify({ project: project_, curatedDocs: docs, facts });
+  }
+  while (payload.length > MAX_PLANNING_PAYLOAD_CHARS && docs.length > 0) {
+    docs.pop();
+    payload = JSON.stringify({ project: project_, curatedDocs: docs, facts });
+  }
+  return payload;
 };
+
+const truncate = (value: string, max: number): string =>
+  typeof value === 'string' && value.length > max ? `${value.slice(0, max)}…` : (value ?? '');
 
 const parseSystemPagePlan = (content: string, allowedEvidencePaths: Set<string>): SystemPageDefinition[] | null => {
   let parsed: unknown;
