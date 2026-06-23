@@ -78,6 +78,14 @@ export class KnowledgeExtractor {
       return false;
     }
 
+    // 文件路径过滤：只有当 commit 触及"有意义的源文件"时才值得提取知识。
+    // 一个只改了生成产物 / 测试 / 锁文件 / 纯配置·资源·文档的 commit,几乎不可能
+    // 沉淀出可复用的工程知识——把它喂给 LLM 只会产出噪音卡片。借鉴确定性
+    // 文件过滤(先剔除噪音,再交给 LLM)的思路,在此处提前挡掉。
+    if (commit.files.length > 0 && !commit.files.some((file) => this.isMeaningfulSourceFile(file))) {
+      return false;
+    }
+
     // diff 太短（< 3 行有效变更）可能不值得。统计 git 统一 diff 的 `+`
     // 新增行,同时兼容 Perforce 默认 ed 格式的 `>` 新增行,避免 P4 来源
     // 因 diff 格式不同而被整体误判为"无变更"。
@@ -86,6 +94,55 @@ export class KnowledgeExtractor {
     if (gitAdded + p4Added < 3) {
       return false;
     }
+
+    return true;
+  }
+
+  /**
+   * 判断单个文件是否是"有意义的源文件"——值得从中提炼知识。
+   * 排除生成产物、测试、锁文件,以及纯配置/资源/文档类文件。
+   * 注意:这是项目无关的内置启发式;项目专属的生成目录(如 Unreal 的
+   * `TypeScript/Typing`、`Content`)由扫描的 graphHints `ignore`/`generatedRoots`
+   * 在更上游剔除,这里只兜底通用噪音。
+   */
+  private isMeaningfulSourceFile(file: string): boolean {
+    const normalized = file.replace(/\\/g, '/').toLowerCase();
+    const base = normalized.substring(normalized.lastIndexOf('/') + 1);
+
+    // 生成 / 构建产物目录（匹配路径任意层级，含位于根的目录前缀）
+    const generatedDirs = [
+      'node_modules', 'dist', 'build', 'out', 'bin', 'obj',
+      'generated', '.next', 'coverage', '__snapshots__',
+      'binaries', 'intermediate', 'saved', 'deriveddatacache',
+    ];
+    const segments = normalized.split('/');
+    if (segments.some((seg) => generatedDirs.includes(seg))) return false;
+    // Unreal 生成的 TS 声明目录（两段连续）
+    if (normalized.includes('typescript/typing/')) return false;
+
+    // 测试文件
+    if (/(^|\/)tests?\//.test(normalized)) return false;
+    if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(normalized)) return false;
+
+    // 锁文件 / 明确的噪音文件名
+    const noiseBasenames = new Set([
+      'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.lock',
+      'go.sum', 'cargo.lock', 'poetry.lock', 'gemfile.lock',
+      '.gitignore', '.gitattributes', '.editorconfig', '.npmrc', '.prettierrc',
+      'license', 'license.txt', 'license.md', 'changelog.md',
+    ]);
+    if (noiseBasenames.has(base)) return false;
+
+    // 纯配置 / 数据 / 资源 / 文档类扩展名(不承载可复用的代码知识)
+    const noiseExtensions = [
+      '.md', '.markdown', '.txt', '.rst',
+      '.json', '.yaml', '.yml', '.toml', '.ini', '.xml', '.csv',
+      '.lock', '.log', '.map', '.snap',
+      '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
+      '.mp3', '.wav', '.ogg', '.ttf', '.otf', '.woff', '.woff2',
+      '.uasset', '.umap', '.bin', '.dat',
+    ];
+    if (noiseExtensions.some((ext) => base.endsWith(ext))) return false;
 
     return true;
   }
