@@ -178,8 +178,8 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
 
           <div className="rounded-lg border border-surface-200 bg-white p-4 overflow-y-auto">
             {selected ? (
-              <div className="space-y-4">
-                <div>
+              <div className="flex flex-col h-full gap-4">
+                <div className="flex-shrink-0">
                   <div className="flex items-center gap-2">
                     <span className={`text-[11px] px-2 py-0.5 rounded-full border ${STATUS_STYLES[selected.status]}`}>{selected.status}</span>
                     <span className="text-xs text-surface-400">{selected.id}</span>
@@ -187,17 +187,17 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
                   <p className="text-sm text-surface-700 mt-2">{selected.rationale}</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 items-start">
+                <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
                   <DiffBlock title={t.before} content={selected.beforeContent} emptyLabel={t.beforeEmpty} />
                   <DiffBlock title={t.after} content={selected.afterContent} emptyLabel={t.afterEmpty} />
                 </div>
 
-                <p className="text-xs text-surface-400">
+                <p className="text-xs text-surface-400 flex-shrink-0">
                   {t.budget}: {selected.budget.maxChangedBullets} {t.bullets} · {selected.budget.maxChangedTokens} {t.tokens}
                 </p>
 
                 {selected.status === 'candidate' && (
-                  <div className="border-t border-surface-100 pt-4 space-y-3">
+                  <div className="border-t border-surface-100 pt-4 space-y-3 flex-shrink-0">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -257,14 +257,14 @@ function Stat({ label, value }: { label: string; value: number }) {
 function DiffBlock({ title, content, emptyLabel }: { title: string; content: string; emptyLabel: string }) {
   const isEmpty = content.trim().length === 0;
   return (
-    <div className="flex flex-col min-w-0">
-      <div className="text-xs font-medium text-surface-500 mb-1">{title}</div>
+    <div className="flex flex-col min-h-0">
+      <div className="text-xs font-medium text-surface-500 mb-1 flex-shrink-0">{title}</div>
       {isEmpty ? (
-        <div className="min-h-[6rem] flex items-center justify-center text-xs text-surface-400 italic bg-surface-50 border border-dashed border-surface-200 rounded-md p-2">
+        <div className="flex-1 min-h-[6rem] flex items-center justify-center text-xs text-surface-400 italic bg-surface-50 border border-dashed border-surface-200 rounded-md p-2">
           {emptyLabel}
         </div>
       ) : (
-        <pre className="text-xs bg-surface-50 border border-surface-100 rounded-md p-2 whitespace-pre-wrap break-words">{content}</pre>
+        <pre className="flex-1 min-h-[6rem] text-xs bg-surface-50 border border-surface-100 rounded-md p-2 whitespace-pre-wrap break-words overflow-y-auto">{content}</pre>
       )}
     </div>
   );
