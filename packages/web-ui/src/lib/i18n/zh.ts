@@ -439,6 +439,8 @@ const zh: Translations = {
     empty: '暂无技能进化补丁。当高阶压缩或优化器提出有界技能修改时会出现在这里。',
     before: '修改前',
     after: '修改后',
+    beforeEmpty: '无原始内容（新增技能，此前没有对应节点内容）。',
+    afterEmpty: '无修改后内容。',
     budget: '预算',
     bullets: '条',
     tokens: 'token',

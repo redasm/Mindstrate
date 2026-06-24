@@ -437,6 +437,8 @@ const en = {
     empty: 'No skill evolution patches yet. They appear when high-order compression or the optimizer proposes bounded skill edits.',
     before: 'Before',
     after: 'After',
+    beforeEmpty: 'No prior content (new skill — no existing node content).',
+    afterEmpty: 'No revised content.',
     budget: 'Budget',
     bullets: 'bullets',
     tokens: 'tokens',
