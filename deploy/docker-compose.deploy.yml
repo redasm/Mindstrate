@@ -148,11 +148,24 @@ services:
     restart: unless-stopped
     profiles: [scanner]
     networks: [mindstrate-net]
-    # Run as root so bind-mounted P4 workspaces owned by the host root
-    # user stay readable and the graph extraction cache
-    # (<workspace>/.mindstrate/) stays writable. Drop this and chown the
-    # workspace's .mindstrate dir to 1001 if you prefer the non-root user.
-    user: "0:0"
+    # Run as the SAME non-root uid (1001) as team-server and web-ui. All three
+    # share the mindstrate-data volume; if the scanner ran as root it would
+    # create root-owned files under /data (e.g. when it opens the SQLite DB),
+    # and the uid-1001 team-server could then no longer write the vector index
+    # there — the EACCES that silently failed every import. Keeping one uid
+    # across the three services removes that volume-ownership conflict for good.
+    #
+    # Prerequisite (run ONCE on the host before `up -d`, re-run if you add a
+    # workspace): the bind-mounted P4 workspaces below are host-root-owned, but
+    # the scanner writes its graph extraction cache into
+    # <workspace>/.mindstrate/. Grant uid 1001 ownership of that subdir so the
+    # non-root scanner can write it (host `p4 sync` as root still overwrites
+    # those files freely — root ignores ownership):
+    #   mkdir -p /root/ms_nami_dev/.mindstrate \
+    #     && chown -R 1001:1001 /root/ms_nami_dev/.mindstrate
+    # The rest of the workspace only needs to be readable by 1001 (P4 syncs as
+    # root typically leave files world-readable; if yours don't, chmod -R o+rX).
+    user: "1001:1001"
     environment:
       TEAM_SERVER_URL: "http://team-server:3388"
       TEAM_API_KEY: "${TEAM_API_KEY:?TEAM_API_KEY must be set in .env.deploy}"
