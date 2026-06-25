@@ -176,4 +176,24 @@ describe('ScanSourceRepository', () => {
     // completed runs are untouched
     expect(runs.find((run) => run.id === finished.id)?.status).toBe('completed');
   });
+
+  it('resetCursor clears the cursor and run state so the next scan is a first run', () => {
+    const source = repo.createGitLocalSource({ name: 'app', project: 'app', repoPath: '/repos/app' });
+    repo.updateCursor(source.id, 'commit-abc');
+    repo.markError(source.id, 'boom');
+    expect(repo.getSource(source.id)?.lastCursor).toBe('commit-abc');
+
+    const ok = repo.resetCursor(source.id);
+
+    expect(ok).toBe(true);
+    const after = repo.getSource(source.id);
+    expect(after?.lastCursor).toBeUndefined();
+    expect(after?.lastRunAt).toBeUndefined();
+    expect(after?.lastSuccessAt).toBeUndefined();
+    expect(after?.lastError).toBeUndefined();
+  });
+
+  it('resetCursor returns false for an unknown source', () => {
+    expect(repo.resetCursor('does-not-exist')).toBe(false);
+  });
 });

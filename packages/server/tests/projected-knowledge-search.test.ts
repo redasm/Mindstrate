@@ -28,7 +28,7 @@ describe('ProjectedKnowledgeSearch', () => {
     removeTempDir(tempDir);
   });
 
-  it('returns projected rule nodes ranked by relevance', () => {
+  it('returns projected rule nodes ranked by relevance', async () => {
     graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
@@ -50,7 +50,7 @@ describe('ProjectedKnowledgeSearch', () => {
       confidence: 0.8,
     });
 
-    const results = search.search('hydration safe SSR', {
+    const results = await search.search('hydration safe SSR', {
       project: 'mindstrate',
       topK: 5,
     });
@@ -60,7 +60,7 @@ describe('ProjectedKnowledgeSearch', () => {
     expect(results[0].matchReason).toContain('Projected rule');
   });
 
-  it('excludes conflicted nodes unless explicitly requested', () => {
+  it('excludes conflicted nodes unless explicitly requested', async () => {
     graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
@@ -70,14 +70,14 @@ describe('ProjectedKnowledgeSearch', () => {
       status: ContextNodeStatus.CONFLICTED,
     });
 
-    expect(search.search('hydration SSR', { project: 'mindstrate' })).toHaveLength(0);
-    expect(search.search('hydration SSR', {
+    expect(await search.search('hydration SSR', { project: 'mindstrate' })).toHaveLength(0);
+    expect(await search.search('hydration SSR', {
       project: 'mindstrate',
       includeStatuses: [ContextNodeStatus.CONFLICTED],
     })).toHaveLength(1);
   });
 
-  it('promotes high-level nodes supported by relevant lower-level evidence', () => {
+  it('promotes high-level nodes supported by relevant lower-level evidence', async () => {
     const rule = graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
@@ -105,7 +105,7 @@ describe('ProjectedKnowledgeSearch', () => {
       strength: 1,
     });
 
-    const results = search.search('hydration mismatch', {
+    const results = await search.search('hydration mismatch', {
       project: 'mindstrate',
       topK: 1,
     });
@@ -115,7 +115,7 @@ describe('ProjectedKnowledgeSearch', () => {
     expect(results[0].matchReason).toContain('supported by related summary');
   });
 
-  it('matches architecture rules by full content, tags, and source reference', () => {
+  it('matches architecture rules by full content, tags, and source reference', async () => {
     graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.ARCHITECTURE,
@@ -129,7 +129,7 @@ describe('ProjectedKnowledgeSearch', () => {
       confidence: 0.9,
     });
 
-    const results = search.search('UnrealSharp TypeScript/Typing generated output source of truth', {
+    const results = await search.search('UnrealSharp TypeScript/Typing generated output source of truth', {
       project: 'client',
       topK: 5,
     });
@@ -138,7 +138,7 @@ describe('ProjectedKnowledgeSearch', () => {
     expect(results[0].view.title).toBe('Generated Files');
   });
 
-  it('does not let a small caller limit hide relevant lower-priority candidates', () => {
+  it('does not let a small caller limit hide relevant lower-priority candidates', async () => {
     for (let index = 0; index < 8; index += 1) {
       graphStore.createNode({
         substrateType: SubstrateType.AXIOM,
@@ -162,7 +162,7 @@ describe('ProjectedKnowledgeSearch', () => {
       confidence: 0.8,
     });
 
-    const results = search.search('Runtime editor module boundary', {
+    const results = await search.search('Runtime editor module boundary', {
       project: 'client',
       limit: 5,
       topK: 3,
@@ -171,7 +171,7 @@ describe('ProjectedKnowledgeSearch', () => {
     expect(results.map((result) => result.view.title)).toContain('Runtime Editor Boundary');
   });
 
-  it('surfaces project graph nodes by default so graph_knowledge_search reaches file/dependency facts', () => {
+  it('surfaces project graph nodes by default so graph_knowledge_search reaches file/dependency facts', async () => {
     // Regression: the projector defaults to filtering project graph
     // nodes (so the assembly DAG's "knowledge" slice does not double-list
     // file nodes that already appear under "Project Graph Relationships").
@@ -195,11 +195,11 @@ describe('ProjectedKnowledgeSearch', () => {
       },
     });
 
-    const defaultSearch = search.search('feature.ts', { project: 'demo', topK: 5 });
+    const defaultSearch = await search.search('feature.ts', { project: 'demo', topK: 5 });
     expect(defaultSearch.length).toBeGreaterThan(0);
     expect(defaultSearch[0].view.title).toBe('packages/server/src/feature.ts');
 
-    const optedOut = search.search('feature.ts', {
+    const optedOut = await search.search('feature.ts', {
       project: 'demo',
       topK: 5,
       includeProjectGraphNodes: false,

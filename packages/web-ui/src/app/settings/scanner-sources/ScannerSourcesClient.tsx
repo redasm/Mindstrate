@@ -327,6 +327,29 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
     if (editingId === source.id) closePanel();
   };
 
+  const handleRescan = async (source: ScannerSourceView) => {
+    if (!confirm(t.rescanConfirm.replace('{NAME}', source.name))) return;
+    // Second prompt: optionally wipe orphan graph nodes (files deleted since the
+    // last scan). OK = wipe, Cancel = keep (plain re-index overwrites in place).
+    const wipe = confirm(t.rescanWipeConfirm);
+    const res = await fetch(`/api/admin/scanner-sources/${encodeURIComponent(source.id)}/rescan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ wipe }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error ?? `${t.rescanFailedPrefix} (${res.status})`);
+      return;
+    }
+    const body = await res.json().catch(() => ({})) as { graphNodesDeleted?: number };
+    setNotice(
+      wipe
+        ? t.rescanQueuedWiped.replace('{COUNT}', String(body.graphNodesDeleted ?? 0))
+        : t.rescanQueued,
+    );
+  };
+
   return (
     <div className="max-w-[1200px] mx-auto px-6 py-5">
       <div className="flex items-end justify-between mb-6 anim-in d1 gap-4">
@@ -822,6 +845,14 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                           title={t.viewLogs}
                         >
                           <Icon icon="lucide:scroll-text" className="text-sm" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRescan(entry)}
+                          className="action-btn w-7 h-7 flex items-center justify-center rounded-md text-surface-400 hover:text-brand-600"
+                          title={t.rescan}
+                        >
+                          <Icon icon="lucide:refresh-cw" className="text-sm" />
                         </button>
                         <button
                           type="button"

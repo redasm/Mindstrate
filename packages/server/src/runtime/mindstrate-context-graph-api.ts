@@ -18,6 +18,10 @@ import type { CreateContextNodeInput, UpdateContextNodeInput } from '../context-
 import type { GraphKnowledgeProjectionOptions } from '../context-graph/knowledge-projector.js';
 import type { ProjectedKnowledgeSearchOptions } from '../context-graph/projected-knowledge-search.js';
 import { computeGraphNodeMatchScore } from '../context-graph/graph-match-score.js';
+import {
+  backfillNodeEmbeddings,
+  type BackfillNodeEmbeddingsResult,
+} from '../context-graph/node-embedding-backfill.js';
 import { ingestUserFeedback } from '../events/index.js';
 import {
   enrichProjectGraph,
@@ -239,11 +243,11 @@ export class MindstrateContextGraphApi {
     return this.services.graphKnowledgeProjector.project(options);
   }
 
-  queryGraphKnowledge(
+  async queryGraphKnowledge(
     query: string,
     options?: ProjectedKnowledgeSearchOptions,
-  ): GraphKnowledgeSearchResult[] {
-    const results = this.services.projectedKnowledgeSearch.search(query, options);
+  ): Promise<GraphKnowledgeSearchResult[]> {
+    const results = await this.services.projectedKnowledgeSearch.search(query, options);
     if (options?.trackFeedback === false) return results;
 
     return results.map((result) => ({
@@ -306,6 +310,26 @@ export class MindstrateContextGraphApi {
       }),
       summarize,
     });
+  }
+
+  /**
+   * Generate and persist vector embeddings for the project's context-graph
+   * nodes. Run after `indexProjectGraph` + `enrichProjectGraph` so file /
+   * dependency nodes (written without embeddings by the scanner) and any
+   * LLM-enriched titles become semantically searchable. Incremental: nodes
+   * already embedded for the active model are skipped unless `force`.
+   */
+  async backfillNodeEmbeddings(
+    project: DetectedProject,
+    options?: { force?: boolean; onProgress?: (p: { embedded: number; total: number }) => void },
+  ): Promise<BackfillNodeEmbeddingsResult> {
+    const providers = this.services.providerFactory.forProject(project.name);
+    return backfillNodeEmbeddings(
+      this.services.contextGraphStore,
+      providers.embedder,
+      providers.embeddingModel,
+      { project: project.name, force: options?.force, onProgress: options?.onProgress },
+    );
   }
 
   async planProjectGraphSystemPages(project: DetectedProject): Promise<SystemPageDefinition[] | null> {

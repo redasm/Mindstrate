@@ -211,6 +211,35 @@ describe('ContextGraphStore', () => {
     expect(store.listEvents({ project: 'keepme' })).toHaveLength(1);
   });
 
+  it('deleteProjectGraphNodes removes only scanner-extracted nodes, keeping manual knowledge', () => {
+    const fileNode = store.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'src/app.ts',
+      content: 'file: src/app.ts',
+      project: 'demo',
+      metadata: { projectGraph: true, kind: 'file' },
+    });
+    const manual = store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Hand-written rule',
+      content: 'Always validate input.',
+      project: 'demo',
+    });
+    store.upsertNodeEmbedding({ nodeId: fileNode.id, model: 'm', dimensions: 3, embedding: [0.1, 0.2, 0.3] });
+    store.upsertNodeEmbedding({ nodeId: manual.id, model: 'm', dimensions: 3, embedding: [0.4, 0.5, 0.6] });
+
+    const result = store.deleteProjectGraphNodes('DEMO'); // case-insensitive
+
+    expect(result.nodesDeleted).toBe(1);
+    expect(store.getNodeById(fileNode.id)).toBeNull();
+    expect(store.getNodeEmbedding(fileNode.id, 'm')).toBeNull();
+    // Manually-authored knowledge and its embedding survive.
+    expect(store.getNodeById(manual.id)).not.toBeNull();
+    expect(store.getNodeEmbedding(manual.id, 'm')).not.toBeNull();
+  });
+
   it('queryProjectSubgraph: skeleton, focus neighborhood, and kind filter', () => {
     const pgNode = (title: string, kind: string) => store.createNode({
       substrateType: SubstrateType.SNAPSHOT,

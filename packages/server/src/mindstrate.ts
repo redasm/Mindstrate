@@ -103,9 +103,9 @@ export class Mindstrate {
     return this.services.providerFactory;
   }
 
-  private queryGraphKnowledgeIds(query: string, topK: number): string[] {
-    return this.context.queryGraphKnowledge(query, { topK, trackFeedback: false })
-      .map((result: GraphKnowledgeSearchResult) => result.view.id);
+  private async queryGraphKnowledgeIds(query: string, topK: number): Promise<string[]> {
+    const results = await this.context.queryGraphKnowledge(query, { topK, trackFeedback: false });
+    return results.map((result: GraphKnowledgeSearchResult) => result.view.id);
   }
 
   private bootstrapAdminFromEnv(): void {

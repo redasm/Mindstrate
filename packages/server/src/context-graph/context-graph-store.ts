@@ -60,6 +60,7 @@ import {
   type ContextGraphDbHandle,
 } from './context-graph-database.js';
 import { GraphQuery } from './graph-query.js';
+import { cosineSimilarity } from '../processing/vector-distance.js';
 
 export type {
   CreateContextEdgeInput,
@@ -334,6 +335,34 @@ export class ContextGraphStore {
     })();
   }
 
+  /**
+   * Delete only the project-graph (scanner-extracted) nodes of a project,
+   * leaving manually-authored knowledge, snapshots, sessions, and conflicts
+   * intact. Used by "re-scan from scratch": a plain re-index upserts by stable
+   * id but never removes nodes for files that no longer exist, so without this
+   * those become orphans. Targets rows tagged `metadata.projectGraph = true`
+   * (the marker every scanner-written node/edge carries, see graph-writer),
+   * plus their edges / embeddings / projections.
+   */
+  deleteProjectGraphNodes(project: string): { nodesDeleted: number } {
+    const sub = `
+      SELECT id FROM context_nodes
+      WHERE LOWER(project) = LOWER(?)
+        AND json_extract(metadata, '$.${PROJECT_GRAPH_METADATA_KEYS.projectGraph}') = 1
+    `;
+    return this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM context_edges WHERE source_id IN (${sub}) OR target_id IN (${sub})`).run(project, project);
+      this.db.prepare(`DELETE FROM node_embeddings WHERE node_id IN (${sub})`).run(project);
+      this.db.prepare(`DELETE FROM projection_records WHERE node_id IN (${sub})`).run(project);
+      const nodesDeleted = this.db.prepare(`
+        DELETE FROM context_nodes
+        WHERE LOWER(project) = LOWER(?)
+          AND json_extract(metadata, '$.${PROJECT_GRAPH_METADATA_KEYS.projectGraph}') = 1
+      `).run(project).changes;
+      return { nodesDeleted };
+    })();
+  }
+
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
     return this.nodes.update(id, input);
   }
@@ -392,6 +421,53 @@ export class ContextGraphStore {
 
   getNodeEmbedding(nodeId: string, model: string): NodeEmbeddingRecord | null {
     return this.nodeEmbeddings.get(nodeId, model);
+  }
+
+  /** Node ids already embedded for `model` (incremental backfill guard). */
+  nodeIdsWithEmbedding(model: string): Set<string> {
+    return this.nodeEmbeddings.nodeIdsWithModel(model);
+  }
+
+  /** Delete all node embeddings for a project (rebuild-vectors). */
+  deleteNodeEmbeddingsForProject(project: string): number {
+    return this.nodeEmbeddings.deleteForProject(project);
+  }
+
+  /**
+   * Vector similarity search over stored node embeddings. Computes cosine
+   * against every candidate of the same dimension as `queryEmbedding`
+   * (mismatched dimensions — e.g. a legacy embedding model — are skipped,
+   * not fatal), returns the top scorers above `minScore`.
+   *
+   * This deliberately bypasses the knowledge projector's substrate-priority
+   * cap: low-priority project-graph FILE/DEPENDENCY nodes would never make
+   * the projector's top-500 prefilter, yet they are exactly what semantic
+   * file/code queries need to surface. Scoring here is purely by vector
+   * distance over the model's own rows.
+   */
+  searchSimilarNodes(opts: {
+    queryEmbedding: number[];
+    model: string;
+    project?: string;
+    statuses?: string[];
+    topK?: number;
+    minScore?: number;
+  }): Array<{ nodeId: string; score: number }> {
+    const candidates = this.nodeEmbeddings.candidatesForSearch({
+      model: opts.model,
+      project: opts.project,
+      statuses: opts.statuses,
+    });
+    const dim = opts.queryEmbedding.length;
+    const minScore = opts.minScore ?? 0;
+    const scored: Array<{ nodeId: string; score: number }> = [];
+    for (const candidate of candidates) {
+      if (candidate.embedding.length !== dim) continue;
+      const score = cosineSimilarity(opts.queryEmbedding, candidate.embedding);
+      if (score > minScore) scored.push({ nodeId: candidate.nodeId, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, opts.topK ?? 10);
   }
 
   createConflictRecord(input: CreateConflictRecordInput): ConflictRecord {

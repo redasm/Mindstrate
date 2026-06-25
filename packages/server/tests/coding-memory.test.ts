@@ -91,7 +91,7 @@ describe('Mindstrate', () => {
         context: { language: 'typescript', framework: 'react' },
       }));
 
-      const results = memory.context.queryGraphKnowledge('hydration error in react');
+      const results = await memory.context.queryGraphKnowledge('hydration error in react');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].view.title).toContain('hydration');
     });
@@ -106,7 +106,7 @@ describe('Mindstrate', () => {
 
       // offline embeddings are word-based, so completely unrelated text should have low similarity
       // but may still return results - we just check it doesn't crash
-      const results = memory.context.queryGraphKnowledge('quantum physics formulas');
+      const results = await memory.context.queryGraphKnowledge('quantum physics formulas');
       expect(results).toBeDefined();
     });
 
@@ -129,7 +129,7 @@ describe('Mindstrate', () => {
         context: { project: 'proj', language: 'typescript', framework: 'react' },
       }));
 
-      const results = memory.context.queryGraphKnowledge('hydration safe SSR', {
+      const results = await memory.context.queryGraphKnowledge('hydration safe SSR', {
         project: 'proj',
         topK: 5,
       });
@@ -549,7 +549,7 @@ describe('Mindstrate', () => {
       expect(projected[0].title).toBe('Hydration Safety Rule');
     });
 
-    it('should expose ECS-native projected search through the facade', () => {
+    it('should expose ECS-native projected search through the facade', async () => {
 
       memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
@@ -562,7 +562,7 @@ describe('Mindstrate', () => {
         confidence: 0.9,
       });
 
-      const results = memory.context.queryGraphKnowledge('hydration safe SSR', {
+      const results = await memory.context.queryGraphKnowledge('hydration safe SSR', {
         project: 'proj',
         topK: 5,
       });

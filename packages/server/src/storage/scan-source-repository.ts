@@ -292,6 +292,24 @@ export class ScanSourceRepository {
     `).run(cursor, now, now, id);
   }
 
+  /**
+   * Clear a source's cursor so its next scan is treated as a first run again
+   * (full project-graph re-index instead of an incremental commit diff). This
+   * is how "re-scan from scratch" works without deleting and recreating the
+   * source: `executeGitLocalSource` / `executeP4Source` branch on an empty
+   * `last_cursor`. Also clears run timestamps/error so the scheduler picks the
+   * source up immediately on its next tick.
+   */
+  resetCursor(id: string): boolean {
+    const now = new Date().toISOString();
+    const result = this.db.prepare(`
+      UPDATE scan_sources
+      SET last_cursor = NULL, last_run_at = NULL, last_success_at = NULL, last_error = NULL, updated_at = ?
+      WHERE id = ?
+    `).run(now, id);
+    return result.changes > 0;
+  }
+
   markRunStart(id: string): void {
     const now = new Date().toISOString();
     this.db.prepare(

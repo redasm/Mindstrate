@@ -29,11 +29,14 @@ export {
   buildProjectGraphScanPlan,
   diffProjectGraphCache,
   estimateProjectGraphScanScope,
+  findUnscannedTopLevelDirectories,
   scanProjectFiles,
   type ProjectGraphScanPlan,
   type ProjectGraphScanScope,
   type ProjectGraphScanScopeOptions,
   type ProjectGraphScanProgress,
+  type ProjectGraphSkipEvent,
+  type ProjectGraphSkipReason,
   type ProjectFileInventoryEntry,
   type ProjectGraphCacheDiff,
   type ScanProjectFilesOptions,
@@ -50,6 +53,7 @@ export {
   type ProjectGraphIndexOptions,
   type ProjectGraphIndexProgress,
   type ProjectGraphIndexResult,
+  type ProjectGraphScanDiagnostics,
 } from './project-graph-service.js';
 export {
   UNREAL_ASSET_REGISTRY_EXPORT,

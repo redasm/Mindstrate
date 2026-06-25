@@ -80,7 +80,7 @@ export interface MindstrateRuntimeOptions extends Partial<MindstrateConfig> {
 
 export function createMindstrateRuntime(
   configOverrides: MindstrateRuntimeOptions | undefined,
-  queryGraphKnowledgeIds: (query: string, options: { topK: number }) => string[],
+  queryGraphKnowledgeIds: (query: string, options: { topK: number }) => Promise<string[]>,
 ): MindstrateRuntime {
   const config = loadConfig(configOverrides);
   const logger = config.logger ?? noopLogger;
@@ -94,14 +94,14 @@ export function createMindstrateRuntime(
   const contextInternalizer = new ContextInternalizer(contextGraphStore);
   const contextPrioritySelector = new ContextPrioritySelector(contextGraphStore);
   const graphKnowledgeProjector = new GraphKnowledgeProjector(contextGraphStore);
-  const projectedKnowledgeSearch = new ProjectedKnowledgeSearch(graphKnowledgeProjector, contextGraphStore);
+  const llmConfigRepository = new LlmConfigRepository(databaseStore.getDb());
+  const providerFactory = new ProviderFactory(llmConfigRepository);
+  const projectedKnowledgeSearch = new ProjectedKnowledgeSearch(graphKnowledgeProjector, contextGraphStore, providerFactory);
   const projectionMaterializer = new KnowledgeProjectionMaterializer(contextGraphStore, graphKnowledgeProjector);
   const sessionProjectionMaterializer = new SessionProjectionMaterializer(contextGraphStore);
   const projectSnapshotProjectionMaterializer = new ProjectSnapshotProjectionMaterializer(contextGraphStore);
   const obsidianProjectionMaterializer = new ObsidianProjectionMaterializer(contextGraphStore);
   const bestSkillProjectionMaterializer = new BestSkillProjectionMaterializer(contextGraphStore);
-  const llmConfigRepository = new LlmConfigRepository(databaseStore.getDb());
-  const providerFactory = new ProviderFactory(llmConfigRepository);
   const conflictDetector = new ConflictDetector(contextGraphStore, providerFactory);
   const conflictReflector = new ConflictReflector(contextGraphStore);
   const patternCompressor = new PatternCompressor(contextGraphStore, providerFactory);

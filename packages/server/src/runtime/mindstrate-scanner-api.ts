@@ -42,6 +42,33 @@ export class MindstrateScannerApi {
     return this.services.scanSourceRepository.deleteSource(id);
   }
 
+  /**
+   * Queue a from-scratch re-scan of a source without deleting/recreating it:
+   * clear its cursor so the next daemon tick treats it as a first run (full
+   * project-graph re-index). Optionally wipe the project's existing
+   * scanner-extracted graph nodes first — a plain re-index upserts by stable
+   * id but never removes nodes for files that no longer exist, so `wipeGraph`
+   * is what clears those orphans. Manually-authored knowledge/snapshots are
+   * always preserved. Returns null if the source does not exist.
+   */
+  rescanFromScratch(
+    id: string,
+    options: { wipeGraph?: boolean } = {},
+  ): { sourceId: string; project: string; graphNodesDeleted: number } | null {
+    const source = this.services.scanSourceRepository.getSource(id);
+    if (!source) return null;
+    let graphNodesDeleted = 0;
+    if (options.wipeGraph) {
+      graphNodesDeleted = this.services.contextGraphStore.deleteProjectGraphNodes(source.project).nodesDeleted;
+    }
+    this.services.scanSourceRepository.resetCursor(id);
+    return { sourceId: id, project: source.project, graphNodesDeleted };
+  }
+
+  resetCursor(id: string): boolean {
+    return this.services.scanSourceRepository.resetCursor(id);
+  }
+
   listDueSources(now: Date = new Date()): ScanSource[] {
     return this.services.scanSourceRepository.listDueSources(now);
   }

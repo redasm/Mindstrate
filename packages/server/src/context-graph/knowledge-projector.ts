@@ -58,7 +58,7 @@ export class GraphKnowledgeProjector {
   }
 }
 
-function isProjectable(substrateType: SubstrateType): boolean {
+export function isProjectable(substrateType: SubstrateType): boolean {
   return [
     SubstrateType.SNAPSHOT,
     SubstrateType.SUMMARY,

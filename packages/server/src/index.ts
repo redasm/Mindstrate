@@ -168,6 +168,7 @@ export type {
   ProjectGraphIndexResult,
   ProjectGraphIndexOptions,
   ProjectGraphIndexProgress,
+  ProjectGraphScanDiagnostics,
   ProjectGraphPathInput,
   ProjectGraphPathResult,
   ProjectGraphTaskQuery,

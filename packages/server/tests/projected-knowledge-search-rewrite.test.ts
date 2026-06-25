@@ -46,7 +46,7 @@ describe('ProjectedKnowledgeSearch - field-weighted scoring', () => {
     removeTempDir(tempDir);
   });
 
-  it('ranks a node with a title-level word match above a body-level substring match for the same token', () => {
+  it('ranks a node with a title-level word match above a body-level substring match for the same token', async () => {
     const titleHit = graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
@@ -69,12 +69,12 @@ describe('ProjectedKnowledgeSearch - field-weighted scoring', () => {
       metadata: { projectGraph: true, kind: 'dependency' },
     });
 
-    const results = search.search('path matching', { project: 'demo', topK: 5 });
+    const results = await search.search('path matching', { project: 'demo', topK: 5 });
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].view.id).toBe(titleHit.id);
   });
 
-  it('rewards a node that hits two distinct tokens over one that hits the same token twice', () => {
+  it('rewards a node that hits two distinct tokens over one that hits the same token twice', async () => {
     const diverseHit = graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
@@ -96,11 +96,11 @@ describe('ProjectedKnowledgeSearch - field-weighted scoring', () => {
       confidence: 0.8,
     });
 
-    const results = search.search('metabolism scheduler refactor', { project: 'demo', topK: 5 });
+    const results = await search.search('metabolism scheduler refactor', { project: 'demo', topK: 5 });
     expect(results[0].view.id).toBe(diverseHit.id);
   });
 
-  it('demotes short tokens so unrelated nodes with the substring do not crowd out true matches', () => {
+  it('demotes short tokens so unrelated nodes with the substring do not crowd out true matches', async () => {
     graphStore.createNode({
       substrateType: SubstrateType.SNAPSHOT,
       domainType: ContextDomainType.ARCHITECTURE,
@@ -123,11 +123,11 @@ describe('ProjectedKnowledgeSearch - field-weighted scoring', () => {
       confidence: 0.85,
     });
 
-    const results = search.search('selectTaskNodes set', { project: 'demo', topK: 5 });
+    const results = await search.search('selectTaskNodes set', { project: 'demo', topK: 5 });
     expect(results[0].view.id).toBe(realHit.id);
   });
 
-  it('still finds a single-token full-word match when nothing else matches', () => {
+  it('still finds a single-token full-word match when nothing else matches', async () => {
     const hit = graphStore.createNode({
       substrateType: SubstrateType.RULE,
       domainType: ContextDomainType.CONVENTION,
@@ -139,7 +139,7 @@ describe('ProjectedKnowledgeSearch - field-weighted scoring', () => {
       confidence: 0.9,
     });
 
-    const results = search.search('validation', { project: 'demo', topK: 5 });
+    const results = await search.search('validation', { project: 'demo', topK: 5 });
     expect(results[0].view.id).toBe(hit.id);
     expect(results[0].relevanceScore).toBeGreaterThan(0.5);
   });

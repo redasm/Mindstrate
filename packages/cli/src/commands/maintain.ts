@@ -8,11 +8,30 @@ import { createMemory } from '../memory-factory.js';
 
 export const maintainCommand = new Command('doctor')
   .description('Run maintenance and health checks')
-  .action(async () => {
+  .option('--rebuild-vectors', 'Re-embed all node embeddings (fixes embedding-model/dimension drift)')
+  .option('-p, --project <name>', 'Limit --rebuild-vectors to a single project')
+  .action(async (options) => {
     const memory = createMemory();
 
     try {
       await memory.init();
+
+      if (options.rebuildVectors) {
+        console.log('Rebuilding node embeddings...\n');
+        const results = await memory.maintenance.rebuildVectors(options.project);
+        if (results.length === 0) {
+          console.log('No projects found to rebuild.');
+        }
+        for (const result of results) {
+          console.log(
+            `  ${result.project}: ${result.embedded}/${result.candidates} nodes embedded `
+              + `(${result.model}, ${result.dimensions}d)`,
+          );
+        }
+        console.log('\nNode embeddings rebuilt.');
+        return;
+      }
+
       console.log('Running maintenance tasks...\n');
 
       const result = memory.maintenance.runMaintenance();

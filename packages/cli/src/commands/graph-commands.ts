@@ -28,6 +28,7 @@ import {
   printTaskQueryResult,
 } from './graph-render.js';
 import { PROJECT_GRAPH_CLI_QUERY_LIMIT, projectGraphEdges, projectGraphNodes } from './graph-selectors.js';
+import { formatScanCoverageLines } from './scan-coverage-report.js';
 import {
   createGraphSyncTeamClient,
   extractProjectGraphUserNotes,
@@ -69,6 +70,7 @@ contextGraphCommand.command('index')
     const artifacts = memory.context.writeProjectGraphArtifacts(project);
     console.log(`Indexed: ${result.filesScanned} files, ${result.nodesExtracted} nodes, ${result.edgesExtracted} edges`);
     console.log(`Report: ${artifacts.reportPath}`);
+    for (const line of formatScanCoverageLines(result.diagnostics)) console.log(line);
     if (result.nodesExtracted <= result.filesScanned) console.log('Warning: graph may be shallow; configure parser adapters, source roots, or metadata imports for richer graph facts.');
   }));
 

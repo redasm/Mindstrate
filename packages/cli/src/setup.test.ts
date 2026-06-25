@@ -31,7 +31,7 @@ test('initializeLocalProject writes the project graph to Obsidian when a vault i
   const memory = new Mindstrate({ dataDir });
   await memory.init();
   try {
-    const results = memory.context.queryGraphKnowledge('before-edit generated output validation', {
+    const results = await memory.context.queryGraphKnowledge('before-edit generated output validation', {
       project: 'setup-graph-demo',
       topK: 10,
     });

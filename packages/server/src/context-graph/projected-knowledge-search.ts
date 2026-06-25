@@ -1,10 +1,14 @@
 import type { GraphKnowledgeSearchResult, GraphKnowledgeView } from '@mindstrate/protocol/models';
 import {
+  ContextNodeStatus,
   ContextRelationType,
+  LLM_ENRICHMENT_CACHE_TAG,
   type ContextNode,
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from './context-graph-store.js';
 import type { GraphKnowledgeProjector, GraphKnowledgeProjectionOptions } from './knowledge-projector.js';
+import { isProjectable, toGraphKnowledgeView } from './knowledge-projector.js';
+import type { ProviderFactory } from '../processing/provider-factory.js';
 
 export interface ProjectedKnowledgeSearchOptions extends GraphKnowledgeProjectionOptions {
   topK?: number;
@@ -12,21 +16,50 @@ export interface ProjectedKnowledgeSearchOptions extends GraphKnowledgeProjectio
   trackFeedback?: boolean;
 }
 
+/**
+ * Weights for blending the vector-similarity signal with the lexical
+ * (field-weighted substring) signal. Lexical leads because an exact title /
+ * path hit is unambiguous; the vector term is what rescues semantic,
+ * cross-language, and natural-language queries that share no literal tokens
+ * with the node. Both terms live in [0, 1], so the blend does too.
+ */
+const VECTOR_WEIGHT = 0.55;
+const LEXICAL_WEIGHT = 0.45;
+
+/** Cosine floor below which a vector candidate is treated as noise. */
+const VECTOR_MIN_SCORE = 0.2;
+
+const DEFAULT_INCLUDE_STATUSES: ContextNodeStatus[] = [
+  ContextNodeStatus.ACTIVE,
+  ContextNodeStatus.VERIFIED,
+  ContextNodeStatus.CANDIDATE,
+];
+
 export class ProjectedKnowledgeSearch {
   private readonly projector: GraphKnowledgeProjector;
   private readonly graphStore?: ContextGraphStore;
+  private readonly providerFactory?: ProviderFactory;
 
-  constructor(projector: GraphKnowledgeProjector, graphStore?: ContextGraphStore) {
+  constructor(
+    projector: GraphKnowledgeProjector,
+    graphStore?: ContextGraphStore,
+    providerFactory?: ProviderFactory,
+  ) {
     this.projector = projector;
     this.graphStore = graphStore;
+    this.providerFactory = providerFactory;
   }
 
-  search(query: string, options: ProjectedKnowledgeSearchOptions = {}): GraphKnowledgeSearchResult[] {
+  async search(
+    query: string,
+    options: ProjectedKnowledgeSearchOptions = {},
+  ): Promise<GraphKnowledgeSearchResult[]> {
     const topK = options.topK ?? 10;
+    const includeStatuses = options.includeStatuses ?? DEFAULT_INCLUDE_STATUSES;
     const candidates = this.projector.project({
       project: options.project,
       limit: Math.max(options.limit ?? 0, topK * 10, 50),
-      includeStatuses: options.includeStatuses,
+      includeStatuses,
       // Default-on for the search path: `graph_knowledge_search` /
       // `memory_search` exist precisely to surface evidence-rich
       // project graph facts (file/module/dependency/asset nodes), so
@@ -39,11 +72,86 @@ export class ProjectedKnowledgeSearch {
     });
 
     const tokens = tokenizeQuery(query);
-    return candidates
-      .map((view) => this.scoreView(query, tokens, view))
+    const lexicalById = new Map<string, GraphKnowledgeSearchResult>();
+    for (const view of candidates) {
+      lexicalById.set(view.id, this.scoreView(query, tokens, view));
+    }
+
+    // Vector candidates bypass the projector's substrate-priority prefilter,
+    // so low-priority file/dependency nodes can still surface when they are
+    // the closest semantic match. Falls back to lexical-only when no embedder
+    // is wired (tests), no project is in scope, or nothing is embedded yet.
+    const vectorById = await this.vectorScores(query, options, includeStatuses, topK);
+
+    const merged = new Map<string, GraphKnowledgeSearchResult>();
+    for (const [id, result] of lexicalById) merged.set(id, result);
+    for (const [id, vectorScore] of vectorById) {
+      const existing = merged.get(id);
+      const lexicalScore = existing?.relevanceScore ?? 0;
+      const blended = LEXICAL_WEIGHT * lexicalScore + VECTOR_WEIGHT * vectorScore;
+      if (existing) {
+        existing.relevanceScore = Math.min(0.99, blended);
+        existing.matchReason = `${existing.matchReason} + vector ${vectorScore.toFixed(2)}`;
+      } else {
+        const view = this.viewForNode(id, includeStatuses);
+        if (!view) continue;
+        merged.set(id, {
+          view,
+          relevanceScore: Math.min(0.99, VECTOR_WEIGHT * vectorScore),
+          matchReason: `Vector similarity ${vectorScore.toFixed(2)}`,
+        });
+      }
+    }
+
+    return Array.from(merged.values())
       .filter((result) => result.relevanceScore > 0)
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, topK);
+  }
+
+  /**
+   * Map of nodeId → cosine score for the query's semantic neighbours. Empty
+   * when vector search is unavailable so the caller degrades to lexical-only.
+   */
+  private async vectorScores(
+    query: string,
+    options: ProjectedKnowledgeSearchOptions,
+    includeStatuses: ContextNodeStatus[],
+    topK: number,
+  ): Promise<Map<string, number>> {
+    const empty = new Map<string, number>();
+    if (!this.graphStore || !this.providerFactory) return empty;
+    const providers = this.providerFactory.forProject(options.project ?? '');
+    let queryEmbedding: number[];
+    try {
+      queryEmbedding = await providers.embedder.embed(query);
+    } catch {
+      // Embedding the query failed (e.g. OpenAI transport error). Lexical
+      // search still works, so swallow and fall back rather than throw.
+      return empty;
+    }
+    const hits = this.graphStore.searchSimilarNodes({
+      queryEmbedding,
+      model: providers.embeddingModel,
+      project: options.project,
+      statuses: includeStatuses,
+      topK: Math.max(topK * 5, 25),
+      minScore: VECTOR_MIN_SCORE,
+    });
+    const scores = new Map<string, number>();
+    for (const hit of hits) scores.set(hit.nodeId, hit.score);
+    return scores;
+  }
+
+  /** Build a projectable view for a vector-only hit, or null if it should be excluded. */
+  private viewForNode(nodeId: string, includeStatuses: ContextNodeStatus[]): GraphKnowledgeView | null {
+    if (!this.graphStore) return null;
+    const node = this.graphStore.getNodeById(nodeId);
+    if (!node) return null;
+    if (!includeStatuses.includes(node.status)) return null;
+    if (!isProjectable(node.substrateType)) return null;
+    if (node.tags.includes(LLM_ENRICHMENT_CACHE_TAG)) return null;
+    return toGraphKnowledgeView(node);
   }
 
   private scoreView(query: string, tokens: QueryToken[], view: GraphKnowledgeView): GraphKnowledgeSearchResult {
