@@ -524,4 +524,9 @@ export class ScanSourceRepository {
         )
     `).run(sourceId, sourceId, keep);
   }
+
+  /** Delete every log row for a source. Returns the number of rows removed. */
+  clearLogs(sourceId: string): number {
+    return this.db.prepare('DELETE FROM scan_logs WHERE source_id = ?').run(sourceId).changes;
+  }
 }

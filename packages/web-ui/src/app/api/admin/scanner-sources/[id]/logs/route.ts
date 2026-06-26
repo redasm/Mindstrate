@@ -30,3 +30,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return errorResponse(error);
   }
 }
+
+/** DELETE — clear all scan logs for a source (e.g. to drop stale pre-update logs). */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await guard(request); if (denied) return denied;
+  try {
+    const { id } = await params;
+    const memory = await getMemoryReady();
+    if (!memory.scanner.getSource(id)) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    const cleared = memory.scanner.clearLogs(id);
+    return NextResponse.json({ cleared });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}

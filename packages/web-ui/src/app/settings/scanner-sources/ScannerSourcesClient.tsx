@@ -176,6 +176,19 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
 
   const closeLogs = () => setLogSource(null);
 
+  const handleClearLogs = async () => {
+    if (!logSource) return;
+    if (!confirm(t.logsClearConfirm)) return;
+    const res = await fetch(`/api/admin/scanner-sources/${encodeURIComponent(logSource.id)}/logs`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      setLogsError(`${t.logsClearFailed} (${res.status})`);
+      return;
+    }
+    setLogs([]);
+  };
+
   const visibleSources = useMemo(
     () => (projectFilter ? sources.filter((s) => s.project === projectFilter) : sources),
     [sources, projectFilter],
@@ -913,14 +926,25 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={closeLogs}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-100 hover:text-surface-600"
-                title={t.logsClose}
-              >
-                <Icon icon="lucide:x" className="text-base" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleClearLogs}
+                  className="h-8 px-2.5 flex items-center gap-1.5 rounded-lg text-surface-400 hover:bg-surface-100 hover:text-red-600 text-xs font-semibold"
+                  title={t.logsClear}
+                >
+                  <Icon icon="lucide:eraser" className="text-sm" />
+                  {t.logsClear}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeLogs}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 hover:bg-surface-100 hover:text-surface-600"
+                  title={t.logsClose}
+                >
+                  <Icon icon="lucide:x" className="text-base" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto bg-surface-950/95 px-4 py-3 rounded-b-2xl">

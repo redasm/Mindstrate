@@ -139,4 +139,8 @@ export class MindstrateScannerApi {
   pruneLogs(sourceId: string, keep: number): void {
     this.services.scanSourceRepository.pruneLogs(sourceId, keep);
   }
+
+  clearLogs(sourceId: string): number {
+    return this.services.scanSourceRepository.clearLogs(sourceId);
+  }
 }
