@@ -82,6 +82,15 @@ import type { ProjectGraphOverlay } from '@mindstrate/protocol/models';
 import type { DetectedProject } from '../project/index.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
 
+/**
+ * Upper bound on architecture nodes loaded to feed an LLM (system-page
+ * planner, enrichment, summarizer). These paths only consume a salience-ranked
+ * top-N (≤80), so loading the whole architecture layer — 100k+ nodes on a
+ * large graph, each with a JSON metadata blob — only risks OOM. Fetched
+ * quality-ranked so the cap keeps the most salient nodes.
+ */
+const LLM_FEED_ARCHITECTURE_NODE_CAP = 2000;
+
 export class MindstrateContextGraphApi {
   constructor(private readonly services: MindstrateRuntime) {}
 
@@ -313,11 +322,11 @@ export class MindstrateContextGraphApi {
     return enrichProjectGraph(this.services.contextGraphStore, {
       project: project.name,
       llmConfigured: providers.hasConfig,
-      extractedNodes: this.services.contextGraphStore.listNodes({
-        project: project.name,
-        domainType: ContextDomainType.ARCHITECTURE,
-        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-      }),
+      extractedNodes: this.services.contextGraphStore.listProjectDomainRanked(
+        project.name,
+        ContextDomainType.ARCHITECTURE,
+        LLM_FEED_ARCHITECTURE_NODE_CAP,
+      ),
       summarize,
     });
   }
@@ -351,11 +360,11 @@ export class MindstrateContextGraphApi {
       client,
       model: providers.llmModel,
       project,
-      extractedNodes: this.services.contextGraphStore.listNodes({
-        project: project.name,
-        domainType: ContextDomainType.ARCHITECTURE,
-        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-      }),
+      extractedNodes: this.services.contextGraphStore.listProjectDomainRanked(
+        project.name,
+        ContextDomainType.ARCHITECTURE,
+        LLM_FEED_ARCHITECTURE_NODE_CAP,
+      ),
       curatedDocs: collectCuratedProjectDocs(project),
       requestPolicy: this.services.config.projectGraphLlm,
     });
@@ -522,11 +531,11 @@ export class MindstrateContextGraphApi {
       client,
       model: providers.llmModel,
       project: project.name,
-      extractedNodes: this.services.contextGraphStore.listNodes({
-        project: project.name,
-        domainType: ContextDomainType.ARCHITECTURE,
-        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-      }),
+      extractedNodes: this.services.contextGraphStore.listProjectDomainRanked(
+        project.name,
+        ContextDomainType.ARCHITECTURE,
+        LLM_FEED_ARCHITECTURE_NODE_CAP,
+      ),
       requestPolicy: this.services.config.projectGraphLlm,
     });
   }

@@ -6,6 +6,7 @@
 
 import Database from 'better-sqlite3';
 import type {
+  ContextDomainType,
   ContextEdge,
   ContextEvent,
   ContextNode,
@@ -140,6 +141,11 @@ export class ContextGraphStore {
 
   listNodes(options: ListContextNodesOptions = {}): ContextNode[] {
     return this.nodes.list(options);
+  }
+
+  /** Bounded, quality-ranked fetch of a project's domain nodes (LLM-feed paths). */
+  listProjectDomainRanked(project: string, domainType: ContextDomainType, limit: number): ContextNode[] {
+    return this.nodes.listByProjectDomainRanked(project, domainType, limit);
   }
 
   /** Bounded substring search over node title / source_ref (assembly seeding). */

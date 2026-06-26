@@ -330,6 +330,33 @@ describe('ContextGraphStore', () => {
     expect(store.getNodeById(synthesized.id)).not.toBeNull();
   });
 
+  it('listProjectDomainRanked returns the highest-quality domain nodes within the limit', () => {
+    for (let i = 0; i < 10; i++) {
+      store.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: `arch ${i}`,
+        content: `c${i}`,
+        project: 'demo',
+        qualityScore: i * 10, // 0..90
+      });
+    }
+    // A node in a different domain must not be returned.
+    store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'not arch',
+      content: 'x',
+      project: 'demo',
+      qualityScore: 100,
+    });
+
+    const top = store.listProjectDomainRanked('DEMO', ContextDomainType.ARCHITECTURE, 3);
+    expect(top).toHaveLength(3);
+    expect(top.map((n) => n.title)).toEqual(['arch 9', 'arch 8', 'arch 7']);
+    expect(top.every((n) => n.domainType === ContextDomainType.ARCHITECTURE)).toBe(true);
+  });
+
   it('queryProjectSubgraph: skeleton, focus neighborhood, and kind filter', () => {
     const pgNode = (title: string, kind: string) => store.createNode({
       substrateType: SubstrateType.SNAPSHOT,

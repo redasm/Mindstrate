@@ -304,6 +304,26 @@ export class ContextNodeRepository {
     return rows.map(rowToNode);
   }
 
+  /**
+   * Bounded, salience-ordered fetch of a project's nodes in a domain. Unlike
+   * `list` (which orders by recency and is used with a 100k limit for full
+   * loads), this orders by quality_score so a small limit keeps the most
+   * salient nodes — used by LLM-feeding paths (system-page planner, enrichment,
+   * summarizer) that only consume a salience-ranked top-N. Loading the whole
+   * architecture layer (100k+ nodes, each with a JSON metadata blob) OOMs on
+   * large graphs.
+   */
+  listByProjectDomainRanked(project: string, domainType: ContextDomainType, limit: number): ContextNode[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM context_nodes
+      WHERE LOWER(project) = LOWER(?)
+        AND domain_type = ?
+      ORDER BY quality_score DESC, updated_at DESC
+      LIMIT ?
+    `).all(project, domainType, limit) as NodeRow[];
+    return rows.map(rowToNode);
+  }
+
   /** Fetch nodes by an explicit id list (subgraph neighbor expansion). */
   listByIds(ids: string[]): ContextNode[] {
     if (ids.length === 0) return [];
