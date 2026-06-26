@@ -40,7 +40,10 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const qs = new URLSearchParams({ project: decoded, limit: '1000' });
+      // No limit param → the API returns the project's full knowledge set.
+      // The list is client-side paginated below, so rendering all is fine, and
+      // the count never silently caps at a hard-coded number.
+      const qs = new URLSearchParams({ project: decoded });
       const resp = await fetch(`/api/knowledge?${qs}`);
       if (!resp.ok) {
         setEntries([]);
