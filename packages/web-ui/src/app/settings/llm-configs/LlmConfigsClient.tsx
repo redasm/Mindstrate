@@ -300,7 +300,7 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
 
           <div className="px-5 py-5 space-y-5">
             <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-              <Field label={t.project} icon="lucide:folder">
+              <Field label={t.project} icon="lucide:folder" colSpan={2}>
                 <input
                   type="text"
                   list="llm-known-projects"
@@ -314,10 +314,21 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
                   {knownProjects.map((p) => <option key={p} value={p} />)}
                 </datalist>
               </Field>
+
+              <Field label={t.llmBaseUrl} suffixLabel={t.optional} icon="lucide:link" colSpan={2}>
+                <input
+                  type="text"
+                  value={form.llmBaseUrl}
+                  onChange={(e) => setFormField('llmBaseUrl', e.target.value)}
+                  placeholder={t.llmBaseUrlPlaceholder}
+                  className="flex-1 px-2.5 py-2.5 bg-transparent text-sm font-mono text-surface-800 placeholder-surface-400 outline-none"
+                />
+              </Field>
               <Field
                 label={t.apiKey}
                 suffixLabel={editingId ? t.apiKeyEditSuffix : t.apiKeyCreateSuffix}
                 icon="lucide:key-round"
+                colSpan={2}
               >
                 <input
                   type={showApiKey ? 'text' : 'password'}
@@ -336,15 +347,6 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
                 </button>
               </Field>
 
-              <Field label={t.llmBaseUrl} suffixLabel={t.optional} icon="lucide:link" colSpan={2}>
-                <input
-                  type="text"
-                  value={form.llmBaseUrl}
-                  onChange={(e) => setFormField('llmBaseUrl', e.target.value)}
-                  placeholder={t.llmBaseUrlPlaceholder}
-                  className="flex-1 px-2.5 py-2.5 bg-transparent text-sm font-mono text-surface-800 placeholder-surface-400 outline-none"
-                />
-              </Field>
               <Field
                 label={t.embeddingBaseUrl}
                 suffixLabel={t.embeddingBaseUrlSuffix}
