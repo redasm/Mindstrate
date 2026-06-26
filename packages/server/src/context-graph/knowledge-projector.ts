@@ -40,10 +40,19 @@ export class GraphKnowledgeProjector {
       ContextNodeStatus.VERIFIED,
       ContextNodeStatus.CANDIDATE,
     ];
+    const excludeProjectGraph = options.includeProjectGraphNodes !== true;
 
+    // Push the project-graph exclusion into SQL when the caller doesn't want
+    // those nodes. Without it, a project with a large scanner graph (100k+
+    // file/symbol nodes) fills the prefetch window with graph rows ordered by
+    // updated_at, and the post-filter leaves zero knowledge nodes — the
+    // knowledge page goes blank right after a re-scan even though the
+    // knowledge is intact. When graph nodes ARE wanted, keep a generous
+    // prefetch so the priority sort still has a wide candidate set.
     const nodes = this.graphStore.listNodes({
       project: options.project,
-      limit: 500,
+      excludeProjectGraph,
+      limit: excludeProjectGraph ? Math.max(limit * 10, 500) : 2000,
     }).filter((node) =>
       includeStatuses.includes(node.status) &&
       isProjectable(node.substrateType) &&

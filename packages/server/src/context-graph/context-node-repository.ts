@@ -48,6 +48,13 @@ export interface ListContextNodesOptions {
   status?: ContextNodeStatus;
   sourceRef?: string;
   limit?: number;
+  /**
+   * Exclude scanner-extracted project-graph nodes (those tagged
+   * `metadata.projectGraph = true`). Pushed into SQL so a project with a huge
+   * graph (100k+ file/symbol nodes) doesn't consume the LIMIT prefetch and
+   * starve the knowledge nodes the caller actually wants.
+   */
+  excludeProjectGraph?: boolean;
 }
 
 export class ContextNodeRepository {
@@ -129,6 +136,11 @@ export class ContextNodeRepository {
     if (options.sourceRef) {
       conditions.push('source_ref = ?');
       params.push(options.sourceRef);
+    }
+    if (options.excludeProjectGraph) {
+      // Tagged nodes carry metadata.projectGraph === true; exclude them in SQL
+      // so they never fill the LIMIT window ahead of knowledge nodes.
+      conditions.push("(json_extract(metadata, '$.projectGraph') IS NULL OR json_extract(metadata, '$.projectGraph') <> 1)");
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

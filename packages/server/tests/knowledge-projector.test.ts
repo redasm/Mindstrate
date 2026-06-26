@@ -110,4 +110,39 @@ describe('GraphKnowledgeProjector', () => {
       includeProjectGraphNodes: true,
     })[0].id).toBe(node.id);
   });
+
+  it('surfaces knowledge even when a large project graph would fill the prefetch window', () => {
+    // Knowledge node first…
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Important Rule',
+      content: 'Keep me visible.',
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 80,
+      confidence: 0.9,
+    });
+    // …then 600 project-graph nodes (more than the old 500 prefetch window),
+    // all with newer updated_at, which used to evict the rule from the result.
+    for (let i = 0; i < 600; i++) {
+      graphStore.createNode({
+        id: `pg:mindstrate:file:f${i}`,
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: `file-${i}.ts`,
+        content: `file: file-${i}.ts`,
+        tags: ['project-graph', 'file'],
+        project: 'mindstrate',
+        status: ContextNodeStatus.ACTIVE,
+        metadata: {
+          [PROJECT_GRAPH_METADATA_KEYS.projectGraph]: true,
+          [PROJECT_GRAPH_METADATA_KEYS.kind]: 'file',
+        },
+      });
+    }
+
+    const projected = projector.project({ project: 'mindstrate', limit: 10 });
+    expect(projected.map((v) => v.title)).toContain('Important Rule');
+  });
 });
