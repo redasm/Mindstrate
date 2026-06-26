@@ -70,7 +70,11 @@ export class ProviderFactory {
 
   private build(config: ProjectLlmConfig): ProjectProviders {
     const embeddingBaseUrl = config.embeddingBaseUrl ?? config.llmBaseUrl;
-    const embedder = new Embedder(config.openaiApiKey, config.embeddingModel, embeddingBaseUrl);
+    // Embedding may use a different provider than the chat LLM (e.g. chat on
+    // DeepSeek, embeddings on Aliyun), which means a different API key. Fall
+    // back to the main key when no separate embedding key is set.
+    const embeddingApiKey = config.embeddingApiKey ?? config.openaiApiKey;
+    const embedder = new Embedder(embeddingApiKey, config.embeddingModel, embeddingBaseUrl);
     const llmClientPromise = getOpenAIClient(config.openaiApiKey, config.llmBaseUrl).then((c) => c ?? null);
     return {
       embedder,

@@ -25,6 +25,16 @@ export class MindstrateMaintenanceApi {
   }
 
   /**
+   * Remove template-placeholder high-order compression nodes (CANDIDATE
+   * skill/heuristic/axiom whose content is the old "Generalized ... from N
+   * nodes" template, not an LLM synthesis). Cleans up noise produced before
+   * high-order compression required real LLM generalization.
+   */
+  pruneTemplateHighOrderNodes(project?: string): { nodesDeleted: number } {
+    return this.services.contextGraphStore.deleteTemplateHighOrderNodes(project);
+  }
+
+  /**
    * Permanently delete a project: its context-graph rows
    * (nodes/edges/embeddings/projections/events/conflicts/metabolism), its
    * scan-source configs (so it isn't rebuilt on the next scan), and its

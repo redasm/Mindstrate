@@ -363,8 +363,7 @@ export class ContextGraphStore {
     })();
   }
 
-  /**
-   * Count only scanner-extracted (project-graph) nodes of a project. The repo
+  /** Count only scanner-extracted (project-graph) nodes of a project. The repo
    * scanner uses this to decide whether a first-run P4 index already happened,
    * so it must ignore manually-authored knowledge — otherwise a project that
    * has any hand-written rule would look "already indexed" and a forced
@@ -377,6 +376,36 @@ export class ContextGraphStore {
         AND json_extract(metadata, '$.${PROJECT_GRAPH_METADATA_KEYS.projectGraph}') = 1
     `).get(project) as { c: number };
     return row.c;
+  }
+
+  /**
+   * Delete template-placeholder high-order compression nodes: CANDIDATE
+   * skill/heuristic/axiom rows tagged `high-order-compression` whose content
+   * is still the old `Generalized ... from N ... nodes.` template (i.e. not
+   * LLM-synthesized). Removes their GENERALIZES edges too. Used to clean up the
+   * noise generated before high-order compression required real synthesis.
+   */
+  deleteTemplateHighOrderNodes(project?: string): { nodesDeleted: number } {
+    const conditions = [
+      "json_extract(metadata, '$.clusterSize') IS NOT NULL",
+      "(json_extract(metadata, '$.llmSynthesized') IS NULL OR json_extract(metadata, '$.llmSynthesized') <> 1)",
+      "content LIKE 'Generalized %'",
+      "EXISTS (SELECT 1 FROM json_each(tags) WHERE value = 'high-order-compression')",
+    ];
+    const params: unknown[] = [];
+    if (project) {
+      conditions.push('LOWER(project) = LOWER(?)');
+      params.push(project);
+    }
+    const where = conditions.join(' AND ');
+    const sub = `SELECT id FROM context_nodes WHERE ${where}`;
+    return this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM context_edges WHERE source_id IN (${sub}) OR target_id IN (${sub})`).run(...params, ...params);
+      this.db.prepare(`DELETE FROM node_embeddings WHERE node_id IN (${sub})`).run(...params);
+      this.db.prepare(`DELETE FROM projection_records WHERE node_id IN (${sub})`).run(...params);
+      const nodesDeleted = this.db.prepare(`DELETE FROM context_nodes WHERE ${where}`).run(...params).changes;
+      return { nodesDeleted };
+    })();
   }
 
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {

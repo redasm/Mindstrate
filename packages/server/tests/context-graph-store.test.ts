@@ -301,6 +301,35 @@ describe('ContextGraphStore', () => {
     expect(store.listNodes({ project: 'demo' })).toHaveLength(1);
   });
 
+  it('deleteTemplateHighOrderNodes removes only template placeholders, keeping synthesized', () => {
+    const placeholder = store.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'skill cluster: demo (2 nodes)',
+      content: 'Generalized skill from 2 related rule nodes.\n1. x\n2. y',
+      tags: ['skill-compression', 'high-order-compression'],
+      project: 'demo',
+      status: ContextNodeStatus.CANDIDATE,
+      metadata: { clusterSize: 2 },
+    });
+    const synthesized = store.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Real synthesized skill',
+      content: 'A genuine generalized principle about X.',
+      tags: ['skill-compression', 'high-order-compression'],
+      project: 'demo',
+      status: ContextNodeStatus.CANDIDATE,
+      metadata: { clusterSize: 2, llmSynthesized: true },
+    });
+
+    const result = store.deleteTemplateHighOrderNodes('demo');
+
+    expect(result.nodesDeleted).toBe(1);
+    expect(store.getNodeById(placeholder.id)).toBeNull();
+    expect(store.getNodeById(synthesized.id)).not.toBeNull();
+  });
+
   it('queryProjectSubgraph: skeleton, focus neighborhood, and kind filter', () => {
     const pgNode = (title: string, kind: string) => store.createNode({
       substrateType: SubstrateType.SNAPSHOT,

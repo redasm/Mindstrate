@@ -38,6 +38,15 @@ function buildPatch(body: Record<string, unknown>): UpdateLlmConfigInput {
   if (typeof body.openaiApiKey === 'string' && body.openaiApiKey !== '') {
     patch.openaiApiKey = body.openaiApiKey;
   }
+  // embeddingApiKey is nullable: explicit null/"" clears it (fall back to main key).
+  if ('embeddingApiKey' in body) {
+    const value = body.embeddingApiKey;
+    if (value === null) patch.embeddingApiKey = null;
+    else if (typeof value === 'string' && !value.startsWith('••••')) {
+      const trimmed = value.trim();
+      patch.embeddingApiKey = trimmed === '' ? null : trimmed;
+    }
+  }
   for (const key of ['llmBaseUrl', 'embeddingBaseUrl'] as const) {
     if (!(key in body)) continue;
     const value = body[key];
@@ -69,7 +78,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const body = await request.json().catch(() => ({})) as Record<string, unknown>;
     const updated = memory.llmConfigs.update(id, buildPatch(body));
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json({ ...updated, openaiApiKey: maskKey(updated.openaiApiKey) });
+    return NextResponse.json({
+      ...updated,
+      openaiApiKey: maskKey(updated.openaiApiKey),
+      embeddingApiKey: updated.embeddingApiKey ? maskKey(updated.embeddingApiKey) : undefined,
+    });
   } catch (error) {
     return errorResponse(error);
   }
