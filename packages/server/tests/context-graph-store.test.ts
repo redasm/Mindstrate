@@ -168,6 +168,39 @@ describe('ContextGraphStore', () => {
     expect(store.getNodeEmbedding(node.id, 'test-embedding')).toBeNull();
   });
 
+  it('searchSimilarNodes caps the candidate scan and prefers high-quality nodes', () => {
+    // Insert more embedded nodes than the candidate limit. Without the cap the
+    // whole set is JSON-parsed into memory (the OOM that crashed team-server on
+    // a 100k-node project); the cap keeps the scan bounded.
+    for (let i = 0; i < 30; i++) {
+      const n = store.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: `node ${i}`,
+        content: `c${i}`,
+        project: 'big',
+        status: ContextNodeStatus.ACTIVE,
+        qualityScore: i, // higher i = higher quality
+      });
+      store.upsertNodeEmbedding({ nodeId: n.id, model: 'm', dimensions: 2, embedding: [1, 0] });
+    }
+
+    const hits = store.searchSimilarNodes({
+      queryEmbedding: [1, 0],
+      model: 'm',
+      project: 'big',
+      topK: 50,
+      candidateLimit: 5,
+    });
+
+    // Only the 5 highest-quality candidates are scanned, so at most 5 returned.
+    expect(hits.length).toBeLessThanOrEqual(5);
+    // The top quality nodes (29, 28, …) must be the ones that surface.
+    const titles = hits.map((h) => store.getNodeById(h.nodeId)?.title);
+    expect(titles).toContain('node 29');
+    expect(titles).not.toContain('node 0');
+  });
+
   it('deletes every row for a project (case-insensitive) and leaves others intact', () => {
     const seed = (project: string) => {
       const a = store.createNode({

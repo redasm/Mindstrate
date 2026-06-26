@@ -468,11 +468,13 @@ export class ContextGraphStore {
     statuses?: string[];
     topK?: number;
     minScore?: number;
+    candidateLimit?: number;
   }): Array<{ nodeId: string; score: number }> {
     const candidates = this.nodeEmbeddings.candidatesForSearch({
       model: opts.model,
       project: opts.project,
       statuses: opts.statuses,
+      limit: opts.candidateLimit,
     });
     const dim = opts.queryEmbedding.length;
     const minScore = opts.minScore ?? 0;

@@ -1,5 +1,19 @@
 import Database from 'better-sqlite3';
 
+/**
+ * Max embedding rows pulled into memory for a single similarity search. Bounds
+ * the JS-side cosine scan so a project with a huge graph can't OOM the process
+ * (each row is a 1536-float vector that gets JSON-parsed). Override per call via
+ * `candidatesForSearch({ limit })` or the env var for larger hosts.
+ */
+const DEFAULT_SEARCH_CANDIDATE_LIMIT = ((): number => {
+  const raw = process.env['MINDSTRATE_VECTOR_CANDIDATE_LIMIT'];
+  if (raw === undefined) return 5000;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) return 5000;
+  return parsed;
+})();
+
 export interface NodeEmbeddingRecord {
   nodeId: string;
   model: string;
@@ -79,6 +93,7 @@ export class NodeEmbeddingRepository {
     model: string;
     project?: string;
     statuses?: string[];
+    limit?: number;
   }): Array<{ nodeId: string; embedding: number[] }> {
     const conditions = ['ne.model = ?'];
     const params: unknown[] = [opts.model];
@@ -90,11 +105,20 @@ export class NodeEmbeddingRepository {
       conditions.push(`n.status IN (${opts.statuses.map(() => '?').join(',')})`);
       params.push(...opts.statuses);
     }
+    // Hard cap the candidate pull. A large project graph holds 100k+ embedded
+    // nodes; `.all()` over the whole set (each row a 1536-float vector that
+    // gets JSON.parsed) blew the team-server JS heap and OOM-crashed it on
+    // every memory_search. Take the highest-quality rows only — semantic
+    // recall doesn't need to cosine-scan the entire graph, and the ranking
+    // downstream keys off the same quality signal anyway.
+    params.push(opts.limit ?? DEFAULT_SEARCH_CANDIDATE_LIMIT);
     const rows = this.db.prepare(`
       SELECT ne.node_id AS node_id, ne.embedding AS embedding
       FROM node_embeddings ne
       JOIN context_nodes n ON n.id = ne.node_id
       WHERE ${conditions.join(' AND ')}
+      ORDER BY n.quality_score DESC, n.updated_at DESC
+      LIMIT ?
     `).all(...params) as Array<{ node_id: string; embedding: string }>;
     return rows.map((row) => ({ nodeId: row.node_id, embedding: JSON.parse(row.embedding) }));
   }
