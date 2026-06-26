@@ -21,6 +21,24 @@ const LOCAL_EMBEDDING_DIM = 256;
 /** Embedding 维度（OpenAI text-embedding-3-small） */
 const OPENAI_EMBEDDING_DIM = 1536;
 
+/**
+ * Max inputs per embedding API request. Aliyun DashScope's OpenAI-compatible
+ * endpoint rejects batches larger than 10 (`batch size is invalid, it should
+ * not be larger than 10`); OpenAI itself allows up to 2048. Default to the
+ * safe DashScope limit so the common Aliyun setup works out of the box, and
+ * let users on OpenAI raise it via `MINDSTRATE_EMBEDDING_MAX_BATCH`. The
+ * embedder chunks any larger batch into requests of at most this size.
+ */
+const DEFAULT_EMBEDDING_MAX_BATCH = 10;
+
+const EMBEDDING_MAX_BATCH = ((): number => {
+  const raw = process.env['MINDSTRATE_EMBEDDING_MAX_BATCH'];
+  if (raw === undefined) return DEFAULT_EMBEDDING_MAX_BATCH;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_EMBEDDING_MAX_BATCH;
+  return parsed;
+})();
+
 export interface EmbedderMetrics {
   apiCalls: number;
   cacheHits: number;
@@ -204,23 +222,29 @@ export class Embedder {
     }
 
     try {
-      const response = await this.withApiSlot(async () => {
-        const client = await this.getClient();
-        this.metrics.apiCalls++;
-        return client.embeddings.create({
-          model: this.model,
-          input: missing,
+      // Chunk into requests of at most EMBEDDING_MAX_BATCH inputs: providers
+      // like Aliyun DashScope hard-cap batch size at 10, so a single large
+      // request (e.g. the 64-wide node-embedding backfill) would 400.
+      for (let start = 0; start < missing.length; start += EMBEDDING_MAX_BATCH) {
+        const chunk = missing.slice(start, start + EMBEDDING_MAX_BATCH);
+        const response = await this.withApiSlot(async () => {
+          const client = await this.getClient();
+          this.metrics.apiCalls++;
+          return client.embeddings.create({
+            model: this.model,
+            input: chunk,
+          });
         });
-      });
 
-      const embeddings = response.data
-        .sort((a, b) => a.index - b.index)
-        .map(d => d.embedding);
-      for (let i = 0; i < missing.length; i++) {
-        const text = missing[i];
-        const embedding = embeddings[i];
-        this.cache.set(this.cacheKey(text), embedding);
-        results.set(text, embedding);
+        const embeddings = response.data
+          .sort((a, b) => a.index - b.index)
+          .map(d => d.embedding);
+        for (let i = 0; i < chunk.length; i++) {
+          const text = chunk[i];
+          const embedding = embeddings[i];
+          this.cache.set(this.cacheKey(text), embedding);
+          results.set(text, embedding);
+        }
       }
       return texts.map((text) => results.get(text)!);
     } catch (err) {
