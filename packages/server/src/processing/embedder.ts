@@ -48,6 +48,13 @@ export interface EmbedderMetrics {
 export interface EmbedderOptions {
   client?: OpenAIClient;
   maxConcurrentRequests?: number;
+  /**
+   * Requested output dimensions, sent as the API `dimensions` parameter. Only
+   * set this for models that support custom dimensions (OpenAI v3 small/large,
+   * Aliyun text-embedding-v3/v4). Fixed-dimension models (v2/v1, ada-002)
+   * reject the parameter, so leave it undefined for them.
+   */
+  dimensions?: number;
 }
 
 export class Embedder {
@@ -56,6 +63,7 @@ export class Embedder {
   private model: string;
   private useLocal: boolean;
   private client?: OpenAIClient;
+  private dimensions?: number;
   private cache = new Map<string, number[]>();
   private pending = new Map<string, Promise<number[]>>();
   private metrics: EmbedderMetrics = { apiCalls: 0, cacheHits: 0, cacheMisses: 0 };
@@ -74,6 +82,7 @@ export class Embedder {
     this.model = model;
     this.useLocal = !apiKey;
     this.client = options.client;
+    this.dimensions = options.dimensions;
     this.maxConcurrentRequests = Math.max(options.maxConcurrentRequests ?? 2, 1);
   }
 
@@ -179,6 +188,7 @@ export class Embedder {
       const response = await client.embeddings.create({
         model: this.model,
         input: text,
+        ...(this.dimensions ? { dimensions: this.dimensions } : {}),
       });
       const embedding = response.data[0].embedding;
       this.cache.set(key, embedding);
@@ -233,6 +243,7 @@ export class Embedder {
           return client.embeddings.create({
             model: this.model,
             input: chunk,
+            ...(this.dimensions ? { dimensions: this.dimensions } : {}),
           });
         });
 

@@ -18,6 +18,20 @@ export interface LlmConfigLookup {
   getByProject(project: string): ProjectLlmConfig | null;
 }
 
+/**
+ * Whether an embedding model accepts a custom `dimensions` request parameter.
+ * Aliyun text-embedding-v3/v4 and OpenAI text-embedding-3-* support it;
+ * fixed-dimension models (Aliyun v2/v1 at 1536, OpenAI ada-002) reject it, so
+ * the param must be omitted for them. Defaults to false for unknown models —
+ * safer to omit than to send a param a provider might 400 on.
+ */
+export const supportsCustomDimensions = (model: string): boolean => {
+  const m = model.toLowerCase();
+  if (m.includes('text-embedding-v4') || m.includes('text-embedding-v3')) return true;
+  if (m.includes('text-embedding-3-small') || m.includes('text-embedding-3-large')) return true;
+  return false;
+};
+
 export class ProviderFactory {
   private readonly cache = new Map<string, ProjectProviders>();
   private offline?: ProjectProviders;
@@ -74,7 +88,13 @@ export class ProviderFactory {
     // DeepSeek, embeddings on Aliyun), which means a different API key. Fall
     // back to the main key when no separate embedding key is set.
     const embeddingApiKey = config.embeddingApiKey ?? config.openaiApiKey;
-    const embedder = new Embedder(embeddingApiKey, config.embeddingModel, embeddingBaseUrl);
+    const embedder = new Embedder(embeddingApiKey, config.embeddingModel, embeddingBaseUrl, {
+      // Only send the `dimensions` param to models that support custom output
+      // dims; fixed-dimension models (Aliyun v2/v1, OpenAI ada-002) reject it.
+      // Without this the configured embeddingDim was silently ignored and the
+      // model returned its default size.
+      dimensions: supportsCustomDimensions(config.embeddingModel) ? config.embeddingDim : undefined,
+    });
     const llmClientPromise = getOpenAIClient(config.openaiApiKey, config.llmBaseUrl).then((c) => c ?? null);
     return {
       embedder,

@@ -155,6 +155,41 @@ describe('Embedder', () => {
       expect(requestSizes).toEqual([10, 10, 5]);
       expect(Math.max(...requestSizes)).toBeLessThanOrEqual(10);
     });
+
+    it('sends the dimensions parameter when configured', async () => {
+      const seen: Array<number | undefined> = [];
+      const client: OpenAIClient = {
+        embeddings: {
+          create: async ({ input, dimensions }) => {
+            seen.push(dimensions);
+            const values = Array.isArray(input) ? input : [input];
+            return { data: values.map((_, index) => ({ embedding: [1, 2, 3], index })) };
+          },
+        },
+        chat: { completions: { create: async () => ({ choices: [] }) } },
+      };
+      const online = new Embedder('fake-key', 'text-embedding-v4', undefined, { client, dimensions: 1024 });
+      await online.embed('single');
+      await online.embedBatch(['a', 'b']);
+      expect(seen).toEqual([1024, 1024]);
+    });
+
+    it('omits dimensions when not configured', async () => {
+      const seen: Array<number | undefined> = [];
+      const client: OpenAIClient = {
+        embeddings: {
+          create: async ({ input, dimensions }) => {
+            seen.push(dimensions);
+            const values = Array.isArray(input) ? input : [input];
+            return { data: values.map((_, index) => ({ embedding: [1, 2, 3], index })) };
+          },
+        },
+        chat: { completions: { create: async () => ({ choices: [] }) } },
+      };
+      const online = new Embedder('fake-key', 'text-embedding-ada-002', undefined, { client });
+      await online.embed('single');
+      expect(seen).toEqual([undefined]);
+    });
   });
 });
 
