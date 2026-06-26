@@ -107,6 +107,13 @@ export interface ProjectGraphIndexOptions {
   onIndexProgress?: (event: ProjectGraphIndexProgress) => void;
   /** Diagnostics sink for skipped/failed files. Defaults to {@link noopLogger}. */
   logger?: Logger;
+  /**
+   * Writable base directory for the per-project extraction cache. When set, the
+   * cache lives under `<extractionCacheDir>/<project-slug>/` instead of inside
+   * the scanned tree — required when the scanned root is a read-only or
+   * root-owned bind-mount (e.g. a P4 workspace the scanner cannot write to).
+   */
+  extractionCacheDir?: string;
 }
 
 export interface ProjectGraphIndexProgress {
@@ -212,6 +219,12 @@ const streamProjectGraphIntoStore = (
   project: DetectedProject,
   options: ProjectGraphIndexOptions,
 ): ProjectGraphStreamStats => {
+  // Per-project extraction-cache directory under the writable data dir, when
+  // configured. Keeps the scanner's state out of the scanned tree (which may be
+  // a read-only / root-owned bind-mount such as a P4 workspace).
+  const extractionCacheDir = options.extractionCacheDir
+    ? path.join(options.extractionCacheDir, extractionCacheSlug(project.name))
+    : undefined;
   let skippedFiles = 0;
   const skippedByReason: Record<string, number> = {};
   const oversizedExamples: Array<{ path: string; sizeBytes: number }> = [];
@@ -245,8 +258,8 @@ const streamProjectGraphIntoStore = (
     createScriptRegexParserAdapter(),
     createTreeSitterSourceParser(),
   ];
-  const previousCache = readProjectGraphExtractionCache(project.root);
-  const cacheWriter = openProjectGraphExtractionCacheWriter(project.root);
+  const previousCache = readProjectGraphExtractionCache(project.root, extractionCacheDir);
+  const cacheWriter = openProjectGraphExtractionCacheWriter(project.root, extractionCacheDir);
 
   const writeResult = emptyWriteResult();
   const seenNodes = new Set<string>();
@@ -448,6 +461,18 @@ const parseFileFacts = (
     return null;
   }
 };
+
+/**
+ * Filesystem-safe slug for a project name, used as the extraction cache's
+ * per-project subdirectory under the data dir. Mirrors the vector-store slug
+ * rules so a project's cache and vectors sit under matching names.
+ */
+const extractionCacheSlug = (project: string): string =>
+  project
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'default';
 
 const projectGraphDeepRoots = (project: DetectedProject): string[] | undefined => {
   const roots = [

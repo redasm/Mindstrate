@@ -26,10 +26,28 @@ export interface ProjectGraphFileExtractionCache {
  * once they've been merged into the deduped in-memory graph.
  */
 const CACHE_VERSION = 3;
-const CACHE_PATH = path.join('.mindstrate', 'project-graph-extract-cache.ndjson');
+const CACHE_FILENAME = 'project-graph-extract-cache.ndjson';
+const CACHE_PATH = path.join('.mindstrate', CACHE_FILENAME);
 
-export const readProjectGraphExtractionCache = (projectRoot: string): ProjectGraphFileExtractionCache => {
-  const cachePath = path.join(projectRoot, CACHE_PATH);
+/**
+ * Resolve where a project's extraction cache lives.
+ *
+ * Default (local mode): inside the scanned tree at
+ * `<projectRoot>/.mindstrate/`. When `cacheDir` is given (team/Docker mode),
+ * the cache is written there instead — the scanned tree may be a read-only or
+ * root-owned bind-mount (e.g. a P4 workspace the scanner can't write to as
+ * uid 1001), and the scanner's own state has no business living in the user's
+ * source tree anyway. `cacheDir` should be a writable, per-project directory
+ * under MINDSTRATE_DATA_DIR.
+ */
+const resolveCachePath = (projectRoot: string, cacheDir?: string): string =>
+  cacheDir ? path.join(cacheDir, CACHE_FILENAME) : path.join(projectRoot, CACHE_PATH);
+
+export const readProjectGraphExtractionCache = (
+  projectRoot: string,
+  cacheDir?: string,
+): ProjectGraphFileExtractionCache => {
+  const cachePath = resolveCachePath(projectRoot, cacheDir);
   let raw: string;
   try {
     raw = fs.readFileSync(cachePath, 'utf8');
@@ -83,8 +101,9 @@ export interface ProjectGraphExtractionCacheWriter {
  */
 export const openProjectGraphExtractionCacheWriter = (
   projectRoot: string,
+  cacheDir?: string,
 ): ProjectGraphExtractionCacheWriter => {
-  const cachePath = path.join(projectRoot, CACHE_PATH);
+  const cachePath = resolveCachePath(projectRoot, cacheDir);
   fs.mkdirSync(path.dirname(cachePath), { recursive: true });
   const fd = fs.openSync(cachePath, 'w');
   fs.writeSync(fd, `${JSON.stringify({ version: CACHE_VERSION })}\n`);

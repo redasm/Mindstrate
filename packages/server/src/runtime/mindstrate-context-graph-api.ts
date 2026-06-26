@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import type {
   FeedbackEvent,
   GraphKnowledgeSearchResult,
@@ -268,6 +269,10 @@ export class MindstrateContextGraphApi {
   indexProjectGraph(project: DetectedProject, options?: ProjectGraphIndexOptions): ProjectGraphIndexResult {
     return indexProjectGraph(this.services.contextGraphStore, project, {
       logger: this.services.logger,
+      // Keep the extraction cache on the writable data volume, not in the
+      // scanned tree — a P4 workspace bind-mount is often root-owned and the
+      // scanner (uid 1001) can't write `<root>/.mindstrate/` there.
+      extractionCacheDir: path.join(this.services.config.dataDir, 'project-graph-cache'),
       ...options,
     });
   }
