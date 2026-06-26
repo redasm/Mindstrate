@@ -161,6 +161,11 @@ export class MindstrateContextGraphApi {
     return this.services.contextGraphStore.listKnownProjects();
   }
 
+  /** Count only scanner-extracted project-graph nodes for a project. */
+  countProjectGraphNodes(project: string): number {
+    return this.services.contextGraphStore.countProjectGraphNodes(project);
+  }
+
   listConflictRecords(project?: string, limit?: number): ConflictRecord[] {
     return this.services.contextGraphStore.listConflictRecords({ project, limit });
   }

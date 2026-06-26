@@ -329,13 +329,10 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
 
   const handleRescan = async (source: ScannerSourceView) => {
     if (!confirm(t.rescanConfirm.replace('{NAME}', source.name))) return;
-    // Second prompt: optionally wipe orphan graph nodes (files deleted since the
-    // last scan). OK = wipe, Cancel = keep (plain re-index overwrites in place).
-    const wipe = confirm(t.rescanWipeConfirm);
     const res = await fetch(`/api/admin/scanner-sources/${encodeURIComponent(source.id)}/rescan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wipe }),
+      body: '{}',
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
@@ -343,11 +340,7 @@ export function ScannerSourcesClient({ initialSources, knownProjects }: Props) {
       return;
     }
     const body = await res.json().catch(() => ({})) as { graphNodesDeleted?: number };
-    setNotice(
-      wipe
-        ? t.rescanQueuedWiped.replace('{COUNT}', String(body.graphNodesDeleted ?? 0))
-        : t.rescanQueued,
-    );
+    setNotice(t.rescanQueued.replace('{COUNT}', String(body.graphNodesDeleted ?? 0)));
   };
 
   return (

@@ -363,6 +363,22 @@ export class ContextGraphStore {
     })();
   }
 
+  /**
+   * Count only scanner-extracted (project-graph) nodes of a project. The repo
+   * scanner uses this to decide whether a first-run P4 index already happened,
+   * so it must ignore manually-authored knowledge — otherwise a project that
+   * has any hand-written rule would look "already indexed" and a forced
+   * re-scan (cursor reset) would be skipped.
+   */
+  countProjectGraphNodes(project: string): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS c FROM context_nodes
+      WHERE LOWER(project) = LOWER(?)
+        AND json_extract(metadata, '$.${PROJECT_GRAPH_METADATA_KEYS.projectGraph}') = 1
+    `).get(project) as { c: number };
+    return row.c;
+  }
+
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
     return this.nodes.update(id, input);
   }

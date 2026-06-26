@@ -699,9 +699,11 @@ export class RepoScannerService {
    * blocked cursor setup) skip the expensive re-index.
    */
   private projectGraphExists(project: string): boolean {
-    return this.memory.maintenance.getProjectBreakdown().some(
-      (entry) => entry.project === project && entry.entries > 0,
-    );
+    // Count only scanner-extracted project-graph nodes — not manually-authored
+    // knowledge. Otherwise a project with any hand-written rule would look
+    // "already indexed", and a forced re-scan (cursor reset, which clears those
+    // project-graph nodes first) would still be skipped on the P4 path.
+    return this.memory.context.countProjectGraphNodes(project) > 0;
   }
 
   private async executeP4Source(source: ScanSource, runId: string): Promise<ScanExecutionResult> {

@@ -240,6 +240,34 @@ describe('ContextGraphStore', () => {
     expect(store.getNodeEmbedding(manual.id, 'm')).not.toBeNull();
   });
 
+  it('countProjectGraphNodes counts only scanner-extracted nodes', () => {
+    store.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'src/a.ts',
+      content: 'file: src/a.ts',
+      project: 'demo',
+      metadata: { projectGraph: true, kind: 'file' },
+    });
+    store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'manual rule',
+      content: 'keep me',
+      project: 'demo',
+    });
+
+    expect(store.countProjectGraphNodes('demo')).toBe(1);
+    expect(store.countProjectGraphNodes('DEMO')).toBe(1); // case-insensitive
+    expect(store.countProjectGraphNodes('other')).toBe(0);
+
+    // After wiping project-graph nodes the count is 0 even though manual
+    // knowledge remains — this is what lets a forced P4 re-scan rebuild.
+    store.deleteProjectGraphNodes('demo');
+    expect(store.countProjectGraphNodes('demo')).toBe(0);
+    expect(store.listNodes({ project: 'demo' })).toHaveLength(1);
+  });
+
   it('queryProjectSubgraph: skeleton, focus neighborhood, and kind filter', () => {
     const pgNode = (title: string, kind: string) => store.createNode({
       substrateType: SubstrateType.SNAPSHOT,
