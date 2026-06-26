@@ -206,4 +206,36 @@ describe('ProjectedKnowledgeSearch', () => {
     });
     expect(optedOut).toHaveLength(0);
   });
+
+  it('ranks hand-authored knowledge above graph-derived snapshots at comparable relevance', async () => {
+    // A project-graph SNAPSHOT and a hand-authored RULE both match the query
+    // term in their title. The snapshot (low knowledge layer) must not bury the
+    // rule: layer-weighted ranking surfaces real knowledge first.
+    graphStore.createNode({
+      id: 'pg:demo:component:MarkerLayer',
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'marker component',
+      content: 'component: marker',
+      tags: ['project-graph', 'component'],
+      project: 'demo',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 80,
+      confidence: 0.9,
+      metadata: { projectGraph: true, kind: 'component' },
+    });
+    const rule = graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'marker numbering convention',
+      content: 'Map markers are numbered sequentially per session.',
+      project: 'demo',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 80,
+      confidence: 0.9,
+    });
+
+    const results = await search.search('marker', { project: 'demo', topK: 5 });
+    expect(results[0].view.id).toBe(rule.id);
+  });
 });

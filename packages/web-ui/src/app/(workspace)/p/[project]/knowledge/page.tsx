@@ -40,7 +40,7 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const qs = new URLSearchParams({ project: decoded, limit: '200' });
+      const qs = new URLSearchParams({ project: decoded, limit: '1000' });
       const resp = await fetch(`/api/knowledge?${qs}`);
       if (!resp.ok) {
         setEntries([]);

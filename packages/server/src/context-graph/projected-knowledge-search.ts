@@ -103,9 +103,17 @@ export class ProjectedKnowledgeSearch {
       }
     }
 
+    // Rank by relevance *weighted by substrate layer*, not raw relevance.
+    // `view.priorityScore` already encodes the knowledge hierarchy (RULE 0.9 >
+    // SUMMARY 0.62 > SNAPSHOT 0.45 — see knowledge-projector). Without this, a
+    // weakly-relevant project-graph SNAPSHOT (e.g. a dependency node at 0.2
+    // cosine) outranks a hand-authored RULE/SUMMARY that matches the intent
+    // less literally. Folding the layer weight in lets real knowledge surface
+    // above graph-derived facts at comparable relevance, while a strongly
+    // relevant graph node can still win on raw score.
     return Array.from(merged.values())
       .filter((result) => result.relevanceScore > 0)
-      .sort((a, b) => b.relevanceScore - a.relevanceScore)
+      .sort((a, b) => rankScore(b) - rankScore(a))
       .slice(0, topK);
   }
 
@@ -194,6 +202,20 @@ export class ProjectedKnowledgeSearch {
     }
     return best;
   }
+}
+
+/**
+ * Layer-weighted ranking score: relevance scaled by how high the node sits in
+ * the knowledge hierarchy. `view.priorityScore` runs ~0.3 (EPISODE) to ~1.2
+ * (AXIOM with boosts); normalizing to a 0.5–1.0 multiplier means a top-layer
+ * RULE keeps ~full relevance while a SNAPSHOT is damped to ~0.7×. The effect:
+ * hand-authored knowledge beats graph-derived snapshots at similar relevance,
+ * but a much-more-relevant snapshot can still outrank a barely-relevant rule.
+ */
+function rankScore(result: GraphKnowledgeSearchResult): number {
+  const priority = Math.min(Math.max(result.view.priorityScore, 0), 1);
+  const layerWeight = 0.5 + 0.5 * priority;
+  return result.relevanceScore * layerWeight;
 }
 
 /**
