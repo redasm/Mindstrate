@@ -2,7 +2,8 @@ import { cosineSimilarity } from '../processing/vector-distance.js';
 import type { ProviderFactory } from '../processing/provider-factory.js';
 import { lexicalOverlap } from './context-clustering.js';
 import type { ContextGraphStore } from './context-graph-store.js';
-import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
+import { runSubstrateCompression } from './substrate-compression.js';
+import { synthesizeCompressedNode } from './compression-llm-synthesis.js';
 import {
   ContextDomainType,
   SubstrateType,
@@ -36,7 +37,14 @@ export class PatternCompressor {
   async compressProjectSummaries(
     options: PatternCompressionOptions = {},
   ): Promise<PatternCompressionResult> {
-    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
+    const providers = this.providerFactory.forProject(options.project ?? '');
+    const embedder = providers.embedder;
+    // Only abstract patterns when we can synthesize with an LLM; offline/no-LLM
+    // skips rather than emitting "Abstracted from N summaries" template shells.
+    const llmClient = await providers.llmClientPromise;
+    if (embedder.isLocalMode() || !llmClient) {
+      return { scannedSummaries: 0, patternNodesCreated: 0, clusters: [] };
+    }
     // Default of 1 positive feedback (was 3) accepts the single-user
     // single-project flow: a SUMMARY that the agent reported as
     // `adopted` even once is already a credible PATTERN candidate.
@@ -56,6 +64,13 @@ export class PatternCompressor {
       confidence: 0.8,
       qualityScore: 80,
       defaultSimilarityThreshold: 0.8,
+      requireIntraClusterCohesion: true,
+      synthesize: (cluster) => synthesizeCompressedNode({
+        client: llmClient,
+        model: providers.llmModel,
+        targetType: SubstrateType.PATTERN,
+        cluster,
+      }),
       title: buildPatternTitle,
       content: buildPatternContent,
       project: (cluster) => isCrossProjectCluster(cluster, minDistinctProjects) ? undefined : cluster[0].project,
@@ -90,10 +105,8 @@ const buildPatternTitle = (cluster: ContextNode[]): string => {
   return `Session pattern: ${project} (${cluster.length} summaries)`;
 };
 
-const buildPatternContent = (cluster: ContextNode[]): string => buildClusterContent(
-  `Abstracted from ${cluster.length} similar session summaries.`,
-  cluster,
-);
+const buildPatternContent = (cluster: ContextNode[]): string =>
+  `Abstracted from ${cluster.length} session summary(ies).`;
 
 const isCrossProjectCluster = (cluster: ContextNode[], minDistinctProjects: number): boolean => {
   const projects = new Set(cluster.map((node) => node.project).filter(Boolean));

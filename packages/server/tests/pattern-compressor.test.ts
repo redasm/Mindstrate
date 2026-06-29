@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { PatternCompressor } from '../src/context-graph/pattern-compressor.js';
 import { ProviderFactory } from '../src/processing/provider-factory.js';
+import { fakeHighOrderProviderFactory } from './high-order-test-support.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 import {
   ContextDomainType,
@@ -10,6 +11,9 @@ import {
   ContextRelationType,
   SubstrateType,
 } from '@mindstrate/protocol/models';
+
+const SYNTHESIS = JSON.stringify({ related: true, title: 'Synthesized pattern', content: 'A real pattern body.' });
+const vectorFor = (text: string) => (text.includes('hydration') ? [1, 0, 0, 0] : [0, 1, 0, 0]);
 
 describe('PatternCompressor', () => {
   let tempDir: string;
@@ -19,7 +23,10 @@ describe('PatternCompressor', () => {
   beforeEach(() => {
     tempDir = createTempDir();
     graphStore = new ContextGraphStore(path.join(tempDir, 'context-graph.db'));
-    compressor = new PatternCompressor(graphStore, ProviderFactory.offline());
+    compressor = new PatternCompressor(
+      graphStore,
+      fakeHighOrderProviderFactory({ vectorFor, chatContent: SYNTHESIS }) as never,
+    );
   });
 
   afterEach(() => {
@@ -27,28 +34,23 @@ describe('PatternCompressor', () => {
     removeTempDir(tempDir);
   });
 
-  it('creates a pattern node from similar summaries', async () => {
+  const seedSummary = (title: string, content: string, project = 'mindstrate') =>
     graphStore.createNode({
       substrateType: SubstrateType.SUMMARY,
       domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Summary A',
-      content: 'Compressed from 2 similar session snapshots.\nHydration mismatch fixed in SSR rendering.',
-      project: 'mindstrate',
+      title,
+      content,
+      project,
       status: ContextNodeStatus.ACTIVE,
     });
-    graphStore.createNode({
-      substrateType: SubstrateType.SUMMARY,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Summary B',
-      content: 'Compressed from 3 similar session snapshots.\nHydration mismatch resolved in SSR rendering.',
-      project: 'mindstrate',
-      status: ContextNodeStatus.ACTIVE,
-    });
+
+  it('creates an LLM-synthesized pattern node from similar summaries', async () => {
+    seedSummary('Summary A', 'Hydration mismatch fixed in SSR rendering.');
+    seedSummary('Summary B', 'Hydration mismatch resolved in SSR rendering.');
 
     const result = await compressor.compressProjectSummaries({
       project: 'mindstrate',
       minClusterSize: 2,
-      similarityThreshold: 0.6,
     });
 
     expect(result.patternNodesCreated).toBe(1);
@@ -60,21 +62,41 @@ describe('PatternCompressor', () => {
       limit: 10,
     });
     expect(patterns).toHaveLength(1);
-    expect(patterns[0].content).toContain('Abstracted from 2 similar session summaries.');
+    expect(patterns[0].title).toBe('Synthesized pattern');
+    expect(patterns[0].content).toBe('A real pattern body.');
+    expect(patterns[0].metadata?.llmSynthesized).toBe(true);
 
     const incoming = graphStore.listIncomingEdges(patterns[0].id, ContextRelationType.GENERALIZES);
     expect(incoming).toHaveLength(2);
   });
 
+  it('skips a cluster the LLM judges unrelated (no template shell written)', async () => {
+    const noSynth = new PatternCompressor(
+      graphStore,
+      fakeHighOrderProviderFactory({ vectorFor, chatContent: JSON.stringify({ related: false }) }) as never,
+    );
+    seedSummary('Summary A', 'Hydration mismatch fixed in SSR rendering.');
+    seedSummary('Summary B', 'Hydration mismatch resolved in SSR rendering.');
+
+    const result = await noSynth.compressProjectSummaries({ project: 'mindstrate', minClusterSize: 2 });
+
+    expect(result.patternNodesCreated).toBe(0);
+    expect(graphStore.listNodes({ project: 'mindstrate', substrateType: SubstrateType.PATTERN, limit: 10 })).toHaveLength(0);
+  });
+
+  it('produces nothing when there is no LLM (offline)', async () => {
+    compressor = new PatternCompressor(graphStore, ProviderFactory.offline());
+    const s = seedSummary('Adopted summary', 'Repeatedly adopted hydration-safe SSR guidance.');
+    graphStore.updateNode(s.id, { positiveFeedback: 4 });
+
+    const result = await compressor.compressProjectSummaries({ project: 'mindstrate' });
+
+    expect(result.scannedSummaries).toBe(0);
+    expect(result.patternNodesCreated).toBe(0);
+  });
+
   it('does not recreate patterns for summaries that already have a pattern parent', async () => {
-    const summary = graphStore.createNode({
-      substrateType: SubstrateType.SUMMARY,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Summary A',
-      content: 'Hydration mismatch fixed in SSR rendering.',
-      project: 'mindstrate',
-      status: ContextNodeStatus.ACTIVE,
-    });
+    const summary = seedSummary('Summary A', 'Hydration mismatch fixed in SSR rendering.');
     const pattern = graphStore.createNode({
       substrateType: SubstrateType.PATTERN,
       domainType: ContextDomainType.PATTERN,
@@ -93,22 +115,14 @@ describe('PatternCompressor', () => {
     const result = await compressor.compressProjectSummaries({
       project: 'mindstrate',
       minClusterSize: 1,
-      similarityThreshold: 0.1,
     });
 
     expect(result.scannedSummaries).toBe(0);
     expect(result.patternNodesCreated).toBe(0);
   });
 
-  it('promotes highly adopted summaries without waiting for a similarity cluster', async () => {
-    const summary = graphStore.createNode({
-      substrateType: SubstrateType.SUMMARY,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Adopted summary',
-      content: 'Repeatedly adopted guidance for hydration-safe SSR rendering.',
-      project: 'mindstrate',
-      status: ContextNodeStatus.ACTIVE,
-    });
+  it('promotes a highly adopted singleton summary into an LLM-refined pattern', async () => {
+    const summary = seedSummary('Adopted summary', 'Repeatedly adopted hydration-safe SSR guidance.');
     graphStore.updateNode(summary.id, { positiveFeedback: 4 });
 
     const result = await compressor.compressProjectSummaries({
@@ -125,31 +139,17 @@ describe('PatternCompressor', () => {
     });
     expect(patterns[0].metadata?.['promotionReason']).toBe('high_positive_feedback');
     expect(patterns[0].metadata?.['sourceSummaryIds']).toEqual([summary.id]);
+    expect(patterns[0].metadata?.llmSynthesized).toBe(true);
     expect(graphStore.listIncomingEdges(patterns[0].id, ContextRelationType.GENERALIZES)).toHaveLength(1);
   });
 
   it('promotes summaries repeated across projects as a cross-project pattern', async () => {
-    graphStore.createNode({
-      substrateType: SubstrateType.SUMMARY,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Web summary',
-      content: 'Hydration-safe SSR requires deterministic server and client markup.',
-      project: 'web-app',
-      status: ContextNodeStatus.ACTIVE,
-    });
-    graphStore.createNode({
-      substrateType: SubstrateType.SUMMARY,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Admin summary',
-      content: 'Hydration-safe SSR needs deterministic client and server markup.',
-      project: 'admin-app',
-      status: ContextNodeStatus.ACTIVE,
-    });
+    seedSummary('Web summary', 'Hydration-safe SSR requires deterministic server and client markup.', 'web-app');
+    seedSummary('Admin summary', 'Hydration-safe SSR needs deterministic client and server markup.', 'admin-app');
 
     const result = await compressor.compressProjectSummaries({
       minClusterSize: 2,
       minDistinctProjects: 2,
-      similarityThreshold: 0.6,
     });
 
     expect(result.patternNodesCreated).toBe(1);

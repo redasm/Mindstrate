@@ -267,7 +267,11 @@ describe('Mindstrate', () => {
       expect(s2.status).toBe('active');
     });
 
-    it('should auto-compress similar session snapshots into a summary node', async () => {
+    it('does not auto-compress snapshots into a summary without an LLM', async () => {
+      // Mid-tier compression now requires an LLM to synthesize real content;
+      // offline (the default test instance) it produces nothing rather than
+      // emitting "Compressed from N snapshots" template shells. The lineage
+      // stays at the SNAPSHOT layer until an LLM is configured.
       const first = await memory.sessions.startSession({ project: 'proj' });
       memory.sessions.saveObservation({
         sessionId: first.id,
@@ -291,8 +295,7 @@ describe('Mindstrate', () => {
         limit: 10,
       });
 
-      expect(summaries.length).toBeGreaterThan(0);
-      expect(summaries[0].content).toContain('Compressed from');
+      expect(summaries).toHaveLength(0);
     });
   });
 

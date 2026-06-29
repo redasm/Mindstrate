@@ -9,7 +9,8 @@ import { createMemory } from '../memory-factory.js';
 export const maintainCommand = new Command('doctor')
   .description('Run maintenance and health checks')
   .option('--rebuild-vectors', 'Re-embed all node embeddings (fixes embedding-model/dimension drift)')
-  .option('-p, --project <name>', 'Limit --rebuild-vectors to a single project')
+  .option('--prune-template-knowledge', 'Delete template-placeholder compression nodes (pseudo summary/pattern/rule/skill) left before LLM synthesis was required')
+  .option('-p, --project <name>', 'Limit --rebuild-vectors / --prune-template-knowledge to a single project')
   .action(async (options) => {
     const memory = createMemory();
 
@@ -29,6 +30,16 @@ export const maintainCommand = new Command('doctor')
           );
         }
         console.log('\nNode embeddings rebuilt.');
+        return;
+      }
+
+      if (options.pruneTemplateKnowledge) {
+        console.log('Pruning template-placeholder compression nodes...\n');
+        const mid = memory.maintenance.pruneTemplateCompressedNodes(options.project);
+        const high = memory.maintenance.pruneTemplateHighOrderNodes(options.project);
+        console.log(`  Mid-tier (summary/pattern/rule): ${mid.nodesDeleted} deleted`);
+        console.log(`  High-order (skill/heuristic/axiom): ${high.nodesDeleted} deleted`);
+        console.log(`\nTotal: ${mid.nodesDeleted + high.nodesDeleted} template node(s) pruned.`);
         return;
       }
 

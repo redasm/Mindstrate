@@ -107,15 +107,6 @@ export const runSubstrateCompression = async (
   };
 };
 
-export const buildClusterContent = (
-  intro: string,
-  cluster: ContextNode[],
-): string => [
-  intro,
-  '',
-  ...cluster.map((node, index) => `${index + 1}. ${node.title}\n${node.content.split('\n')[0] ?? node.title}`),
-].join('\n');
-
 const createTargetNode = (
   graphStore: ContextGraphStore,
   spec: SubstrateCompressionSpec,

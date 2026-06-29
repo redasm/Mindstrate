@@ -35,6 +35,16 @@ export class MindstrateMaintenanceApi {
   }
 
   /**
+   * Remove template-placeholder mid-tier compression nodes (summary/pattern/
+   * rule whose content is still a "Compressed/Abstracted/Generalized from N"
+   * template, not an LLM synthesis). Cleans up the pseudo-summary/pattern/rule
+   * noise produced before mid-tier compression required real LLM synthesis.
+   */
+  pruneTemplateCompressedNodes(project?: string): { nodesDeleted: number } {
+    return this.services.contextGraphStore.deleteTemplateCompressedNodes(project);
+  }
+
+  /**
    * Permanently delete a project: its context-graph rows
    * (nodes/edges/embeddings/projections/events/conflicts/metabolism), its
    * scan-source configs (so it isn't rebuilt on the next scan), and its

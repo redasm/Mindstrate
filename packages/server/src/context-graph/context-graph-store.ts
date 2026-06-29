@@ -414,6 +414,36 @@ export class ContextGraphStore {
     })();
   }
 
+  /**
+   * Delete template-placeholder mid-tier compression nodes:
+   * summary/pattern/rule rows tagged with their compression tag whose content
+   * is still a `Compressed/Abstracted/Generalized from N ...` template (i.e.
+   * not LLM-synthesized). Removes their GENERALIZES edges, embeddings, and
+   * projections too. Cleans up the pseudo-summary/pattern/rule noise produced
+   * before mid-tier compression required real LLM synthesis.
+   */
+  deleteTemplateCompressedNodes(project?: string): { nodesDeleted: number } {
+    const conditions = [
+      "(json_extract(metadata, '$.llmSynthesized') IS NULL OR json_extract(metadata, '$.llmSynthesized') <> 1)",
+      "(content LIKE 'Compressed from %' OR content LIKE 'Abstracted from %' OR content LIKE 'Generalized from %')",
+      `EXISTS (SELECT 1 FROM json_each(tags) WHERE value IN ('summary-compression', 'pattern-compression', 'rule-compression'))`,
+    ];
+    const params: unknown[] = [];
+    if (project) {
+      conditions.push('LOWER(project) = LOWER(?)');
+      params.push(project);
+    }
+    const where = conditions.join(' AND ');
+    const sub = `SELECT id FROM context_nodes WHERE ${where}`;
+    return this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM context_edges WHERE source_id IN (${sub}) OR target_id IN (${sub})`).run(...params, ...params);
+      this.db.prepare(`DELETE FROM node_embeddings WHERE node_id IN (${sub})`).run(...params);
+      this.db.prepare(`DELETE FROM projection_records WHERE node_id IN (${sub})`).run(...params);
+      const nodesDeleted = this.db.prepare(`DELETE FROM context_nodes WHERE ${where}`).run(...params).changes;
+      return { nodesDeleted };
+    })();
+  }
+
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
     return this.nodes.update(id, input);
   }

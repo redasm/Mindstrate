@@ -13,17 +13,18 @@ export class MetabolicCompressor {
   }) {}
 
   async run(options: MetabolismStageOptions = {}): Promise<CompressionStageResult> {
+    // Each compressor uses its own (high) defaultSimilarityThreshold and now
+    // requires intra-cluster cohesion + LLM synthesis, so we no longer override
+    // the threshold down here — the old 0.6 floors fused unrelated session
+    // items into one bogus summary/pattern/rule.
     const summary = await this.deps.summaryCompressor.compressProjectSnapshots({
       project: options.project,
-      similarityThreshold: 0.6,
     });
     const pattern = await this.deps.patternCompressor.compressProjectSummaries({
       project: options.project,
-      similarityThreshold: 0.6,
     });
     const rule = await this.deps.ruleCompressor.compressProjectPatterns({
       project: options.project,
-      similarityThreshold: 0.75,
     });
     const highOrder = this.deps.highOrderCompressor
       ? {

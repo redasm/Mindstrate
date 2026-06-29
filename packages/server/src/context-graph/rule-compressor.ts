@@ -1,6 +1,7 @@
 import type { ProviderFactory } from '../processing/provider-factory.js';
 import type { ContextGraphStore } from './context-graph-store.js';
-import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
+import { runSubstrateCompression } from './substrate-compression.js';
+import { synthesizeCompressedNode } from './compression-llm-synthesis.js';
 import {
   ContextDomainType,
   SubstrateType,
@@ -33,7 +34,16 @@ export class RuleCompressor {
   async compressProjectPatterns(
     options: RuleCompressionOptions = {},
   ): Promise<RuleCompressionResult> {
-    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
+    const providers = this.providerFactory.forProject(options.project ?? '');
+    const embedder = providers.embedder;
+    // A RULE shapes future retrieval and is template-noise without real
+    // synthesis (unrelated patterns fused into one shell). Only form rules when
+    // we can cluster on real vectors and synthesize with an LLM; offline/no-LLM
+    // skips entirely rather than emitting "Generalized from N patterns" shells.
+    const llmClient = await providers.llmClientPromise;
+    if (embedder.isLocalMode() || !llmClient) {
+      return { scannedPatterns: 0, ruleNodesCreated: 0, clusters: [] };
+    }
     // Default of 2 positive feedback (was 4): a PATTERN with at least
     // two `adopted` signals is a credible RULE candidate. Four was
     // calibrated for team-server multi-user mode where many agents
@@ -50,6 +60,18 @@ export class RuleCompressor {
       confidence: 0.85,
       qualityScore: 85,
       defaultSimilarityThreshold: 0.88,
+      // Require cluster-wide cohesion, not just seed similarity, so loosely
+      // related patterns can't accrete into one bogus rule.
+      requireIntraClusterCohesion: true,
+      // LLM synthesis is the title/content source; null skips the cluster so a
+      // spurious grouping never becomes a rule. Template fns kept for the type
+      // contract but synthesize overrides them on success.
+      synthesize: (cluster) => synthesizeCompressedNode({
+        client: llmClient,
+        model: providers.llmModel,
+        targetType: SubstrateType.RULE,
+        cluster,
+      }),
       title: buildRuleTitle,
       content: buildRuleContent,
       metadata: (cluster) => ({
@@ -78,7 +100,5 @@ const buildRuleTitle = (cluster: ContextNode[]): string => {
   return `Session rule: ${project} (${cluster.length} patterns)`;
 };
 
-const buildRuleContent = (cluster: ContextNode[]): string => buildClusterContent(
-  `Generalized from ${cluster.length} highly similar session patterns.`,
-  cluster,
-);
+const buildRuleContent = (cluster: ContextNode[]): string =>
+  `Generalized from ${cluster.length} session pattern(s).`;
