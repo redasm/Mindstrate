@@ -167,6 +167,7 @@ export const indexProjectGraph = (
     edgesCreated: stats.writeResult.edgesCreated + bindingResult.edgesCreated,
     edgesUpdated: stats.writeResult.edgesUpdated + bindingResult.edgesUpdated,
     edgesSkipped: stats.writeResult.edgesSkipped + bindingResult.edgesSkipped,
+    edgesOrphaned: stats.writeResult.edgesOrphaned + bindingResult.edgesOrphaned,
     filesScanned: stats.filesScanned,
     nodesExtracted: stats.nodeCount,
     edgesExtracted: stats.edgeCount + bindingEdges,

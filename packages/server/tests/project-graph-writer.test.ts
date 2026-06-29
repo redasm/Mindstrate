@@ -37,6 +37,7 @@ describe('project graph ECS writer', () => {
       edgesCreated: 1,
       edgesUpdated: 0,
       edgesSkipped: 0,
+      edgesOrphaned: 0,
     });
     expect(writeProjectGraphExtraction(store, extraction)).toEqual({
       nodesCreated: 0,
@@ -44,6 +45,7 @@ describe('project graph ECS writer', () => {
       edgesCreated: 0,
       edgesUpdated: 0,
       edgesSkipped: 1,
+      edgesOrphaned: 0,
     });
 
     const nodes = store.listNodes({ project: 'demo', limit: 10 });
@@ -208,6 +210,7 @@ describe('project graph ECS writer', () => {
     const failingStore = {
       transaction: (fn: () => unknown) => fn(),
       getEdgeById: () => null,
+      getNodeById: () => ({ id: 'x' }),
       createEdge: () => {
         throw new Error('Invalid argument');
       },
@@ -219,6 +222,39 @@ describe('project graph ECS writer', () => {
     })).toThrow(
       'writing project graph edge defines (pg:demo:file:src/App.tsx -> pg:demo:function:src/App.tsx#App, pge:defines:file-app:function-app) failed: Invalid argument',
     );
+  });
+
+  it('drops an edge whose endpoint node is missing instead of failing the write', () => {
+    const result = writeProjectGraphExtraction(store, {
+      project: 'demo',
+      nodes: [
+        {
+          id: 'pg:demo:file:src/App.tsx',
+          kind: ProjectGraphNodeKind.FILE,
+          label: 'src/App.tsx',
+          project: 'demo',
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'src/App.tsx', extractorId: 'tree-sitter-source' }],
+        },
+      ],
+      edges: [
+        // target node is not in the extraction (and not in the DB) — must be
+        // dropped as orphaned rather than throwing an FK error.
+        {
+          id: 'pge:contains:dir:missing-file',
+          sourceId: 'pg:demo:file:src/App.tsx',
+          targetId: 'pg:demo:file:does/not/exist.ts',
+          kind: ProjectGraphEdgeKind.CONTAINS,
+          provenance: ProjectGraphProvenance.EXTRACTED,
+          evidence: [{ path: 'src/App.tsx', extractorId: 'tree-sitter-source' }],
+        },
+      ],
+    });
+
+    expect(result.nodesCreated).toBe(1);
+    expect(result.edgesCreated).toBe(0);
+    expect(result.edgesOrphaned).toBe(1);
+    expect(store.listEdges({ limit: 10 })).toHaveLength(0);
   });
 
   it('archives facts owned by a deleted file', () => {
