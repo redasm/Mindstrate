@@ -96,4 +96,62 @@ describe('ConflictDetector', () => {
     expect(secondRun.conflictsDetected).toBe(0);
     expect(graphStore.listConflictRecords({ project: 'mindstrate' })).toHaveLength(1);
   });
+
+  it('ignores descriptive snapshot substrate even when content looks contradictory', async () => {
+    // Two near-identical project snapshots: both contain affirmation ("use")
+    // and negation ("do not") markers, which the keyword heuristic would flag.
+    const snapshotContent =
+      'Use the repository layer for all DB writes. Do not edit generated output manually. Never call the driver directly.';
+    graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.PROJECT_SNAPSHOT,
+      title: 'Project Snapshot',
+      content: snapshotContent,
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    graphStore.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.SESSION_SUMMARY,
+      title: 'Assimilated snapshot',
+      content: snapshotContent,
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+
+    const result = await detector.detectConflicts({ project: 'mindstrate', similarityThreshold: 0.55 });
+
+    expect(result.scannedNodes).toBe(0);
+    expect(result.conflictsDetected).toBe(0);
+    expect(graphStore.listConflictRecords({ project: 'mindstrate' })).toHaveLength(0);
+  });
+
+  it('skips near-duplicate rules above the duplicate threshold', async () => {
+    const content = 'Use hydration-safe SSR but do not run browser checks during render.';
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Rule A',
+      content,
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Rule B (duplicate)',
+      content,
+      project: 'mindstrate',
+      status: ContextNodeStatus.ACTIVE,
+    });
+
+    const result = await detector.detectConflicts({
+      project: 'mindstrate',
+      similarityThreshold: 0.55,
+      duplicateThreshold: 0.97,
+    });
+
+    expect(result.conflictsDetected).toBe(0);
+    expect(graphStore.listConflictRecords({ project: 'mindstrate' })).toHaveLength(0);
+  });
 });
