@@ -45,7 +45,8 @@ export const synthesizeHighOrderNode = async (
     const response = await input.client.chat.completions.create({
       model: input.model,
       temperature: 0.2,
-      max_tokens: 700,
+      // Headroom for reasoning models (thinking tokens precede the JSON).
+      max_tokens: 3000,
       response_format: { type: 'json_object' },
       messages: [
         {
