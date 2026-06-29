@@ -15,6 +15,7 @@ export interface KnowledgeCardData {
   status?: string;
   tags?: string[];
   context?: { project?: string; language?: string };
+  createdAt?: string;
   updatedAt?: string;
   refCount?: number;
 }

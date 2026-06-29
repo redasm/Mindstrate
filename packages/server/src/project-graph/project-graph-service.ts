@@ -29,10 +29,12 @@ import { createProjectGraphNodeId } from './node-id.js';
 import type { ParserAdapter, ParserCapture } from './parser-adapter.js';
 import {
   buildProjectGraphScanPlan,
+  findUnscannedTopLevelDirectories,
   scanProjectFiles,
   type ProjectFileInventoryEntry,
   type ProjectGraphScanPlan,
   type ProjectGraphScanProgress,
+  type ProjectGraphSkipEvent,
 } from './scanner.js';
 import { createTreeSitterSourceParser } from './tree-sitter-source-parser.js';
 import { createUnrealCppParserAdapter } from './unreal-cpp-parser-adapter.js';
@@ -73,11 +75,31 @@ import {
 } from './unreal-fact-builder.js';
 import { bindProjectGraph } from './project-graph-binding.js';
 
+export interface ProjectGraphScanDiagnostics {
+  /**
+   * `restricted` when the scan only deep-scanned configured sourceRoots
+   * (other top-level dirs invisible); `full-tree` when the whole directory
+   * was walked with built-in ignores only.
+   */
+  coverage: 'restricted' | 'full-tree';
+  /** sourceRoots requested by the detection rule / hints. */
+  requestedSourceRoots: string[];
+  /** Requested sourceRoots that did not exist on disk and were dropped. */
+  missingSourceRoots: string[];
+  /** Top-level dirs NOT deep-scanned because coverage is restricted. */
+  unscannedTopLevelDirectories: string[];
+  /** Count of skipped files grouped by reason (for "why fewer than expected"). */
+  skippedByReason: Record<string, number>;
+  /** A few example oversized files (path + bytes), for actionable logs. */
+  oversizedExamples: Array<{ path: string; sizeBytes: number }>;
+}
+
 export interface ProjectGraphIndexResult extends ProjectGraphWriteResult {
   filesScanned: number;
   nodesExtracted: number;
   edgesExtracted: number;
   skippedFiles: number;
+  diagnostics: ProjectGraphScanDiagnostics;
 }
 
 export interface ProjectGraphIndexOptions {
@@ -85,6 +107,13 @@ export interface ProjectGraphIndexOptions {
   onIndexProgress?: (event: ProjectGraphIndexProgress) => void;
   /** Diagnostics sink for skipped/failed files. Defaults to {@link noopLogger}. */
   logger?: Logger;
+  /**
+   * Writable base directory for the per-project extraction cache. When set, the
+   * cache lives under `<extractionCacheDir>/<project-slug>/` instead of inside
+   * the scanned tree — required when the scanned root is a read-only or
+   * root-owned bind-mount (e.g. a P4 workspace the scanner cannot write to).
+   */
+  extractionCacheDir?: string;
 }
 
 export interface ProjectGraphIndexProgress {
@@ -138,10 +167,12 @@ export const indexProjectGraph = (
     edgesCreated: stats.writeResult.edgesCreated + bindingResult.edgesCreated,
     edgesUpdated: stats.writeResult.edgesUpdated + bindingResult.edgesUpdated,
     edgesSkipped: stats.writeResult.edgesSkipped + bindingResult.edgesSkipped,
+    edgesOrphaned: stats.writeResult.edgesOrphaned + bindingResult.edgesOrphaned,
     filesScanned: stats.filesScanned,
     nodesExtracted: stats.nodeCount,
     edgesExtracted: stats.edgeCount + bindingEdges,
     skippedFiles: stats.skippedFiles,
+    diagnostics: stats.diagnostics,
   };
 };
 
@@ -153,6 +184,7 @@ interface ProjectGraphStreamStats {
   nodeCount: number;
   edgeCount: number;
   writeResult: ProjectGraphWriteResult;
+  diagnostics: ProjectGraphScanDiagnostics;
 }
 
 interface ProjectGraphFileExtractionOutcome extends ProjectGraphExtractionResult {
@@ -188,7 +220,21 @@ const streamProjectGraphIntoStore = (
   project: DetectedProject,
   options: ProjectGraphIndexOptions,
 ): ProjectGraphStreamStats => {
+  // Per-project extraction-cache directory under the writable data dir, when
+  // configured. Keeps the scanner's state out of the scanned tree (which may be
+  // a read-only / root-owned bind-mount such as a P4 workspace).
+  const extractionCacheDir = options.extractionCacheDir
+    ? path.join(options.extractionCacheDir, extractionCacheSlug(project.name))
+    : undefined;
   let skippedFiles = 0;
+  const skippedByReason: Record<string, number> = {};
+  const oversizedExamples: Array<{ path: string; sizeBytes: number }> = [];
+  const recordSkip = (event: ProjectGraphSkipEvent): void => {
+    skippedByReason[event.reason] = (skippedByReason[event.reason] ?? 0) + 1;
+    if (event.reason === 'oversized' && event.sizeBytes !== undefined && oversizedExamples.length < 5) {
+      oversizedExamples.push({ path: event.path, sizeBytes: event.sizeBytes });
+    }
+  };
   const scanOptions = {
     sourceRoots: projectGraphDeepRoots(project),
     ignore: project.graphHints?.ignore,
@@ -201,9 +247,11 @@ const streamProjectGraphIntoStore = (
       skippedFiles = event.skippedFiles;
       options.onScanProgress?.(event);
     },
+    onSkip: recordSkip,
   };
   const scanPlan = buildProjectGraphScanPlan(project.root, scanOptions);
   const files = scanProjectFiles(project.root, scanOptions);
+  const unscannedTopLevelDirectories = findUnscannedTopLevelDirectories(project.root, scanPlan, scanOptions);
   const generatedFiles = files.filter((file) => file.generated).length;
   const metadataOnlyRoots = scanOptions.metadataOnlyRoots?.length ?? 0;
   const parserAdapters = [
@@ -211,8 +259,8 @@ const streamProjectGraphIntoStore = (
     createScriptRegexParserAdapter(),
     createTreeSitterSourceParser(),
   ];
-  const previousCache = readProjectGraphExtractionCache(project.root);
-  const cacheWriter = openProjectGraphExtractionCacheWriter(project.root);
+  const previousCache = readProjectGraphExtractionCache(project.root, extractionCacheDir);
+  const cacheWriter = openProjectGraphExtractionCacheWriter(project.root, extractionCacheDir);
 
   const writeResult = emptyWriteResult();
   const seenNodes = new Set<string>();
@@ -256,7 +304,10 @@ const streamProjectGraphIntoStore = (
       addNode(fileNodes, makeFileNode(project, file.path, scanPlan));
       addFileContainmentFact(project, file.path, scanPlan, fileNodes, fileEdges);
       const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache, options.logger ?? noopLogger);
-      if (fileExtraction.skipped) skippedFiles += 1;
+      if (fileExtraction.skipped) {
+        skippedFiles += 1;
+        skippedByReason['parser-failed'] = (skippedByReason['parser-failed'] ?? 0) + 1;
+      }
       if (!fileExtraction.skipped) {
         cacheWriter.write({
           path: file.path,
@@ -310,6 +361,14 @@ const streamProjectGraphIntoStore = (
     nodeCount: seenNodes.size,
     edgeCount: seenEdges.size,
     writeResult,
+    diagnostics: {
+      coverage: scanPlan.deepRoots.length > 0 ? 'restricted' : 'full-tree',
+      requestedSourceRoots: scanPlan.requestedSourceRoots,
+      missingSourceRoots: scanPlan.missingSourceRoots,
+      unscannedTopLevelDirectories,
+      skippedByReason,
+      oversizedExamples,
+    },
   };
 };
 
@@ -403,6 +462,18 @@ const parseFileFacts = (
     return null;
   }
 };
+
+/**
+ * Filesystem-safe slug for a project name, used as the extraction cache's
+ * per-project subdirectory under the data dir. Mirrors the vector-store slug
+ * rules so a project's cache and vectors sit under matching names.
+ */
+const extractionCacheSlug = (project: string): string =>
+  project
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'default';
 
 const projectGraphDeepRoots = (project: DetectedProject): string[] | undefined => {
   const roots = [

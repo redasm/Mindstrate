@@ -19,6 +19,14 @@ const SUBSTRATE_PRIORITY: Record<SubstrateType, number> = {
   [SubstrateType.EPISODE]: 0.3,
 };
 
+/**
+ * SQL prefetch when the caller requests ALL knowledge (limit undefined). The
+ * knowledge layer (hand-authored + metabolized nodes) is small and bounded —
+ * project-graph nodes are excluded in SQL — so this only needs to comfortably
+ * exceed any realistic knowledge-node count, not the 100k+ scanner graph.
+ */
+const ALL_KNOWLEDGE_PREFETCH = 100000;
+
 export interface GraphKnowledgeProjectionOptions {
   project?: string;
   limit?: number;
@@ -34,16 +42,32 @@ export class GraphKnowledgeProjector {
   }
 
   project(options: GraphKnowledgeProjectionOptions = {}): GraphKnowledgeView[] {
-    const limit = options.limit ?? 20;
+    // `limit` undefined means "return all" — used by the knowledge-list path,
+    // which excludes project-graph nodes, so the result is bounded by the
+    // (small) knowledge-node count rather than the 100k+ scanner graph. A
+    // provided limit (always the case for search) keeps a bounded prefetch.
+    const limit = options.limit;
     const includeStatuses = options.includeStatuses ?? [
       ContextNodeStatus.ACTIVE,
       ContextNodeStatus.VERIFIED,
       ContextNodeStatus.CANDIDATE,
     ];
+    const excludeProjectGraph = options.includeProjectGraphNodes !== true;
 
+    // Push the project-graph exclusion into SQL when the caller doesn't want
+    // those nodes. Without it, a project with a large scanner graph (100k+
+    // file/symbol nodes) fills the prefetch window with graph rows ordered by
+    // updated_at, and the post-filter leaves zero knowledge nodes — the
+    // knowledge page goes blank right after a re-scan even though the
+    // knowledge is intact. When graph nodes ARE wanted, keep a generous
+    // prefetch so the priority sort still has a wide candidate set.
+    const prefetch = limit === undefined
+      ? ALL_KNOWLEDGE_PREFETCH
+      : (excludeProjectGraph ? Math.max(limit * 10, 500) : 2000);
     const nodes = this.graphStore.listNodes({
       project: options.project,
-      limit: 500,
+      excludeProjectGraph,
+      limit: prefetch,
     }).filter((node) =>
       includeStatuses.includes(node.status) &&
       isProjectable(node.substrateType) &&
@@ -51,14 +75,14 @@ export class GraphKnowledgeProjector {
       (options.includeProjectGraphNodes === true || !isProjectGraphNode(node)),
     );
 
-    return nodes
+    const ranked = nodes
       .map((node) => toGraphKnowledgeView(node))
-      .sort((a, b) => b.priorityScore - a.priorityScore)
-      .slice(0, limit);
+      .sort((a, b) => b.priorityScore - a.priorityScore);
+    return limit === undefined ? ranked : ranked.slice(0, limit);
   }
 }
 
-function isProjectable(substrateType: SubstrateType): boolean {
+export function isProjectable(substrateType: SubstrateType): boolean {
   return [
     SubstrateType.SNAPSHOT,
     SubstrateType.SUMMARY,

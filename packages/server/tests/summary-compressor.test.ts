@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { SummaryCompressor } from '../src/context-graph/summary-compressor.js';
 import { ProviderFactory } from '../src/processing/provider-factory.js';
+import { fakeHighOrderProviderFactory } from './high-order-test-support.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 import {
   ContextDomainType,
@@ -10,6 +11,12 @@ import {
   ContextRelationType,
   SubstrateType,
 } from '@mindstrate/protocol/models';
+
+// Snapshots mentioning "hydration" embed to one vector (so they cluster);
+// everything else embeds elsewhere. The LLM stub returns a real synthesis so
+// the cluster actually becomes a SUMMARY.
+const SYNTHESIS = JSON.stringify({ related: true, title: 'Synthesized summary', content: 'A real summary body.' });
+const vectorFor = (text: string) => (text.includes('hydration') ? [1, 0, 0, 0] : [0, 1, 0, 0]);
 
 describe('SummaryCompressor', () => {
   let tempDir: string;
@@ -19,7 +26,10 @@ describe('SummaryCompressor', () => {
   beforeEach(() => {
     tempDir = createTempDir();
     graphStore = new ContextGraphStore(path.join(tempDir, 'context-graph.db'));
-    compressor = new SummaryCompressor(graphStore, ProviderFactory.offline());
+    compressor = new SummaryCompressor(
+      graphStore,
+      fakeHighOrderProviderFactory({ vectorFor, chatContent: SYNTHESIS }) as never,
+    );
   });
 
   afterEach(() => {
@@ -27,36 +37,25 @@ describe('SummaryCompressor', () => {
     removeTempDir(tempDir);
   });
 
-  it('creates a summary node from similar snapshots', async () => {
+  const seedSnapshot = (title: string, content: string, extra: Record<string, unknown> = {}) =>
     graphStore.createNode({
       substrateType: SubstrateType.SNAPSHOT,
       domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Session snapshot A',
-      content: 'Summary: Fixed hydration mismatch in SSR rendering flow.',
+      title,
+      content,
       project: 'mindstrate',
       status: ContextNodeStatus.ACTIVE,
+      ...extra,
     });
-    graphStore.createNode({
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Session snapshot B',
-      content: 'Summary: Resolved hydration mismatch in SSR rendering path.',
-      project: 'mindstrate',
-      status: ContextNodeStatus.ACTIVE,
-    });
-    graphStore.createNode({
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Unrelated snapshot',
-      content: 'Summary: PostgreSQL connection pool tuning.',
-      project: 'mindstrate',
-      status: ContextNodeStatus.ACTIVE,
-    });
+
+  it('creates an LLM-synthesized summary node from similar snapshots', async () => {
+    seedSnapshot('Session snapshot A', 'Summary: Fixed hydration mismatch in SSR rendering flow.');
+    seedSnapshot('Session snapshot B', 'Summary: Resolved hydration mismatch in SSR rendering path.');
+    seedSnapshot('Unrelated snapshot', 'Summary: PostgreSQL connection pool tuning.');
 
     const result = await compressor.compressProjectSnapshots({
       project: 'mindstrate',
       minClusterSize: 2,
-      similarityThreshold: 0.6,
     });
 
     expect(result.summaryNodesCreated).toBe(1);
@@ -68,21 +67,41 @@ describe('SummaryCompressor', () => {
       limit: 10,
     });
     expect(summaries).toHaveLength(1);
-    expect(summaries[0].content).toContain('Compressed from 2 similar session snapshots.');
+    expect(summaries[0].title).toBe('Synthesized summary');
+    expect(summaries[0].content).toBe('A real summary body.');
+    expect(summaries[0].metadata?.llmSynthesized).toBe(true);
 
     const incoming = graphStore.listIncomingEdges(summaries[0].id, ContextRelationType.GENERALIZES);
     expect(incoming).toHaveLength(2);
   });
 
+  it('skips a cluster the LLM judges unrelated (no template shell written)', async () => {
+    const noSynth = new SummaryCompressor(
+      graphStore,
+      fakeHighOrderProviderFactory({ vectorFor, chatContent: JSON.stringify({ related: false }) }) as never,
+    );
+    seedSnapshot('Session snapshot A', 'Summary: Fixed hydration mismatch in SSR rendering flow.');
+    seedSnapshot('Session snapshot B', 'Summary: Resolved hydration mismatch in SSR rendering path.');
+
+    const result = await noSynth.compressProjectSnapshots({ project: 'mindstrate', minClusterSize: 2 });
+
+    expect(result.summaryNodesCreated).toBe(0);
+    expect(graphStore.listNodes({ project: 'mindstrate', substrateType: SubstrateType.SUMMARY, limit: 10 })).toHaveLength(0);
+  });
+
+  it('produces nothing when there is no LLM (offline)', async () => {
+    compressor = new SummaryCompressor(graphStore, ProviderFactory.offline());
+    seedSnapshot('Session snapshot A', 'Summary: hydration mismatch.', { qualityScore: 90 });
+    seedSnapshot('Session snapshot B', 'Summary: hydration mismatch again.', { qualityScore: 90 });
+
+    const result = await compressor.compressProjectSnapshots({ project: 'mindstrate' });
+
+    expect(result.scannedSnapshots).toBe(0);
+    expect(result.summaryNodesCreated).toBe(0);
+  });
+
   it('does not recreate summaries for snapshots that already have a summary parent', async () => {
-    const snapshot = graphStore.createNode({
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Session snapshot A',
-      content: 'Summary: Fixed hydration mismatch in SSR rendering flow.',
-      project: 'mindstrate',
-      status: ContextNodeStatus.ACTIVE,
-    });
+    const snapshot = seedSnapshot('Session snapshot A', 'Summary: Fixed hydration mismatch in SSR rendering flow.');
     const summary = graphStore.createNode({
       substrateType: SubstrateType.SUMMARY,
       domainType: ContextDomainType.SESSION_SUMMARY,
@@ -101,31 +120,18 @@ describe('SummaryCompressor', () => {
     const result = await compressor.compressProjectSnapshots({
       project: 'mindstrate',
       minClusterSize: 1,
-      similarityThreshold: 0.1,
     });
 
     expect(result.scannedSnapshots).toBe(0);
     expect(result.summaryNodesCreated).toBe(0);
   });
 
-  it('promotes a single quality-verified snapshot into a SUMMARY when no peer cluster exists', async () => {
-    // Real-world single-user single-project scenario: there is exactly
-    // one session_summary snapshot in the project. Previously this
-    // produced zero compression no matter how active the session was,
-    // because clusterContextNodes required `minClusterSize >= 2`. The
-    // promoteSingleton hook now lifts a singleton SNAPSHOT with
-    // `qualityScore >= 70` into a SUMMARY so the lineage starts
-    // moving from day one.
-    graphStore.createNode({
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Lone session snapshot',
-      content: 'Summary: discovered before-edit path-matching regression and fixed it.',
-      project: 'mindstrate',
-      status: ContextNodeStatus.ACTIVE,
-      qualityScore: 75,
-      confidence: 0.85,
-    });
+  it('promotes a single quality-verified snapshot into an LLM-refined SUMMARY', async () => {
+    seedSnapshot(
+      'Lone session snapshot',
+      'Summary: discovered before-edit hydration path-matching regression and fixed it.',
+      { qualityScore: 75, confidence: 0.85 },
+    );
 
     const result = await compressor.compressProjectSnapshots({ project: 'mindstrate' });
 
@@ -137,19 +143,11 @@ describe('SummaryCompressor', () => {
       limit: 10,
     });
     expect(summaries).toHaveLength(1);
+    expect(summaries[0].metadata?.llmSynthesized).toBe(true);
   });
 
   it('does NOT promote a low-quality singleton', async () => {
-    graphStore.createNode({
-      substrateType: SubstrateType.SNAPSHOT,
-      domainType: ContextDomainType.SESSION_SUMMARY,
-      title: 'Scratch snapshot',
-      content: 'Summary: half-finished thought, not worth promoting.',
-      project: 'mindstrate',
-      status: ContextNodeStatus.ACTIVE,
-      qualityScore: 40,
-      confidence: 0.5,
-    });
+    seedSnapshot('Scratch snapshot', 'Summary: half-finished hydration thought.', { qualityScore: 40, confidence: 0.5 });
 
     const result = await compressor.compressProjectSnapshots({ project: 'mindstrate' });
 

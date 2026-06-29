@@ -70,7 +70,9 @@ export const summarizeProjectGraphWithLlm = async (
     const response = await scheduleProjectGraphLlmRequest(() => input.client.chat.completions.create({
       model: input.model,
       temperature: 0.1,
-      max_tokens: 900,
+      // Headroom for reasoning models that spend tokens thinking before the
+      // JSON answer; non-reasoning models won't use it all.
+      max_tokens: 4000,
       response_format: { type: 'json_object' },
       messages: [
         {

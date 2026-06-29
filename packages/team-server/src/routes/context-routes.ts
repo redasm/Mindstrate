@@ -62,7 +62,7 @@ export const registerContextRoutes = (app: Express, { memory }: TeamRouteDeps): 
     const authorized = authorizeProject(req, res, project, 'read');
     if (authorized === null) return;
 
-    res.json(memory.context.queryGraphKnowledge(query, {
+    res.json(await memory.context.queryGraphKnowledge(query, {
       project: authorized ?? project,
       topK: topK || 10,
       limit: limit || 50,

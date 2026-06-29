@@ -136,7 +136,7 @@ export interface LocalContextSubApi {
       trackFeedback?: boolean;
       sessionId?: string;
     },
-  ): GraphKnowledgeSearchResult[];
+  ): Promise<GraphKnowledgeSearchResult[]>;
   queryContextGraph(options?: ContextGraphQueryOptions): ContextNode[];
   getContextNode(id: string): ContextNode | null;
   queryProjectSubgraph(

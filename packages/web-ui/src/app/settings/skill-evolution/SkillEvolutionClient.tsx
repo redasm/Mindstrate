@@ -29,6 +29,7 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
   const [busy, setBusy] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizerSummary, setOptimizerSummary] = useState<string | null>(null);
+  const [pruning, setPruning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const counts = useMemo(() => ({
@@ -121,31 +122,66 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
     }
   };
 
+  const pruneOrphans = async () => {
+    if (!window.confirm(t.pruneConfirm)) return;
+    setPruning(true);
+    setOptimizerSummary(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/skill-evolution/prune-orphans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Prune failed (${res.status})`);
+        return;
+      }
+      const data = await res.json() as { patchesDeleted: number };
+      setOptimizerSummary(`${t.pruned} ${data.patchesDeleted}`);
+      await refresh();
+    } finally {
+      setPruning(false);
+    }
+  };
+
   return (
-    <div className="p-5 max-w-6xl mx-auto">
-      <header className="mb-5 flex items-start justify-between gap-4">
+    <div className="flex flex-col h-full p-5 max-w-6xl mx-auto w-full">
+      <header className="mb-5 flex items-start justify-between gap-4 flex-shrink-0">
         <div>
           <h1 className="text-lg font-semibold text-surface-900">{t.title}</h1>
           <p className="text-sm text-surface-500">{t.description}</p>
         </div>
-        <button
-          type="button"
-          disabled={optimizing}
-          onClick={runOptimizer}
-          className="shrink-0 px-3 py-1.5 rounded-md border border-brand-300 text-brand-700 text-sm font-medium hover:bg-brand-50 disabled:opacity-50"
-        >
-          <Icon icon={optimizing ? 'lucide:loader-2' : 'lucide:sparkles'} className={`text-sm mr-1 inline ${optimizing ? 'animate-spin' : ''}`} />
-          {optimizing ? t.optimizing : t.optimize}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={pruning}
+            onClick={pruneOrphans}
+            className="px-3 py-1.5 rounded-md border border-surface-300 text-surface-700 text-sm font-medium hover:bg-surface-50 disabled:opacity-50"
+          >
+            <Icon icon={pruning ? 'lucide:loader-2' : 'lucide:trash-2'} className={`text-sm mr-1 inline ${pruning ? 'animate-spin' : ''}`} />
+            {pruning ? t.pruning : t.pruneOrphans}
+          </button>
+          <button
+            type="button"
+            disabled={optimizing}
+            onClick={runOptimizer}
+            className="px-3 py-1.5 rounded-md border border-brand-300 text-brand-700 text-sm font-medium hover:bg-brand-50 disabled:opacity-50"
+          >
+            <Icon icon={optimizing ? 'lucide:loader-2' : 'lucide:sparkles'} className={`text-sm mr-1 inline ${optimizing ? 'animate-spin' : ''}`} />
+            {optimizing ? t.optimizing : t.optimize}
+          </button>
+        </div>
       </header>
 
       {optimizerSummary && (
-        <p className="mb-4 text-xs text-surface-600 bg-surface-50 border border-surface-200 rounded-md px-3 py-2">
+        <p className="mb-4 text-xs text-surface-600 bg-surface-50 border border-surface-200 rounded-md px-3 py-2 flex-shrink-0">
           {optimizerSummary}
         </p>
       )}
 
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-4 gap-3 mb-5 flex-shrink-0">
         <Stat label={t.total} value={counts.total} />
         <Stat label={t.candidate} value={counts.candidate} />
         <Stat label={t.accepted} value={counts.accepted} />
@@ -153,12 +189,12 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
       </div>
 
       {patches.length === 0 ? (
-        <div className="rounded-lg border border-surface-200 bg-white p-6 text-sm text-surface-500">
+        <div className="rounded-lg border border-surface-200 bg-white p-6 text-sm text-surface-500 flex-shrink-0">
           {t.empty}
         </div>
       ) : (
-        <div className="grid grid-cols-[1fr_1.4fr] gap-4">
-          <ul className="rounded-lg border border-surface-200 bg-white divide-y divide-surface-100 overflow-hidden">
+        <div className="grid grid-cols-[1fr_1.4fr] gap-4 flex-1 min-h-0">
+          <ul className="rounded-lg border border-surface-200 bg-white divide-y divide-surface-100 overflow-y-auto">
             {patches.map((patch) => (
               <li key={patch.id}>
                 <button
@@ -176,10 +212,10 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
             ))}
           </ul>
 
-          <div className="rounded-lg border border-surface-200 bg-white p-4">
+          <div className="rounded-lg border border-surface-200 bg-white p-4 overflow-y-auto">
             {selected ? (
-              <div className="space-y-4">
-                <div>
+              <div className="flex flex-col h-full gap-4">
+                <div className="flex-shrink-0">
                   <div className="flex items-center gap-2">
                     <span className={`text-[11px] px-2 py-0.5 rounded-full border ${STATUS_STYLES[selected.status]}`}>{selected.status}</span>
                     <span className="text-xs text-surface-400">{selected.id}</span>
@@ -187,17 +223,17 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
                   <p className="text-sm text-surface-700 mt-2">{selected.rationale}</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <DiffBlock title={t.before} content={selected.beforeContent} />
-                  <DiffBlock title={t.after} content={selected.afterContent} />
+                <div className="grid grid-cols-2 gap-3 flex-1 min-h-0">
+                  <DiffBlock title={t.before} content={selected.beforeContent} emptyLabel={t.beforeEmpty} />
+                  <DiffBlock title={t.after} content={selected.afterContent} emptyLabel={t.afterEmpty} />
                 </div>
 
-                <p className="text-xs text-surface-400">
+                <p className="text-xs text-surface-400 flex-shrink-0">
                   {t.budget}: {selected.budget.maxChangedBullets} {t.bullets} · {selected.budget.maxChangedTokens} {t.tokens}
                 </p>
 
                 {selected.status === 'candidate' && (
-                  <div className="border-t border-surface-100 pt-4 space-y-3">
+                  <div className="border-t border-surface-100 pt-4 space-y-3 flex-shrink-0">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
@@ -254,11 +290,18 @@ function Stat({ label, value }: { label: string; value: number }) {
   );
 }
 
-function DiffBlock({ title, content }: { title: string; content: string }) {
+function DiffBlock({ title, content, emptyLabel }: { title: string; content: string; emptyLabel: string }) {
+  const isEmpty = content.trim().length === 0;
   return (
-    <div>
-      <div className="text-xs font-medium text-surface-500 mb-1">{title}</div>
-      <pre className="text-xs bg-surface-50 border border-surface-100 rounded-md p-2 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">{content}</pre>
+    <div className="flex flex-col min-h-0">
+      <div className="text-xs font-medium text-surface-500 mb-1 flex-shrink-0">{title}</div>
+      {isEmpty ? (
+        <div className="flex-1 min-h-[6rem] flex items-center justify-center text-xs text-surface-400 italic bg-surface-50 border border-dashed border-surface-200 rounded-md p-2">
+          {emptyLabel}
+        </div>
+      ) : (
+        <pre className="flex-1 min-h-[6rem] text-xs bg-surface-50 border border-surface-100 rounded-md p-2 whitespace-pre-wrap break-words overflow-y-auto">{content}</pre>
+      )}
     </div>
   );
 }

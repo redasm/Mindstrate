@@ -91,7 +91,7 @@ describe('Mindstrate', () => {
         context: { language: 'typescript', framework: 'react' },
       }));
 
-      const results = memory.context.queryGraphKnowledge('hydration error in react');
+      const results = await memory.context.queryGraphKnowledge('hydration error in react');
       expect(results.length).toBeGreaterThan(0);
       expect(results[0].view.title).toContain('hydration');
     });
@@ -106,7 +106,7 @@ describe('Mindstrate', () => {
 
       // offline embeddings are word-based, so completely unrelated text should have low similarity
       // but may still return results - we just check it doesn't crash
-      const results = memory.context.queryGraphKnowledge('quantum physics formulas');
+      const results = await memory.context.queryGraphKnowledge('quantum physics formulas');
       expect(results).toBeDefined();
     });
 
@@ -129,7 +129,7 @@ describe('Mindstrate', () => {
         context: { project: 'proj', language: 'typescript', framework: 'react' },
       }));
 
-      const results = memory.context.queryGraphKnowledge('hydration safe SSR', {
+      const results = await memory.context.queryGraphKnowledge('hydration safe SSR', {
         project: 'proj',
         topK: 5,
       });
@@ -267,7 +267,11 @@ describe('Mindstrate', () => {
       expect(s2.status).toBe('active');
     });
 
-    it('should auto-compress similar session snapshots into a summary node', async () => {
+    it('does not auto-compress snapshots into a summary without an LLM', async () => {
+      // Mid-tier compression now requires an LLM to synthesize real content;
+      // offline (the default test instance) it produces nothing rather than
+      // emitting "Compressed from N snapshots" template shells. The lineage
+      // stays at the SNAPSHOT layer until an LLM is configured.
       const first = await memory.sessions.startSession({ project: 'proj' });
       memory.sessions.saveObservation({
         sessionId: first.id,
@@ -291,8 +295,7 @@ describe('Mindstrate', () => {
         limit: 10,
       });
 
-      expect(summaries.length).toBeGreaterThan(0);
-      expect(summaries[0].content).toContain('Compressed from');
+      expect(summaries).toHaveLength(0);
     });
   });
 
@@ -549,7 +552,7 @@ describe('Mindstrate', () => {
       expect(projected[0].title).toBe('Hydration Safety Rule');
     });
 
-    it('should expose ECS-native projected search through the facade', () => {
+    it('should expose ECS-native projected search through the facade', async () => {
 
       memory.context.createContextNode({
         substrateType: SubstrateType.RULE,
@@ -562,7 +565,7 @@ describe('Mindstrate', () => {
         confidence: 0.9,
       });
 
-      const results = memory.context.queryGraphKnowledge('hydration safe SSR', {
+      const results = await memory.context.queryGraphKnowledge('hydration safe SSR', {
         project: 'proj',
         topK: 5,
       });

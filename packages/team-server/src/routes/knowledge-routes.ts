@@ -134,12 +134,12 @@ export const registerKnowledgeRoutes = (app: Express, { memory }: TeamRouteDeps)
       return;
     }
 
-    const results = memory.context.queryGraphKnowledge(query, {
+    const results = (await memory.context.queryGraphKnowledge(query, {
       topK: topK || 10,
       project,
       limit: 100,
       sessionId,
-    }).filter((result) => !types || types.includes(result.view.domainType))
+    })).filter((result) => !types || types.includes(result.view.domainType))
       .filter((result) => !tags || includesAll(result.view.tags ?? [], tags))
       .filter((result) => !status || status.includes(result.view.status))
       .filter((result) => !language || result.view.tags.includes(language))

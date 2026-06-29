@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import type {
   FeedbackEvent,
   GraphKnowledgeSearchResult,
@@ -18,6 +19,10 @@ import type { CreateContextNodeInput, UpdateContextNodeInput } from '../context-
 import type { GraphKnowledgeProjectionOptions } from '../context-graph/knowledge-projector.js';
 import type { ProjectedKnowledgeSearchOptions } from '../context-graph/projected-knowledge-search.js';
 import { computeGraphNodeMatchScore } from '../context-graph/graph-match-score.js';
+import {
+  backfillNodeEmbeddings,
+  type BackfillNodeEmbeddingsResult,
+} from '../context-graph/node-embedding-backfill.js';
 import { ingestUserFeedback } from '../events/index.js';
 import {
   enrichProjectGraph,
@@ -76,6 +81,15 @@ import {
 import type { ProjectGraphOverlay } from '@mindstrate/protocol/models';
 import type { DetectedProject } from '../project/index.js';
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
+
+/**
+ * Upper bound on architecture nodes loaded to feed an LLM (system-page
+ * planner, enrichment, summarizer). These paths only consume a salience-ranked
+ * top-N (≤80), so loading the whole architecture layer — 100k+ nodes on a
+ * large graph, each with a JSON metadata blob — only risks OOM. Fetched
+ * quality-ranked so the cap keeps the most salient nodes.
+ */
+const LLM_FEED_ARCHITECTURE_NODE_CAP = 2000;
 
 export class MindstrateContextGraphApi {
   constructor(private readonly services: MindstrateRuntime) {}
@@ -155,6 +169,11 @@ export class MindstrateContextGraphApi {
 
   listKnownProjects(): string[] {
     return this.services.contextGraphStore.listKnownProjects();
+  }
+
+  /** Count only scanner-extracted project-graph nodes for a project. */
+  countProjectGraphNodes(project: string): number {
+    return this.services.contextGraphStore.countProjectGraphNodes(project);
   }
 
   listConflictRecords(project?: string, limit?: number): ConflictRecord[] {
@@ -239,11 +258,11 @@ export class MindstrateContextGraphApi {
     return this.services.graphKnowledgeProjector.project(options);
   }
 
-  queryGraphKnowledge(
+  async queryGraphKnowledge(
     query: string,
     options?: ProjectedKnowledgeSearchOptions,
-  ): GraphKnowledgeSearchResult[] {
-    const results = this.services.projectedKnowledgeSearch.search(query, options);
+  ): Promise<GraphKnowledgeSearchResult[]> {
+    const results = await this.services.projectedKnowledgeSearch.search(query, options);
     if (options?.trackFeedback === false) return results;
 
     return results.map((result) => ({
@@ -259,6 +278,10 @@ export class MindstrateContextGraphApi {
   indexProjectGraph(project: DetectedProject, options?: ProjectGraphIndexOptions): ProjectGraphIndexResult {
     return indexProjectGraph(this.services.contextGraphStore, project, {
       logger: this.services.logger,
+      // Keep the extraction cache on the writable data volume, not in the
+      // scanned tree — a P4 workspace bind-mount is often root-owned and the
+      // scanner (uid 1001) can't write `<root>/.mindstrate/` there.
+      extractionCacheDir: path.join(this.services.config.dataDir, 'project-graph-cache'),
       ...options,
     });
   }
@@ -299,13 +322,33 @@ export class MindstrateContextGraphApi {
     return enrichProjectGraph(this.services.contextGraphStore, {
       project: project.name,
       llmConfigured: providers.hasConfig,
-      extractedNodes: this.services.contextGraphStore.listNodes({
-        project: project.name,
-        domainType: ContextDomainType.ARCHITECTURE,
-        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-      }),
+      extractedNodes: this.services.contextGraphStore.listProjectDomainRanked(
+        project.name,
+        ContextDomainType.ARCHITECTURE,
+        LLM_FEED_ARCHITECTURE_NODE_CAP,
+      ),
       summarize,
     });
+  }
+
+  /**
+   * Generate and persist vector embeddings for the project's context-graph
+   * nodes. Run after `indexProjectGraph` + `enrichProjectGraph` so file /
+   * dependency nodes (written without embeddings by the scanner) and any
+   * LLM-enriched titles become semantically searchable. Incremental: nodes
+   * already embedded for the active model are skipped unless `force`.
+   */
+  async backfillNodeEmbeddings(
+    project: DetectedProject,
+    options?: { force?: boolean; onProgress?: (p: { embedded: number; total: number }) => void },
+  ): Promise<BackfillNodeEmbeddingsResult> {
+    const providers = this.services.providerFactory.forProject(project.name);
+    return backfillNodeEmbeddings(
+      this.services.contextGraphStore,
+      providers.embedder,
+      providers.embeddingModel,
+      { project: project.name, force: options?.force, onProgress: options?.onProgress },
+    );
   }
 
   async planProjectGraphSystemPages(project: DetectedProject): Promise<SystemPageDefinition[] | null> {
@@ -317,11 +360,11 @@ export class MindstrateContextGraphApi {
       client,
       model: providers.llmModel,
       project,
-      extractedNodes: this.services.contextGraphStore.listNodes({
-        project: project.name,
-        domainType: ContextDomainType.ARCHITECTURE,
-        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-      }),
+      extractedNodes: this.services.contextGraphStore.listProjectDomainRanked(
+        project.name,
+        ContextDomainType.ARCHITECTURE,
+        LLM_FEED_ARCHITECTURE_NODE_CAP,
+      ),
       curatedDocs: collectCuratedProjectDocs(project),
       requestPolicy: this.services.config.projectGraphLlm,
     });
@@ -488,11 +531,11 @@ export class MindstrateContextGraphApi {
       client,
       model: providers.llmModel,
       project: project.name,
-      extractedNodes: this.services.contextGraphStore.listNodes({
-        project: project.name,
-        domainType: ContextDomainType.ARCHITECTURE,
-        limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT,
-      }),
+      extractedNodes: this.services.contextGraphStore.listProjectDomainRanked(
+        project.name,
+        ContextDomainType.ARCHITECTURE,
+        LLM_FEED_ARCHITECTURE_NODE_CAP,
+      ),
       requestPolicy: this.services.config.projectGraphLlm,
     });
   }

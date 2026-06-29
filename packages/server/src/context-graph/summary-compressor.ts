@@ -1,6 +1,7 @@
 import type { ProviderFactory } from '../processing/provider-factory.js';
 import type { ContextGraphStore } from './context-graph-store.js';
-import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
+import { runSubstrateCompression } from './substrate-compression.js';
+import { synthesizeCompressedNode } from './compression-llm-synthesis.js';
 import {
   ContextDomainType,
   SubstrateType,
@@ -32,7 +33,14 @@ export class SummaryCompressor {
   async compressProjectSnapshots(
     options: SummaryCompressionOptions = {},
   ): Promise<SummaryCompressionResult> {
-    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
+    const providers = this.providerFactory.forProject(options.project ?? '');
+    const embedder = providers.embedder;
+    // Only form summaries when we can synthesize with an LLM; offline/no-LLM
+    // skips rather than emitting "Compressed from N snapshots" template shells.
+    const llmClient = await providers.llmClientPromise;
+    if (embedder.isLocalMode() || !llmClient) {
+      return { scannedSnapshots: 0, summaryNodesCreated: 0, clusters: [] };
+    }
     const run = await runSubstrateCompression(this.graphStore, embedder, {
       sourceType: SubstrateType.SNAPSHOT,
       sourceDomain: ContextDomainType.SESSION_SUMMARY,
@@ -43,6 +51,13 @@ export class SummaryCompressor {
       confidence: 0.75,
       qualityScore: 75,
       defaultSimilarityThreshold: 0.78,
+      requireIntraClusterCohesion: true,
+      synthesize: (cluster) => synthesizeCompressedNode({
+        client: llmClient,
+        model: providers.llmModel,
+        targetType: SubstrateType.SUMMARY,
+        cluster,
+      }),
       title: buildSummaryTitle,
       content: buildSummaryContent,
       metadata: (cluster) => ({ sourceSnapshotIds: cluster.map((item) => item.id) }),
@@ -74,7 +89,5 @@ const buildSummaryTitle = (cluster: ContextNode[]): string => {
   return `Session summary cluster: ${project} (${cluster.length} snapshots)`;
 };
 
-const buildSummaryContent = (cluster: ContextNode[]): string => buildClusterContent(
-  `Compressed from ${cluster.length} similar session snapshots.`,
-  cluster,
-);
+const buildSummaryContent = (cluster: ContextNode[]): string =>
+  `Compressed from ${cluster.length} session snapshot(s).`;

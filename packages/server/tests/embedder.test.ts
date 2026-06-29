@@ -136,6 +136,60 @@ describe('Embedder', () => {
       expect(calls).toBe(2);
       expect(online.getMetrics().cacheHits).toBe(1);
     });
+
+    it('chunks large online batches to at most 10 inputs per request (DashScope cap)', async () => {
+      const requestSizes: number[] = [];
+      const client = makeEmbeddingClient(async (input) => {
+        const values = Array.isArray(input) ? input : [input];
+        requestSizes.push(values.length);
+        return values.map((text) => [text.length]);
+      });
+      const online = new Embedder('fake-key', 'test-model', undefined, { client });
+
+      const texts = Array.from({ length: 25 }, (_, i) => `text-${i}`);
+      const results = await online.embedBatch(texts);
+
+      // All 25 embedded, in input order, and never more than 10 per request.
+      expect(results).toHaveLength(25);
+      expect(results).toEqual(texts.map((t) => [t.length]));
+      expect(requestSizes).toEqual([10, 10, 5]);
+      expect(Math.max(...requestSizes)).toBeLessThanOrEqual(10);
+    });
+
+    it('sends the dimensions parameter when configured', async () => {
+      const seen: Array<number | undefined> = [];
+      const client: OpenAIClient = {
+        embeddings: {
+          create: async ({ input, dimensions }) => {
+            seen.push(dimensions);
+            const values = Array.isArray(input) ? input : [input];
+            return { data: values.map((_, index) => ({ embedding: [1, 2, 3], index })) };
+          },
+        },
+        chat: { completions: { create: async () => ({ choices: [] }) } },
+      };
+      const online = new Embedder('fake-key', 'text-embedding-v4', undefined, { client, dimensions: 1024 });
+      await online.embed('single');
+      await online.embedBatch(['a', 'b']);
+      expect(seen).toEqual([1024, 1024]);
+    });
+
+    it('omits dimensions when not configured', async () => {
+      const seen: Array<number | undefined> = [];
+      const client: OpenAIClient = {
+        embeddings: {
+          create: async ({ input, dimensions }) => {
+            seen.push(dimensions);
+            const values = Array.isArray(input) ? input : [input];
+            return { data: values.map((_, index) => ({ embedding: [1, 2, 3], index })) };
+          },
+        },
+        chat: { completions: { create: async () => ({ choices: [] }) } },
+      };
+      const online = new Embedder('fake-key', 'text-embedding-ada-002', undefined, { client });
+      await online.embed('single');
+      expect(seen).toEqual([undefined]);
+    });
   });
 });
 

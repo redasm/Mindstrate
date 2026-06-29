@@ -167,8 +167,9 @@ export class KnowledgeExtractor {
         model: providers.llmModel,
         temperature: 0.2,
         // 富结构化输出(多段 solution + 代码片段 + actionable)需要足够的
-        // 输出预算,否则会被服务端默认上限截断成半句话。
-        max_tokens: 2400,
+        // 输出预算,否则会被服务端默认上限截断成半句话。推理模型(如
+        // deepseek-v4-pro 默认思考)还会先消耗大量 token 思考,故再放宽。
+        max_tokens: 4000,
         response_format: { type: 'json_object' },
         messages: [
           {

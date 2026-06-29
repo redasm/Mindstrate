@@ -16,6 +16,7 @@ import { RuleCompressor } from '../src/context-graph/rule-compressor.js';
 import { SummaryCompressor } from '../src/context-graph/summary-compressor.js';
 import { Assimilator, DigestEngine, MetabolicCompressor, Reflector } from '../src/metabolism/index.js';
 import { ProviderFactory } from '../src/processing/provider-factory.js';
+import { fakeHighOrderProviderFactory } from './high-order-test-support.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
 describe('metabolism stage modules', () => {
@@ -209,6 +210,11 @@ describe('metabolism stage modules', () => {
   });
 
   it('runs compression and reflection as independent stage classes', async () => {
+    // Mid-tier compression now requires real vectors + an LLM; supply both so
+    // the two "use/run tests before editing ECS" snapshots cluster and the LLM
+    // stub synthesizes one summary.
+    const synthesis = JSON.stringify({ related: true, title: 'Test discipline', content: 'Run tests before editing ECS.' });
+    const compressionFactory = fakeHighOrderProviderFactory({ vectorFor: () => [1, 0, 0, 0], chatContent: synthesis }) as never;
     const providerFactory = ProviderFactory.offline();
     graphStore.createNode({
       substrateType: SubstrateType.SNAPSHOT,
@@ -228,9 +234,9 @@ describe('metabolism stage modules', () => {
     });
 
     const compression = await new MetabolicCompressor({
-      summaryCompressor: new SummaryCompressor(graphStore, providerFactory),
-      patternCompressor: new PatternCompressor(graphStore, providerFactory),
-      ruleCompressor: new RuleCompressor(graphStore, providerFactory),
+      summaryCompressor: new SummaryCompressor(graphStore, compressionFactory),
+      patternCompressor: new PatternCompressor(graphStore, compressionFactory),
+      ruleCompressor: new RuleCompressor(graphStore, compressionFactory),
     }).run({ project: 'mindstrate' });
     const reflection = await new Reflector({
       conflictDetector: new ConflictDetector(graphStore, providerFactory),

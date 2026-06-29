@@ -30,6 +30,7 @@ import {
   type ProjectGraphIndexProgress,
 } from '@mindstrate/server';
 import { writeMcpConfig } from './setup-mcp.js';
+import { formatScanCoverageLines } from './scan-coverage-report.js';
 import { loadProjectEnv, writeProjectCliConfig } from '../cli-config.js';
 
 interface InitOptions {
@@ -153,6 +154,7 @@ export const initCommand = new Command('init')
         console.log(`  Files: ${graph.filesScanned}`);
         console.log(`  Nodes: ${graph.nodesCreated} created, ${graph.nodesUpdated} updated`);
         console.log(`  Edges: ${graph.edgesCreated} created, ${graph.edgesSkipped} unchanged`);
+        for (const line of formatScanCoverageLines(graph.diagnostics)) console.log(line);
         const artifacts = writeLocalProjectGraphArtifacts(memory, project, options.withVault);
         console.log(`  Report: ${artifacts.reportPath}`);
         console.log(`  Stats:  ${artifacts.statsPath}`);

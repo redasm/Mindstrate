@@ -13,6 +13,15 @@ export interface ContextClusterOptions {
   minClusterSize: number;
   similarityThreshold: number;
   promoteSingleton?: (node: ContextNode) => boolean;
+  /**
+   * Require a candidate to be similar to the cluster's existing members on
+   * average — not just to the seed. The default greedy single-link pass admits
+   * anything close to the seed, so a cluster can collect members that resemble
+   * the seed but not each other (e.g. unrelated refactors that share a few
+   * generic tokens). With this on, a candidate joins only if its mean
+   * similarity to current members also clears the threshold.
+   */
+  requireIntraClusterCohesion?: boolean;
   similarity?: (input: {
     node: ContextNode;
     candidate: ContextNode;
@@ -27,6 +36,7 @@ export async function clusterContextNodes({
   minClusterSize,
   similarityThreshold,
   promoteSingleton,
+  requireIntraClusterCohesion = false,
   similarity = ({ nodeEmbedding, candidateEmbedding }) => cosineSimilarity(nodeEmbedding, candidateEmbedding),
 }: ContextClusterOptions): Promise<ContextNode[][]> {
   const embeddings = new Map<string, number[]>();
@@ -57,10 +67,26 @@ export async function clusterContextNodes({
         nodeEmbedding,
         candidateEmbedding,
       });
-      if (score >= similarityThreshold) {
-        visited.add(candidate.id);
-        cluster.push(candidate);
+      if (score < similarityThreshold) continue;
+
+      // Cohesion guard: the candidate must also fit the cluster as a whole,
+      // not merely the seed, so loosely-related members can't accrete.
+      if (requireIntraClusterCohesion && cluster.length > 1) {
+        const meanToMembers = cluster.reduce((sum, member) => {
+          const memberEmbedding = embeddings.get(member.id);
+          if (!memberEmbedding) return sum;
+          return sum + similarity({
+            node: member,
+            candidate,
+            nodeEmbedding: memberEmbedding,
+            candidateEmbedding,
+          });
+        }, 0) / cluster.length;
+        if (meanToMembers < similarityThreshold) continue;
       }
+
+      visited.add(candidate.id);
+      cluster.push(candidate);
     }
 
     if (cluster.length >= minClusterSize) {

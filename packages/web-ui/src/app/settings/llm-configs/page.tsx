@@ -16,6 +16,7 @@ export default async function SettingsLlmConfigsPage() {
   const configs: ProjectLlmConfig[] = memory.llmConfigs.list().map((c) => ({
     ...c,
     openaiApiKey: maskKey(c.openaiApiKey),
+    embeddingApiKey: c.embeddingApiKey ? maskKey(c.embeddingApiKey) : undefined,
   }));
   const knownProjects = listWorkspaceProjects(memory);
 

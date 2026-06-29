@@ -39,6 +39,16 @@ export interface SubstrateCompressionSpec {
   evidence?: (source: ContextNode) => Record<string, unknown>;
   promoteSingleton?: ContextClusterOptions['promoteSingleton'];
   similarity?: ContextClusterOptions['similarity'];
+  /** Require cluster-wide cohesion, not just seed similarity (high-order). */
+  requireIntraClusterCohesion?: boolean;
+  /**
+   * Optional async synthesis of the target node's title/content from the
+   * cluster (e.g. an LLM generalization). Returning null skips the cluster —
+   * no node is created — which lets callers refuse to emit a node when no LLM
+   * is available or the model judges the cluster spurious, instead of writing
+   * a template placeholder.
+   */
+  synthesize?: (cluster: ContextNode[]) => Promise<{ title: string; content: string } | null>;
 }
 
 export interface SubstrateCompressionRun {
@@ -72,36 +82,42 @@ export const runSubstrateCompression = async (
     similarityThreshold,
     promoteSingleton: spec.promoteSingleton,
     similarity: spec.similarity,
+    requireIntraClusterCohesion: spec.requireIntraClusterCohesion,
   });
+
+  const built: Array<{ targetNode: ContextNode; sourceNodes: ContextNode[] }> = [];
+  for (const cluster of clusters) {
+    // Optional synthesis (e.g. LLM generalization): null → skip this cluster
+    // entirely rather than persist a template placeholder.
+    let synthesized: { title: string; content: string } | undefined;
+    if (spec.synthesize) {
+      const result = await spec.synthesize(cluster);
+      if (!result) continue;
+      synthesized = result;
+    }
+    built.push({
+      targetNode: createTargetNode(graphStore, spec, cluster, synthesized),
+      sourceNodes: cluster,
+    });
+  }
 
   return {
     scannedNodes: eligible.length,
-    clusters: clusters.map((cluster) => ({
-      targetNode: createTargetNode(graphStore, spec, cluster),
-      sourceNodes: cluster,
-    })),
+    clusters: built,
   };
 };
-
-export const buildClusterContent = (
-  intro: string,
-  cluster: ContextNode[],
-): string => [
-  intro,
-  '',
-  ...cluster.map((node, index) => `${index + 1}. ${node.title}\n${node.content.split('\n')[0] ?? node.title}`),
-].join('\n');
 
 const createTargetNode = (
   graphStore: ContextGraphStore,
   spec: SubstrateCompressionSpec,
   cluster: ContextNode[],
+  synthesized?: { title: string; content: string },
 ): ContextNode => {
   const targetNode = graphStore.createNode({
     substrateType: spec.targetType,
     domainType: spec.targetDomain,
-    title: spec.title(cluster),
-    content: spec.content(cluster),
+    title: synthesized?.title ?? spec.title(cluster),
+    content: synthesized?.content ?? spec.content(cluster),
     tags: spec.tags,
     project: spec.project ? spec.project(cluster) : cluster[0].project,
     compressionLevel: spec.compressionLevel,
@@ -110,6 +126,7 @@ const createTargetNode = (
     status: spec.targetStatus ?? ContextNodeStatus.ACTIVE,
     metadata: {
       clusterSize: cluster.length,
+      ...(synthesized ? { llmSynthesized: true } : {}),
       ...spec.metadata?.(cluster),
     },
   });

@@ -21,6 +21,24 @@ const LOCAL_EMBEDDING_DIM = 256;
 /** Embedding 维度（OpenAI text-embedding-3-small） */
 const OPENAI_EMBEDDING_DIM = 1536;
 
+/**
+ * Max inputs per embedding API request. Aliyun DashScope's OpenAI-compatible
+ * endpoint rejects batches larger than 10 (`batch size is invalid, it should
+ * not be larger than 10`); OpenAI itself allows up to 2048. Default to the
+ * safe DashScope limit so the common Aliyun setup works out of the box, and
+ * let users on OpenAI raise it via `MINDSTRATE_EMBEDDING_MAX_BATCH`. The
+ * embedder chunks any larger batch into requests of at most this size.
+ */
+const DEFAULT_EMBEDDING_MAX_BATCH = 10;
+
+const EMBEDDING_MAX_BATCH = ((): number => {
+  const raw = process.env['MINDSTRATE_EMBEDDING_MAX_BATCH'];
+  if (raw === undefined) return DEFAULT_EMBEDDING_MAX_BATCH;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) return DEFAULT_EMBEDDING_MAX_BATCH;
+  return parsed;
+})();
+
 export interface EmbedderMetrics {
   apiCalls: number;
   cacheHits: number;
@@ -30,6 +48,13 @@ export interface EmbedderMetrics {
 export interface EmbedderOptions {
   client?: OpenAIClient;
   maxConcurrentRequests?: number;
+  /**
+   * Requested output dimensions, sent as the API `dimensions` parameter. Only
+   * set this for models that support custom dimensions (OpenAI v3 small/large,
+   * Aliyun text-embedding-v3/v4). Fixed-dimension models (v2/v1, ada-002)
+   * reject the parameter, so leave it undefined for them.
+   */
+  dimensions?: number;
 }
 
 export class Embedder {
@@ -38,6 +63,7 @@ export class Embedder {
   private model: string;
   private useLocal: boolean;
   private client?: OpenAIClient;
+  private dimensions?: number;
   private cache = new Map<string, number[]>();
   private pending = new Map<string, Promise<number[]>>();
   private metrics: EmbedderMetrics = { apiCalls: 0, cacheHits: 0, cacheMisses: 0 };
@@ -56,6 +82,7 @@ export class Embedder {
     this.model = model;
     this.useLocal = !apiKey;
     this.client = options.client;
+    this.dimensions = options.dimensions;
     this.maxConcurrentRequests = Math.max(options.maxConcurrentRequests ?? 2, 1);
   }
 
@@ -161,6 +188,7 @@ export class Embedder {
       const response = await client.embeddings.create({
         model: this.model,
         input: text,
+        ...(this.dimensions ? { dimensions: this.dimensions } : {}),
       });
       const embedding = response.data[0].embedding;
       this.cache.set(key, embedding);
@@ -204,23 +232,30 @@ export class Embedder {
     }
 
     try {
-      const response = await this.withApiSlot(async () => {
-        const client = await this.getClient();
-        this.metrics.apiCalls++;
-        return client.embeddings.create({
-          model: this.model,
-          input: missing,
+      // Chunk into requests of at most EMBEDDING_MAX_BATCH inputs: providers
+      // like Aliyun DashScope hard-cap batch size at 10, so a single large
+      // request (e.g. the 64-wide node-embedding backfill) would 400.
+      for (let start = 0; start < missing.length; start += EMBEDDING_MAX_BATCH) {
+        const chunk = missing.slice(start, start + EMBEDDING_MAX_BATCH);
+        const response = await this.withApiSlot(async () => {
+          const client = await this.getClient();
+          this.metrics.apiCalls++;
+          return client.embeddings.create({
+            model: this.model,
+            input: chunk,
+            ...(this.dimensions ? { dimensions: this.dimensions } : {}),
+          });
         });
-      });
 
-      const embeddings = response.data
-        .sort((a, b) => a.index - b.index)
-        .map(d => d.embedding);
-      for (let i = 0; i < missing.length; i++) {
-        const text = missing[i];
-        const embedding = embeddings[i];
-        this.cache.set(this.cacheKey(text), embedding);
-        results.set(text, embedding);
+        const embeddings = response.data
+          .sort((a, b) => a.index - b.index)
+          .map(d => d.embedding);
+        for (let i = 0; i < chunk.length; i++) {
+          const text = chunk[i];
+          const embedding = embeddings[i];
+          this.cache.set(this.cacheKey(text), embedding);
+          results.set(text, embedding);
+        }
       }
       return texts.map((text) => results.get(text)!);
     } catch (err) {

@@ -196,7 +196,7 @@ export class VectorStore implements IVectorStore {
     console.warn(
       `[vector-store] Embedding dimension changed from ${this.expectedDimension} to ${embedding.length}. ` +
       `Dropping ${droppedCount} legacy document(s) from the in-memory index. ` +
-      `Run \`mindstrate maintenance --rebuild-vectors\` or delete the vector store file to clean up on-disk state. ` +
+      `Run \`mindstrate doctor --rebuild-vectors\` or delete the vector store file to clean up on-disk state. ` +
       `(This usually means the project's LLM Config in Settings → LLM Configs changed its embedding model since the last write.)`,
     );
     this.index.documents = this.index.documents.filter(

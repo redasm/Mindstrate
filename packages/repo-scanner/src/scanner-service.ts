@@ -9,6 +9,7 @@ import {
   type DetectedProject,
   type ProjectGraphScanProgress,
   type ProjectGraphIndexProgress,
+  type ProjectGraphIndexResult,
   type ScanLogLevel,
   type SystemPageDefinition,
 } from '@mindstrate/server';
@@ -448,6 +449,7 @@ export class RepoScannerService {
       `Project graph indexed: ${indexResult.filesScanned} files scanned, ${indexResult.skippedFiles} skipped`,
       'index',
     );
+    this.logScanCoverage(source.id, runId, indexResult);
     // Internalize the system pages (architecture / operation-manual book) into
     // the graph so the MCP before-edit / impact tools surface the same
     // project-specific editing rules in team mode as `mindstrate init` gives
@@ -471,6 +473,88 @@ export class RepoScannerService {
         + `${systemPages.updated.length} updated, ${systemPages.unchanged.length} unchanged`,
       'index',
     );
+
+    await this.backfillNodeEmbeddings(source, project, runId);
+  }
+
+  /**
+   * Make scan coverage visible so a partial first index is not a black box.
+   * Three things otherwise fail silently and leave the user guessing why
+   * "half the repo is missing":
+   *  - the scan only deep-scanned configured sourceRoots (other top-level
+   *    source dirs never entered the walk),
+   *  - some configured sourceRoots did not exist on disk and were dropped,
+   *  - files were skipped (oversized / unreadable / parser failure).
+   * Restricted coverage or dropped roots are warnings (actionable); a
+   * full-tree scan with only routine skips is informational.
+   */
+  private logScanCoverage(sourceId: string, runId: string, result: ProjectGraphIndexResult): void {
+    const d = result.diagnostics;
+
+    if (d.missingSourceRoots.length > 0) {
+      this.log(
+        sourceId,
+        runId,
+        'warn',
+        `Configured sourceRoots not found on disk and skipped: ${d.missingSourceRoots.join(', ')}. `
+          + 'The detection rule expected these directories but they do not exist under the scan root — '
+          + 'their source files are NOT in the graph. Fix the rule, or point the source at the right root.',
+        'index',
+      );
+    }
+
+    if (d.coverage === 'restricted' && d.unscannedTopLevelDirectories.length > 0) {
+      this.log(
+        sourceId,
+        runId,
+        'warn',
+        `Restricted scan: only deep-scanned [${d.requestedSourceRoots.join(', ')}]. `
+          + `These top-level directories were NOT scanned and have no file/symbol nodes: `
+          + `${d.unscannedTopLevelDirectories.join(', ')}. If they contain source you want indexed, add them to `
+          + `the project's sourceRoots (.mindstrate/rules/*.json) and re-scan.`,
+        'index',
+      );
+    }
+
+    const reasons = Object.entries(d.skippedByReason);
+    if (reasons.length > 0) {
+      const breakdown = reasons.map(([reason, count]) => `${reason}=${count}`).join(', ');
+      const oversizedHint = d.oversizedExamples.length > 0
+        ? ` Oversized examples: ${d.oversizedExamples.map((f) => `${f.path} (${Math.round(f.sizeBytes / 1024 / 1024)}MB)`).join(', ')}. `
+          + 'Raise MINDSTRATE_SCAN_MAX_FILE_BYTES (or SCANNER_MAX_FILE_BYTES in Docker) to include them.'
+        : '';
+      this.log(sourceId, runId, 'info', `Skipped files by reason: ${breakdown}.${oversizedHint}`, 'index');
+    }
+  }
+
+  /**
+   * Embed the project's context-graph nodes so hybrid semantic search can
+   * reach file / dependency / module nodes (the scanner writes them without
+   * embeddings). Runs last, after enrichment + system pages, so embeddings
+   * cover the richest node text. A failure here must not fail the scan — the
+   * deterministic graph and lexical search still work without vectors.
+   */
+  private async backfillNodeEmbeddings(source: ScanSource, project: DetectedProject, runId: string): Promise<void> {
+    try {
+      const result = await this.memory.context.backfillNodeEmbeddings(project);
+      this.log(
+        source.id,
+        runId,
+        'info',
+        `Node embeddings backfilled (${result.model}, ${result.dimensions}d): `
+          + `${result.embedded} embedded, ${result.skipped} already current, ${result.candidates} candidates`,
+        'index',
+      );
+    } catch (error) {
+      this.log(
+        source.id,
+        runId,
+        'warn',
+        `Node embedding backfill failed (semantic search will fall back to lexical): `
+          + `${error instanceof Error ? error.message : String(error)}`,
+        'index',
+      );
+    }
   }
 
   /**
@@ -615,9 +699,11 @@ export class RepoScannerService {
    * blocked cursor setup) skip the expensive re-index.
    */
   private projectGraphExists(project: string): boolean {
-    return this.memory.maintenance.getProjectBreakdown().some(
-      (entry) => entry.project === project && entry.entries > 0,
-    );
+    // Count only scanner-extracted project-graph nodes — not manually-authored
+    // knowledge. Otherwise a project with any hand-written rule would look
+    // "already indexed", and a forced re-scan (cursor reset, which clears those
+    // project-graph nodes first) would still be skipped on the P4 path.
+    return this.memory.context.countProjectGraphNodes(project) > 0;
   }
 
   private async executeP4Source(source: ScanSource, runId: string): Promise<ScanExecutionResult> {

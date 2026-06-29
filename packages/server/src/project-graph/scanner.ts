@@ -22,14 +22,34 @@ export interface ScanProjectFilesOptions {
   manifests?: string[];
   readFile?: (absolutePath: string) => Buffer;
   onProgress?: (event: ProjectGraphScanProgress) => void;
+  /** Fired for every skipped file/directory, with the reason. */
+  onSkip?: (event: ProjectGraphSkipEvent) => void;
 }
 
 export interface ProjectGraphScanPlan {
   deepRoots: string[];
+  /** sourceRoots the caller asked to deep-scan, before existence filtering. */
+  requestedSourceRoots: string[];
+  /** Requested sourceRoots that do not exist on disk and were dropped. */
+  missingSourceRoots: string[];
   manifestFiles: string[];
   ignoredRoots: string[];
   generatedRoots: string[];
   metadataOnlyRoots: string[];
+}
+
+/** Why a file/directory was skipped during the walk. */
+export type ProjectGraphSkipReason =
+  | 'unreadable-directory'
+  | 'stat-failed'
+  | 'oversized'
+  | 'read-failed';
+
+export interface ProjectGraphSkipEvent {
+  path: string;
+  reason: ProjectGraphSkipReason;
+  /** Present for the `oversized` reason: the file's size in bytes. */
+  sizeBytes?: number;
 }
 
 export interface ProjectGraphScanProgress {
@@ -145,10 +165,15 @@ export const buildProjectGraphScanPlan = (
   options: ScanProjectFilesOptions = {},
 ): ProjectGraphScanPlan => {
   const resolvedRoot = path.resolve(root);
-  const sourceRoots = uniqueSorted(options.sourceRoots ?? [])
+  const requestedSourceRoots = uniqueSorted(options.sourceRoots ?? []);
+  const sourceRoots = requestedSourceRoots
     .filter((rel) => pathExistsInsideRoot(resolvedRoot, rel));
+  const missingSourceRoots = requestedSourceRoots
+    .filter((rel) => !sourceRoots.includes(rel));
   return {
     deepRoots: sourceRoots,
+    requestedSourceRoots,
+    missingSourceRoots,
     manifestFiles: expandManifestFiles(resolvedRoot, options.manifests ?? []),
     ignoredRoots: uniqueSorted([
       ...DEFAULT_PROJECT_GRAPH_IGNORES,
@@ -157,6 +182,42 @@ export const buildProjectGraphScanPlan = (
     generatedRoots: uniqueSorted(options.generatedRoots ?? []),
     metadataOnlyRoots: uniqueSorted(options.metadataOnlyRoots ?? []),
   };
+};
+
+/**
+ * Top-level directories under `root` that the scan plan will NOT deep-scan.
+ *
+ * When `deepRoots` is non-empty the walk only descends into those roots
+ * (see {@link scanProjectFiles}), so every other source-bearing top-level
+ * directory is silently invisible to the graph. This surfaces them so the
+ * caller can warn instead of leaving the user to guess why half the repo is
+ * missing. Returns `[]` when nothing is restricted (deepRoots empty = whole
+ * tree scanned) or when no readable top-level dirs remain after ignores.
+ */
+export const findUnscannedTopLevelDirectories = (
+  root: string,
+  plan: ProjectGraphScanPlan,
+  options: ScanProjectFilesOptions = {},
+): string[] => {
+  if (plan.deepRoots.length === 0) return [];
+  const resolvedRoot = path.resolve(root);
+  const ignoreRules = loadIgnoreRules(resolvedRoot, options);
+  let dirents: fs.Dirent[];
+  try {
+    dirents = fs.readdirSync(resolvedRoot, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const deepTops = new Set(plan.deepRoots.map((rel) => normalizePath(rel).split('/')[0]));
+  const unscanned: string[] = [];
+  for (const dirent of dirents) {
+    if (!dirent.isDirectory()) continue;
+    const rel = normalizePath(dirent.name);
+    if (deepTops.has(rel)) continue;
+    if (isIgnored(rel, true, ignoreRules)) continue;
+    unscanned.push(rel);
+  }
+  return uniqueSorted(unscanned);
 };
 
 export const scanProjectFiles = (
@@ -189,6 +250,7 @@ export const scanProjectFiles = (
     readFile,
     progress,
     onProgress: options.onProgress,
+    onSkip: options.onSkip,
   };
   for (const relDir of plan.deepRoots.length > 0 ? plan.deepRoots : ['']) {
     walkProject({ ...walkInput, relDir });
@@ -204,6 +266,7 @@ export const scanProjectFiles = (
       readFile,
       progress,
       onProgress: options.onProgress,
+      onSkip: options.onSkip,
     });
   }
   return entries.sort((left, right) => left.path.localeCompare(right.path));
@@ -249,10 +312,11 @@ interface WalkProjectInput {
   readFile: (absolutePath: string) => Buffer;
   progress: ProjectGraphScanProgress;
   onProgress?: (event: ProjectGraphScanProgress) => void;
+  onSkip?: (event: ProjectGraphSkipEvent) => void;
 }
 
 const walkProject = (input: WalkProjectInput): void => {
-  const { root, relDir, ignoreRules, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress } = input;
+  const { root, relDir, ignoreRules, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress, onSkip } = input;
   const absDir = path.join(root, relDir);
   progress.directories += 1;
   emitProgress(onProgress, progress, 'directory', relDir || '.');
@@ -262,6 +326,7 @@ const walkProject = (input: WalkProjectInput): void => {
   } catch {
     progress.skippedFiles += 1;
     emitProgress(onProgress, progress, 'skipped', relDir || '.');
+    onSkip?.({ path: relDir || '.', reason: 'unreadable-directory' });
     return;
   }
 
@@ -275,7 +340,7 @@ const walkProject = (input: WalkProjectInput): void => {
     }
     if (!dirent.isFile()) continue;
 
-    addFileEntry({ root, rel, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress });
+    addFileEntry({ root, rel, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress, onSkip });
   }
 };
 
@@ -289,10 +354,11 @@ interface AddFileEntryInput {
   readFile: (absolutePath: string) => Buffer;
   progress: ProjectGraphScanProgress;
   onProgress?: (event: ProjectGraphScanProgress) => void;
+  onSkip?: (event: ProjectGraphSkipEvent) => void;
 }
 
 const addFileEntry = (input: AddFileEntryInput): void => {
-  const { root, rel, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress } = input;
+  const { root, rel, generatedRoots, metadataOnlyRoots, entries, seen, readFile, progress, onProgress, onSkip } = input;
   const normalizedRel = normalizePath(rel);
   if (seen.has(normalizedRel)) return;
   seen.add(normalizedRel);
@@ -302,6 +368,7 @@ const addFileEntry = (input: AddFileEntryInput): void => {
   if (!stat) {
     progress.skippedFiles += 1;
     emitProgress(onProgress, progress, 'skipped', normalizedRel);
+    onSkip?.({ path: normalizedRel, reason: 'stat-failed' });
     return;
   }
   // Skip oversized files before reading them: a full read of a huge blob is
@@ -309,12 +376,14 @@ const addFileEntry = (input: AddFileEntryInput): void => {
   if (PROJECT_GRAPH_MAX_FILE_BYTES > 0 && stat.size > PROJECT_GRAPH_MAX_FILE_BYTES) {
     progress.skippedFiles += 1;
     emitProgress(onProgress, progress, 'skipped', normalizedRel);
+    onSkip?.({ path: normalizedRel, reason: 'oversized', sizeBytes: stat.size });
     return;
   }
   const content = readFileContent(abs, readFile);
   if (!content) {
     progress.skippedFiles += 1;
     emitProgress(onProgress, progress, 'skipped', normalizedRel);
+    onSkip?.({ path: normalizedRel, reason: 'read-failed' });
     return;
   }
   progress.files += 1;

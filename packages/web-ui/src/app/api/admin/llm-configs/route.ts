@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
     const configs = memory.llmConfigs.list().map((config) => ({
       ...config,
       openaiApiKey: maskKey(config.openaiApiKey),
+      embeddingApiKey: config.embeddingApiKey ? maskKey(config.embeddingApiKey) : undefined,
     }));
     return NextResponse.json({ configs });
   } catch (error) {
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
     const created = memory.llmConfigs.create({
       project,
       openaiApiKey,
+      embeddingApiKey: optionalString(body.embeddingApiKey),
       llmBaseUrl: optionalString(body.llmBaseUrl),
       embeddingBaseUrl: optionalString(body.embeddingBaseUrl),
       llmModel,
@@ -72,7 +74,11 @@ export async function POST(request: NextRequest) {
       embeddingDim,
     });
 
-    return NextResponse.json({ ...created, openaiApiKey: maskKey(created.openaiApiKey) }, { status: 201 });
+    return NextResponse.json({
+      ...created,
+      openaiApiKey: maskKey(created.openaiApiKey),
+      embeddingApiKey: created.embeddingApiKey ? maskKey(created.embeddingApiKey) : undefined,
+    }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }

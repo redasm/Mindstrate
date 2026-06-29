@@ -14,6 +14,7 @@ interface Props {
 interface FormState {
   project: string;
   openaiApiKey: string;
+  embeddingApiKey: string;
   llmBaseUrl: string;
   embeddingBaseUrl: string;
   llmModel: string;
@@ -24,6 +25,7 @@ interface FormState {
 const blankForm = (): FormState => ({
   project: '',
   openaiApiKey: '',
+  embeddingApiKey: '',
   llmBaseUrl: '',
   embeddingBaseUrl: '',
   llmModel: '',
@@ -35,6 +37,7 @@ const EMBEDDING_DIM_PRESETS: Record<string, number> = {
   'text-embedding-3-small': 1536,
   'text-embedding-3-large': 3072,
   'text-embedding-ada-002': 1536,
+  'text-embedding-v4': 1024,
   'text-embedding-v3': 1024,
   'text-embedding-v2': 1536,
   'text-embedding-v1': 1536,
@@ -124,6 +127,7 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
     setForm({
       project: full.project,
       openaiApiKey: full.openaiApiKey,
+      embeddingApiKey: full.embeddingApiKey ?? '',
       llmBaseUrl: full.llmBaseUrl ?? '',
       embeddingBaseUrl: full.embeddingBaseUrl ?? '',
       llmModel: full.llmModel,
@@ -166,6 +170,12 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
       if (form.openaiApiKey.trim() !== '' && !form.openaiApiKey.startsWith('••••')) {
         patch.openaiApiKey = form.openaiApiKey.trim();
       }
+      // embeddingApiKey: empty clears it (fall back to main key); masked value left untouched.
+      if (form.embeddingApiKey.trim() === '') {
+        patch.embeddingApiKey = null;
+      } else if (!form.embeddingApiKey.startsWith('••••')) {
+        patch.embeddingApiKey = form.embeddingApiKey.trim();
+      }
       res = await fetch(`/api/admin/llm-configs/${encodeURIComponent(editingId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -175,6 +185,7 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
       const payload: CreateLlmConfigInput = {
         project: form.project.trim(),
         openaiApiKey: form.openaiApiKey.trim(),
+        embeddingApiKey: form.embeddingApiKey.trim() || undefined,
         llmBaseUrl: form.llmBaseUrl.trim() || undefined,
         embeddingBaseUrl: form.embeddingBaseUrl.trim() || undefined,
         llmModel: form.llmModel.trim(),
@@ -289,7 +300,7 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
 
           <div className="px-5 py-5 space-y-5">
             <div className="grid grid-cols-2 gap-x-5 gap-y-4">
-              <Field label={t.project} icon="lucide:folder">
+              <Field label={t.project} icon="lucide:folder" colSpan={2}>
                 <input
                   type="text"
                   list="llm-known-projects"
@@ -303,10 +314,21 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
                   {knownProjects.map((p) => <option key={p} value={p} />)}
                 </datalist>
               </Field>
+
+              <Field label={t.llmBaseUrl} suffixLabel={t.optional} icon="lucide:link" colSpan={2}>
+                <input
+                  type="text"
+                  value={form.llmBaseUrl}
+                  onChange={(e) => setFormField('llmBaseUrl', e.target.value)}
+                  placeholder={t.llmBaseUrlPlaceholder}
+                  className="flex-1 px-2.5 py-2.5 bg-transparent text-sm font-mono text-surface-800 placeholder-surface-400 outline-none"
+                />
+              </Field>
               <Field
                 label={t.apiKey}
                 suffixLabel={editingId ? t.apiKeyEditSuffix : t.apiKeyCreateSuffix}
                 icon="lucide:key-round"
+                colSpan={2}
               >
                 <input
                   type={showApiKey ? 'text' : 'password'}
@@ -325,15 +347,6 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
                 </button>
               </Field>
 
-              <Field label={t.llmBaseUrl} suffixLabel={t.optional} icon="lucide:link" colSpan={2}>
-                <input
-                  type="text"
-                  value={form.llmBaseUrl}
-                  onChange={(e) => setFormField('llmBaseUrl', e.target.value)}
-                  placeholder={t.llmBaseUrlPlaceholder}
-                  className="flex-1 px-2.5 py-2.5 bg-transparent text-sm font-mono text-surface-800 placeholder-surface-400 outline-none"
-                />
-              </Field>
               <Field
                 label={t.embeddingBaseUrl}
                 suffixLabel={t.embeddingBaseUrlSuffix}
@@ -345,6 +358,20 @@ export function LlmConfigsClient({ initialConfigs, knownProjects }: Props) {
                   value={form.embeddingBaseUrl}
                   onChange={(e) => setFormField('embeddingBaseUrl', e.target.value)}
                   placeholder={t.embeddingBaseUrlPlaceholder}
+                  className="flex-1 px-2.5 py-2.5 bg-transparent text-sm font-mono text-surface-800 placeholder-surface-400 outline-none"
+                />
+              </Field>
+              <Field
+                label={t.embeddingApiKey}
+                suffixLabel={t.embeddingApiKeySuffix}
+                icon="lucide:key-round"
+                colSpan={2}
+              >
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={form.embeddingApiKey}
+                  onChange={(e) => setFormField('embeddingApiKey', e.target.value)}
+                  placeholder={t.embeddingApiKeyPlaceholder}
                   className="flex-1 px-2.5 py-2.5 bg-transparent text-sm font-mono text-surface-800 placeholder-surface-400 outline-none"
                 />
               </Field>

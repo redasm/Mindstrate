@@ -11,6 +11,7 @@ interface LlmConfigRow {
   id: string;
   project: string;
   openai_api_key: string;
+  embedding_api_key: string | null;
   llm_base_url: string | null;
   embedding_base_url: string | null;
   llm_model: string;
@@ -24,6 +25,7 @@ const rowToConfig = (row: LlmConfigRow): ProjectLlmConfig => ({
   id: row.id,
   project: row.project,
   openaiApiKey: row.openai_api_key,
+  embeddingApiKey: row.embedding_api_key ?? undefined,
   llmBaseUrl: row.llm_base_url ?? undefined,
   embeddingBaseUrl: row.embedding_base_url ?? undefined,
   llmModel: row.llm_model,
@@ -68,14 +70,15 @@ export class LlmConfigRepository {
     this.db
       .prepare(
         `INSERT INTO project_llm_configs (
-          id, project, openai_api_key, llm_base_url, embedding_base_url,
+          id, project, openai_api_key, embedding_api_key, llm_base_url, embedding_base_url,
           llm_model, embedding_model, embedding_dim, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
         input.project,
         input.openaiApiKey,
+        input.embeddingApiKey ?? null,
         input.llmBaseUrl ?? null,
         input.embeddingBaseUrl ?? null,
         input.llmModel,
@@ -100,6 +103,7 @@ export class LlmConfigRepository {
     };
 
     setField('openai_api_key', patch.openaiApiKey);
+    setField('embedding_api_key', patch.embeddingApiKey);
     setField('llm_base_url', patch.llmBaseUrl);
     setField('embedding_base_url', patch.embeddingBaseUrl);
     setField('llm_model', patch.llmModel);

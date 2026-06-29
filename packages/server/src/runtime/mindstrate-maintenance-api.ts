@@ -1,4 +1,5 @@
 import type { MindstrateRuntime } from './mindstrate-runtime.js';
+import { backfillNodeEmbeddings } from '../context-graph/node-embedding-backfill.js';
 
 export class MindstrateMaintenanceApi {
   constructor(private readonly services: MindstrateRuntime) {}
@@ -21,6 +22,26 @@ export class MindstrateMaintenanceApi {
    */
   getProjectBreakdown(): Array<{ project: string; entries: number; conflicts: number; lastActivity: string | null }> {
     return this.services.contextGraphStore.getProjectBreakdown();
+  }
+
+  /**
+   * Remove template-placeholder high-order compression nodes (CANDIDATE
+   * skill/heuristic/axiom whose content is the old "Generalized ... from N
+   * nodes" template, not an LLM synthesis). Cleans up noise produced before
+   * high-order compression required real LLM generalization.
+   */
+  pruneTemplateHighOrderNodes(project?: string): { nodesDeleted: number } {
+    return this.services.contextGraphStore.deleteTemplateHighOrderNodes(project);
+  }
+
+  /**
+   * Remove template-placeholder mid-tier compression nodes (summary/pattern/
+   * rule whose content is still a "Compressed/Abstracted/Generalized from N"
+   * template, not an LLM synthesis). Cleans up the pseudo-summary/pattern/rule
+   * noise produced before mid-tier compression required real LLM synthesis.
+   */
+  pruneTemplateCompressedNodes(project?: string): { nodesDeleted: number } {
+    return this.services.contextGraphStore.deleteTemplateCompressedNodes(project);
   }
 
   /**
@@ -54,6 +75,46 @@ export class MindstrateMaintenanceApi {
       );
     }
     return { nodesDeleted, sourcesDeleted, vectorsCleared };
+  }
+
+  /**
+   * Rebuild node embeddings for one project (or all known projects). Clears
+   * the project's stored node embeddings, then re-embeds every live node with
+   * the project's currently configured embedding model. This is the fix for
+   * embedding-dimension drift: switching a project's LLM Config embedding
+   * model leaves the old-dimension vectors unusable (cosine across dimensions
+   * is undefined), and this re-aligns everything to the new model. Idempotent.
+   */
+  async rebuildVectors(
+    project?: string,
+    onProgress?: (p: { project: string; embedded: number; total: number }) => void,
+  ): Promise<Array<{ project: string; embedded: number; candidates: number; model: string; dimensions: number }>> {
+    const projects = project
+      ? [project]
+      : this.services.contextGraphStore.listKnownProjects();
+    const results: Array<{ project: string; embedded: number; candidates: number; model: string; dimensions: number }> = [];
+    for (const name of projects) {
+      this.services.contextGraphStore.deleteNodeEmbeddingsForProject(name);
+      const providers = this.services.providerFactory.forProject(name);
+      const result = await backfillNodeEmbeddings(
+        this.services.contextGraphStore,
+        providers.embedder,
+        providers.embeddingModel,
+        {
+          project: name,
+          force: true,
+          onProgress: (p) => onProgress?.({ project: name, embedded: p.embedded, total: p.total }),
+        },
+      );
+      results.push({
+        project: name,
+        embedded: result.embedded,
+        candidates: result.candidates,
+        model: result.model,
+        dimensions: result.dimensions,
+      });
+    }
+    return results;
   }
 
   async getStats(): Promise<{

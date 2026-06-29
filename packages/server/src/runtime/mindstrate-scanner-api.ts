@@ -42,6 +42,32 @@ export class MindstrateScannerApi {
     return this.services.scanSourceRepository.deleteSource(id);
   }
 
+  /**
+   * Queue a from-scratch re-scan of a source without deleting/recreating it.
+   *
+   * Always clears the project's existing scanner-extracted graph nodes, then
+   * resets the cursor so the next daemon tick treats it as a first run (full
+   * re-index). Wiping first is required, not optional: a plain re-index upserts
+   * by stable id but never removes nodes for files deleted since the last scan,
+   * and the P4 path skips re-indexing entirely while any project-graph node
+   * still exists. Manually-authored knowledge / snapshots are always preserved
+   * (only nodes tagged `metadata.projectGraph` are removed). Returns null if
+   * the source does not exist.
+   */
+  rescanFromScratch(
+    id: string,
+  ): { sourceId: string; project: string; graphNodesDeleted: number } | null {
+    const source = this.services.scanSourceRepository.getSource(id);
+    if (!source) return null;
+    const graphNodesDeleted = this.services.contextGraphStore.deleteProjectGraphNodes(source.project).nodesDeleted;
+    this.services.scanSourceRepository.resetCursor(id);
+    return { sourceId: id, project: source.project, graphNodesDeleted };
+  }
+
+  resetCursor(id: string): boolean {
+    return this.services.scanSourceRepository.resetCursor(id);
+  }
+
   listDueSources(now: Date = new Date()): ScanSource[] {
     return this.services.scanSourceRepository.listDueSources(now);
   }
@@ -112,5 +138,9 @@ export class MindstrateScannerApi {
 
   pruneLogs(sourceId: string, keep: number): void {
     this.services.scanSourceRepository.pruneLogs(sourceId, keep);
+  }
+
+  clearLogs(sourceId: string): number {
+    return this.services.scanSourceRepository.clearLogs(sourceId);
   }
 }

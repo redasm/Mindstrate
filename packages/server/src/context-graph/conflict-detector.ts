@@ -4,9 +4,9 @@ import type { ContextGraphStore } from './context-graph-store.js';
 import {
   ContextNodeStatus,
   ContextRelationType,
+  SubstrateType,
   type ConflictRecord,
   type ContextNode,
-  type SubstrateType,
 } from '@mindstrate/protocol/models';
 
 const NEGATION_MARKERS = [
@@ -28,10 +28,32 @@ const AFFIRMATION_MARKERS = [
   'supported',
 ];
 
+/**
+ * Conflict detection only makes sense for normative, prescriptive substrate —
+ * a RULE/HEURISTIC/AXIOM can genuinely contradict another. SNAPSHOT / SUMMARY /
+ * EPISODE / PATTERN / SKILL are long descriptive documents; running a
+ * keyword-based "contradiction" check over them produces false positives,
+ * because two near-identical documents both contain the same affirmation and
+ * negation words (e.g. a project snapshot saying both "use the repository
+ * layer" and "do not edit manually"). Restricting the scan to normative
+ * substrate is the primary guard against that class of false positive.
+ */
+const NORMATIVE_SUBSTRATES: readonly SubstrateType[] = [
+  SubstrateType.RULE,
+  SubstrateType.HEURISTIC,
+  SubstrateType.AXIOM,
+];
+
 export interface ConflictDetectionOptions {
   project?: string;
   substrateType?: SubstrateType;
   similarityThreshold?: number;
+  /**
+   * Upper similarity bound: pairs at or above this are treated as
+   * near-duplicates (e.g. an assimilated copy of the same snapshot), not
+   * contradictions, and are skipped. Defaults to 0.97.
+   */
+  duplicateThreshold?: number;
   limit?: number;
 }
 
@@ -52,14 +74,25 @@ export class ConflictDetector {
 
   async detectConflicts(options: ConflictDetectionOptions = {}): Promise<ConflictDetectionResult> {
     const similarityThreshold = options.similarityThreshold ?? 0.84;
+    const duplicateThreshold = options.duplicateThreshold ?? 0.97;
     const limit = options.limit ?? 200;
     const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
 
-    const nodes = this.graphStore.listNodes({
-      project: options.project,
-      substrateType: options.substrateType,
-      limit,
-    }).filter((node) => node.status !== ContextNodeStatus.ARCHIVED);
+    // Only normative substrate can meaningfully contradict; descriptive
+    // documents (snapshots/summaries/episodes/patterns/skills) are excluded to
+    // avoid keyword-driven false positives. An explicit substrateType is still
+    // honoured, but only if it is itself normative.
+    const substrateTypes = options.substrateType
+      ? (NORMATIVE_SUBSTRATES.includes(options.substrateType) ? [options.substrateType] : [])
+      : NORMATIVE_SUBSTRATES;
+
+    const nodes = substrateTypes.flatMap((substrateType) =>
+      this.graphStore.listNodes({
+        project: options.project,
+        substrateType,
+        limit,
+      }),
+    ).filter((node) => node.status !== ContextNodeStatus.ARCHIVED);
 
     const embeddings = new Map<string, number[]>();
     for (const node of nodes) {
@@ -79,6 +112,9 @@ export class ConflictDetector {
 
         const similarity = cosineSimilarity(embeddingA, embeddingB);
         if (similarity < similarityThreshold) continue;
+        // Near-identical content is a duplicate (e.g. an assimilated copy),
+        // not a contradiction — skip rather than flag a false conflict.
+        if (similarity >= duplicateThreshold) continue;
         if (!looksContradictory(a, b)) continue;
         if (this.hasRecordedConflict(a.id, b.id)) continue;
 

@@ -8,7 +8,11 @@ import {
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { HighOrderCompressor } from '../src/context-graph/high-order-compressor.js';
 import { ProviderFactory } from '../src/processing/provider-factory.js';
+import { fakeHighOrderProviderFactory } from './high-order-test-support.js';
 import { createTempDir, removeTempDir } from './test-support.js';
+
+const SYNTHESIS = JSON.stringify({ related: true, title: 'Synth', content: 'Generalized.' });
+const sameVector = () => [1, 0, 0, 0];
 
 describe('HighOrderCompressor candidate-first promotion', () => {
   let tempDir: string;
@@ -18,7 +22,10 @@ describe('HighOrderCompressor candidate-first promotion', () => {
   beforeEach(() => {
     tempDir = createTempDir();
     graphStore = new ContextGraphStore(path.join(tempDir, 'context-graph.db'));
-    compressor = new HighOrderCompressor(graphStore, ProviderFactory.offline());
+    compressor = new HighOrderCompressor(
+      graphStore,
+      fakeHighOrderProviderFactory({ vectorFor: sameVector, chatContent: SYNTHESIS }) as never,
+    );
   });
 
   afterEach(() => {
@@ -26,51 +33,43 @@ describe('HighOrderCompressor candidate-first promotion', () => {
     removeTempDir(tempDir);
   });
 
-  it('creates SKILL clusters as candidate nodes, not active', async () => {
-    for (let index = 0; index < 2; index++) {
+  const seed = (substrateType: SubstrateType, domainType: ContextDomainType) => {
+    for (let index = 0; index < 3; index++) {
       graphStore.createNode({
-        substrateType: SubstrateType.RULE,
-        domainType: ContextDomainType.CONVENTION,
-        title: `Rule ${index}`,
-        content: 'Run focused tests before changing ECS runtime behavior.',
+        substrateType,
+        domainType,
+        title: `${substrateType} ${index}`,
+        content: `${substrateType} content ${index}`,
         project: 'mindstrate',
         status: ContextNodeStatus.ACTIVE,
       });
     }
+  };
 
-    const skill = await compressor.compressRulesToSkills({ project: 'mindstrate', similarityThreshold: 0.55 });
+  it('creates SKILL clusters as candidate nodes, not active', async () => {
+    seed(SubstrateType.RULE, ContextDomainType.CONVENTION);
+    const skill = await compressor.compressRulesToSkills({ project: 'mindstrate' });
     expect(skill.nodesCreated).toBe(1);
     const skillNode = graphStore.getNodeById(skill.clusters[0].targetNodeId);
     expect(skillNode?.substrateType).toBe(SubstrateType.SKILL);
     expect(skillNode?.status).toBe(ContextNodeStatus.CANDIDATE);
   });
 
-  it('does not surface candidate high-order nodes in active-only listings', async () => {
-    for (let index = 0; index < 2; index++) {
-      graphStore.createNode({
-        substrateType: SubstrateType.HEURISTIC,
-        domainType: ContextDomainType.BEST_PRACTICE,
-        title: `Heuristic ${index}`,
-        content: 'Prefer verified changes with evidence before automation.',
-        project: 'mindstrate',
-        status: ContextNodeStatus.ACTIVE,
-      });
-    }
+  it('skips high-order compression entirely in offline (hash) mode', async () => {
+    seed(SubstrateType.RULE, ContextDomainType.CONVENTION);
+    const offline = new HighOrderCompressor(graphStore, ProviderFactory.offline());
+    const skill = await offline.compressRulesToSkills({ project: 'mindstrate' });
+    expect(skill.nodesCreated).toBe(0);
+    expect(graphStore.listNodes({ project: 'mindstrate', substrateType: SubstrateType.SKILL })).toHaveLength(0);
+  });
 
-    await compressor.compressHeuristicsToAxioms({ project: 'mindstrate', similarityThreshold: 0.55 });
-
-    const activeAxioms = graphStore.listNodes({
-      project: 'mindstrate',
-      substrateType: SubstrateType.AXIOM,
-      status: ContextNodeStatus.ACTIVE,
-    });
-    expect(activeAxioms).toHaveLength(0);
-
-    const candidateAxioms = graphStore.listNodes({
-      project: 'mindstrate',
-      substrateType: SubstrateType.AXIOM,
-      status: ContextNodeStatus.CANDIDATE,
-    });
-    expect(candidateAxioms).toHaveLength(1);
+  it('skips a cluster when the LLM declines to synthesize', async () => {
+    seed(SubstrateType.RULE, ContextDomainType.CONVENTION);
+    const noSynth = new HighOrderCompressor(
+      graphStore,
+      fakeHighOrderProviderFactory({ vectorFor: sameVector, chatContent: JSON.stringify({ related: false }) }) as never,
+    );
+    const skill = await noSynth.compressRulesToSkills({ project: 'mindstrate' });
+    expect(skill.nodesCreated).toBe(0);
   });
 });

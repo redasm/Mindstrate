@@ -1,11 +1,11 @@
 import type { ProviderFactory } from '../processing/provider-factory.js';
 import type { ContextGraphStore } from './context-graph-store.js';
-import { buildClusterContent, runSubstrateCompression } from './substrate-compression.js';
+import { runSubstrateCompression } from './substrate-compression.js';
+import { synthesizeHighOrderNode } from './high-order-llm-synthesis.js';
 import {
   ContextDomainType,
   ContextNodeStatus,
   SubstrateType,
-  type ContextNode,
 } from '@mindstrate/protocol/models';
 
 export interface HighOrderCompressionOptions {
@@ -80,8 +80,20 @@ export class HighOrderCompressor {
     options: HighOrderCompressionOptions,
     spec: UpgradeSpec,
   ): Promise<HighOrderCompressionResult> {
-    const embedder = this.providerFactory.forProject(options.project ?? '').embedder;
-    const run = await runSubstrateCompression(this.graphStore, embedder, {
+    const providers = this.providerFactory.forProject(options.project ?? '');
+
+    // High-order substrates (skill / heuristic / axiom) shape future context
+    // assembly and are hard to walk back, so they're only worth forming when
+    // we can (a) cluster on real semantic vectors and (b) actually synthesize
+    // a generalization. Offline hash embeddings produce spurious clusters
+    // (token-overlap, not meaning) and without an LLM we'd only emit template
+    // placeholders — so skip entirely rather than generate noise.
+    const llmClient = await providers.llmClientPromise;
+    if (providers.embedder.isLocalMode() || !llmClient) {
+      return { scannedNodes: 0, nodesCreated: 0, clusters: [] };
+    }
+
+    const run = await runSubstrateCompression(this.graphStore, providers.embedder, {
       sourceType: spec.sourceType,
       targetType: spec.targetType,
       targetDomain: spec.targetDomain,
@@ -89,16 +101,26 @@ export class HighOrderCompressor {
       compressionLevel: spec.compressionLevel,
       confidence: spec.confidence,
       qualityScore: spec.qualityScore,
-      defaultSimilarityThreshold: 0.82,
-      // Candidate-first: high-order substrates (skill / heuristic /
-      // axiom) are never auto-promoted to active by the compressor. They
-      // enter as `candidate` and only the SkillOpt-style evaluation gate
-      // (or an explicit human accept) can move them to active / verified.
-      // This keeps a clustering mistake from silently shaping every
-      // future context assembly.
+      // Higher bar than mid-tier compression: a wrong high-order promotion is
+      // costly, so demand tighter similarity and full cluster cohesion.
+      defaultSimilarityThreshold: 0.88,
+      requireIntraClusterCohesion: true,
+      // Candidate-first: high-order substrates are never auto-promoted to
+      // active by the compressor. They enter as `candidate` and only the
+      // SkillOpt-style evaluation gate (or an explicit human accept) can move
+      // them to active / verified.
       targetStatus: ContextNodeStatus.CANDIDATE,
-      title: (cluster) => buildTitle(spec.targetType, cluster),
-      content: (cluster) => buildContent(spec.targetType, cluster),
+      // LLM synthesis is the title/content source; null skips the cluster so a
+      // spurious grouping never becomes a node.
+      synthesize: (cluster) => synthesizeHighOrderNode({
+        client: llmClient,
+        model: providers.llmModel,
+        targetType: spec.targetType,
+        cluster,
+      }),
+      // Kept for the type contract, but synthesize overrides these on success.
+      title: (cluster) => `${spec.targetType} cluster (${cluster.length})`,
+      content: (cluster) => `Generalized ${spec.targetType} from ${cluster.length} nodes.`,
       metadata: (cluster) => ({
         sourceNodeIds: cluster.map((item) => item.id),
         sourceSubstrateType: spec.sourceType,
@@ -108,16 +130,9 @@ export class HighOrderCompressor {
         sourceSubstrateType: spec.sourceType,
         targetSubstrateType: spec.targetType,
       }),
-      // Promote a high-feedback singleton when no peer cluster forms.
-      // High-order substrates (skill / heuristic / axiom) require
-      // stronger feedback evidence than mid-tier substrates because a
-      // promotion mistake here is harder to reverse — a stray AXIOM
-      // shapes future context assemblies indefinitely. Three positive
-      // signals with no negatives is the minimum bar.
-      promoteSingleton: (node) => (
-        node.positiveFeedback >= 3 && node.negativeFeedback === 0
-      ),
-    }, options);
+      // No singleton promotion for high-order: a generalization needs at least
+      // a real cluster to synthesize from. minClusterSize default below is 3.
+    }, { ...options, minClusterSize: options.minClusterSize ?? 3 });
 
     return {
       scannedNodes: run.scannedNodes,
@@ -129,13 +144,3 @@ export class HighOrderCompressor {
     };
   }
 }
-
-const buildTitle = (targetType: SubstrateType, cluster: ContextNode[]): string => {
-  const project = cluster[0].project || 'default';
-  return `${targetType} cluster: ${project} (${cluster.length} nodes)`;
-};
-
-const buildContent = (targetType: SubstrateType, cluster: ContextNode[]): string => buildClusterContent(
-  `Generalized ${targetType} from ${cluster.length} related ${cluster[0].substrateType} nodes.`,
-  cluster,
-);

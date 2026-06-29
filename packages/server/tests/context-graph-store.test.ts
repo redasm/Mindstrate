@@ -168,6 +168,39 @@ describe('ContextGraphStore', () => {
     expect(store.getNodeEmbedding(node.id, 'test-embedding')).toBeNull();
   });
 
+  it('searchSimilarNodes caps the candidate scan and prefers high-quality nodes', () => {
+    // Insert more embedded nodes than the candidate limit. Without the cap the
+    // whole set is JSON-parsed into memory (the OOM that crashed team-server on
+    // a 100k-node project); the cap keeps the scan bounded.
+    for (let i = 0; i < 30; i++) {
+      const n = store.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: `node ${i}`,
+        content: `c${i}`,
+        project: 'big',
+        status: ContextNodeStatus.ACTIVE,
+        qualityScore: i, // higher i = higher quality
+      });
+      store.upsertNodeEmbedding({ nodeId: n.id, model: 'm', dimensions: 2, embedding: [1, 0] });
+    }
+
+    const hits = store.searchSimilarNodes({
+      queryEmbedding: [1, 0],
+      model: 'm',
+      project: 'big',
+      topK: 50,
+      candidateLimit: 5,
+    });
+
+    // Only the 5 highest-quality candidates are scanned, so at most 5 returned.
+    expect(hits.length).toBeLessThanOrEqual(5);
+    // The top quality nodes (29, 28, …) must be the ones that surface.
+    const titles = hits.map((h) => store.getNodeById(h.nodeId)?.title);
+    expect(titles).toContain('node 29');
+    expect(titles).not.toContain('node 0');
+  });
+
   it('deletes every row for a project (case-insensitive) and leaves others intact', () => {
     const seed = (project: string) => {
       const a = store.createNode({
@@ -209,6 +242,119 @@ describe('ContextGraphStore', () => {
     expect(store.getEdgeById(keep.edge.id)).not.toBeNull();
     expect(store.getNodeEmbedding(keep.a.id, 'm')).not.toBeNull();
     expect(store.listEvents({ project: 'keepme' })).toHaveLength(1);
+  });
+
+  it('deleteProjectGraphNodes removes only scanner-extracted nodes, keeping manual knowledge', () => {
+    const fileNode = store.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'src/app.ts',
+      content: 'file: src/app.ts',
+      project: 'demo',
+      metadata: { projectGraph: true, kind: 'file' },
+    });
+    const manual = store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Hand-written rule',
+      content: 'Always validate input.',
+      project: 'demo',
+    });
+    store.upsertNodeEmbedding({ nodeId: fileNode.id, model: 'm', dimensions: 3, embedding: [0.1, 0.2, 0.3] });
+    store.upsertNodeEmbedding({ nodeId: manual.id, model: 'm', dimensions: 3, embedding: [0.4, 0.5, 0.6] });
+
+    const result = store.deleteProjectGraphNodes('DEMO'); // case-insensitive
+
+    expect(result.nodesDeleted).toBe(1);
+    expect(store.getNodeById(fileNode.id)).toBeNull();
+    expect(store.getNodeEmbedding(fileNode.id, 'm')).toBeNull();
+    // Manually-authored knowledge and its embedding survive.
+    expect(store.getNodeById(manual.id)).not.toBeNull();
+    expect(store.getNodeEmbedding(manual.id, 'm')).not.toBeNull();
+  });
+
+  it('countProjectGraphNodes counts only scanner-extracted nodes', () => {
+    store.createNode({
+      substrateType: SubstrateType.SNAPSHOT,
+      domainType: ContextDomainType.ARCHITECTURE,
+      title: 'src/a.ts',
+      content: 'file: src/a.ts',
+      project: 'demo',
+      metadata: { projectGraph: true, kind: 'file' },
+    });
+    store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'manual rule',
+      content: 'keep me',
+      project: 'demo',
+    });
+
+    expect(store.countProjectGraphNodes('demo')).toBe(1);
+    expect(store.countProjectGraphNodes('DEMO')).toBe(1); // case-insensitive
+    expect(store.countProjectGraphNodes('other')).toBe(0);
+
+    // After wiping project-graph nodes the count is 0 even though manual
+    // knowledge remains — this is what lets a forced P4 re-scan rebuild.
+    store.deleteProjectGraphNodes('demo');
+    expect(store.countProjectGraphNodes('demo')).toBe(0);
+    expect(store.listNodes({ project: 'demo' })).toHaveLength(1);
+  });
+
+  it('deleteTemplateHighOrderNodes removes only template placeholders, keeping synthesized', () => {
+    const placeholder = store.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'skill cluster: demo (2 nodes)',
+      content: 'Generalized skill from 2 related rule nodes.\n1. x\n2. y',
+      tags: ['skill-compression', 'high-order-compression'],
+      project: 'demo',
+      status: ContextNodeStatus.CANDIDATE,
+      metadata: { clusterSize: 2 },
+    });
+    const synthesized = store.createNode({
+      substrateType: SubstrateType.SKILL,
+      domainType: ContextDomainType.WORKFLOW,
+      title: 'Real synthesized skill',
+      content: 'A genuine generalized principle about X.',
+      tags: ['skill-compression', 'high-order-compression'],
+      project: 'demo',
+      status: ContextNodeStatus.CANDIDATE,
+      metadata: { clusterSize: 2, llmSynthesized: true },
+    });
+
+    const result = store.deleteTemplateHighOrderNodes('demo');
+
+    expect(result.nodesDeleted).toBe(1);
+    expect(store.getNodeById(placeholder.id)).toBeNull();
+    expect(store.getNodeById(synthesized.id)).not.toBeNull();
+  });
+
+  it('listProjectDomainRanked returns the highest-quality domain nodes within the limit', () => {
+    for (let i = 0; i < 10; i++) {
+      store.createNode({
+        substrateType: SubstrateType.SNAPSHOT,
+        domainType: ContextDomainType.ARCHITECTURE,
+        title: `arch ${i}`,
+        content: `c${i}`,
+        project: 'demo',
+        qualityScore: i * 10, // 0..90
+      });
+    }
+    // A node in a different domain must not be returned.
+    store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'not arch',
+      content: 'x',
+      project: 'demo',
+      qualityScore: 100,
+    });
+
+    const top = store.listProjectDomainRanked('DEMO', ContextDomainType.ARCHITECTURE, 3);
+    expect(top).toHaveLength(3);
+    expect(top.map((n) => n.title)).toEqual(['arch 9', 'arch 8', 'arch 7']);
+    expect(top.every((n) => n.domainType === ContextDomainType.ARCHITECTURE)).toBe(true);
   });
 
   it('queryProjectSubgraph: skeleton, focus neighborhood, and kind filter', () => {

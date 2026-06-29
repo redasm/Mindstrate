@@ -48,6 +48,13 @@ export interface ListContextNodesOptions {
   status?: ContextNodeStatus;
   sourceRef?: string;
   limit?: number;
+  /**
+   * Exclude scanner-extracted project-graph nodes (those tagged
+   * `metadata.projectGraph = true`). Pushed into SQL so a project with a huge
+   * graph (100k+ file/symbol nodes) doesn't consume the LIMIT prefetch and
+   * starve the knowledge nodes the caller actually wants.
+   */
+  excludeProjectGraph?: boolean;
 }
 
 export class ContextNodeRepository {
@@ -129,6 +136,11 @@ export class ContextNodeRepository {
     if (options.sourceRef) {
       conditions.push('source_ref = ?');
       params.push(options.sourceRef);
+    }
+    if (options.excludeProjectGraph) {
+      // Tagged nodes carry metadata.projectGraph === true; exclude them in SQL
+      // so they never fill the LIMIT window ahead of knowledge nodes.
+      conditions.push("(json_extract(metadata, '$.projectGraph') IS NULL OR json_extract(metadata, '$.projectGraph') <> 1)");
     }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -289,6 +301,26 @@ export class ContextNodeRepository {
       ORDER BY quality_score DESC, updated_at DESC
       LIMIT ?
     `).all(project, ...kinds, limit) as NodeRow[];
+    return rows.map(rowToNode);
+  }
+
+  /**
+   * Bounded, salience-ordered fetch of a project's nodes in a domain. Unlike
+   * `list` (which orders by recency and is used with a 100k limit for full
+   * loads), this orders by quality_score so a small limit keeps the most
+   * salient nodes — used by LLM-feeding paths (system-page planner, enrichment,
+   * summarizer) that only consume a salience-ranked top-N. Loading the whole
+   * architecture layer (100k+ nodes, each with a JSON metadata blob) OOMs on
+   * large graphs.
+   */
+  listByProjectDomainRanked(project: string, domainType: ContextDomainType, limit: number): ContextNode[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM context_nodes
+      WHERE LOWER(project) = LOWER(?)
+        AND domain_type = ?
+      ORDER BY quality_score DESC, updated_at DESC
+      LIMIT ?
+    `).all(project, domainType, limit) as NodeRow[];
     return rows.map(rowToNode);
   }
 

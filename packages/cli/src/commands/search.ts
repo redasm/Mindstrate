@@ -23,10 +23,10 @@ export const searchCommand = new Command('search')
       await memory.init();
 
       const minScore = parseFloat(options.minScore);
-      const results = memory.context.queryGraphKnowledge(query, {
+      const results = (await memory.context.queryGraphKnowledge(query, {
         topK: parseInt(options.topK, 10),
         limit: 100,
-      }).filter((result) => !options.type || result.view.domainType === options.type)
+      })).filter((result) => !options.type || result.view.domainType === options.type)
         .filter((result) => !options.language || result.view.tags.includes(options.language))
         .filter((result) => !options.framework || result.view.tags.includes(options.framework))
         .filter((result) => Number.isNaN(minScore) || result.view.priorityScore >= minScore);

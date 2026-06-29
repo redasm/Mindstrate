@@ -26,6 +26,7 @@ export interface OpenAIClient {
     create(params: {
       model: string;
       input: string | string[];
+      dimensions?: number;
     }): Promise<{
       data: Array<{ embedding: number[]; index: number }>;
     }>;

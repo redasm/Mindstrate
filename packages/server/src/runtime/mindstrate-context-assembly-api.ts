@@ -48,7 +48,7 @@ export class MindstrateContextAssemblyApi {
     private readonly queryGraphKnowledge: (
       query: string,
       options?: { project?: string; limit?: number; includeProjectGraphNodes?: boolean },
-    ) => GraphKnowledgeSearchResult[],
+    ) => Promise<GraphKnowledgeSearchResult[]>,
     private readonly listConflictRecords: (project?: string, limit?: number) => ConflictRecord[],
   ) {}
 
@@ -71,11 +71,11 @@ export class MindstrateContextAssemblyApi {
     // / file nodes here. This is the one place that opts out of the
     // default-on `includeProjectGraphNodes` change made in
     // `ProjectedKnowledgeSearch.search`.
-    const knowledge = this.queryGraphKnowledge(taskDescription, { project, limit: 5, includeProjectGraphNodes: false });
-    const workflows = this.queryGraphKnowledge(taskDescription, { project, limit: 10, includeProjectGraphNodes: false })
+    const knowledge = await this.queryGraphKnowledge(taskDescription, { project, limit: 5, includeProjectGraphNodes: false });
+    const workflows = (await this.queryGraphKnowledge(taskDescription, { project, limit: 10, includeProjectGraphNodes: false }))
       .filter((result) => result.view.domainType === ContextDomainType.WORKFLOW)
       .slice(0, 3);
-    const warnings = this.queryGraphKnowledge(`common mistakes pitfalls when ${taskDescription}`, {
+    const warnings = await this.queryGraphKnowledge(`common mistakes pitfalls when ${taskDescription}`, {
       project,
       limit: 3,
       includeProjectGraphNodes: false,

@@ -20,7 +20,12 @@ export async function GET(request: NextRequest) {
     if (project && !canAccessProject(session, project)) {
       return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
-    const limit = parseInt(params.get('limit') || '50', 10);
+    // No `limit` param → return the project's full knowledge set. The
+    // knowledge layer is bounded (hand-authored + metabolized nodes, not the
+    // 100k+ scanner graph, which the projector excludes), so "all" is safe and
+    // the UI never silently caps the count.
+    const limitParam = params.get('limit');
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
     const entries = memory.context.readGraphKnowledge({
       project: project || undefined,

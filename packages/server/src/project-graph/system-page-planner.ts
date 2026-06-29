@@ -63,7 +63,11 @@ export const planProjectGraphSystemPagesWithLlm = async (
   const response = await scheduleProjectGraphLlmRequest(() => input.client.chat.completions.create({
     model: input.model,
     temperature: 0.1,
-    max_tokens: 3000,
+    // Generous cap: a reasoning model (e.g. deepseek-v4-pro, default thinking
+    // mode) spends a large share of tokens on `reasoning_content` before
+    // emitting the answer, so a tight limit truncates the JSON and parsing
+    // fails. Non-reasoning models simply won't use the headroom.
+    max_tokens: 8000,
     response_format: { type: 'json_object' },
     messages: [
       {

@@ -26,6 +26,8 @@ export interface ProjectGraphWriteResult {
   edgesCreated: number;
   edgesUpdated: number;
   edgesSkipped: number;
+  /** Edges dropped because an endpoint node was missing (would violate FK). */
+  edgesOrphaned: number;
 }
 
 export interface ArchiveProjectGraphFileFactsInput {
@@ -58,6 +60,7 @@ export const emptyWriteResult = (): ProjectGraphWriteResult => ({
   edgesCreated: 0,
   edgesUpdated: 0,
   edgesSkipped: 0,
+  edgesOrphaned: 0,
 });
 
 /**
@@ -107,7 +110,16 @@ export const applyStreamedNodeWrites = (
     try {
       if (seen.has(node.id)) {
         const existing = store.getNodeById(node.id);
-        if (existing) store.updateNode(node.id, mergeNodeUpdate(existing, node));
+        // Normal case: already written this run → merge. But if it's in `seen`
+        // yet absent from the DB, a prior batch's transaction rolled back after
+        // we recorded the id (seen is run-scoped, the DB is per-batch). Re-create
+        // it instead of skipping, or every later edge to this node orphans.
+        if (existing) {
+          store.updateNode(node.id, mergeNodeUpdate(existing, node));
+        } else {
+          store.createNode(toContextNodeCreate(node));
+          result.nodesCreated++;
+        }
         continue;
       }
       seen.add(node.id);
@@ -175,6 +187,14 @@ export const applyEdgeWrites = (
         }
         store.updateEdge(edge.id, edgeInput);
         result.edgesUpdated++;
+        continue;
+      }
+      // Guard the FK before inserting: if an endpoint node isn't present, drop
+      // the edge instead of throwing — a single orphan edge (e.g. a containment
+      // edge to a file whose node was skipped, or a cross-batch ordering gap)
+      // must not abort indexing the whole graph. Count it so it's visible.
+      if (!store.getNodeById(edgeInput.sourceId) || !store.getNodeById(edgeInput.targetId)) {
+        result.edgesOrphaned++;
         continue;
       }
       store.createEdge(edgeInput);
