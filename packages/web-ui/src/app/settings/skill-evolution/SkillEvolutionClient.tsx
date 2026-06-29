@@ -29,6 +29,7 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
   const [busy, setBusy] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizerSummary, setOptimizerSummary] = useState<string | null>(null);
+  const [pruning, setPruning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const counts = useMemo(() => ({
@@ -121,6 +122,30 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
     }
   };
 
+  const pruneOrphans = async () => {
+    if (!window.confirm(t.pruneConfirm)) return;
+    setPruning(true);
+    setOptimizerSummary(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/skill-evolution/prune-orphans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || `Prune failed (${res.status})`);
+        return;
+      }
+      const data = await res.json() as { patchesDeleted: number };
+      setOptimizerSummary(`${t.pruned} ${data.patchesDeleted}`);
+      await refresh();
+    } finally {
+      setPruning(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full p-5 max-w-6xl mx-auto w-full">
       <header className="mb-5 flex items-start justify-between gap-4 flex-shrink-0">
@@ -128,15 +153,26 @@ export function SkillEvolutionClient({ initialPatches }: Props) {
           <h1 className="text-lg font-semibold text-surface-900">{t.title}</h1>
           <p className="text-sm text-surface-500">{t.description}</p>
         </div>
-        <button
-          type="button"
-          disabled={optimizing}
-          onClick={runOptimizer}
-          className="shrink-0 px-3 py-1.5 rounded-md border border-brand-300 text-brand-700 text-sm font-medium hover:bg-brand-50 disabled:opacity-50"
-        >
-          <Icon icon={optimizing ? 'lucide:loader-2' : 'lucide:sparkles'} className={`text-sm mr-1 inline ${optimizing ? 'animate-spin' : ''}`} />
-          {optimizing ? t.optimizing : t.optimize}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={pruning}
+            onClick={pruneOrphans}
+            className="px-3 py-1.5 rounded-md border border-surface-300 text-surface-700 text-sm font-medium hover:bg-surface-50 disabled:opacity-50"
+          >
+            <Icon icon={pruning ? 'lucide:loader-2' : 'lucide:trash-2'} className={`text-sm mr-1 inline ${pruning ? 'animate-spin' : ''}`} />
+            {pruning ? t.pruning : t.pruneOrphans}
+          </button>
+          <button
+            type="button"
+            disabled={optimizing}
+            onClick={runOptimizer}
+            className="px-3 py-1.5 rounded-md border border-brand-300 text-brand-700 text-sm font-medium hover:bg-brand-50 disabled:opacity-50"
+          >
+            <Icon icon={optimizing ? 'lucide:loader-2' : 'lucide:sparkles'} className={`text-sm mr-1 inline ${optimizing ? 'animate-spin' : ''}`} />
+            {optimizing ? t.optimizing : t.optimize}
+          </button>
+        </div>
       </header>
 
       {optimizerSummary && (

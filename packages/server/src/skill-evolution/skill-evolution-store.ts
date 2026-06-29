@@ -104,6 +104,31 @@ export class SkillEvolutionStore {
     return rows.map(rowToPatch);
   }
 
+  /**
+   * Delete patches whose source node no longer exists in the graph. A full
+   * re-scan clears the project's graph nodes, but the patches that the
+   * metabolism skill-gating raised for those nodes survive as orphans and
+   * keep cluttering the skill-evolution review queue. Source-node existence —
+   * not patch content — is the discriminator: a patch for a live skill always
+   * has its source node, so this never touches a real candidate. Associated
+   * evaluations are removed by the `ON DELETE CASCADE` foreign key.
+   */
+  deleteOrphanedPatches(options: { project?: string } = {}): { patchesDeleted: number } {
+    const conditions = ['source_node_id NOT IN (SELECT id FROM context_nodes)'];
+    const params: unknown[] = [];
+    if (options.project) {
+      conditions.push('LOWER(project) = LOWER(?)');
+      params.push(options.project);
+    }
+    const where = conditions.join(' AND ');
+    return this.db.transaction(() => {
+      const patchesDeleted = this.db
+        .prepare(`DELETE FROM skill_evolution_patches WHERE ${where}`)
+        .run(...params).changes;
+      return { patchesDeleted };
+    })();
+  }
+
   markPatchAccepted(id: string, metadata: Record<string, unknown> = {}): SkillEvolutionPatch | null {
     return this.updatePatchDecision(id, SkillEvolutionPatchStatus.ACCEPTED, metadata);
   }

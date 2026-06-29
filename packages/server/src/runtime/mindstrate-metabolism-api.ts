@@ -257,6 +257,15 @@ export class MindstrateMetabolismApi {
     return this.services.skillEvolutionStore.listPatches(options);
   }
 
+  /**
+   * Remove skill-evolution patches whose source node no longer exists (e.g.
+   * left behind when a full re-scan cleared the graph). Real candidates keep
+   * their source node, so this only clears orphaned review-queue noise.
+   */
+  pruneOrphanedSkillPatches(options: { project?: string } = {}): { patchesDeleted: number } {
+    return this.services.skillEvolutionStore.deleteOrphanedPatches(options);
+  }
+
   rejectSkillPatch(input: { patchId: string; reason: string; metadata?: Record<string, unknown> }): SkillEvolutionPatch | null {
     return this.services.skillEvolutionStore.markPatchRejected(input.patchId, input.reason, input.metadata);
   }

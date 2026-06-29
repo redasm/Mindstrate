@@ -196,6 +196,26 @@ skillEvolutionCommand
   });
 
 skillEvolutionCommand
+  .command('prune-orphans')
+  .description('Delete skill patches whose source node no longer exists (e.g. left by a full re-scan)')
+  .option('-p, --project <project>', 'Project scope')
+  .action(async (options: { project?: string }) => {
+    const memory = createMemory();
+    try {
+      await memory.init();
+      const { patchesDeleted } = memory.metabolism.pruneOrphanedSkillPatches({
+        project: options.project,
+      });
+      console.log(`Pruned ${patchesDeleted} orphaned skill patch(es).`);
+    } catch (error) {
+      console.error('Skill patch prune failed:', errorMessage(error));
+      process.exit(1);
+    } finally {
+      memory.close();
+    }
+  });
+
+skillEvolutionCommand
   .command('transfer <fromProject> <toProject>')
   .description('Copy verified high-order skills from one project to another as candidates')
   .option('-l, --limit <number>', 'Maximum number of skills', '50')
