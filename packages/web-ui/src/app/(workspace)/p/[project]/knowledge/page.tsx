@@ -18,9 +18,13 @@ type ApiEntry = {
   type?: string;
   context?: { project?: string; language?: string };
   tags?: string[];
+  createdAt?: string;
   updatedAt?: string;
+  priorityScore?: number;
   refCount?: number;
 };
+
+type SortKey = 'newest' | 'updated' | 'relevance';
 
 const PAGE_SIZE = 12;
 
@@ -35,6 +39,7 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [langFilter, setLangFilter] = useState<string>('');
   const [search, setSearch] = useState<string>('');
+  const [sortBy, setSortBy] = useState<SortKey>('newest');
   const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
@@ -55,8 +60,10 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
         title: e.title,
         summary: e.summary ?? e.solution ?? '',
         substrateType: e.substrateType ?? e.type ?? 'rule',
+        priorityScore: e.priorityScore,
         context: e.context,
         tags: e.tags,
+        createdAt: e.createdAt,
         updatedAt: e.updatedAt,
         refCount: e.refCount,
       }));
@@ -72,20 +79,35 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return entries.filter((e) => {
+    const matched = entries.filter((e) => {
       if (typeFilter && e.substrateType.toLowerCase() !== typeFilter) return false;
       if (langFilter && (e.context?.language ?? '').toLowerCase() !== langFilter) return false;
       if (q && !(e.title.toLowerCase().includes(q) || e.summary.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [entries, typeFilter, langFilter, search]);
+
+    const time = (iso?: string) => {
+      const t = iso ? new Date(iso).getTime() : NaN;
+      return Number.isNaN(t) ? 0 : t;
+    };
+    const sorted = [...matched];
+    if (sortBy === 'newest') {
+      sorted.sort((a, b) => time(b.createdAt) - time(a.createdAt));
+    } else if (sortBy === 'updated') {
+      sorted.sort((a, b) => time(b.updatedAt) - time(a.updatedAt));
+    } else {
+      // relevance: preserve the API's priority order (priorityScore desc)
+      sorted.sort((a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0));
+    }
+    return sorted;
+  }, [entries, typeFilter, langFilter, search, sortBy]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   useEffect(() => {
     setPage(1);
-  }, [typeFilter, langFilter, search]);
+  }, [typeFilter, langFilter, search, sortBy]);
 
   const handleDelete = async (id: string) => {
     if (!confirm(t.deleteConfirm)) return;
@@ -156,6 +178,21 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t.searchPlaceholder}
               className="w-56 pl-9 pr-3 py-2 text-sm font-medium text-surface-700 bg-white border border-surface-200 rounded-lg outline-none transition-all placeholder-surface-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            />
+          </div>
+          <div className="relative">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortKey)}
+              className="appearance-none pl-3 pr-8 py-2 text-sm font-medium text-surface-700 bg-white border border-surface-200 rounded-lg cursor-pointer outline-none focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
+            >
+              <option value="newest">{t.sortNewest}</option>
+              <option value="updated">{t.sortUpdated}</option>
+              <option value="relevance">{t.sortRelevance}</option>
+            </select>
+            <Icon
+              icon="lucide:arrow-down-up"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-surface-400 pointer-events-none"
             />
           </div>
         </div>
