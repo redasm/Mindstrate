@@ -168,19 +168,6 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
             />
           </div>
           <div className="relative">
-            <Icon
-              icon="lucide:search"
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-400"
-            />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t.searchPlaceholder}
-              className="w-56 pl-9 pr-3 py-2 text-sm font-medium text-surface-700 bg-white border border-surface-200 rounded-lg outline-none transition-all placeholder-surface-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
-            />
-          </div>
-          <div className="relative">
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortKey)}
@@ -193,6 +180,19 @@ export default function ProjectKnowledgePage({ params }: { params: Promise<{ pro
             <Icon
               icon="lucide:arrow-down-up"
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-surface-400 pointer-events-none"
+            />
+          </div>
+          <div className="relative">
+            <Icon
+              icon="lucide:search"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-surface-400"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t.searchPlaceholder}
+              className="w-56 pl-9 pr-3 py-2 text-sm font-medium text-surface-700 bg-white border border-surface-200 rounded-lg outline-none transition-all placeholder-surface-400 focus:border-brand-400 focus:ring-2 focus:ring-brand-100"
             />
           </div>
         </div>
