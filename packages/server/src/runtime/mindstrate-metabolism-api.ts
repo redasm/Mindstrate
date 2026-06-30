@@ -137,15 +137,59 @@ export class MindstrateMetabolismApi {
     const { optimizeSkills, generateEvalCases, ...schedulerOptions } = options;
     this.metabolismScheduler = new MetabolismScheduler({
       ...schedulerOptions,
-      runMetabolism: (runOptions) => this.runMetabolism(runOptions),
+      runMetabolism: (runOptions) =>
+        this.forEachScheduledProject(runOptions.project, (project) =>
+          this.runMetabolism({ ...runOptions, project })),
       optimizeSkills: optimizeSkills
-        ? (skillOptions) => this.optimizeSkillTargets(skillOptions)
+        ? (skillOptions) =>
+          this.forEachScheduledProject(skillOptions.project, (project) =>
+            this.optimizeSkillTargets({ ...skillOptions, project }))
         : undefined,
       generateEvalCases: generateEvalCases
-        ? (genOptions) => this.generateScheduledEvalCases(genOptions)
+        ? (genOptions) =>
+          this.forEachScheduledProject(genOptions.project, (project) =>
+            this.generateScheduledEvalCases({ ...genOptions, project }))
         : undefined,
     });
     this.metabolismScheduler.start();
+  }
+
+  /**
+   * Run a scheduled task once per project so each gets its own LLM providers
+   * (`ProviderFactory.forProject`). A blank scheduler project means "all
+   * projects" — but a single `project=undefined` pass collapses to offline
+   * providers (no LLM, hash embeddings), silently disabling high-order
+   * compression / skill evolution for every project that *does* have an LLM
+   * config. So when no project is configured we fan out over every project
+   * with data instead.
+   *
+   * - explicit project → run only that project.
+   * - no project + projects with data → run each, isolating per-project
+   *   providers and failures (one project throwing never skips the rest).
+   * - no project + empty graph → a single `undefined` pass preserves the
+   *   empty-store behavior the scheduler had before.
+   */
+  private async forEachScheduledProject(
+    configuredProject: string | undefined,
+    task: (project: string | undefined) => Promise<unknown> | unknown,
+  ): Promise<void> {
+    if (configuredProject) {
+      await task(configuredProject);
+      return;
+    }
+    const projects = this.services.contextGraphStore.listKnownProjects();
+    if (projects.length === 0) {
+      await task(undefined);
+      return;
+    }
+    for (const project of projects) {
+      try {
+        await task(project);
+      } catch {
+        // Isolate per-project failures: one project's error (e.g. a bad LLM
+        // config) must not stop metabolism for the others.
+      }
+    }
   }
 
   /**
