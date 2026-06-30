@@ -153,4 +153,67 @@ describe('Mindstrate metabolism scheduling', () => {
     memory.close();
     vi.useRealTimers();
   });
+
+  it('fans out a blank-project schedule across every project with data', async () => {
+    vi.useFakeTimers();
+    const memory = new Mindstrate();
+    const runMetabolism = vi.spyOn(memory.metabolism, 'runMetabolism').mockResolvedValue({} as any);
+    vi.spyOn((memory as any).services.contextGraphStore, 'listKnownProjects')
+      .mockReturnValue(['alpha', 'beta']);
+
+    // No project configured -> "all projects".
+    memory.metabolism.startMetabolismScheduler({ intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(1000);
+    memory.metabolism.stopMetabolismScheduler();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(runMetabolism).toHaveBeenCalledTimes(2);
+    expect(runMetabolism).toHaveBeenCalledWith({ project: 'alpha', trigger: 'scheduled' });
+    expect(runMetabolism).toHaveBeenCalledWith({ project: 'beta', trigger: 'scheduled' });
+
+    memory.close();
+    vi.useRealTimers();
+  });
+
+  it('runs a single undefined pass when no project is configured and the graph is empty', async () => {
+    vi.useFakeTimers();
+    const memory = new Mindstrate();
+    const runMetabolism = vi.spyOn(memory.metabolism, 'runMetabolism').mockResolvedValue({} as any);
+    vi.spyOn((memory as any).services.contextGraphStore, 'listKnownProjects')
+      .mockReturnValue([]);
+
+    memory.metabolism.startMetabolismScheduler({ intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(1000);
+    memory.metabolism.stopMetabolismScheduler();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(runMetabolism).toHaveBeenCalledTimes(1);
+    expect(runMetabolism).toHaveBeenCalledWith({ project: undefined, trigger: 'scheduled' });
+
+    memory.close();
+    vi.useRealTimers();
+  });
+
+  it('keeps fanning out when one project throws', async () => {
+    vi.useFakeTimers();
+    const memory = new Mindstrate();
+    const runMetabolism = vi.spyOn(memory.metabolism, 'runMetabolism')
+      .mockImplementation(async ({ project }: any) => {
+        if (project === 'alpha') throw new Error('boom');
+        return {} as any;
+      });
+    vi.spyOn((memory as any).services.contextGraphStore, 'listKnownProjects')
+      .mockReturnValue(['alpha', 'beta']);
+
+    memory.metabolism.startMetabolismScheduler({ intervalMs: 1000 });
+    await vi.advanceTimersByTimeAsync(1000);
+    memory.metabolism.stopMetabolismScheduler();
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(runMetabolism).toHaveBeenCalledTimes(2);
+    expect(runMetabolism).toHaveBeenCalledWith({ project: 'beta', trigger: 'scheduled' });
+
+    memory.close();
+    vi.useRealTimers();
+  });
 });
