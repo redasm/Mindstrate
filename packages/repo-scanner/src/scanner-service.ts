@@ -905,16 +905,41 @@ export class RepoScannerService {
 
   /**
    * The project graph is only rebuilt from the local checkout, which stays
-   * at whatever revision the operator last synced — every ingested upstream
-   * change therefore stamps staleness markers on the affected graph nodes
-   * so impact analysis can flag possibly-outdated conclusions until the
-   * next reindex. Best-effort: a marker failure must not fail ingestion.
+   * at whatever revision the operator last synced. For each ingested upstream
+   * change we do two things:
+   *   1. Incrementally re-extract the touched files from the local checkout so
+   *      the graph's file / symbol / call nodes stay current (best-effort:
+   *      requires a resolvable local root synced to the change).
+   *   2. Stamp staleness markers on the affected nodes so impact analysis can
+   *      still flag possibly-outdated conclusions between full reindexes.
+   * Both are best-effort: a failure must not fail knowledge ingestion.
    */
   private markProjectGraphChanges(
     source: ScanSource,
     commit: { hash: string; files: string[] },
   ): void {
     if (commit.files.length === 0) return;
+
+    // 1. Incremental re-extraction from the local checkout, when we can resolve
+    // one. `detectProject` gives the graphHints (sourceRoots / generatedRoots)
+    // the extractor needs; the scanner's project name overrides the detected one.
+    const localRoot = this.resolveLocalRoot(source);
+    if (localRoot) {
+      try {
+        const detected = detectProject(localRoot);
+        if (detected) {
+          this.memory.context.reindexProjectGraphFiles(
+            { ...detected, name: source.project, root: localRoot },
+            commit.files,
+          );
+        }
+      } catch {
+        // Local root missing/unsynced or extraction failed — fall through to the
+        // staleness marker so the graph is at least flagged as drifted.
+      }
+    }
+
+    // 2. Staleness markers (also covers files with no resolvable local root).
     try {
       this.memory.context.recordProjectGraphExternalChanges({
         project: source.project,
@@ -926,6 +951,24 @@ export class RepoScannerService {
       // Knowledge ingestion already succeeded; losing one staleness marker
       // only means the graph looks slightly fresher than it is.
     }
+  }
+
+  /**
+   * Best-effort local checkout root for incremental graph re-extraction.
+   * Git sources clone to a known path; P4 sources use the configured workspace
+   * path (a `p4 where` lookup needs the P4 server and is skipped here to keep
+   * this synchronous and cheap — it falls back to markers when absent).
+   */
+  private resolveLocalRoot(source: ScanSource): string | null {
+    if (source.repoPath) return source.repoPath;
+    if (source.kind === 'git-local') {
+      try {
+        return ensureGitClone(source);
+      } catch {
+        return null;
+      }
+    }
+    return null;
   }
 }
 

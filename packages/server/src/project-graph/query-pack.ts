@@ -6,13 +6,52 @@ export interface QueryPack {
   query: string;
 }
 
+// Language-agnostic part of the TS/JS/JSX source query. Node types here exist
+// in every ECMAScript grammar (JS, TS, TSX, JSX), so this string compiles
+// against all four. Class *name* capture is grammar-specific (TS names classes
+// with `type_identifier`, JS with `identifier`), so it lives in the per-flavor
+// packs below rather than here.
+//
+// Coverage note: the original query only had `function_declaration`, which
+// missed the dominant TS shapes — class methods (`method_definition`), arrow
+// functions assigned to a class field (`public_field_definition`) or a const
+// (`variable_declarator`), and `new X()` construction. A codebase written as
+// classes (Controller/Model/View) produced almost no symbol nodes and no
+// call graph as a result. These captures close that gap.
+//
+// Class members are captured as `@method.name` (not `@function.name`) on
+// purpose: the React-component heuristic derives a `react.component` from every
+// uppercase `function.name`, which would otherwise turn an ordinary uppercase
+// method (`UpdateNextCustomMarkNumber`) into a bogus COMPONENT node in addition
+// to its FUNCTION node. Both `@function.name` and `@method.name` map to a
+// FUNCTION symbol downstream, but only `@function.name` feeds the React heuristic.
 const sourceQuery = `
   (import_statement source: (string) @import.source)
   (export_statement source: (string) @export.source)
   (function_declaration name: (identifier) @function.name)
+  (method_definition name: (property_identifier) @method.name)
+  (public_field_definition
+    name: (property_identifier) @method.name
+    value: [(arrow_function) (function_expression)])
+  (variable_declarator
+    name: (identifier) @function.name
+    value: [(arrow_function) (function_expression)])
   (call_expression function: (identifier) @call.function)
   (call_expression function: (member_expression
     property: (property_identifier) @call.function))
+  (new_expression constructor: (identifier) @call.function)
+`;
+
+// Class-name capture, split by grammar because the name node type differs:
+// TypeScript/TSX use `type_identifier`, JavaScript/JSX use `identifier`.
+// `abstract_class_declaration` only exists in the TS grammar.
+const tsClassQuery = `
+  (class_declaration name: (type_identifier) @class.name)
+  (abstract_class_declaration name: (type_identifier) @class.name)
+`;
+
+const jsClassQuery = `
+  (class_declaration name: (identifier) @class.name)
 `;
 
 const jsxQuery = `
@@ -65,6 +104,16 @@ export const BUILTIN_TREE_SITTER_QUERY_PACKS: QueryPack[] = [
     id: 'typescript-source',
     languages: ['typescript', 'tsx', 'javascript', 'jsx'],
     query: sourceQuery,
+  },
+  {
+    id: 'typescript-class',
+    languages: ['typescript', 'tsx'],
+    query: tsClassQuery,
+  },
+  {
+    id: 'javascript-class',
+    languages: ['javascript', 'jsx'],
+    query: jsClassQuery,
   },
   {
     id: 'jsx-components',
