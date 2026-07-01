@@ -27,6 +27,29 @@ const SUBSTRATE_PRIORITY: Record<SubstrateType, number> = {
  */
 const ALL_KNOWLEDGE_PREFETCH = 100000;
 
+/**
+ * TTL (ms) for the projection cache. Search embeds the query, scans vectors,
+ * and projects candidates on every call; back-to-back `memory_search` /
+ * `graph_knowledge_search` requests re-run the same projection (listNodes +
+ * a `toGraphKnowledgeView` per row) against a knowledge layer that changes on
+ * the order of the metabolism cadence, not per-request. A few seconds of reuse
+ * removes that redundant work without serving meaningfully stale knowledge.
+ * Override via `MINDSTRATE_PROJECTION_CACHE_TTL_MS`; 0 disables.
+ */
+const PROJECTION_CACHE_TTL_MS = ((): number => {
+  const raw = process.env['MINDSTRATE_PROJECTION_CACHE_TTL_MS'];
+  if (raw === undefined) return 5000;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) return 5000;
+  return parsed;
+})();
+
+interface ProjectionCacheEntry {
+  expiresAt: number;
+  version: number;
+  views: GraphKnowledgeView[];
+}
+
 export interface GraphKnowledgeProjectionOptions {
   project?: string;
   limit?: number;
@@ -36,12 +59,54 @@ export interface GraphKnowledgeProjectionOptions {
 
 export class GraphKnowledgeProjector {
   private readonly graphStore: ContextGraphStore;
+  private readonly cache = new Map<string, ProjectionCacheEntry>();
 
   constructor(graphStore: ContextGraphStore) {
     this.graphStore = graphStore;
   }
 
+  /**
+   * Invalidate the projection cache. Call after writes that change the
+   * knowledge layer (node upsert/delete, status change) so a stale projection
+   * can't outlive the data it was built from.
+   */
+  invalidate(): void {
+    this.cache.clear();
+  }
+
   project(options: GraphKnowledgeProjectionOptions = {}): GraphKnowledgeView[] {
+    if (PROJECTION_CACHE_TTL_MS === 0) return this.computeProjection(options);
+
+    const key = this.cacheKey(options);
+    const now = Date.now();
+    const version = this.graphStore.nodeVersion;
+    const cached = this.cache.get(key);
+    // Reuse only when the entry is both fresh (TTL) and built from the current
+    // node version — a same-process write bumps the version and forces a
+    // recompute so `add` then `search` never sees stale knowledge.
+    if (cached && cached.expiresAt > now && cached.version === version) {
+      return cached.views;
+    }
+
+    const views = this.computeProjection(options);
+    this.cache.set(key, { views, version, expiresAt: now + PROJECTION_CACHE_TTL_MS });
+    return views;
+  }
+
+  private cacheKey(options: GraphKnowledgeProjectionOptions): string {
+    const statuses = (options.includeStatuses ?? [])
+      .slice()
+      .sort()
+      .join(',');
+    return [
+      options.project ?? '',
+      options.limit ?? 'all',
+      options.includeProjectGraphNodes === true ? 'graph' : 'nograph',
+      statuses,
+    ].join('|');
+  }
+
+  private computeProjection(options: GraphKnowledgeProjectionOptions = {}): GraphKnowledgeView[] {
     // `limit` undefined means "return all" — used by the knowledge-list path,
     // which excludes project-graph nodes, so the result is bounded by the
     // (small) knowledge-node count rather than the 100k+ scanner graph. A

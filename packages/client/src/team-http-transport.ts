@@ -12,7 +12,10 @@ export class TeamHttpTransport {
   constructor(config: TeamHttpTransportConfig) {
     this.baseUrl = config.serverUrl.replace(/\/+$/, '');
     this.apiKey = config.apiKey ?? '';
-    this.timeout = config.timeout ?? 10000;
+    // 30s default: a cold `/api/graph/search` (query embedding round-trip +
+    // vector scan on a large graph) can exceed the old 10s and surface as
+    // "This operation was aborted" at the MCP layer. Callers can lower it.
+    this.timeout = config.timeout ?? 30000;
   }
 
   async get<T = unknown>(path: string): Promise<T> {

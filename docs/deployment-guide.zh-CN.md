@@ -204,10 +204,14 @@ mindstrate setup \
 | `MINDSTRATE_DB_PATH` | 显式 SQLite 数据库路径 |
 | `MINDSTRATE_VECTOR_BACKEND` | `local`（默认）或 `qdrant` |
 | `MINDSTRATE_QDRANT_URL` | 使用 `qdrant` 后端时的 Qdrant 服务地址 |
+| `MINDSTRATE_VECTOR_CANDIDATE_LIMIT` | SQLite 相似度检索单次扫描的最大向量数（默认 5000） |
+| `MINDSTRATE_EMBED_TIMEOUT_MS` | 查询 embedding 的单请求超时；超时后检索降级为纯词法（默认 3000，0 关闭） |
+| `MINDSTRATE_PROJECTION_CACHE_TTL_MS` | 检索间复用的投影缓存 TTL；写入会立即失效（默认 5000，0 关闭） |
 | `MINDSTRATE_LOCALE` | 输出语言偏好，例如 `en` 或 `zh-CN` |
 | `TEAM_PORT` | Team Server 端口 |
 | `TEAM_API_KEY` | Team Server 管理员引导密钥（成员密钥在 Web UI 中签发） |
 | `TEAM_SERVER_URL` | 客户端/MCP 使用的 Team Server URL |
+| `TEAM_HTTP_TIMEOUT_MS` | 团队模式 HTTP 请求超时（毫秒，默认 30000） |
 | `LOG_LEVEL` | 日志级别 |
 
 可从 `.env.example` 和 `deploy/.env.deploy.example` 复制模板。

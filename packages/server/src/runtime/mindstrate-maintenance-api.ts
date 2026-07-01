@@ -67,6 +67,9 @@ export class MindstrateMaintenanceApi {
     let vectorsCleared = true;
     try {
       await this.services.vectorStoreFactory.deleteProject(project);
+      // Also drop the project's node vectors from the search index (Qdrant).
+      // No-op for the SQLite index — those rows went with deleteProject above.
+      await this.services.nodeVectorIndex.deleteForProject(project);
     } catch (error) {
       vectorsCleared = false;
       this.services.logger.warn(
@@ -95,6 +98,7 @@ export class MindstrateMaintenanceApi {
     const results: Array<{ project: string; embedded: number; candidates: number; model: string; dimensions: number }> = [];
     for (const name of projects) {
       this.services.contextGraphStore.deleteNodeEmbeddingsForProject(name);
+      await this.services.nodeVectorIndex.deleteForProject(name);
       const providers = this.services.providerFactory.forProject(name);
       const result = await backfillNodeEmbeddings(
         this.services.contextGraphStore,
@@ -104,6 +108,7 @@ export class MindstrateMaintenanceApi {
           project: name,
           force: true,
           onProgress: (p) => onProgress?.({ project: name, embedded: p.embedded, total: p.total }),
+          vectorIndex: this.services.nodeVectorIndex,
         },
       );
       results.push({

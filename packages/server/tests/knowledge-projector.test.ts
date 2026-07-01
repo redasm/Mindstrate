@@ -165,4 +165,25 @@ describe('GraphKnowledgeProjector', () => {
     const projected = projector.project({ project: 'mindstrate', limit: 10 });
     expect(projected.map((v) => v.title)).toContain('Important Rule');
   });
+
+  it('reflects a same-process write immediately despite the projection cache', () => {
+    // Warm the cache for this query shape.
+    expect(projector.project({ project: 'cache', limit: 10 })).toHaveLength(0);
+
+    // A new node bumps the store's node version, so the cached (empty) result
+    // must not be served — add-then-read has to see the write, not wait out TTL.
+    graphStore.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Freshly added rule',
+      content: 'Must be visible immediately.',
+      project: 'cache',
+      status: ContextNodeStatus.ACTIVE,
+      qualityScore: 80,
+      confidence: 0.9,
+    });
+
+    const after = projector.project({ project: 'cache', limit: 10 });
+    expect(after.map((v) => v.title)).toContain('Freshly added rule');
+  });
 });

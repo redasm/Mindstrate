@@ -21,6 +21,7 @@ import {
 } from '@mindstrate/protocol/models';
 import type { ContextGraphStore } from './context-graph-store.js';
 import type { Embedder } from '../processing/embedder.js';
+import type { NodeVectorIndex, NodeVectorRecord } from './node-vector-index.js';
 import { PROJECT_GRAPH_DEFAULT_QUERY_LIMIT } from '@mindstrate/protocol/models';
 
 export interface BackfillNodeEmbeddingsInput {
@@ -31,6 +32,12 @@ export interface BackfillNodeEmbeddingsInput {
   batchSize?: number;
   /** Progress callback, fired once per committed batch. */
   onProgress?: (progress: { embedded: number; total: number }) => void;
+  /**
+   * Optional search index to mirror embeddings into (e.g. Qdrant). The SQLite
+   * store is always written; this keeps an external ANN index in sync. Mirror
+   * failures are swallowed by the index itself so a backfill never fails on it.
+   */
+  vectorIndex?: NodeVectorIndex;
 }
 
 export interface BackfillNodeEmbeddingsResult {
@@ -74,6 +81,7 @@ export const backfillNodeEmbeddings = async (
     const batch = pending.slice(i, i + batchSize);
     const texts = batch.map((node) => nodeEmbeddingText(node));
     const embeddings = await embedder.embedBatch(texts);
+    const mirror: NodeVectorRecord[] = [];
     for (let j = 0; j < batch.length; j++) {
       const embedding = embeddings[j];
       store.upsertNodeEmbedding({
@@ -83,8 +91,10 @@ export const backfillNodeEmbeddings = async (
         embedding,
         text: texts[j],
       });
+      mirror.push({ nodeId: batch[j].id, project: batch[j].project, model, embedding });
       result.embedded++;
     }
+    if (input.vectorIndex) await input.vectorIndex.upsert(mirror);
     input.onProgress?.({ embedded: result.embedded, total: pending.length });
   }
 

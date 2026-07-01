@@ -347,7 +347,12 @@ export class MindstrateContextGraphApi {
       this.services.contextGraphStore,
       providers.embedder,
       providers.embeddingModel,
-      { project: project.name, force: options?.force, onProgress: options?.onProgress },
+      {
+        project: project.name,
+        force: options?.force,
+        onProgress: options?.onProgress,
+        vectorIndex: this.services.nodeVectorIndex,
+      },
     );
   }
 
