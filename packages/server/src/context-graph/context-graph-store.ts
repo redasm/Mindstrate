@@ -211,7 +211,7 @@ export class ContextGraphStore {
     nodeKinds?: string[];
     limit?: number;
   }): { nodes: ContextNode[]; edges: ContextEdge[] } {
-    const limit = Math.min(Math.max(opts.limit ?? 300, 1), 2000);
+    const limit = Math.min(Math.max(opts.limit ?? 300, 1), 3000);
     if (opts.focusNodeId) {
       const focus = this.nodes.getById(opts.focusNodeId);
       if (!focus) return { nodes: [], edges: [] };
@@ -227,11 +227,15 @@ export class ContextGraphStore {
       const edges = this.edges.listAmongNodes(nodes.map((n) => n.id));
       return { nodes, edges };
     }
-    // Default skeleton: pull the structural backbone (project + directories)
-    // first so file→directory/project CONTAINS edges always have both endpoints
-    // present, then fill the remaining budget with files. Picking only top files
-    // by salience would otherwise drop their parent nodes and leave an edgeless
-    // scatter of dots.
+    // Default skeleton: pull the full structural backbone (project + every
+    // directory) first, then fill the remaining budget with files. The scanner
+    // now materializes a directory node for every ancestor path segment and
+    // chains them project → dir → subdir → file, so this backbone is the
+    // navigable tree: from the root the user can drill into any directory to
+    // reach its files/symbols. Loading all directories up front (bounded — a
+    // large project has a few thousand, well under the clamp) is what makes deep
+    // files reachable; filling leftover budget with the highest-quality files
+    // gives an immediately useful first view.
     const structural = this.nodes.listByProjectKinds(opts.project, ['project', 'directory'], limit);
     const files = this.nodes.listByProjectKinds(
       opts.project,

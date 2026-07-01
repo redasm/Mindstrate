@@ -65,7 +65,6 @@ import {
   isUnrealBuildFile,
   isUnrealConfigFile,
   isUnrealManifestFile,
-  longestMatchingRoot,
   makeEdge,
   makeFileNode,
   makeNode,
@@ -255,7 +254,7 @@ export const reindexProjectGraphFiles = (
       const fileNodes = new Map<string, ProjectGraphNodeDto>();
       const fileEdges = new Map<string, ProjectGraphEdgeDto>();
       addNode(fileNodes, makeFileNode(project, entry.path, scanPlan));
-      addFileContainmentFact(project, entry.path, scanPlan, fileNodes, fileEdges);
+      addFileContainmentFact(project, entry.path, fileNodes, fileEdges);
       const extraction = extractFileFacts(project, entry, parserAdapters, emptyCache, logger);
       if (extraction.skipped) result.filesSkipped++;
       for (const node of extraction.nodes) addNode(fileNodes, node);
@@ -440,7 +439,7 @@ const streamProjectGraphIntoStore = (
       const fileNodes = new Map<string, ProjectGraphNodeDto>();
       const fileEdges = new Map<string, ProjectGraphEdgeDto>();
       addNode(fileNodes, makeFileNode(project, file.path, scanPlan));
-      addFileContainmentFact(project, file.path, scanPlan, fileNodes, fileEdges);
+      addFileContainmentFact(project, file.path, fileNodes, fileEdges);
       const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache, options.logger ?? noopLogger);
       if (fileExtraction.skipped) {
         skippedFiles += 1;
@@ -663,15 +662,58 @@ const addDirectoryFact = (
 const addFileContainmentFact = (
   project: DetectedProject,
   filePath: string,
-  scanPlan: ProjectGraphScanPlan,
   nodes: Map<string, ProjectGraphNodeDto>,
   edges: Map<string, ProjectGraphEdgeDto>,
 ): void => {
-  const parentRoot = longestMatchingRoot(filePath, scanPlan.deepRoots);
-  const parentId = parentRoot
-    ? createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.DIRECTORY, key: parentRoot })
-    : createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.PROJECT, key: project.name });
-  addEdge(edges, makeEdge(parentId, fileNodeId(project, filePath), ProjectGraphEdgeKind.CONTAINS, evidence(filePath)));
+  // Build the full ancestor directory chain so the graph is navigable from the
+  // project root down to every file. Previously a file was linked directly to
+  // its nearest configured deep-root (e.g. `TypeScript`), collapsing every
+  // intermediate directory (`TypeScript/Src`, `TypeScript/Src/Game`, ...) out of
+  // existence — so from the root there was no path to reach a deep file, and the
+  // bounded initial view could never surface it. Now each path segment becomes a
+  // DIRECTORY node chained by CONTAINS: project → TypeScript → Src → Game → file.
+  const parentDirId = addDirectoryChainFacts(project, filePath, nodes, edges);
+  addEdge(edges, makeEdge(parentDirId, fileNodeId(project, filePath), ProjectGraphEdgeKind.CONTAINS, evidence(filePath)));
+};
+
+/**
+ * Ensure a DIRECTORY node exists for every ancestor directory of `filePath`,
+ * chained parent→child by CONTAINS, and return the id of the file's immediate
+ * parent directory (or the project node id when the file sits at the root).
+ *
+ * The topmost segment is linked to the project node; deeper segments chain to
+ * their parent directory. Directory nodes are keyed by their relative path,
+ * matching `addDirectoryFact`, so the configured deep-root directory nodes
+ * (created up-front with a scanMode marker) and re-index runs merge by id
+ * rather than duplicating.
+ */
+const addDirectoryChainFacts = (
+  project: DetectedProject,
+  filePath: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): string => {
+  const projectId = createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.PROJECT, key: project.name });
+  const segments = filePath.split('/');
+  segments.pop(); // drop the file name; only directories remain
+  if (segments.length === 0) return projectId;
+
+  let parentId = projectId;
+  let accum = '';
+  for (const segment of segments) {
+    accum = accum ? `${accum}/${segment}` : segment;
+    const dirId = createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.DIRECTORY, key: accum });
+    // Only create the node if it isn't already staged this batch: deep-root
+    // directory nodes are created up-front by addScanPlanFacts with a scanMode
+    // marker that a bare directory fact must not clobber. addNode merges, so the
+    // guard just avoids overwriting the richer root metadata.
+    if (!nodes.has(dirId)) {
+      addNode(nodes, makeNode(project, ProjectGraphNodeKind.DIRECTORY, accum, accum, evidence(accum)));
+    }
+    addEdge(edges, makeEdge(parentId, dirId, ProjectGraphEdgeKind.CONTAINS, evidence(accum)));
+    parentId = dirId;
+  }
+  return parentId;
 };
 
 // ============================================================

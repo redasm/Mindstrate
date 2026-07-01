@@ -631,4 +631,42 @@ describe('project graph service', () => {
     expect(store.listNodes({ project: 'Client', limit: 500 })
       .some((n) => n.title === 'willVanish' && n.status === 'active')).toBe(false);
   });
+
+  it('builds a full directory chain so deep files are reachable from the project root', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'TypeScript/Src/Game/MapModel.ts', 'export class MapModel {}');
+
+    const project = detectProject(root)!;
+    indexProjectGraph(store, project);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 2000 });
+    const kindOf = (n: { metadata?: Record<string, unknown> }) => n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind];
+    const dirTitle = (t: string) =>
+      nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.DIRECTORY && n.title === t);
+
+    // Every intermediate directory must exist as its own node (previously only
+    // the top-level deep-root `TypeScript` did, collapsing the rest).
+    expect(dirTitle('TypeScript')).toBeDefined();
+    expect(dirTitle('TypeScript/Src')).toBeDefined();
+    expect(dirTitle('TypeScript/Src/Game')).toBeDefined();
+
+    // And they must chain project → TypeScript → Src → Game → file via CONTAINS,
+    // so the bounded root view can drill down to the deep file.
+    const edges = store.listEdges({ limit: 5000 });
+    const contains = (fromId: string, toId: string) =>
+      edges.some((e) =>
+        e.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CONTAINS
+        && e.sourceId === fromId && e.targetId === toId);
+
+    const projectNode = nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.PROJECT)!;
+    const ts = dirTitle('TypeScript')!;
+    const src = dirTitle('TypeScript/Src')!;
+    const game = dirTitle('TypeScript/Src/Game')!;
+    const file = nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.FILE && n.title.endsWith('Game/MapModel.ts'))!;
+
+    expect(projectNode && ts && contains(projectNode.id, ts.id)).toBeTruthy();
+    expect(contains(ts.id, src.id)).toBe(true);
+    expect(contains(src.id, game.id)).toBe(true);
+    expect(file && contains(game.id, file.id)).toBeTruthy();
+  });
 });

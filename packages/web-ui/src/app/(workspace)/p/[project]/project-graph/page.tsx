@@ -81,7 +81,11 @@ export default function ProjectGraphPage({ params }: { params: Promise<{ project
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const sub = await fetchProjectSubgraph(decoded, { limit: 300 });
+      // Load the full directory-tree backbone (project + all directories) plus a
+      // budget of files. The scanner builds a directory node per path segment, so
+      // this makes the graph navigable from the root down to deep files. 3000
+      // matches the server-side subgraph clamp.
+      const sub = await fetchProjectSubgraph(decoded, { limit: 3000 });
       setRawNodes(new Map(sub.nodes.map((n) => [n.id, n])));
       setRawEdges(new Map(sub.edges.map((e) => [e.id, e])));
       const resp = await fetch(`/api/project-graph-overlays?limit=500&project=${encodeURIComponent(decoded)}`);
