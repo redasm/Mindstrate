@@ -126,6 +126,17 @@ export function initializeContextGraphSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_metabolism_runs_project ON metabolism_runs(project);
     CREATE INDEX IF NOT EXISTS idx_metabolism_runs_started_at ON metabolism_runs(started_at);
 
+    -- Vector-search candidate ordering. The similarity scan pulls the top
+    -- candidates ordered by quality_score/updated_at before scoring them
+    -- (see NodeEmbeddingRepository.candidatesForSearch). Without this index a
+    -- 100k+ node graph builds a TEMP B-TREE over the whole model set on every
+    -- search — the first (cold-cache) memory_search/graph_knowledge_search then
+    -- overran the MCP request timeout and surfaced as a transient error, while
+    -- the retry hit warm pages and succeeded. The DESC column order matches the
+    -- query so the planner can walk the index instead of sorting.
+    CREATE INDEX IF NOT EXISTS idx_context_nodes_quality
+      ON context_nodes(quality_score DESC, updated_at DESC);
+
     -- Lowercase indexes: the project filter on every list/query
     -- query uses LOWER(project) so callers can pass "Mindstrate" or
     -- "mindstrate" interchangeably. Without these expression indexes
@@ -148,5 +159,45 @@ export function initializeContextGraphSchema(db: Database.Database): void {
     `ALTER TABLE node_embeddings ADD COLUMN embedding_vec BLOB`,
   ]) {
     try { db.exec(ddl); } catch { /* column already exists */ }
+  }
+
+  ensureVectorSearchStatistics(db);
+}
+
+/**
+ * Make the planner actually use `idx_context_nodes_quality`.
+ *
+ * Creating the index is not enough on a database that has never been analyzed
+ * (no `sqlite_stat1`): with no statistics the planner keeps driving the
+ * vector-candidate join from `node_embeddings(model)` and still builds a TEMP
+ * B-TREE for the ORDER BY. Only after ANALYZE does it flip the join to walk the
+ * quality index in order and stop the sort. Verified with EXPLAIN QUERY PLAN on
+ * the production graph (108k nodes) and synthetic fixtures.
+ *
+ * Runs ANALYZE once, then no-ops: `initializeContextGraphSchema` runs in every
+ * process that opens the store (team-server, web-ui, repo-scanner), so a blind
+ * ANALYZE on each startup would be a needless full-table pass on a multi-GB DB.
+ * The guard keys off whether the index already has a `sqlite_stat1` row. Scope
+ * is limited to the two tables the candidate query touches — statistically
+ * identical to a full ANALYZE for this query, without analyzing unrelated tables.
+ */
+function ensureVectorSearchStatistics(db: Database.Database): void {
+  try {
+    const analyzed = db
+      .prepare(
+        `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_stat1'`,
+      )
+      .get()
+      && db
+        .prepare(`SELECT 1 FROM sqlite_stat1 WHERE idx = 'idx_context_nodes_quality'`)
+        .get();
+    if (analyzed) return;
+    db.exec('ANALYZE context_nodes;');
+    db.exec('ANALYZE node_embeddings;');
+  } catch {
+    // ANALYZE is a pure optimization: a failure (e.g. a read-only handle or a
+    // concurrent writer holding the lock) must never break store init. The
+    // search still returns correct results, just with the cold-cache sort until
+    // stats land on a later startup.
   }
 }
