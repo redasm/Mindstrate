@@ -669,4 +669,42 @@ describe('project graph service', () => {
     expect(contains(src.id, game.id)).toBe(true);
     expect(file && contains(game.id, file.id)).toBeTruthy();
   });
+
+  it('does not create dependency nodes for language builtins / test-framework calls', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'TypeScript/Src/Game/Widget.ts', [
+      'export class Widget {',
+      '  render(): void {',
+      '    const x = [1, 2].map((n) => n + 1);',   // map is a builtin-ish global we filter
+      '    doWork(x);',                              // real project call -> should survive
+      '  }',
+      '}',
+      'function doWork(v: number[]): void { return; }',
+    ].join('\n'));
+    write(root, 'TypeScript/Src/Test/Widget.test.ts', [
+      'describe("Widget", () => {',
+      '  it("renders", () => {',
+      '    expect(1).toEqual(1);',
+      '  });',
+      '});',
+    ].join('\n'));
+
+    const project = detectProject(root)!;
+    indexProjectGraph(store, project);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 2000 });
+    const depTitles = new Set(
+      nodes
+        .filter((n) => n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.DEPENDENCY)
+        .map((n) => n.title),
+    );
+    // Builtins / test globals must NOT be dependency nodes.
+    for (const noise of ['expect', 'it', 'describe', 'toEqual', 'map']) {
+      expect(depTitles.has(noise)).toBe(false);
+    }
+    // The real intra-file call still resolves to the local function definition.
+    const doWork = nodes.find((n) =>
+      n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.FUNCTION && n.title === 'doWork');
+    expect(doWork).toBeDefined();
+  });
 });

@@ -820,8 +820,47 @@ const addCallFact = (
     addEdge(edges, makeEdge(fileNodeId(project, filePath), targetId, ProjectGraphEdgeKind.CALLS, evidence(filePath, capture)));
     return;
   }
+  // Drop calls to language builtins / test-framework globals. These are not
+  // project dependencies — treating `str`/`print`/`require`/`expect`/`it` as
+  // DEPENDENCY nodes floods the graph with thousands of meaningless nodes that
+  // LLM enrichment then promotes into bogus "concept" architecture nodes. A call
+  // to a name we don't recognize as a local definition AND that is a known
+  // builtin is noise; skip it. Real imported symbols still arrive via
+  // `import.source`, and genuine cross-file calls still fall through to a
+  // DEPENDENCY the binding pass can resolve.
+  if (CALL_NOISE_SYMBOLS.has(name)) return;
   addDependencyFact(project, filePath, name, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
 };
+
+/**
+ * Call targets that are language builtins or test-framework globals, not
+ * project symbols. Filtered out of the call graph so they don't become
+ * DEPENDENCY nodes (and, downstream, LLM-inferred "concept" nodes). Scoped to
+ * the languages this scanner parses (JS/TS, Python, Lua, C#, C++). Kept
+ * deliberately conservative — only unambiguous builtins/framework globals — so
+ * a real project symbol that merely shares a common name is not dropped.
+ */
+const CALL_NOISE_SYMBOLS = new Set<string>([
+  // JS/TS language + common globals
+  'require', 'super', 'import', 'typeof', 'instanceof', 'await', 'new', 'delete', 'void', 'yield',
+  'Array', 'Object', 'String', 'Number', 'Boolean', 'Symbol', 'BigInt', 'Promise', 'Map', 'Set',
+  'WeakMap', 'WeakSet', 'JSON', 'Math', 'Date', 'RegExp', 'Error', 'parseInt', 'parseFloat',
+  'isNaN', 'isFinite', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+  'console', 'all', 'race', 'resolve', 'reject', 'from', 'of', 'keys', 'values', 'entries',
+  // Jest / Vitest / Mocha test globals
+  'describe', 'it', 'test', 'expect', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll',
+  'toEqual', 'toBe', 'toContain', 'toThrow', 'toHaveBeenCalled', 'toMatchObject', 'toBeNull',
+  'toBeUndefined', 'toBeDefined', 'toBeTruthy', 'toBeFalsy', 'toHaveLength', 'mockReturnValue',
+  'vi', 'jest', 'spyOn', 'mock',
+  // Python builtins
+  'str', 'int', 'float', 'bool', 'bytes', 'list', 'dict', 'tuple', 'set', 'frozenset',
+  'print', 'len', 'range', 'enumerate', 'zip', 'map', 'filter', 'isinstance', 'issubclass',
+  'hasattr', 'getattr', 'setattr', 'type', 'repr', 'abs', 'min', 'max', 'sum', 'sorted',
+  'open', 'input', 'format', 'super', 'any',
+  // Lua builtins
+  'pairs', 'ipairs', 'tostring', 'tonumber', 'pcall', 'xpcall', 'select', 'rawget', 'rawset',
+  'setmetatable', 'getmetatable', 'assert', 'error', 'next',
+]);
 
 type SourceFactHandler = (
   project: DetectedProject,
