@@ -131,6 +131,14 @@ export interface ProjectGraphHints {
   ignore?: string[];
   manifests?: string[];
   riskHints?: string[];
+  /**
+   * Call targets to exclude from the project graph (language builtins,
+   * test-framework globals, etc.) so they don't become noise DEPENDENCY /
+   * concept nodes. When omitted, the scanner uses its built-in default set;
+   * an explicit empty array disables the filter. Editable per project in
+   * `.mindstrate/rules/*.json`.
+   */
+  callNoiseSymbols?: string[];
   layers?: ProjectLayer[];
   operationManual?: ProjectOperationManual;
   /**

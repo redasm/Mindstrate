@@ -774,13 +774,26 @@ const addSourceFacts = (
   // Pass 2: dispatch each capture. `call.function` is resolved against the
   // local definitions first (see `addCallFact`); everything else goes straight
   // to its registered handler.
+  const noiseSymbols = callNoiseSymbolsFor(project);
   for (const capture of captures) {
     if (capture.name === 'call.function') {
-      addCallFact(project, filePath, capture, localDefinitions, nodes, edges);
+      addCallFact(project, filePath, capture, localDefinitions, noiseSymbols, nodes, edges);
       continue;
     }
     SOURCE_FACT_HANDLERS[capture.name]?.(project, filePath, capture, nodes, edges);
   }
+};
+
+/**
+ * Resolve the call-noise symbol set for a project: the rule-provided
+ * `graphHints.callNoiseSymbols` when configured (so teams can tune it per
+ * project in their `.mindstrate/rules/*.json`), otherwise the built-in default.
+ * An explicit empty array in the rule disables filtering entirely.
+ */
+const callNoiseSymbolsFor = (project: DetectedProject): Set<string> => {
+  const configured = project.graphHints?.callNoiseSymbols;
+  if (configured) return new Set(configured);
+  return DEFAULT_CALL_NOISE_SYMBOLS;
 };
 
 /**
@@ -808,6 +821,7 @@ const addCallFact = (
   filePath: string,
   capture: ParserCapture,
   localDefinitions: Map<string, string>,
+  noiseSymbols: Set<string>,
   nodes: Map<string, ProjectGraphNodeDto>,
   edges: Map<string, ProjectGraphEdgeDto>,
 ): void => {
@@ -827,20 +841,21 @@ const addCallFact = (
   // to a name we don't recognize as a local definition AND that is a known
   // builtin is noise; skip it. Real imported symbols still arrive via
   // `import.source`, and genuine cross-file calls still fall through to a
-  // DEPENDENCY the binding pass can resolve.
-  if (CALL_NOISE_SYMBOLS.has(name)) return;
+  // DEPENDENCY the binding pass can resolve. The set is configurable per project
+  // via the rule's `callNoiseSymbols` (see {@link callNoiseSymbolsFor}).
+  if (noiseSymbols.has(name)) return;
   addDependencyFact(project, filePath, name, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
 };
 
 /**
- * Call targets that are language builtins or test-framework globals, not
- * project symbols. Filtered out of the call graph so they don't become
- * DEPENDENCY nodes (and, downstream, LLM-inferred "concept" nodes). Scoped to
- * the languages this scanner parses (JS/TS, Python, Lua, C#, C++). Kept
- * deliberately conservative — only unambiguous builtins/framework globals — so
- * a real project symbol that merely shares a common name is not dropped.
+ * Default call targets that are language builtins or test-framework globals,
+ * not project symbols. Used when a project's rule does not override
+ * `graphHints.callNoiseSymbols`. Filtered out of the call graph so they don't
+ * become DEPENDENCY nodes (and, downstream, LLM-inferred "concept" nodes).
+ * Scoped to the languages this scanner parses (JS/TS, Python, Lua, C#, C++).
+ * Deliberately conservative — only unambiguous builtins/framework globals.
  */
-const CALL_NOISE_SYMBOLS = new Set<string>([
+export const DEFAULT_CALL_NOISE_SYMBOLS = new Set<string>([
   // JS/TS language + common globals
   'require', 'super', 'import', 'typeof', 'instanceof', 'await', 'new', 'delete', 'void', 'yield',
   'Array', 'Object', 'String', 'Number', 'Boolean', 'Symbol', 'BigInt', 'Promise', 'Map', 'Set',
@@ -856,7 +871,7 @@ const CALL_NOISE_SYMBOLS = new Set<string>([
   'str', 'int', 'float', 'bool', 'bytes', 'list', 'dict', 'tuple', 'set', 'frozenset',
   'print', 'len', 'range', 'enumerate', 'zip', 'map', 'filter', 'isinstance', 'issubclass',
   'hasattr', 'getattr', 'setattr', 'type', 'repr', 'abs', 'min', 'max', 'sum', 'sorted',
-  'open', 'input', 'format', 'super', 'any',
+  'open', 'input', 'format', 'any',
   // Lua builtins
   'pairs', 'ipairs', 'tostring', 'tonumber', 'pcall', 'xpcall', 'select', 'rawget', 'rawset',
   'setmetatable', 'getmetatable', 'assert', 'error', 'next',

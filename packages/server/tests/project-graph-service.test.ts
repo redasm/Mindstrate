@@ -707,4 +707,36 @@ describe('project graph service', () => {
       n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.FUNCTION && n.title === 'doWork');
     expect(doWork).toBeDefined();
   });
+
+  it('honors a rule-provided callNoiseSymbols override', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    // Custom rule: filter only `bespokeGlobal`, and NOT the built-in defaults.
+    write(root, '.mindstrate/rules/nami.json', JSON.stringify({
+      id: 'nami-custom',
+      name: 'NAMI Custom',
+      priority: 300,
+      match: { all: [{ glob: '*.uproject' }] },
+      detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+      sourceRoots: ['TypeScript'],
+      callNoiseSymbols: ['bespokeGlobal'],
+    }));
+    write(root, 'TypeScript/Src/Game/Caller.ts', [
+      'export function run(): void {',
+      '  bespokeGlobal();',   // overridden noise -> filtered
+      '  expect(1);',          // default noise, but NOT in the override -> kept as dependency
+      '}',
+    ].join('\n'));
+
+    const project = detectProject(root)!;
+    expect(project.graphHints?.callNoiseSymbols).toEqual(['bespokeGlobal']);
+    indexProjectGraph(store, project);
+
+    const depTitles = new Set(
+      store.listNodes({ project: 'Client', limit: 2000 })
+        .filter((n) => n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.DEPENDENCY)
+        .map((n) => n.title),
+    );
+    expect(depTitles.has('bespokeGlobal')).toBe(false); // override filtered it
+    expect(depTitles.has('expect')).toBe(true);          // default no longer applies
+  });
 });
