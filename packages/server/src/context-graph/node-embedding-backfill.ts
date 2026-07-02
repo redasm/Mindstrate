@@ -22,7 +22,6 @@ import {
 import type { ContextGraphStore } from './context-graph-store.js';
 import type { Embedder } from '../processing/embedder.js';
 import type { NodeVectorIndex, NodeVectorRecord } from './node-vector-index.js';
-import { PROJECT_GRAPH_DEFAULT_QUERY_LIMIT } from '@mindstrate/protocol/models';
 
 export interface BackfillNodeEmbeddingsInput {
   project?: string;
@@ -62,23 +61,44 @@ export const backfillNodeEmbeddings = async (
   input: BackfillNodeEmbeddingsInput = {},
 ): Promise<BackfillNodeEmbeddingsResult> => {
   const batchSize = Math.max(input.batchSize ?? 64, 1);
-  const nodes = store
-    .listNodes({ project: input.project, limit: PROJECT_GRAPH_DEFAULT_QUERY_LIMIT })
-    .filter((node) => EMBEDDABLE_STATUSES.has(node.status));
+  const statuses = Array.from(EMBEDDABLE_STATUSES);
 
-  const already = input.force ? new Set<string>() : store.nodeIdsWithEmbedding(model);
-  const pending = nodes.filter((node) => !already.has(node.id));
+  // `force` re-embeds everything; otherwise the DB-side anti-join skips nodes
+  // already embedded for this model, so we never hold every embedded id in a
+  // JS Set. `total`/`candidates` are counted, not derived from a materialized
+  // list — the whole point is to never load the full node set at once.
+  const excludeModel = input.force ? undefined : model;
+  const total = store.countEmbeddableNodes({ project: input.project, statuses, excludeModel });
+  const candidates = store.countEmbeddableNodes({ project: input.project, statuses });
 
   const result: BackfillNodeEmbeddingsResult = {
     model,
     dimensions: embedder.getEmbeddingDimension(),
-    candidates: nodes.length,
+    candidates,
     embedded: 0,
-    skipped: nodes.length - pending.length,
+    skipped: candidates - total,
   };
 
-  for (let i = 0; i < pending.length; i += batchSize) {
-    const batch = pending.slice(i, i + batchSize);
+  // Keyset pagination by primary key: peak memory is O(batchSize), not
+  // O(node count). A 100k-node graph that OOM-crashed the 512MB team-server on
+  // the old `list({ limit: 100000 })` load now streams through cleanly.
+  //
+  // `afterId` advances past the last id every batch in BOTH modes, so it is
+  // strictly increasing and the loop is guaranteed to terminate. The
+  // `excludeModel` anti-join is only an optimization layered on top: it drops
+  // already-embedded nodes out of the forward scan (incremental re-runs), while
+  // the cursor still guarantees we never revisit a node we just processed.
+  let afterId: string | undefined;
+  for (;;) {
+    const batch = store.listEmbeddableNodesPage({
+      statuses,
+      project: input.project,
+      afterId,
+      excludeModel,
+      limit: batchSize,
+    });
+    if (batch.length === 0) break;
+
     const texts = batch.map((node) => nodeEmbeddingText(node));
     const embeddings = await embedder.embedBatch(texts);
     const mirror: NodeVectorRecord[] = [];
@@ -95,7 +115,10 @@ export const backfillNodeEmbeddings = async (
       result.embedded++;
     }
     if (input.vectorIndex) await input.vectorIndex.upsert(mirror);
-    input.onProgress?.({ embedded: result.embedded, total: pending.length });
+    input.onProgress?.({ embedded: result.embedded, total });
+
+    afterId = batch[batch.length - 1].id;
+    if (batch.length < batchSize) break;
   }
 
   return result;

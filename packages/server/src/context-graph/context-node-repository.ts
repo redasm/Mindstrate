@@ -151,6 +151,89 @@ export class ContextNodeRepository {
     return rows.map(rowToNode);
   }
 
+  /**
+   * One keyset page of embeddable nodes, ordered by primary key so the caller
+   * can stream the whole set batch-by-batch without ever materializing it.
+   *
+   * The node-embedding backfill runs inside a 512MB team-server container over
+   * graphs of 100k+ nodes; a single `list({ limit: 100000 })` load OOM-crashed
+   * it (V8 JsonParser abort) and left coverage stuck at a few percent. Paging by
+   * `id > afterId` keeps peak memory at O(batchSize).
+   *
+   * `excludeModel` pushes the incremental guard into SQL — a `NOT EXISTS`
+   * anti-join skips nodes already embedded for that model, so re-running after a
+   * partial scan doesn't require holding every embedded id in a JS Set.
+   */
+  listEmbeddablePage(opts: {
+    statuses: ContextNodeStatus[];
+    project?: string;
+    afterId?: string;
+    excludeModel?: string;
+    limit: number;
+  }): ContextNode[] {
+    if (opts.statuses.length === 0) return [];
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    conditions.push(`status IN (${opts.statuses.map(() => '?').join(',')})`);
+    params.push(...opts.statuses);
+    if (opts.project) {
+      conditions.push('LOWER(project) = LOWER(?)');
+      params.push(opts.project);
+    }
+    if (opts.afterId !== undefined) {
+      conditions.push('id > ?');
+      params.push(opts.afterId);
+    }
+    if (opts.excludeModel) {
+      conditions.push(
+        'NOT EXISTS (SELECT 1 FROM node_embeddings ne WHERE ne.node_id = context_nodes.id AND ne.model = ?)',
+      );
+      params.push(opts.excludeModel);
+    }
+
+    const rows = this.db.prepare(`
+      SELECT * FROM context_nodes
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY id ASC
+      LIMIT ?
+    `).all(...params, opts.limit) as NodeRow[];
+    return rows.map(rowToNode);
+  }
+
+  /**
+   * Count embeddable nodes matching the same filter as {@link listEmbeddablePage}
+   * (minus the keyset cursor). Lets the backfill report an accurate candidate /
+   * progress total without materializing rows.
+   */
+  countEmbeddable(opts: {
+    statuses: ContextNodeStatus[];
+    project?: string;
+    excludeModel?: string;
+  }): number {
+    if (opts.statuses.length === 0) return 0;
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    conditions.push(`status IN (${opts.statuses.map(() => '?').join(',')})`);
+    params.push(...opts.statuses);
+    if (opts.project) {
+      conditions.push('LOWER(project) = LOWER(?)');
+      params.push(opts.project);
+    }
+    if (opts.excludeModel) {
+      conditions.push(
+        'NOT EXISTS (SELECT 1 FROM node_embeddings ne WHERE ne.node_id = context_nodes.id AND ne.model = ?)',
+      );
+      params.push(opts.excludeModel);
+    }
+
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS c FROM context_nodes WHERE ${conditions.join(' AND ')}
+    `).get(...params) as { c: number };
+    return row.c;
+  }
+
   update(id: string, input: UpdateContextNodeInput): ContextNode | null {
     const existing = this.getById(id);
     if (!existing) return null;
