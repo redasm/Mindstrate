@@ -97,4 +97,26 @@ describe('hybrid knowledge search', () => {
     expect(first.embedded).toBe(second.embedded);
     expect(second.candidates).toBe(first.candidates);
   });
+
+  it('streams through more nodes than one batch without dropping any', async () => {
+    // Regression: the backfill used to load the whole node set with
+    // list({ limit: 100000 }), which OOM-crashed the 512MB team-server on large
+    // graphs and left coverage stuck at a few percent. It now pages by primary
+    // key, so a candidate set larger than one batch must still embed in full.
+    const NODE_COUNT = 150;
+    for (let i = 0; i < NODE_COUNT; i++) {
+      const n = String(i).padStart(3, '0');
+      addFileNode(memory, `mod-${n}.ts`, `packages/server/src/gen/mod-${n}.ts`);
+    }
+
+    // Small batchSize forces many keyset pages over the candidate set.
+    const [result] = await memory.maintenance.rebuildVectors(PROJECT);
+    expect(result.candidates).toBe(NODE_COUNT);
+    expect(result.embedded).toBe(NODE_COUNT);
+
+    // A second (incremental, non-force would skip) pass over the same graph is
+    // still complete — nothing is lost across pages.
+    const [again] = await memory.maintenance.rebuildVectors(PROJECT);
+    expect(again.embedded).toBe(NODE_COUNT);
+  });
 });

@@ -10,6 +10,7 @@ import type {
   ContextEdge,
   ContextEvent,
   ContextNode,
+  ContextNodeStatus,
 } from '@mindstrate/protocol/models';
 import {
   type ConflictRecord,
@@ -162,6 +163,31 @@ export class ContextGraphStore {
 
   listNodes(options: ListContextNodesOptions = {}): ContextNode[] {
     return this.nodes.list(options);
+  }
+
+  /**
+   * One keyset page of embeddable nodes (id-ordered) for streaming backfill.
+   * Callers page via `afterId`; `excludeModel` skips nodes already embedded for
+   * that model in SQL. Never materializes the whole graph — see the repository
+   * method for the OOM history that motivated this.
+   */
+  listEmbeddableNodesPage(opts: {
+    statuses: ContextNodeStatus[];
+    project?: string;
+    afterId?: string;
+    excludeModel?: string;
+    limit: number;
+  }): ContextNode[] {
+    return this.nodes.listEmbeddablePage(opts);
+  }
+
+  /** Count embeddable nodes matching {@link listEmbeddableNodesPage}'s filter. */
+  countEmbeddableNodes(opts: {
+    statuses: ContextNodeStatus[];
+    project?: string;
+    excludeModel?: string;
+  }): number {
+    return this.nodes.countEmbeddable(opts);
   }
 
   /** Bounded, quality-ranked fetch of a project's domain nodes (LLM-feed paths). */
