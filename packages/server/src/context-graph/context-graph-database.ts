@@ -135,4 +135,18 @@ export function initializeContextGraphSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_conflict_records_project_lower ON conflict_records(LOWER(project));
     CREATE INDEX IF NOT EXISTS idx_metabolism_runs_project_lower ON metabolism_runs(LOWER(project));
   `);
+
+  // Lightweight additive migrations. SQLite raises an error if the column
+  // already exists; swallowing keeps init idempotent.
+  //
+  // `embedding_vec` stores the L2-normalized embedding as a packed Float32
+  // BLOB. It supersedes the legacy `embedding` TEXT column (a JSON array):
+  // reading a BLOB is a zero-parse buffer view, and normalizing at write time
+  // lets the similarity scan use a plain dot product. Old TEXT rows are
+  // migrated lazily as they are read (see NodeEmbeddingRepository).
+  for (const ddl of [
+    `ALTER TABLE node_embeddings ADD COLUMN embedding_vec BLOB`,
+  ]) {
+    try { db.exec(ddl); } catch { /* column already exists */ }
+  }
 }

@@ -160,7 +160,12 @@ describe('ContextGraphStore', () => {
     });
 
     expect(embedding.nodeId).toBe(node.id);
-    expect(embedding.embedding).toEqual([0.1, 0.2, 0.3]);
+    // Stored vectors are L2-normalized at write time (so similarity scans can
+    // use a plain dot product) and round-tripped through a Float32 BLOB, so the
+    // read-back is the unit vector, not the raw input.
+    const norm = Math.hypot(...embedding.embedding);
+    expect(norm).toBeCloseTo(1, 5);
+    expect(embedding.embedding[0]).toBeCloseTo(0.1 / Math.hypot(0.1, 0.2, 0.3), 5);
     expect(store.getNodeEmbedding(node.id, 'test-embedding')?.dimensions).toBe(3);
 
     store.deleteNode(node.id);
@@ -199,6 +204,43 @@ describe('ContextGraphStore', () => {
     const titles = hits.map((h) => store.getNodeById(h.nodeId)?.title);
     expect(titles).toContain('node 29');
     expect(titles).not.toContain('node 0');
+  });
+
+  it('migrates legacy TEXT-only embedding rows to the BLOB column on read', () => {
+    const node = store.createNode({
+      substrateType: SubstrateType.RULE,
+      domainType: ContextDomainType.CONVENTION,
+      title: 'Legacy embedded node',
+      content: 'x',
+      project: 'legacy',
+      status: ContextNodeStatus.ACTIVE,
+    });
+    // Simulate a pre-migration row: JSON in `embedding`, NULL `embedding_vec`.
+    // Reach past the repository deliberately to plant the legacy shape.
+    const db = store.rawDatabase;
+    const now = new Date().toISOString();
+    db.prepare(`
+      INSERT INTO node_embeddings (node_id, model, dimensions, embedding, embedding_vec, text, created_at, updated_at)
+      VALUES (?, ?, ?, ?, NULL, ?, ?, ?)
+    `).run(node.id, 'legacy-model', 2, JSON.stringify([3, 4]), 'legacy', now, now);
+
+    // First read: the search normalizes the legacy vector on the fly. [3,4]
+    // normalizes to [0.6,0.8]; the query [1,0] scores 0.6.
+    const hits = store.searchSimilarNodes({
+      queryEmbedding: [1, 0],
+      model: 'legacy-model',
+      project: 'legacy',
+      topK: 5,
+      minScore: 0,
+    });
+    expect(hits).toHaveLength(1);
+    expect(hits[0].score).toBeCloseTo(0.6, 5);
+
+    // The BLOB column is now backfilled, so the row no longer relies on TEXT.
+    const row = db.prepare(
+      'SELECT embedding_vec FROM node_embeddings WHERE node_id = ? AND model = ?',
+    ).get(node.id, 'legacy-model') as { embedding_vec: Buffer | null };
+    expect(row.embedding_vec).toBeInstanceOf(Buffer);
   });
 
   it('deletes every row for a project (case-insensitive) and leaves others intact', () => {

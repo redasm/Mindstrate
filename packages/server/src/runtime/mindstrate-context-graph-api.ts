@@ -32,6 +32,7 @@ import {
   estimateProjectGraphBlastRadius,
   findProjectGraphPath,
   indexProjectGraph,
+  reindexProjectGraphFiles,
   planProjectGraphSystemPagesWithLlm,
   collectCuratedProjectDocs,
   queryProjectGraphTask,
@@ -48,6 +49,7 @@ import {
   type ProjectGraphEnrichmentResult,
   type ProjectGraphIndexOptions,
   type ProjectGraphIndexResult,
+  type ReindexProjectGraphFilesResult,
   type ProjectGraphPathInput,
   type ProjectGraphPathResult,
   type ProjectGraphScanScope,
@@ -293,6 +295,23 @@ export class MindstrateContextGraphApi {
     return detectProjectGraphChanges(this.services.contextGraphStore, project, input);
   }
 
+  /**
+   * Incrementally re-extract specific files into the persisted project graph
+   * (file + symbol + call nodes), then re-run binding. Unlike
+   * `ingestProjectGraphChangeSet`, which only detects + marks staleness, this
+   * writes fresh facts so a scanner can keep the graph current per commit /
+   * changelist without a full re-index. `project.root` must be a local checkout
+   * synced to the ingested revision.
+   */
+  reindexProjectGraphFiles(
+    project: DetectedProject,
+    filePaths: string[],
+  ): ReindexProjectGraphFilesResult {
+    return reindexProjectGraphFiles(this.services.contextGraphStore, project, filePaths, {
+      logger: this.services.logger,
+    });
+  }
+
   ingestProjectGraphChangeSet(
     project: DetectedProject,
     changeSet: ChangeSet,
@@ -347,7 +366,12 @@ export class MindstrateContextGraphApi {
       this.services.contextGraphStore,
       providers.embedder,
       providers.embeddingModel,
-      { project: project.name, force: options?.force, onProgress: options?.onProgress },
+      {
+        project: project.name,
+        force: options?.force,
+        onProgress: options?.onProgress,
+        vectorIndex: this.services.nodeVectorIndex,
+      },
     );
   }
 

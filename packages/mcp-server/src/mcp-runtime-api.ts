@@ -12,6 +12,8 @@ import { resolveLocalDataDir } from './local-data-dir.js';
 interface RuntimeApiOptions {
   teamServerUrl: string;
   teamApiKey: string;
+  /** HTTP request timeout (ms) for team-mode calls. Undefined → client default. */
+  teamHttpTimeoutMs?: number;
   obsidianVaultPath: string;
   obsidianAutoSync: boolean;
   obsidianWatch: boolean;
@@ -23,7 +25,11 @@ export function createMcpApi(options: RuntimeApiOptions): McpApi {
   let memory: LocalMemory | null = null;
   let vaultSync: VaultSync | null = null;
   const teamClient = isTeamMode
-    ? new TeamClient({ serverUrl: options.teamServerUrl, apiKey: options.teamApiKey })
+    ? new TeamClient({
+        serverUrl: options.teamServerUrl,
+        apiKey: options.teamApiKey,
+        timeout: options.teamHttpTimeoutMs,
+      })
     : null;
 
   const api: McpApi = {

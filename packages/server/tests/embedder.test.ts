@@ -119,6 +119,26 @@ describe('Embedder', () => {
       expect(online.getMetrics().apiCalls).toBe(1);
     });
 
+    it('passes a per-call timeout to the embeddings API on the query hot path', async () => {
+      let seenOptions: { timeout?: number; signal?: AbortSignal } | undefined;
+      const client: OpenAIClient = {
+        embeddings: {
+          create: async ({ input }, options) => {
+            seenOptions = options;
+            const values = Array.isArray(input) ? input : [input];
+            return { data: values.map((_, index) => ({ embedding: [1], index })) };
+          },
+        },
+        chat: { completions: { create: async () => ({ choices: [] }) } },
+      };
+      const online = new Embedder('fake-key', 'test-model', undefined, { client });
+
+      await online.embed('needs a timeout');
+      // Default MINDSTRATE_EMBED_TIMEOUT_MS is 3000; the option must be forwarded
+      // so a hung provider aborts rather than stalling the whole search.
+      expect(seenOptions?.timeout).toBe(3000);
+    });
+
     it('deduplicates cached entries during online batches', async () => {
       let calls = 0;
       const client = makeEmbeddingClient(async (input) => {

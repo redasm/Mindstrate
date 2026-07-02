@@ -27,7 +27,7 @@ export interface OpenAIClient {
       model: string;
       input: string | string[];
       dimensions?: number;
-    }): Promise<{
+    }, options?: { timeout?: number; signal?: AbortSignal }): Promise<{
       data: Array<{ embedding: number[]; index: number }>;
     }>;
   };

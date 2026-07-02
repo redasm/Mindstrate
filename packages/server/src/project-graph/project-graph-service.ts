@@ -13,6 +13,7 @@
  * file can stay focused on flow rather than recipes.
  */
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
@@ -30,7 +31,9 @@ import type { ParserAdapter, ParserCapture } from './parser-adapter.js';
 import {
   buildProjectGraphScanPlan,
   findUnscannedTopLevelDirectories,
+  languageForExtension,
   scanProjectFiles,
+  PROJECT_GRAPH_MAX_FILE_BYTES,
   type ProjectFileInventoryEntry,
   type ProjectGraphScanPlan,
   type ProjectGraphScanProgress,
@@ -42,6 +45,7 @@ import { createScriptRegexParserAdapter } from './script-parser-adapter.js';
 import {
   applyEdgeWrites,
   applyStreamedNodeWrites,
+  archiveProjectGraphFileFacts,
   emptyWriteResult,
   type ProjectGraphExtractionResult,
   type ProjectGraphWriteResult,
@@ -49,6 +53,7 @@ import {
 import {
   readProjectGraphExtractionCache,
   openProjectGraphExtractionCacheWriter,
+  emptyCache as emptyExtractionCache,
   type ProjectGraphFileExtractionCache,
 } from './extraction-cache.js';
 import {
@@ -60,7 +65,6 @@ import {
   isUnrealBuildFile,
   isUnrealConfigFile,
   isUnrealManifestFile,
-  longestMatchingRoot,
   makeEdge,
   makeFileNode,
   makeNode,
@@ -173,6 +177,139 @@ export const indexProjectGraph = (
     edgesExtracted: stats.edgeCount + bindingEdges,
     skippedFiles: stats.skippedFiles,
     diagnostics: stats.diagnostics,
+  };
+};
+
+export interface ReindexProjectGraphFilesResult extends ProjectGraphWriteResult {
+  filesReindexed: number;
+  filesRemoved: number;
+  filesSkipped: number;
+}
+
+export interface ReindexProjectGraphFilesOptions {
+  logger?: Logger;
+}
+
+/**
+ * Incrementally re-extract a specific set of files into an already-indexed
+ * project graph, then re-run binding inference.
+ *
+ * This is the write-path counterpart to `detectProjectGraphChangeSet` (which
+ * only reads + marks staleness). A repo scanner calls it after an upstream
+ * commit / changelist so the touched files' file + symbol (function / class /
+ * call) nodes are rebuilt from current disk contents — without re-walking the
+ * whole checkout. Files that no longer exist on disk have their owned facts
+ * archived. `project.root` must point at a local checkout synced to (at least)
+ * the revision being ingested, or extraction reads stale bytes.
+ *
+ * Idempotent: node/edge ids are deterministic, so re-running upserts. Old
+ * symbols removed from a file are archived (not left dangling) via
+ * `archiveProjectGraphFileFacts` before the file's fresh facts are written.
+ */
+export const reindexProjectGraphFiles = (
+  store: ContextGraphStore,
+  project: DetectedProject,
+  filePaths: string[],
+  options: ReindexProjectGraphFilesOptions = {},
+): ReindexProjectGraphFilesResult => {
+  const logger = options.logger ?? noopLogger;
+  const scanPlan = buildProjectGraphScanPlan(project.root, {
+    sourceRoots: projectGraphDeepRoots(project),
+    ignore: project.graphHints?.ignore,
+    generatedRoots: project.graphHints?.generatedRoots,
+    manifests: project.graphHints?.manifests,
+  });
+  const parserAdapters = [
+    createUnrealCppParserAdapter(),
+    createScriptRegexParserAdapter(),
+    createTreeSitterSourceParser(),
+  ];
+  // Empty previous cache: incremental reindex always re-parses the given files
+  // from disk (the whole point is that they changed), so a cache hit would defeat it.
+  const emptyCache: ProjectGraphFileExtractionCache = emptyExtractionCache();
+
+  const result: ReindexProjectGraphFilesResult = {
+    ...emptyWriteResult(),
+    filesReindexed: 0,
+    filesRemoved: 0,
+    filesSkipped: 0,
+  };
+
+  const uniquePaths = Array.from(new Set(filePaths.map((file) => file.replace(/\\/g, '/')).filter(Boolean)));
+
+  store.transaction(() => {
+    for (const relPath of uniquePaths) {
+      const entry = buildInventoryEntry(project.root, relPath, scanPlan);
+      // File gone from disk (deleted upstream): archive its owned facts so the
+      // graph doesn't keep stale symbols, and move on.
+      if (!entry) {
+        archiveProjectGraphFileFacts(store, { project: project.name, filePath: relPath });
+        result.filesRemoved++;
+        continue;
+      }
+      // Rebuild: archive the file's previous owned symbols first so a symbol
+      // removed from the file this revision disappears instead of lingering.
+      archiveProjectGraphFileFacts(store, { project: project.name, filePath: relPath });
+
+      const fileNodes = new Map<string, ProjectGraphNodeDto>();
+      const fileEdges = new Map<string, ProjectGraphEdgeDto>();
+      addNode(fileNodes, makeFileNode(project, entry.path, scanPlan));
+      addFileContainmentFact(project, entry.path, fileNodes, fileEdges);
+      const extraction = extractFileFacts(project, entry, parserAdapters, emptyCache, logger);
+      if (extraction.skipped) result.filesSkipped++;
+      for (const node of extraction.nodes) addNode(fileNodes, node);
+      for (const edge of extraction.edges) addEdge(fileEdges, edge);
+
+      applyStreamedNodeWrites(store, Array.from(fileNodes.values()), new Set<string>(), result);
+      applyEdgeWrites(store, Array.from(fileEdges.values()), result);
+      result.filesReindexed++;
+    }
+  });
+
+  // Re-run binding inference so native↔script and generated↔source edges pick up
+  // the freshly (re)written symbols.
+  bindProjectGraph(store, project.name);
+
+  return result;
+};
+
+/**
+ * Build a single-file inventory entry from disk, mirroring `scanner.addFileEntry`
+ * (hash, language, generated flag, oversize guard). Returns null when the file is
+ * missing, unreadable, or over the size cap — the caller treats null as "removed".
+ */
+const buildInventoryEntry = (
+  root: string,
+  relPath: string,
+  scanPlan: ProjectGraphScanPlan,
+): ProjectFileInventoryEntry | null => {
+  const abs = path.join(root, relPath);
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(abs);
+  } catch {
+    return null;
+  }
+  if (!stat.isFile()) return null;
+  if (PROJECT_GRAPH_MAX_FILE_BYTES > 0 && stat.size > PROJECT_GRAPH_MAX_FILE_BYTES) return null;
+  let content: Buffer;
+  try {
+    content = fs.readFileSync(abs);
+  } catch {
+    return null;
+  }
+  const extension = path.extname(relPath);
+  const generated = scanPlan.generatedRoots.some((genRoot) =>
+    relPath === genRoot || relPath.startsWith(`${genRoot}/`));
+  return {
+    path: relPath,
+    absolutePath: abs,
+    size: stat.size,
+    extension,
+    hash: createHash('sha256').update(content).digest('hex'),
+    modifiedTime: stat.mtime.toISOString(),
+    language: languageForExtension(extension),
+    generated,
   };
 };
 
@@ -302,7 +439,7 @@ const streamProjectGraphIntoStore = (
       const fileNodes = new Map<string, ProjectGraphNodeDto>();
       const fileEdges = new Map<string, ProjectGraphEdgeDto>();
       addNode(fileNodes, makeFileNode(project, file.path, scanPlan));
-      addFileContainmentFact(project, file.path, scanPlan, fileNodes, fileEdges);
+      addFileContainmentFact(project, file.path, fileNodes, fileEdges);
       const fileExtraction = extractFileFacts(project, file, parserAdapters, previousCache, options.logger ?? noopLogger);
       if (fileExtraction.skipped) {
         skippedFiles += 1;
@@ -525,15 +662,58 @@ const addDirectoryFact = (
 const addFileContainmentFact = (
   project: DetectedProject,
   filePath: string,
-  scanPlan: ProjectGraphScanPlan,
   nodes: Map<string, ProjectGraphNodeDto>,
   edges: Map<string, ProjectGraphEdgeDto>,
 ): void => {
-  const parentRoot = longestMatchingRoot(filePath, scanPlan.deepRoots);
-  const parentId = parentRoot
-    ? createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.DIRECTORY, key: parentRoot })
-    : createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.PROJECT, key: project.name });
-  addEdge(edges, makeEdge(parentId, fileNodeId(project, filePath), ProjectGraphEdgeKind.CONTAINS, evidence(filePath)));
+  // Build the full ancestor directory chain so the graph is navigable from the
+  // project root down to every file. Previously a file was linked directly to
+  // its nearest configured deep-root (e.g. `TypeScript`), collapsing every
+  // intermediate directory (`TypeScript/Src`, `TypeScript/Src/Game`, ...) out of
+  // existence — so from the root there was no path to reach a deep file, and the
+  // bounded initial view could never surface it. Now each path segment becomes a
+  // DIRECTORY node chained by CONTAINS: project → TypeScript → Src → Game → file.
+  const parentDirId = addDirectoryChainFacts(project, filePath, nodes, edges);
+  addEdge(edges, makeEdge(parentDirId, fileNodeId(project, filePath), ProjectGraphEdgeKind.CONTAINS, evidence(filePath)));
+};
+
+/**
+ * Ensure a DIRECTORY node exists for every ancestor directory of `filePath`,
+ * chained parent→child by CONTAINS, and return the id of the file's immediate
+ * parent directory (or the project node id when the file sits at the root).
+ *
+ * The topmost segment is linked to the project node; deeper segments chain to
+ * their parent directory. Directory nodes are keyed by their relative path,
+ * matching `addDirectoryFact`, so the configured deep-root directory nodes
+ * (created up-front with a scanMode marker) and re-index runs merge by id
+ * rather than duplicating.
+ */
+const addDirectoryChainFacts = (
+  project: DetectedProject,
+  filePath: string,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): string => {
+  const projectId = createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.PROJECT, key: project.name });
+  const segments = filePath.split('/');
+  segments.pop(); // drop the file name; only directories remain
+  if (segments.length === 0) return projectId;
+
+  let parentId = projectId;
+  let accum = '';
+  for (const segment of segments) {
+    accum = accum ? `${accum}/${segment}` : segment;
+    const dirId = createProjectGraphNodeId({ project: project.name, kind: ProjectGraphNodeKind.DIRECTORY, key: accum });
+    // Only create the node if it isn't already staged this batch: deep-root
+    // directory nodes are created up-front by addScanPlanFacts with a scanMode
+    // marker that a bare directory fact must not clobber. addNode merges, so the
+    // guard just avoids overwriting the richer root metadata.
+    if (!nodes.has(dirId)) {
+      addNode(nodes, makeNode(project, ProjectGraphNodeKind.DIRECTORY, accum, accum, evidence(accum)));
+    }
+    addEdge(edges, makeEdge(parentId, dirId, ProjectGraphEdgeKind.CONTAINS, evidence(accum)));
+    parentId = dirId;
+  }
+  return parentId;
 };
 
 // ============================================================
@@ -573,10 +753,129 @@ const addSourceFacts = (
   nodes: Map<string, ProjectGraphNodeDto>,
   edges: Map<string, ProjectGraphEdgeDto>,
 ): void => {
+  // Pass 1: index the function-like symbols this file defines, so a call to one
+  // of them can be resolved to the local FUNCTION definition node instead of an
+  // anonymous DEPENDENCY node. Only function/method definitions are eligible
+  // call targets (a CLASS is constructed via `new`, handled as a call too, but
+  // its definition node is a CLASS — include it so `new Foo()` links to it).
+  const localDefinitions = new Map<string, string>(); // symbol name -> definition node id
   for (const capture of captures) {
+    const kind = LOCAL_DEFINITION_KINDS[capture.name];
+    if (!kind) continue;
+    const name = capture.text.trim();
+    if (name.length === 0) continue;
+    // First definition of a name wins; overloads/duplicates collapse to one node
+    // (the symbol node id is derived from name, so they'd merge anyway).
+    if (!localDefinitions.has(name)) {
+      localDefinitions.set(name, symbolNodeId(project, filePath, kind, name));
+    }
+  }
+
+  // Pass 2: dispatch each capture. `call.function` is resolved against the
+  // local definitions first (see `addCallFact`); everything else goes straight
+  // to its registered handler.
+  const noiseSymbols = callNoiseSymbolsFor(project);
+  for (const capture of captures) {
+    if (capture.name === 'call.function') {
+      addCallFact(project, filePath, capture, localDefinitions, noiseSymbols, nodes, edges);
+      continue;
+    }
     SOURCE_FACT_HANDLERS[capture.name]?.(project, filePath, capture, nodes, edges);
   }
 };
+
+/**
+ * Resolve the call-noise symbol set for a project: the rule-provided
+ * `graphHints.callNoiseSymbols` when configured (so teams can tune it per
+ * project in their `.mindstrate/rules/*.json`), otherwise the built-in default.
+ * An explicit empty array in the rule disables filtering entirely.
+ */
+const callNoiseSymbolsFor = (project: DetectedProject): Set<string> => {
+  const configured = project.graphHints?.callNoiseSymbols;
+  if (configured) return new Set(configured);
+  return DEFAULT_CALL_NOISE_SYMBOLS;
+};
+
+/**
+ * Capture names that introduce a callable symbol *defined in this file*, mapped
+ * to the node kind they produce. Used by {@link addSourceFacts} pass 1 to build
+ * the local call-resolution table. Mirrors the FUNCTION/CLASS entries in
+ * {@link SOURCE_FACT_HANDLERS} for the ECMAScript captures.
+ */
+const LOCAL_DEFINITION_KINDS: Record<string, ProjectGraphNodeKind> = {
+  'function.name': ProjectGraphNodeKind.FUNCTION,
+  'method.name': ProjectGraphNodeKind.FUNCTION,
+  'class.name': ProjectGraphNodeKind.CLASS,
+};
+
+/**
+ * Resolve a `call.function` capture. When the called name matches a function /
+ * class defined in the same file, emit a `CALLS` edge to that definition node —
+ * this is what makes the intra-file call graph traversable ("who calls
+ * `UpdateNextCustomMarkNumber`"). When it doesn't match (an imported symbol, a
+ * built-in, a member call on another object), fall back to the anonymous
+ * DEPENDENCY node so cross-file / native binding inference can still connect it.
+ */
+const addCallFact = (
+  project: DetectedProject,
+  filePath: string,
+  capture: ParserCapture,
+  localDefinitions: Map<string, string>,
+  noiseSymbols: Set<string>,
+  nodes: Map<string, ProjectGraphNodeDto>,
+  edges: Map<string, ProjectGraphEdgeDto>,
+): void => {
+  const name = capture.text.trim();
+  const targetId = localDefinitions.get(name);
+  if (targetId) {
+    // The definition's symbol node is emitted by its own handler in this same
+    // pass (order-independent: both live in the file's node/edge buffer, and the
+    // writer's FK guard drops the edge if the node somehow didn't materialize).
+    addEdge(edges, makeEdge(fileNodeId(project, filePath), targetId, ProjectGraphEdgeKind.CALLS, evidence(filePath, capture)));
+    return;
+  }
+  // Drop calls to language builtins / test-framework globals. These are not
+  // project dependencies — treating `str`/`print`/`require`/`expect`/`it` as
+  // DEPENDENCY nodes floods the graph with thousands of meaningless nodes that
+  // LLM enrichment then promotes into bogus "concept" architecture nodes. A call
+  // to a name we don't recognize as a local definition AND that is a known
+  // builtin is noise; skip it. Real imported symbols still arrive via
+  // `import.source`, and genuine cross-file calls still fall through to a
+  // DEPENDENCY the binding pass can resolve. The set is configurable per project
+  // via the rule's `callNoiseSymbols` (see {@link callNoiseSymbolsFor}).
+  if (noiseSymbols.has(name)) return;
+  addDependencyFact(project, filePath, name, nodes, edges, ProjectGraphEdgeKind.CALLS, capture);
+};
+
+/**
+ * Default call targets that are language builtins or test-framework globals,
+ * not project symbols. Used when a project's rule does not override
+ * `graphHints.callNoiseSymbols`. Filtered out of the call graph so they don't
+ * become DEPENDENCY nodes (and, downstream, LLM-inferred "concept" nodes).
+ * Scoped to the languages this scanner parses (JS/TS, Python, Lua, C#, C++).
+ * Deliberately conservative — only unambiguous builtins/framework globals.
+ */
+export const DEFAULT_CALL_NOISE_SYMBOLS = new Set<string>([
+  // JS/TS language + common globals
+  'require', 'super', 'import', 'typeof', 'instanceof', 'await', 'new', 'delete', 'void', 'yield',
+  'Array', 'Object', 'String', 'Number', 'Boolean', 'Symbol', 'BigInt', 'Promise', 'Map', 'Set',
+  'WeakMap', 'WeakSet', 'JSON', 'Math', 'Date', 'RegExp', 'Error', 'parseInt', 'parseFloat',
+  'isNaN', 'isFinite', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+  'console', 'all', 'race', 'resolve', 'reject', 'from', 'of', 'keys', 'values', 'entries',
+  // Jest / Vitest / Mocha test globals
+  'describe', 'it', 'test', 'expect', 'beforeEach', 'afterEach', 'beforeAll', 'afterAll',
+  'toEqual', 'toBe', 'toContain', 'toThrow', 'toHaveBeenCalled', 'toMatchObject', 'toBeNull',
+  'toBeUndefined', 'toBeDefined', 'toBeTruthy', 'toBeFalsy', 'toHaveLength', 'mockReturnValue',
+  'vi', 'jest', 'spyOn', 'mock',
+  // Python builtins
+  'str', 'int', 'float', 'bool', 'bytes', 'list', 'dict', 'tuple', 'set', 'frozenset',
+  'print', 'len', 'range', 'enumerate', 'zip', 'map', 'filter', 'isinstance', 'issubclass',
+  'hasattr', 'getattr', 'setattr', 'type', 'repr', 'abs', 'min', 'max', 'sum', 'sorted',
+  'open', 'input', 'format', 'any',
+  // Lua builtins
+  'pairs', 'ipairs', 'tostring', 'tonumber', 'pcall', 'xpcall', 'select', 'rawget', 'rawset',
+  'setmetatable', 'getmetatable', 'assert', 'error', 'next',
+]);
 
 type SourceFactHandler = (
   project: DetectedProject,
@@ -609,6 +908,11 @@ const SOURCE_FACT_HANDLERS: Record<string, SourceFactHandler> = {
   'import.source':   dependencyHandler(ProjectGraphEdgeKind.IMPORTS, { stripQuotes: true }),
   'export.source':   dependencyHandler(ProjectGraphEdgeKind.EXPORTS, { stripQuotes: true }),
   'function.name':   symbolHandler(ProjectGraphNodeKind.FUNCTION),
+  // Class members (methods, arrow-function fields). Captured separately from
+  // `function.name` so the React-component heuristic (uppercase function → component)
+  // does not misfire on an ordinary uppercase method, but modeled as the same
+  // FUNCTION symbol kind.
+  'method.name':     symbolHandler(ProjectGraphNodeKind.FUNCTION),
   'class.name':      symbolHandler(ProjectGraphNodeKind.CLASS),
   'call.function':   dependencyHandler(ProjectGraphEdgeKind.CALLS),
   'react.component': symbolHandler(ProjectGraphNodeKind.COMPONENT),
@@ -685,9 +989,21 @@ const addSymbolFact = (
   edges: Map<string, ProjectGraphEdgeDto>,
   capture: ParserCapture,
 ): void => {
-  const symbol = makeNode(project, kind, `${filePath}#${kind}:${name}`, name, evidence(filePath, capture), {
+  const symbol = makeNode(project, kind, symbolKey(filePath, kind, name), name, evidence(filePath, capture), {
     ownedByFile: filePath,
   });
   addNode(nodes, symbol);
   addEdge(edges, makeEdge(fileNodeId(project, filePath), symbol.id, ProjectGraphEdgeKind.DEFINES, evidence(filePath, capture)));
 };
+
+/** Key seed for a per-file symbol node (function / class / type defined in a file). */
+const symbolKey = (filePath: string, kind: ProjectGraphNodeKind, name: string): string =>
+  `${filePath}#${kind}:${name}`;
+
+/** Node id for a per-file symbol, matching what {@link addSymbolFact} writes. */
+const symbolNodeId = (
+  project: DetectedProject,
+  filePath: string,
+  kind: ProjectGraphNodeKind,
+  name: string,
+): string => createProjectGraphNodeId({ project: project.name, kind, key: symbolKey(filePath, kind, name) });

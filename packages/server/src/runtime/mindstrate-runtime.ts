@@ -17,6 +17,8 @@ import { ContextPrioritySelector } from '../context-graph/context-priority-selec
 import { ContextGraphStore } from '../context-graph/context-graph-store.js';
 import { GraphKnowledgeProjector } from '../context-graph/knowledge-projector.js';
 import { ProjectedKnowledgeSearch } from '../context-graph/projected-knowledge-search.js';
+import type { NodeVectorIndex } from '../context-graph/node-vector-index.js';
+import { createNodeVectorIndex } from './node-vector-index-factory.js';
 import { ConflictDetector } from '../context-graph/conflict-detector.js';
 import { ConflictReflector } from '../context-graph/conflict-reflector.js';
 import { PatternCompressor } from '../context-graph/pattern-compressor.js';
@@ -45,6 +47,7 @@ export interface MindstrateRuntime {
   contextPrioritySelector: ContextPrioritySelector;
   graphKnowledgeProjector: GraphKnowledgeProjector;
   projectedKnowledgeSearch: ProjectedKnowledgeSearch;
+  nodeVectorIndex: NodeVectorIndex;
   projectionMaterializer: KnowledgeProjectionMaterializer;
   sessionProjectionMaterializer: SessionProjectionMaterializer;
   projectSnapshotProjectionMaterializer: ProjectSnapshotProjectionMaterializer;
@@ -96,7 +99,13 @@ export function createMindstrateRuntime(
   const graphKnowledgeProjector = new GraphKnowledgeProjector(contextGraphStore);
   const llmConfigRepository = new LlmConfigRepository(databaseStore.getDb());
   const providerFactory = new ProviderFactory(llmConfigRepository);
-  const projectedKnowledgeSearch = new ProjectedKnowledgeSearch(graphKnowledgeProjector, contextGraphStore, providerFactory);
+  const nodeVectorIndex = createNodeVectorIndex(
+    config,
+    providerFactory,
+    contextGraphStore,
+    (message) => logger.warn(message),
+  );
+  const projectedKnowledgeSearch = new ProjectedKnowledgeSearch(graphKnowledgeProjector, contextGraphStore, providerFactory, nodeVectorIndex);
   const projectionMaterializer = new KnowledgeProjectionMaterializer(contextGraphStore, graphKnowledgeProjector);
   const sessionProjectionMaterializer = new SessionProjectionMaterializer(contextGraphStore);
   const projectSnapshotProjectionMaterializer = new ProjectSnapshotProjectionMaterializer(contextGraphStore);
@@ -150,6 +159,7 @@ export function createMindstrateRuntime(
     contextPrioritySelector,
     graphKnowledgeProjector,
     projectedKnowledgeSearch,
+    nodeVectorIndex,
     projectionMaterializer,
     sessionProjectionMaterializer,
     projectSnapshotProjectionMaterializer,

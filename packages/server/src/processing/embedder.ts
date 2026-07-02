@@ -39,6 +39,23 @@ const EMBEDDING_MAX_BATCH = ((): number => {
   return parsed;
 })();
 
+/**
+ * Per-request timeout (ms) for a single query embedding. The search hot path
+ * embeds the query synchronously before it can rank anything, so a slow or
+ * flaky provider stalls the whole `memory_search` until the MCP/HTTP client
+ * gives up (previously a fixed 10s abort surfaced as "operation was aborted").
+ * Capping the embed call and letting the caller fall back to lexical-only
+ * keeps search responsive. Batch/backfill calls are not time-critical and
+ * keep the SDK default. Override via `MINDSTRATE_EMBED_TIMEOUT_MS`; 0 disables.
+ */
+const EMBED_TIMEOUT_MS = ((): number => {
+  const raw = process.env['MINDSTRATE_EMBED_TIMEOUT_MS'];
+  if (raw === undefined) return 3000;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) return 3000;
+  return parsed;
+})();
+
 export interface EmbedderMetrics {
   apiCalls: number;
   cacheHits: number;
@@ -189,7 +206,7 @@ export class Embedder {
         model: this.model,
         input: text,
         ...(this.dimensions ? { dimensions: this.dimensions } : {}),
-      });
+      }, EMBED_TIMEOUT_MS > 0 ? { timeout: EMBED_TIMEOUT_MS } : undefined);
       const embedding = response.data[0].embedding;
       this.cache.set(key, embedding);
       return embedding;

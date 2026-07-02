@@ -52,6 +52,7 @@ interface ProjectDetectionRule {
   ignore?: string[];
   manifests?: string[];
   riskHints?: string[];
+  callNoiseSymbols?: string[];
   layers?: RuleProjectLayer[];
   operationManual?: ProjectOperationManual;
   suggestedSystemPages?: SuggestedSystemPage[];
@@ -126,6 +127,7 @@ export const detectProjectByRules = (root: string): DetectedProject | null => {
       ignore: rule.ignore,
       manifests: rule.manifests,
       riskHints: rule.riskHints,
+      callNoiseSymbols: rule.callNoiseSymbols,
       layers: normalizeLayers(rule.layers),
       operationManual: rule.operationManual,
       suggestedSystemPages: normalizeSuggestedSystemPages(rule.suggestedSystemPages),

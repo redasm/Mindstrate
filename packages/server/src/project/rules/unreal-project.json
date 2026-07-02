@@ -81,6 +81,23 @@
   "riskHints": [
     "Do not edit generated Unreal output unless explicitly requested."
   ],
+  "callNoiseSymbols": [
+    "require", "super", "import", "typeof", "instanceof", "await", "new", "delete", "void", "yield",
+    "Array", "Object", "String", "Number", "Boolean", "Symbol", "BigInt", "Promise", "Map", "Set",
+    "WeakMap", "WeakSet", "JSON", "Math", "Date", "RegExp", "Error", "parseInt", "parseFloat",
+    "isNaN", "isFinite", "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+    "console", "all", "race", "resolve", "reject", "from", "of", "keys", "values", "entries",
+    "describe", "it", "test", "expect", "beforeEach", "afterEach", "beforeAll", "afterAll",
+    "toEqual", "toBe", "toContain", "toThrow", "toHaveBeenCalled", "toMatchObject", "toBeNull",
+    "toBeUndefined", "toBeDefined", "toBeTruthy", "toBeFalsy", "toHaveLength", "mockReturnValue",
+    "vi", "jest", "spyOn", "mock",
+    "str", "int", "float", "bool", "bytes", "list", "dict", "tuple", "set", "frozenset",
+    "print", "len", "range", "enumerate", "zip", "map", "filter", "isinstance", "issubclass",
+    "hasattr", "getattr", "setattr", "type", "repr", "abs", "min", "max", "sum", "sorted",
+    "open", "input", "format", "any",
+    "pairs", "ipairs", "tostring", "tonumber", "pcall", "xpcall", "select", "rawget", "rawset",
+    "setmetatable", "getmetatable", "assert", "error", "next"
+  ],
   "operationManual": {
     "architecture": [
       "Unreal project manifests define enabled plugins, module visibility, and startup surfaces before source files are considered.",

@@ -10,6 +10,7 @@ import type {
   ContextEdge,
   ContextEvent,
   ContextNode,
+  ContextNodeStatus,
 } from '@mindstrate/protocol/models';
 import {
   type ConflictRecord,
@@ -61,7 +62,7 @@ import {
   type ContextGraphDbHandle,
 } from './context-graph-database.js';
 import { GraphQuery } from './graph-query.js';
-import { cosineSimilarity } from '../processing/vector-distance.js';
+import { dotProduct, l2Normalize } from '../processing/vector-distance.js';
 
 export type {
   CreateContextEdgeInput,
@@ -89,6 +90,14 @@ export class ContextGraphStore {
   private readonly conflictRecords: ConflictRecordRepository;
   private readonly projectionRecords: ProjectionRecordRepository;
   private readonly metabolismRuns: MetabolismRunRepository;
+  /**
+   * Monotonic counter bumped on every node write. The knowledge projector's
+   * cache keys off this so a same-process write (event ingestion, metabolism,
+   * knowledge add) invalidates a cached projection immediately, rather than
+   * waiting out the projection TTL. Cross-process writes (the external scanner)
+   * are still only bounded by the TTL, which is acceptable for graph nodes.
+   */
+  private nodeMutations = 0;
 
   constructor(dbOrPath: ContextGraphDbHandle) {
     const connection = openContextGraphDatabase(dbOrPath);
@@ -106,7 +115,18 @@ export class ContextGraphStore {
   }
 
   createNode(input: CreateContextNodeInput): ContextNode {
+    this.nodeMutations++;
     return this.nodes.create(input);
+  }
+
+  /**
+   * Version of the node table for cache invalidation. Bumped on every write
+   * that goes through this store's typed API. Consumers (the knowledge
+   * projector cache) treat a change as "the knowledge layer may have moved".
+   * Bulk writes via {@link transaction} / {@link rawDatabase} bump it once.
+   */
+  get nodeVersion(): number {
+    return this.nodeMutations;
   }
 
   /**
@@ -120,6 +140,7 @@ export class ContextGraphStore {
    * span an await).
    */
   transaction<T>(fn: () => T): T {
+    this.nodeMutations++;
     return this.db.transaction(fn)();
   }
 
@@ -132,6 +153,7 @@ export class ContextGraphStore {
    * through the repository methods so table ownership stays intact.
    */
   get rawDatabase(): Database.Database {
+    this.nodeMutations++;
     return this.db;
   }
 
@@ -141,6 +163,31 @@ export class ContextGraphStore {
 
   listNodes(options: ListContextNodesOptions = {}): ContextNode[] {
     return this.nodes.list(options);
+  }
+
+  /**
+   * One keyset page of embeddable nodes (id-ordered) for streaming backfill.
+   * Callers page via `afterId`; `excludeModel` skips nodes already embedded for
+   * that model in SQL. Never materializes the whole graph — see the repository
+   * method for the OOM history that motivated this.
+   */
+  listEmbeddableNodesPage(opts: {
+    statuses: ContextNodeStatus[];
+    project?: string;
+    afterId?: string;
+    excludeModel?: string;
+    limit: number;
+  }): ContextNode[] {
+    return this.nodes.listEmbeddablePage(opts);
+  }
+
+  /** Count embeddable nodes matching {@link listEmbeddableNodesPage}'s filter. */
+  countEmbeddableNodes(opts: {
+    statuses: ContextNodeStatus[];
+    project?: string;
+    excludeModel?: string;
+  }): number {
+    return this.nodes.countEmbeddable(opts);
   }
 
   /** Bounded, quality-ranked fetch of a project's domain nodes (LLM-feed paths). */
@@ -190,7 +237,7 @@ export class ContextGraphStore {
     nodeKinds?: string[];
     limit?: number;
   }): { nodes: ContextNode[]; edges: ContextEdge[] } {
-    const limit = Math.min(Math.max(opts.limit ?? 300, 1), 2000);
+    const limit = Math.min(Math.max(opts.limit ?? 300, 1), 3000);
     if (opts.focusNodeId) {
       const focus = this.nodes.getById(opts.focusNodeId);
       if (!focus) return { nodes: [], edges: [] };
@@ -206,11 +253,15 @@ export class ContextGraphStore {
       const edges = this.edges.listAmongNodes(nodes.map((n) => n.id));
       return { nodes, edges };
     }
-    // Default skeleton: pull the structural backbone (project + directories)
-    // first so file→directory/project CONTAINS edges always have both endpoints
-    // present, then fill the remaining budget with files. Picking only top files
-    // by salience would otherwise drop their parent nodes and leave an edgeless
-    // scatter of dots.
+    // Default skeleton: pull the full structural backbone (project + every
+    // directory) first, then fill the remaining budget with files. The scanner
+    // now materializes a directory node for every ancestor path segment and
+    // chains them project → dir → subdir → file, so this backbone is the
+    // navigable tree: from the root the user can drill into any directory to
+    // reach its files/symbols. Loading all directories up front (bounded — a
+    // large project has a few thousand, well under the clamp) is what makes deep
+    // files reachable; filling leftover budget with the highest-quality files
+    // gives an immediately useful first view.
     const structural = this.nodes.listByProjectKinds(opts.project, ['project', 'directory'], limit);
     const files = this.nodes.listByProjectKinds(
       opts.project,
@@ -445,10 +496,12 @@ export class ContextGraphStore {
   }
 
   updateNode(id: string, input: UpdateContextNodeInput): ContextNode | null {
+    this.nodeMutations++;
     return this.nodes.update(id, input);
   }
 
   deleteNode(id: string): boolean {
+    this.nodeMutations++;
     return this.nodes.delete(id);
   }
 
@@ -515,10 +568,11 @@ export class ContextGraphStore {
   }
 
   /**
-   * Vector similarity search over stored node embeddings. Computes cosine
-   * against every candidate of the same dimension as `queryEmbedding`
-   * (mismatched dimensions — e.g. a legacy embedding model — are skipped,
-   * not fatal), returns the top scorers above `minScore`.
+   * Vector similarity search over stored node embeddings. Candidates come back
+   * pre-normalized (Float32), so similarity is a plain dot product against the
+   * normalized query — equal to cosine, minus the per-row norm/sqrt work.
+   * Mismatched dimensions (e.g. a legacy embedding model) are skipped, not
+   * fatal; returns the top scorers above `minScore`.
    *
    * This deliberately bypasses the knowledge projector's substrate-priority
    * cap: low-priority project-graph FILE/DEPENDENCY nodes would never make
@@ -541,12 +595,13 @@ export class ContextGraphStore {
       statuses: opts.statuses,
       limit: opts.candidateLimit,
     });
-    const dim = opts.queryEmbedding.length;
+    const query = l2Normalize(opts.queryEmbedding);
+    const dim = query.length;
     const minScore = opts.minScore ?? 0;
     const scored: Array<{ nodeId: string; score: number }> = [];
     for (const candidate of candidates) {
       if (candidate.embedding.length !== dim) continue;
-      const score = cosineSimilarity(opts.queryEmbedding, candidate.embedding);
+      const score = dotProduct(query, candidate.embedding);
       if (score > minScore) scored.push({ nodeId: candidate.nodeId, score });
     }
     scored.sort((a, b) => b.score - a.score);

@@ -58,6 +58,17 @@ const TEAM_SERVER_URL = process.env['TEAM_SERVER_URL'] ?? '';
 const TEAM_API_KEY = process.env['TEAM_API_KEY'] ?? '';
 const isTeamMode = !!TEAM_SERVER_URL;
 
+// Team-mode HTTP timeout (ms). Undefined → client default (30s). Raise this on
+// slow embedding providers / very large graphs where `/api/graph/search` runs
+// long; the old fixed 10s surfaced as MCP "operation was aborted".
+const TEAM_HTTP_TIMEOUT_MS = ((): number | undefined => {
+  const raw = process.env['TEAM_HTTP_TIMEOUT_MS'];
+  if (raw === undefined) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) return undefined;
+  return parsed;
+})();
+
 // Optional Obsidian vault sync (local mode only)
 const OBSIDIAN_VAULT_PATH = process.env['OBSIDIAN_VAULT_PATH'] ?? '';
 const OBSIDIAN_AUTO_SYNC = process.env['OBSIDIAN_AUTO_SYNC'] !== 'false';
@@ -76,6 +87,7 @@ const sessionState: SessionState = {
 const api: McpApi = createMcpApi({
   teamServerUrl: TEAM_SERVER_URL,
   teamApiKey: TEAM_API_KEY,
+  teamHttpTimeoutMs: TEAM_HTTP_TIMEOUT_MS,
   obsidianVaultPath: OBSIDIAN_VAULT_PATH,
   obsidianAutoSync: OBSIDIAN_AUTO_SYNC,
   obsidianWatch: OBSIDIAN_WATCH,

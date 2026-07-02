@@ -204,10 +204,14 @@ Also append Mindstrate MCP usage rules to the project-root `AGENTS.md` so the AI
 | `MINDSTRATE_DB_PATH` | Explicit SQLite database path |
 | `MINDSTRATE_VECTOR_BACKEND` | `local` (default) or `qdrant` |
 | `MINDSTRATE_QDRANT_URL` | Qdrant URL when the vector backend is `qdrant` |
+| `MINDSTRATE_VECTOR_CANDIDATE_LIMIT` | Max node embeddings scanned per SQLite similarity search (default 5000) |
+| `MINDSTRATE_EMBED_TIMEOUT_MS` | Per-request timeout for embedding the search query; on timeout search falls back to lexical (default 3000, 0 disables) |
+| `MINDSTRATE_PROJECTION_CACHE_TTL_MS` | TTL for the projection cache reused across searches; writes invalidate it (default 5000, 0 disables) |
 | `MINDSTRATE_LOCALE` | Preferred output locale, for example `en` or `zh-CN` |
 | `TEAM_PORT` | Team Server port |
 | `TEAM_API_KEY` | Team Server admin bootstrap key (member keys are minted in the Web UI) |
 | `TEAM_SERVER_URL` | Team Server URL used by clients/MCP |
+| `TEAM_HTTP_TIMEOUT_MS` | HTTP request timeout (ms) for team-mode calls (default 30000) |
 | `LOG_LEVEL` | Log level |
 
 Use `.env.example` and `deploy/.env.deploy.example` as templates.

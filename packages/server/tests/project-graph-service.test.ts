@@ -9,7 +9,7 @@ import {
 } from '@mindstrate/protocol/models';
 import { ContextGraphStore } from '../src/context-graph/context-graph-store.js';
 import { detectProject } from '../src/project/detector.js';
-import { indexProjectGraph } from '../src/project-graph/project-graph-service.js';
+import { indexProjectGraph, reindexProjectGraphFiles } from '../src/project-graph/project-graph-service.js';
 import { readProjectGraphExtractionCache } from '../src/project-graph/extraction-cache.js';
 import { createTempDir, removeTempDir } from './test-support.js';
 
@@ -522,5 +522,221 @@ describe('project graph service', () => {
       skippedFiles: expect.any(Number),
     });
     expect(scanProgress.some((event) => event.phase === 'file' && event.path === 'TypeScript/Typing/UObject.ts')).toBe(true);
+  });
+
+  it('extracts TypeScript class, methods, and intra-file call edges', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    // A class-based TS module like the game's Game layer: methods calling each
+    // other, an arrow-function field, and a top-level helper.
+    write(root, 'TypeScript/Src/Game/MapModel.ts', [
+      "import { EventDefine } from '../Core/Event/EventDefine';",
+      '',
+      'export class MapModel {',
+      '  private nextMark = 0;',
+      '',
+      '  public UpdateNextCustomMarkNumber(): number {',
+      '    this.nextMark = computeNext(this.nextMark);',
+      '    return this.nextMark;',
+      '  }',
+      '',
+      '  private reset = (): void => {',
+      '    this.nextMark = 0;',
+      '  };',
+      '}',
+      '',
+      'function computeNext(n: number): number {',
+      '  return n + 1;',
+      '}',
+    ].join('\n'));
+
+    const project = detectProject(root);
+    expect(project).not.toBeNull();
+    indexProjectGraph(store, project!);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 500 });
+    const kindOf = (node: { metadata?: Record<string, unknown> }) =>
+      node.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind];
+
+    // Class node + method/function symbol nodes (the previously-missing pieces).
+    const classNode = nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.CLASS && n.title === 'MapModel');
+    const methodNode = nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.FUNCTION && n.title === 'UpdateNextCustomMarkNumber');
+    const arrowField = nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.FUNCTION && n.title === 'reset');
+    const helper = nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.FUNCTION && n.title === 'computeNext');
+    expect(classNode).toBeDefined();
+    expect(methodNode).toBeDefined();
+    expect(arrowField).toBeDefined();
+    expect(helper).toBeDefined();
+
+    // The uppercase method must NOT be misclassified as a React component.
+    expect(nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.COMPONENT && n.title === 'UpdateNextCustomMarkNumber')).toBeUndefined();
+
+    // Intra-file call: UpdateNextCustomMarkNumber calls computeNext → a CALLS
+    // edge from the file to the computeNext FUNCTION definition node (not a
+    // bare DEPENDENCY node).
+    const edges = store.listEdges({ limit: 1000 });
+    const callToHelper = edges.find((edge) =>
+      edge.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CALLS
+      && edge.targetId === helper!.id);
+    expect(callToHelper).toBeDefined();
+  });
+
+  it('incrementally re-extracts changed files, replacing removed symbols', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'TypeScript/Src/Game/Combat.ts', [
+      'export class Combat {',
+      '  public startFight(): void { prepare(); }',
+      '}',
+      'function prepare(): void {}',
+    ].join('\n'));
+
+    const project = detectProject(root)!;
+    indexProjectGraph(store, project);
+
+    const funcTitles = () => store.listNodes({ project: 'Client', limit: 500 })
+      .filter((n) => n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.FUNCTION
+        && n.status === 'active')
+      .map((n) => n.title);
+    expect(funcTitles()).toContain('startFight');
+    expect(funcTitles()).toContain('prepare');
+
+    // Edit the file: rename the method, drop the helper.
+    write(root, 'TypeScript/Src/Game/Combat.ts', [
+      'export class Combat {',
+      '  public endFight(): void {}',
+      '}',
+    ].join('\n'));
+
+    const result = reindexProjectGraphFiles(store, project, ['TypeScript/Src/Game/Combat.ts']);
+    expect(result.filesReindexed).toBe(1);
+
+    const active = funcTitles();
+    expect(active).toContain('endFight');
+    // The removed symbols are archived (no longer active), not left dangling.
+    expect(active).not.toContain('startFight');
+    expect(active).not.toContain('prepare');
+  });
+
+  it('archives a file\'s symbols when the file is deleted upstream', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'TypeScript/Src/Game/Temp.ts', 'export function willVanish(): void {}');
+
+    const project = detectProject(root)!;
+    indexProjectGraph(store, project);
+    expect(store.listNodes({ project: 'Client', limit: 500 })
+      .some((n) => n.title === 'willVanish' && n.status === 'active')).toBe(true);
+
+    fs.rmSync(path.join(root, 'TypeScript/Src/Game/Temp.ts'));
+    const result = reindexProjectGraphFiles(store, project, ['TypeScript/Src/Game/Temp.ts']);
+    expect(result.filesRemoved).toBe(1);
+    expect(store.listNodes({ project: 'Client', limit: 500 })
+      .some((n) => n.title === 'willVanish' && n.status === 'active')).toBe(false);
+  });
+
+  it('builds a full directory chain so deep files are reachable from the project root', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'TypeScript/Src/Game/MapModel.ts', 'export class MapModel {}');
+
+    const project = detectProject(root)!;
+    indexProjectGraph(store, project);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 2000 });
+    const kindOf = (n: { metadata?: Record<string, unknown> }) => n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind];
+    const dirTitle = (t: string) =>
+      nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.DIRECTORY && n.title === t);
+
+    // Every intermediate directory must exist as its own node (previously only
+    // the top-level deep-root `TypeScript` did, collapsing the rest).
+    expect(dirTitle('TypeScript')).toBeDefined();
+    expect(dirTitle('TypeScript/Src')).toBeDefined();
+    expect(dirTitle('TypeScript/Src/Game')).toBeDefined();
+
+    // And they must chain project → TypeScript → Src → Game → file via CONTAINS,
+    // so the bounded root view can drill down to the deep file.
+    const edges = store.listEdges({ limit: 5000 });
+    const contains = (fromId: string, toId: string) =>
+      edges.some((e) =>
+        e.evidence?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphEdgeKind.CONTAINS
+        && e.sourceId === fromId && e.targetId === toId);
+
+    const projectNode = nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.PROJECT)!;
+    const ts = dirTitle('TypeScript')!;
+    const src = dirTitle('TypeScript/Src')!;
+    const game = dirTitle('TypeScript/Src/Game')!;
+    const file = nodes.find((n) => kindOf(n) === ProjectGraphNodeKind.FILE && n.title.endsWith('Game/MapModel.ts'))!;
+
+    expect(projectNode && ts && contains(projectNode.id, ts.id)).toBeTruthy();
+    expect(contains(ts.id, src.id)).toBe(true);
+    expect(contains(src.id, game.id)).toBe(true);
+    expect(file && contains(game.id, file.id)).toBeTruthy();
+  });
+
+  it('does not create dependency nodes for language builtins / test-framework calls', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    write(root, 'TypeScript/Src/Game/Widget.ts', [
+      'export class Widget {',
+      '  render(): void {',
+      '    const x = [1, 2].map((n) => n + 1);',   // map is a builtin-ish global we filter
+      '    doWork(x);',                              // real project call -> should survive
+      '  }',
+      '}',
+      'function doWork(v: number[]): void { return; }',
+    ].join('\n'));
+    write(root, 'TypeScript/Src/Test/Widget.test.ts', [
+      'describe("Widget", () => {',
+      '  it("renders", () => {',
+      '    expect(1).toEqual(1);',
+      '  });',
+      '});',
+    ].join('\n'));
+
+    const project = detectProject(root)!;
+    indexProjectGraph(store, project);
+
+    const nodes = store.listNodes({ project: 'Client', limit: 2000 });
+    const depTitles = new Set(
+      nodes
+        .filter((n) => n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.DEPENDENCY)
+        .map((n) => n.title),
+    );
+    // Builtins / test globals must NOT be dependency nodes.
+    for (const noise of ['expect', 'it', 'describe', 'toEqual', 'map']) {
+      expect(depTitles.has(noise)).toBe(false);
+    }
+    // The real intra-file call still resolves to the local function definition.
+    const doWork = nodes.find((n) =>
+      n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.FUNCTION && n.title === 'doWork');
+    expect(doWork).toBeDefined();
+  });
+
+  it('honors a rule-provided callNoiseSymbols override', () => {
+    write(root, 'Client.uproject', '{"FileVersion":3}');
+    // Custom rule: filter only `bespokeGlobal`, and NOT the built-in defaults.
+    write(root, '.mindstrate/rules/nami.json', JSON.stringify({
+      id: 'nami-custom',
+      name: 'NAMI Custom',
+      priority: 300,
+      match: { all: [{ glob: '*.uproject' }] },
+      detect: { language: 'cpp', framework: 'unreal-engine', manifest: '*.uproject' },
+      sourceRoots: ['TypeScript'],
+      callNoiseSymbols: ['bespokeGlobal'],
+    }));
+    write(root, 'TypeScript/Src/Game/Caller.ts', [
+      'export function run(): void {',
+      '  bespokeGlobal();',   // overridden noise -> filtered
+      '  expect(1);',          // default noise, but NOT in the override -> kept as dependency
+      '}',
+    ].join('\n'));
+
+    const project = detectProject(root)!;
+    expect(project.graphHints?.callNoiseSymbols).toEqual(['bespokeGlobal']);
+    indexProjectGraph(store, project);
+
+    const depTitles = new Set(
+      store.listNodes({ project: 'Client', limit: 2000 })
+        .filter((n) => n.metadata?.[PROJECT_GRAPH_METADATA_KEYS.kind] === ProjectGraphNodeKind.DEPENDENCY)
+        .map((n) => n.title),
+    );
+    expect(depTitles.has('bespokeGlobal')).toBe(false); // override filtered it
+    expect(depTitles.has('expect')).toBe(true);          // default no longer applies
   });
 });

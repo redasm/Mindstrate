@@ -9,6 +9,8 @@ import type { ContextGraphStore } from './context-graph-store.js';
 import type { GraphKnowledgeProjector, GraphKnowledgeProjectionOptions } from './knowledge-projector.js';
 import { isProjectable, toGraphKnowledgeView } from './knowledge-projector.js';
 import type { ProviderFactory } from '../processing/provider-factory.js';
+import type { NodeVectorIndex } from './node-vector-index.js';
+import { SqliteNodeVectorIndex } from './node-vector-index.js';
 
 export interface ProjectedKnowledgeSearchOptions extends GraphKnowledgeProjectionOptions {
   topK?: number;
@@ -39,15 +41,20 @@ export class ProjectedKnowledgeSearch {
   private readonly projector: GraphKnowledgeProjector;
   private readonly graphStore?: ContextGraphStore;
   private readonly providerFactory?: ProviderFactory;
+  private readonly vectorIndex?: NodeVectorIndex;
 
   constructor(
     projector: GraphKnowledgeProjector,
     graphStore?: ContextGraphStore,
     providerFactory?: ProviderFactory,
+    vectorIndex?: NodeVectorIndex,
   ) {
     this.projector = projector;
     this.graphStore = graphStore;
     this.providerFactory = providerFactory;
+    // Default to the in-process SQLite scan when no index is injected, so a
+    // store-only construction (tests, local mode) still gets vector search.
+    this.vectorIndex = vectorIndex ?? (graphStore ? new SqliteNodeVectorIndex(graphStore) : undefined);
   }
 
   async search(
@@ -128,17 +135,18 @@ export class ProjectedKnowledgeSearch {
     topK: number,
   ): Promise<Map<string, number>> {
     const empty = new Map<string, number>();
-    if (!this.graphStore || !this.providerFactory) return empty;
+    if (!this.graphStore || !this.providerFactory || !this.vectorIndex) return empty;
     const providers = this.providerFactory.forProject(options.project ?? '');
     let queryEmbedding: number[];
     try {
       queryEmbedding = await providers.embedder.embed(query);
     } catch {
-      // Embedding the query failed (e.g. OpenAI transport error). Lexical
-      // search still works, so swallow and fall back rather than throw.
+      // Embedding the query failed (e.g. OpenAI transport error, or the
+      // per-call embed timeout fired). Lexical search still works, so swallow
+      // and fall back rather than throw.
       return empty;
     }
-    const hits = this.graphStore.searchSimilarNodes({
+    const hits = await this.vectorIndex.search({
       queryEmbedding,
       model: providers.embeddingModel,
       project: options.project,

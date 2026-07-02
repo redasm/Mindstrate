@@ -50,10 +50,13 @@ export {
 } from './graph-writer.js';
 export {
   indexProjectGraph,
+  reindexProjectGraphFiles,
   type ProjectGraphIndexOptions,
   type ProjectGraphIndexProgress,
   type ProjectGraphIndexResult,
   type ProjectGraphScanDiagnostics,
+  type ReindexProjectGraphFilesOptions,
+  type ReindexProjectGraphFilesResult,
 } from './project-graph-service.js';
 export {
   UNREAL_ASSET_REGISTRY_EXPORT,
